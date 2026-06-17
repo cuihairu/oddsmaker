@@ -10,7 +10,7 @@
 - [release-notes/README.md](release-notes/README.md): 发布记录
 
 ## 细分索引
-- [api-reference.zh.md](api-reference.zh.md): 控制服务 API 参考索引
+- [reference/api-reference.zh.md](reference/api-reference.zh.md): 控制服务 API 参考索引
 
 ## 说明
 - 主体文档仍在根层，入口已按主题分层。
