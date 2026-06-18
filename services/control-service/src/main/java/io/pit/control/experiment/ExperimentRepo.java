@@ -9,9 +9,9 @@ import org.springframework.data.repository.query.Param;
 import java.util.List;
 
 public interface ExperimentRepo extends JpaRepository<ExperimentEntity, String> {
-    List<ExperimentEntity> findByProjectId(String projectId);
-    List<ExperimentEntity> findByProjectIdAndStatus(String projectId, String status);
+    List<ExperimentEntity> findByTenantIdAndAppId(String tenantId, String appId);
+    List<ExperimentEntity> findByTenantIdAndAppIdAndStatus(String tenantId, String appId, String status);
 
-    @Query("SELECT e FROM ExperimentEntity e WHERE e.projectId=:pid AND (:st IS NULL OR e.status=:st) ORDER BY e.updatedAt DESC")
-    Page<ExperimentEntity> pageBy(@Param("pid") String projectId, @Param("st") String status, Pageable pageable);
+    @Query("SELECT e FROM ExperimentEntity e WHERE e.tenantId=:tid AND e.appId=:aid AND (:st IS NULL OR e.status=:st) ORDER BY e.updatedAt DESC")
+    Page<ExperimentEntity> pageBy(@Param("tid") String tenantId, @Param("aid") String appId, @Param("st") String status, Pageable pageable);
 }

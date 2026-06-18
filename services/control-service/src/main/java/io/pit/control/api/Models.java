@@ -2,31 +2,34 @@ package io.pit.control.api;
 
 import java.util.List;
 
+/**
+ * API DTO - 多租户模型（v2）
+ * 废弃 Project 概念，统一为 Organization → Game → Environment → App
+ */
 public class Models {
-    public static class Project {
-        public String id;
-        public String name;
-    }
+
     public static class ApiKeyResp {
         public String apiKey; // public key
         public String secret; // private secret
-        public String projectId;
+        public String orgId;
+        public String gameId;
+        public String environmentId;
         public String name;
     }
+
     public static class CreateKeyReq {
-        public String projectId;
+        public String orgId;
+        public String gameId;
+        public String environmentId;
         public String name;
     }
-    public static class PolicyResp {
-        public String projectId;
-        public Integer rpm;
-        public Integer ipRpm;
-        public List<String> propsAllowlist;
-    }
+
     public static class KeyDetailResp {
         public String apiKey;
         public String secret;
-        public String projectId;
+        public String orgId;
+        public String gameId;
+        public String environmentId;
         public Integer rpm;
         public Integer ipRpm;
         public List<String> propsAllowlist;

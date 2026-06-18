@@ -55,15 +55,16 @@ public class RetentionJob {
         DataStream<GenericRecord> stream = env.fromSource(source, wm, "events-raw");
 
         stream
-                .keyBy(r -> (r.get("project_id")+"|"+ uidOf(r)))
+                .keyBy(r -> (r.get("tenant_id")+"|"+r.get("app_id")+"|"+ uidOf(r)))
                 .process(new RetentionProcess())
                 .addSink(JdbcSink.sink(
-                        "INSERT INTO retention_daily (project_id, cohort_date, d, users) VALUES (?,?,?,?)",
+                        "INSERT INTO retention_daily (tenant_id, app_id, cohort_date, d, users) VALUES (?,?,?,?,?)",
                         (ps, row) -> {
-                            ps.setString(1, row.projectId);
-                            ps.setDate(2, new java.sql.Date(row.cohortDate.toEpochDay()*24*3600*1000));
-                            ps.setInt(3, row.d);
-                            ps.setLong(4, 1L);
+                            ps.setString(1, row.tenantId);
+                            ps.setString(2, row.appId);
+                            ps.setDate(3, new java.sql.Date(row.cohortDate.toEpochDay()*24*3600*1000));
+                            ps.setInt(4, row.d);
+                            ps.setLong(5, 1L);
                         },
                         JdbcExecutionOptions.builder().withBatchIntervalMs(1000).withBatchSize(2000).withMaxRetries(3).build(),
                         new JdbcConnectionOptions.JdbcConnectionOptionsBuilder()
@@ -81,7 +82,7 @@ public class RetentionJob {
     }
 
     static class RetentionEmit {
-        String projectId; LocalDate cohortDate; int d;
+        String tenantId; String appId; LocalDate cohortDate; int d;
     }
 
     static class RetentionProcess extends KeyedProcessFunction<String, GenericRecord, RetentionEmit> {
@@ -101,7 +102,8 @@ public class RetentionJob {
 
         @Override
         public void processElement(GenericRecord value, Context ctx, Collector<RetentionEmit> out) throws Exception {
-            String project = value.get("project_id").toString();
+            String tenantId = value.get("tenant_id").toString();
+            String appId = value.get("app_id").toString();
             long ms = tsMs(value);
             LocalDate day = LocalDate.ofEpochDay(ms / 86_400_000L);
 
@@ -109,7 +111,7 @@ public class RetentionJob {
             if (first == null) {
                 long epochDay = day.toEpochDay();
                 state.put("first", epochDay);
-                RetentionEmit r0 = new RetentionEmit(); r0.projectId = project; r0.cohortDate = day; r0.d = 0; out.collect(r0);
+                RetentionEmit r0 = new RetentionEmit(); r0.tenantId = tenantId; r0.appId = appId; r0.cohortDate = day; r0.d = 0; out.collect(r0);
                 return;
             }
             int d = (int)(day.toEpochDay() - first);
@@ -117,7 +119,7 @@ public class RetentionJob {
                 String key = "seen_d_"+d;
                 if (state.get(key) == null) {
                     state.put(key, 1L);
-                    RetentionEmit r = new RetentionEmit(); r.projectId = project; r.cohortDate = LocalDate.ofEpochDay(first); r.d = d; out.collect(r);
+                    RetentionEmit r = new RetentionEmit(); r.tenantId = tenantId; r.appId = appId; r.cohortDate = LocalDate.ofEpochDay(first); r.d = d; out.collect(r);
                 }
             }
         }

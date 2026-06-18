@@ -1,7 +1,8 @@
 export type PitOptions = {
   apiKey: string;
   endpoint: string; // e.g. https://ingest.pit.io
-  projectId: string;
+  tenantId: string; // = organization_id; multi-tenant isolation key
+  appId: string;    // = game_id + environment
   deviceId?: string;
   flushIntervalMs?: number; // default 5000
   maxBatch?: number;        // default 50
@@ -15,7 +16,8 @@ export type EventProps = Record<string, any>;
 type Event = {
   event_id: string;
   event_name: string;
-  project_id: string;
+  tenant_id: string;
+  app_id: string;
   user_id?: string | null;
   device_id: string;
   session_id?: string | null;
@@ -89,7 +91,8 @@ class Queue {
 export class Pit {
   private apiKey: string;
   private endpoint: string;
-  private projectId: string;
+  private tenantId: string;
+  private appId: string;
   private deviceId: string;
   private userId: string | null = null;
   private userProps: Record<string, string | number | boolean | null> = {};
@@ -105,14 +108,15 @@ export class Pit {
   constructor(opts: PitOptions) {
     this.apiKey = opts.apiKey;
     this.endpoint = opts.endpoint.replace(/\/$/, '');
-    this.projectId = opts.projectId;
+    this.tenantId = opts.tenantId;
+    this.appId = opts.appId;
     this.flushInterval = opts.flushIntervalMs ?? 5000;
     this.maxBatch = opts.maxBatch ?? 50;
     this.queue = new Queue(opts.maxQueueBytes ?? 512_000);
     this.sessionGapMs = opts.sessionGapMs ?? 30*60*1000;
     this.debug = !!opts.debug;
 
-    const k = `pit_device_id_${this.projectId}`;
+    const k = `pit_device_id_${this.tenantId}_${this.appId}`;
     this.deviceId = opts.deviceId || storageGet(k) || this.randomDeviceId();
     storageSet(k, this.deviceId);
 
@@ -139,7 +143,8 @@ export class Pit {
     const evt: Event = {
       event_id: uuidv7(),
       event_name: eventName,
-      project_id: this.projectId,
+      tenant_id: this.tenantId,
+      app_id: this.appId,
       user_id: this.userId ?? undefined,
       device_id: this.deviceId,
       session_id: this.sessionId ?? undefined,
@@ -187,7 +192,7 @@ export class Pit {
     return { ...this.userProps, ...(p||{}) };
   }
 
-  private queueKey() { return `pt_queue_${this.projectId}_${this.deviceId}`; }
+  private queueKey() { return `pt_queue_${this.tenantId}_${this.appId}_${this.deviceId}`; }
   private randomDeviceId() { return 'd_' + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2); }
 
   private async send(evts: Event[]) {
@@ -265,8 +270,8 @@ export function assignVariant(exp: { id: string; salt?: string; variants: Varian
   return vars[0].name;
 }
 
-export async function fetchExperiments(controlEndpoint: string, projectId: string): Promise<ExperimentCfg[]> {
-  const url = controlEndpoint.replace(/\/$/,'') + `/api/config/${encodeURIComponent(projectId)}`;
+export async function fetchExperiments(controlEndpoint: string, tenantId: string, appId: string): Promise<ExperimentCfg[]> {
+  const url = controlEndpoint.replace(/\/$/,'') + `/api/config/${encodeURIComponent(tenantId)}/${encodeURIComponent(appId)}`;
   const r = await fetch(url, { headers: { 'accept': 'application/json' } });
   if (!r.ok) throw new Error('fetch experiments failed: '+r.status);
   return r.json();
@@ -330,41 +335,41 @@ export async function assignAllWithTargeting(pt: Pit, exps: ExperimentCfg[], use
 
 // ===== Experiments cache and auto-refresh =====
 type ExperimentsCacheEntry = { ts: number; exps: ExperimentCfg[] };
-function expsCacheKey(projectId: string) { return `pt_experiments_${projectId}`; }
+function expsCacheKey(tenantId: string, appId: string) { return `pt_experiments_${tenantId}_${appId}`; }
 
-export function getCachedExperiments(projectId: string): ExperimentCfg[] | null {
-  const raw = storageGet(expsCacheKey(projectId)); if (!raw) return null;
+export function getCachedExperiments(tenantId: string, appId: string): ExperimentCfg[] | null {
+  const raw = storageGet(expsCacheKey(tenantId, appId)); if (!raw) return null;
   try { const o = JSON.parse(raw) as ExperimentsCacheEntry; if (!Array.isArray(o.exps)) return null; return o.exps; } catch { return null; }
 }
 
-export async function fetchExperimentsCached(controlEndpoint: string, projectId: string, ttlMs = 300_000): Promise<ExperimentCfg[]> {
+export async function fetchExperimentsCached(controlEndpoint: string, tenantId: string, appId: string, ttlMs = 300_000): Promise<ExperimentCfg[]> {
   const now = nowMs();
   try {
-    const raw = storageGet(expsCacheKey(projectId));
+    const raw = storageGet(expsCacheKey(tenantId, appId));
     if (raw) {
       const o = JSON.parse(raw) as ExperimentsCacheEntry;
       if (o && Array.isArray(o.exps) && typeof o.ts === 'number' && (now - o.ts) < ttlMs) {
         // background refresh
-        void fetchExperiments(controlEndpoint, projectId).then(exps => {
-          storageSet(expsCacheKey(projectId), JSON.stringify({ ts: nowMs(), exps }));
+        void fetchExperiments(controlEndpoint, tenantId, appId).then(exps => {
+          storageSet(expsCacheKey(tenantId, appId), JSON.stringify({ ts: nowMs(), exps }));
         }).catch(()=>{});
         return o.exps;
       }
     }
   } catch {}
-  const exps = await fetchExperiments(controlEndpoint, projectId);
-  storageSet(expsCacheKey(projectId), JSON.stringify({ ts: nowMs(), exps }));
+  const exps = await fetchExperiments(controlEndpoint, tenantId, appId);
+  storageSet(expsCacheKey(tenantId, appId), JSON.stringify({ ts: nowMs(), exps }));
   return exps;
 }
 
-export function startExperimentsAutoRefresh(controlEndpoint: string, projectId: string, onUpdate: (exps: ExperimentCfg[]) => void, intervalMs = 300_000): () => void {
+export function startExperimentsAutoRefresh(controlEndpoint: string, tenantId: string, appId: string, onUpdate: (exps: ExperimentCfg[]) => void, intervalMs = 300_000): () => void {
   let stopped = false;
   // emit cached immediately if any
-  const cached = getCachedExperiments(projectId); if (cached) { try { onUpdate(cached); } catch {} }
+  const cached = getCachedExperiments(tenantId, appId); if (cached) { try { onUpdate(cached); } catch {} }
   const tick = async () => {
     try {
-      const exps = await fetchExperiments(controlEndpoint, projectId);
-      storageSet(expsCacheKey(projectId), JSON.stringify({ ts: nowMs(), exps }));
+      const exps = await fetchExperiments(controlEndpoint, tenantId, appId);
+      storageSet(expsCacheKey(tenantId, appId), JSON.stringify({ ts: nowMs(), exps }));
       if (!stopped) onUpdate(exps);
     } catch {}
   };
@@ -374,7 +379,7 @@ export function startExperimentsAutoRefresh(controlEndpoint: string, projectId: 
   return () => { stopped = true; clearInterval(h); };
 }
 
-export async function ensureFreshExperimentsAndAssign(pt: Pit, controlEndpoint: string, projectId: string, userKey: string, ctx: ExpContext, ttlMs = 300_000): Promise<Record<string,string>> {
-  const exps = await fetchExperimentsCached(controlEndpoint, projectId, ttlMs);
+export async function ensureFreshExperimentsAndAssign(pt: Pit, controlEndpoint: string, tenantId: string, appId: string, userKey: string, ctx: ExpContext, ttlMs = 300_000): Promise<Record<string,string>> {
+  const exps = await fetchExperimentsCached(controlEndpoint, tenantId, appId, ttlMs);
   return assignAllWithTargeting(pt, exps, userKey, ctx);
 }

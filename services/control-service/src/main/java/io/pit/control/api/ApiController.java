@@ -5,34 +5,20 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
+/**
+ * API Controller - 多租户模型（v2）
+ * Project 概念已废弃；统一 Organization → Game → Environment → ApiKey
+ */
 @RestController
 @RequestMapping("/api")
 public class ApiController {
     private final ControlService svc;
     public ApiController(ControlService svc) { this.svc = svc; }
 
-    @PostMapping("/projects")
-    public Models.Project upsertProject(@RequestBody Models.Project req) {
-        return svc.upsertProject(req.id, req.name);
-    }
-
-    @GetMapping("/projects")
-    public Object listProjects(@RequestParam(value = "q", required = false) String q,
-                               @RequestParam(value = "page", required = false) Integer page,
-                               @RequestParam(value = "size", required = false) Integer size) {
-        if (page == null && size == null && q == null) {
-            return svc.listProjects();
-        }
-        int p = page == null ? 0 : Math.max(0, page);
-        int s = size == null ? 50 : Math.max(1, size);
-        return svc.searchProjects(q, p, s);
-    }
-
     @PostMapping("/keys")
     public Models.ApiKeyResp createKey(@RequestBody Models.CreateKeyReq req) {
-        return svc.createKey(req.projectId, req.name);
+        return svc.createKey(req.orgId, req.gameId, req.environmentId, req.name);
     }
 
     @GetMapping("/keys/{apiKey}")
@@ -44,15 +30,16 @@ public class ApiController {
 
     @GetMapping("/keys")
     public Object listKeys(@RequestParam(value = "q", required = false) String q,
-                           @RequestParam(value = "projectId", required = false) String projectId,
+                           @RequestParam(value = "orgId", required = false) String orgId,
+                           @RequestParam(value = "gameId", required = false) String gameId,
                            @RequestParam(value = "page", required = false) Integer page,
                            @RequestParam(value = "size", required = false) Integer size) {
-        if (page == null && size == null && (q == null && projectId == null)) {
+        if (page == null && size == null && (q == null && orgId == null && gameId == null)) {
             return svc.listKeys();
         }
         int p = page == null ? 0 : Math.max(0, page);
         int s = size == null ? 50 : Math.max(1, size);
-        return svc.searchKeys(projectId, q, p, s);
+        return svc.searchKeys(orgId, gameId, q, p, s);
     }
 
     public static class UpdatePolicyReq {
@@ -82,11 +69,5 @@ public class ApiController {
     public ResponseEntity<Map<String,Object>> deleteKeys(@RequestBody BatchDeleteReq req) {
         long n = svc.deleteKeys(req.apiKeys);
         return ResponseEntity.ok(Map.of("deleted", n));
-    }
-
-    @DeleteMapping("/projects/{projectId}")
-    public ResponseEntity<Map<String,Object>> deleteProject(@PathVariable String projectId) {
-        long n = svc.deleteProject(projectId);
-        return ResponseEntity.ok(Map.of("deleted","project","keys_deleted", n));
     }
 }

@@ -7,50 +7,46 @@ import java.security.SecureRandom;
 import java.util.*;
 import java.util.stream.Collectors;
 
+/**
+ * Control Service - 多租户模型（v2）
+ * ApiKey 关联 Organization → Game → Environment
+ */
 @Service
 public class ControlService {
-    private final ProjectRepo projectRepo;
     private final ApiKeyRepo keyRepo;
+    private final OrganizationRepo orgRepo;
+    private final GameRepo gameRepo;
+    private final GameEnvironmentRepo envRepo;
 
-    public ControlService(ProjectRepo projectRepo, ApiKeyRepo keyRepo) {
-        this.projectRepo = projectRepo; this.keyRepo = keyRepo;
+    public ControlService(ApiKeyRepo keyRepo,
+                          OrganizationRepo orgRepo,
+                          GameRepo gameRepo,
+                          GameEnvironmentRepo envRepo) {
+        this.keyRepo = keyRepo; this.orgRepo = orgRepo; this.gameRepo = gameRepo; this.envRepo = envRepo;
     }
 
-    public Models.Project upsertProject(String id, String name) {
-        ProjectEntity p = new ProjectEntity(); p.id = id; p.name = name; projectRepo.save(p);
-        Models.Project out = new Models.Project(); out.id = p.id; out.name = p.name; return out;
-    }
-
-    public List<Models.Project> listProjects() {
-        return projectRepo.findAll().stream().map(pe -> { Models.Project m = new Models.Project(); m.id = pe.id; m.name = pe.name; return m; }).collect(Collectors.toList());
-    }
-
-    public Paged<Models.Project> searchProjects(String q, int page, int size) {
-        var pageable = org.springframework.data.domain.PageRequest.of(page, size, org.springframework.data.domain.Sort.by("id").ascending());
-        var pg = projectRepo.search(emptyToNull(q), pageable);
-        var items = pg.getContent().stream().map(pe -> { Models.Project m = new Models.Project(); m.id = pe.id; m.name = pe.name; return m; }).collect(Collectors.toList());
-        return new Paged<>(items, pg.getTotalElements());
-    }
-
-    public Models.ApiKeyResp createKey(String projectId, String name) {
+    public Models.ApiKeyResp createKey(String orgId, String gameId, String environmentId, String name) {
         ApiKeyEntity e = new ApiKeyEntity();
-        e.apiKey = gen("pk_"); e.secret = gen("sk_"); e.projectId = projectId; e.name = name; e.rpm = 600; e.ipRpm = 300;
+        e.apiKey = gen("pk_"); e.secret = gen("sk_");
+        e.orgId = orgId; e.gameId = gameId; e.environmentId = environmentId;
+        e.name = name; e.rpm = 600; e.ipRpm = 300;
         keyRepo.save(e);
-        Models.ApiKeyResp out = new Models.ApiKeyResp(); out.apiKey = e.apiKey; out.secret = e.secret; out.projectId = e.projectId; out.name = e.name; return out;
+        return toResp(e);
     }
 
     public Models.KeyDetailResp getKey(String apiKey) {
-        return keyRepo.findById(apiKey).map(this::toResp).orElse(null);
+        return keyRepo.findById(apiKey).map(this::toDetail).orElse(null);
     }
 
     public List<Models.KeyDetailResp> listKeys() {
-        return keyRepo.findAll().stream().map(this::toResp).collect(Collectors.toList());
+        return keyRepo.findAll().stream().map(this::toDetail).collect(Collectors.toList());
     }
 
-    public Paged<Models.KeyDetailResp> searchKeys(String projectId, String q, int page, int size) {
-        var pageable = org.springframework.data.domain.PageRequest.of(page, size, org.springframework.data.domain.Sort.by("apiKey").ascending());
-        var pg = keyRepo.search(emptyToNull(projectId), emptyToNull(q), pageable);
-        var items = pg.getContent().stream().map(this::toResp).collect(Collectors.toList());
+    public Paged<Models.KeyDetailResp> searchKeys(String orgId, String gameId, String q, int page, int size) {
+        var pageable = org.springframework.data.domain.PageRequest.of(page, size,
+                org.springframework.data.domain.Sort.by("apiKey").ascending());
+        var pg = keyRepo.searchApiKeysInOrg(orgId == null ? "" : orgId, q == null ? "" : q, pageable);
+        var items = pg.getContent().stream().map(this::toDetail).collect(Collectors.toList());
         return new Paged<>(items, pg.getTotalElements());
     }
 
@@ -65,14 +61,6 @@ public class ControlService {
         keyRepo.deleteAllById(apiKeys);
         return apiKeys.size();
     }
-
-    public long deleteProject(String projectId) {
-        long n = keyRepo.deleteByProjectId(projectId);
-        projectRepo.deleteById(projectId);
-        return n;
-    }
-
-    private static String emptyToNull(String s) { return (s==null||s.isBlank())?null:s; }
 
     public static class Paged<T> {
         public java.util.List<T> items; public long total;
@@ -90,13 +78,23 @@ public class ControlService {
             if (req.denyKeys != null) e.denyKeys = String.join(",", req.denyKeys);
             if (req.maskKeys != null) e.maskKeys = String.join(",", req.maskKeys);
             keyRepo.save(e);
-            return toResp(e);
+            return toDetail(e);
         }).orElse(null);
     }
 
-    private Models.KeyDetailResp toResp(ApiKeyEntity e) {
+    private Models.ApiKeyResp toResp(ApiKeyEntity e) {
+        Models.ApiKeyResp out = new Models.ApiKeyResp();
+        out.apiKey = e.apiKey; out.secret = e.secret;
+        out.orgId = e.orgId; out.gameId = e.gameId; out.environmentId = e.environmentId;
+        out.name = e.name;
+        return out;
+    }
+
+    private Models.KeyDetailResp toDetail(ApiKeyEntity e) {
         Models.KeyDetailResp r = new Models.KeyDetailResp();
-        r.apiKey = e.apiKey; r.secret = e.secret; r.projectId = e.projectId; r.rpm = e.rpm; r.ipRpm = e.ipRpm;
+        r.apiKey = e.apiKey; r.secret = e.secret;
+        r.orgId = e.orgId; r.gameId = e.gameId; r.environmentId = e.environmentId;
+        r.rpm = e.rpm; r.ipRpm = e.ipRpm;
         r.propsAllowlist = split(e.propsAllowlist);
         r.piiEmail = e.piiEmail; r.piiPhone = e.piiPhone; r.piiIp = e.piiIp;
         r.denyKeys = split(e.denyKeys); r.maskKeys = split(e.maskKeys);

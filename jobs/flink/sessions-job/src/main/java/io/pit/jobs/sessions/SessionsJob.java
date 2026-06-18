@@ -7,6 +7,7 @@ import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.common.serialization.SimpleStringSchema;
 import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.connector.jdbc.JdbcConnectionOptions;
 import org.apache.flink.connector.jdbc.JdbcExecutionOptions;
 import org.apache.flink.connector.jdbc.JdbcSink;
@@ -55,21 +56,22 @@ public class SessionsJob {
                 .assignTimestampsAndWatermarks(wm);
 
         events
-                .keyBy(e -> Tuple2.of(e.projectId, e.userOrDeviceId()))
+                .keyBy(e -> Tuple3.of(e.tenantId, e.appId, e.userOrDeviceId()))
                 .window(EventTimeSessionWindows.withGap(Time.minutes(gapMinutes)))
                 .process(new BuildSession())
                 .addSink(JdbcSink.sink(
-                        "INSERT INTO sessions (project_id, session_id, user_id, device_id, session_start, session_end, duration, country, events) VALUES (?,?,?,?,?,?,?,?,?)",
+                        "INSERT INTO sessions (tenant_id, app_id, session_id, user_id, device_id, session_start, session_end, duration, country, events) VALUES (?,?,?,?,?,?,?,?,?,?)",
                         (ps, s) -> {
-                            ps.setString(1, s.project_id);
-                            ps.setString(2, s.session_id);
-                            ps.setString(3, s.user_id);
-                            ps.setString(4, s.device_id);
-                            ps.setTimestamp(5, s.session_start);
-                            ps.setTimestamp(6, s.session_end);
-                            ps.setInt(7, s.duration);
-                            ps.setString(8, s.country);
-                            ps.setInt(9, s.events);
+                            ps.setString(1, s.tenant_id);
+                            ps.setString(2, s.app_id);
+                            ps.setString(3, s.session_id);
+                            ps.setString(4, s.user_id);
+                            ps.setString(5, s.device_id);
+                            ps.setTimestamp(6, s.session_start);
+                            ps.setTimestamp(7, s.session_end);
+                            ps.setInt(8, s.duration);
+                            ps.setString(9, s.country);
+                            ps.setInt(10, s.events);
                         },
                         JdbcExecutionOptions.builder().withBatchIntervalMs(500).withBatchSize(1000).withMaxRetries(3).build(),
                         new JdbcConnectionOptions.JdbcConnectionOptionsBuilder()
@@ -85,7 +87,8 @@ public class SessionsJob {
 
     static EventLite toLite(GenericRecord r) {
         EventLite e = new EventLite();
-        e.projectId = str(r.get("project_id"));
+        e.tenantId = str(r.get("tenant_id"));
+        e.appId = str(r.get("app_id"));
         e.userId = str(r.get("user_id"));
         e.deviceId = str(r.get("device_id"));
         e.country = nz(str(r.get("country")));
@@ -100,7 +103,8 @@ public class SessionsJob {
     static String nz(String s) { return s == null ? "" : s; }
 
     public static class EventLite {
-        public String projectId;
+        public String tenantId;
+        public String appId;
         public String userId;
         public String deviceId;
         public String country;
@@ -109,7 +113,8 @@ public class SessionsJob {
     }
 
     public static class SessionRow {
-        public String project_id;
+        public String tenant_id;
+        public String app_id;
         public String session_id;
         public String user_id;
         public String device_id;
@@ -120,9 +125,9 @@ public class SessionsJob {
         public int events;
     }
 
-    public static class BuildSession extends ProcessWindowFunction<EventLite, SessionRow, Tuple2<String,String>, TimeWindow> {
+    public static class BuildSession extends ProcessWindowFunction<EventLite, SessionRow, Tuple3<String,String,String>, TimeWindow> {
         @Override
-        public void process(Tuple2<String, String> key, Context context, Iterable<EventLite> elements, Collector<SessionRow> out) throws Exception {
+        public void process(Tuple3<String, String, String> key, Context context, Iterable<EventLite> elements, Collector<SessionRow> out) throws Exception {
             long minTs = Long.MAX_VALUE, maxTs = Long.MIN_VALUE; int cnt = 0; String country = "";
             for (EventLite e : elements) {
                 if (e.eventTimeMs < minTs) minTs = e.eventTimeMs;
@@ -132,8 +137,9 @@ public class SessionsJob {
             }
             if (cnt == 0) return;
             SessionRow s = new SessionRow();
-            s.project_id = key.f0;
-            String userOrDevice = key.f1;
+            s.tenant_id = key.f0;
+            s.app_id = key.f1;
+            String userOrDevice = key.f2;
             s.user_id = userOrDevice.equals(elements.iterator().next().userId) ? userOrDevice : (elements.iterator().next().userId == null ? "" : elements.iterator().next().userId);
             s.device_id = elements.iterator().next().deviceId == null ? "" : elements.iterator().next().deviceId;
             s.session_start = new Timestamp(minTs);
@@ -141,7 +147,7 @@ public class SessionsJob {
             s.duration = (int) Math.max(0, (maxTs - minTs)/1000);
             s.country = country;
             s.events = cnt;
-            s.session_id = deterministicId(key.f0 + ":" + userOrDevice + ":" + minTs);
+            s.session_id = deterministicId(key.f0 + ":" + key.f1 + ":" + userOrDevice + ":" + minTs);
             out.collect(s);
         }
     }

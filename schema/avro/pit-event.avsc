@@ -1,11 +1,12 @@
 {
   "type": "record",
   "name": "Event",
-  "namespace": "io.pit.v1",
+  "namespace": "io.pit.v2",
   "fields": [
     {"name": "event_id", "type": "string"},
+    {"name": "tenant_id", "type": "string", "doc": "organization_id; multi-tenant isolation key"},
+    {"name": "app_id", "type": "string", "doc": "game_id + environment, e.g. game_xxx_prod"},
     {"name": "event_name", "type": "string"},
-    {"name": "project_id", "type": "string"},
     {"name": "user_id", "type": ["null", "string"], "default": null},
     {"name": "device_id", "type": "string"},
     {"name": "session_id", "type": ["null", "string"], "default": null},

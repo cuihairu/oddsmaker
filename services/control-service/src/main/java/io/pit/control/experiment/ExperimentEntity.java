@@ -7,8 +7,9 @@ import java.time.Instant;
 @Table(name = "experiments")
 public class ExperimentEntity {
     @Id
-    public String id;            // exp key (unique per project)
-    public String projectId;
+    public String id;            // exp key (unique per app)
+    public String tenantId;      // organization_id; multi-tenant isolation key
+    public String appId;         // game_id + environment
     public String name;
     public String status;        // draft|running|paused
     public String salt;          // for hashing assignment

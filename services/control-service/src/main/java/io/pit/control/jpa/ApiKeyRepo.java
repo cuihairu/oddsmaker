@@ -11,18 +11,12 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 /**
- * API密钥数据访问接口 - 扩展支持多租户
+ * API密钥数据访问接口 - 多租户模型
  */
 @Repository
 public interface ApiKeyRepo extends JpaRepository<ApiKeyEntity, String> {
 
-    // 兼容旧版本方法
-    @Query("SELECT a FROM ApiKeyEntity a WHERE (:projectId IS NULL OR LOWER(a.projectId) LIKE LOWER(CONCAT('%',:projectId,'%'))) AND (:q IS NULL OR LOWER(a.apiKey) LIKE LOWER(CONCAT('%',:q,'%')) OR LOWER(a.name) LIKE LOWER(CONCAT('%',:q,'%')))")
-    Page<ApiKeyEntity> search(@Param("projectId") String projectId, @Param("q") String q, Pageable pageable);
-
-    long deleteByProjectId(String projectId);
-
-    // 新的多租户方法
+    // 多租户方法
     List<ApiKeyEntity> findByOrgId(String orgId);
     List<ApiKeyEntity> findByGameId(String gameId);
     List<ApiKeyEntity> findByEnvironmentId(String environmentId);

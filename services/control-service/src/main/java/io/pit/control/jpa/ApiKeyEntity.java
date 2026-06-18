@@ -21,11 +21,6 @@ public class ApiKeyEntity {
     @Column(nullable = false, length = 64)
     public String secret;
 
-    // 兼容旧版本字段
-    @Column(name = "project_id", length = 32)
-    public String projectId; // 对应 gameId，保持向后兼容
-
-    // 新的多租户字段
     @Column(name = "org_id", length = 32)
     public String orgId;
 
@@ -206,17 +201,5 @@ public class ApiKeyEntity {
 
     public void recordEvents(long eventCount) {
         this.totalEvents = (totalEvents == null ? 0L : totalEvents) + eventCount;
-    }
-
-    // 向后兼容方法
-    @Deprecated
-    public String getProjectId() {
-        return gameId != null ? gameId : projectId;
-    }
-
-    @Deprecated
-    public void setProjectId(String projectId) {
-        this.projectId = projectId;
-        this.gameId = projectId;
     }
 }

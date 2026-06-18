@@ -5,17 +5,23 @@ import Compression
 public struct PitOptions {
     public let apiKey: String
     public let endpoint: URL
-    public let projectId: String
+    public let tenantId: String   // = organization_id
+    public let appId: String      // = game_id + environment
     public var deviceId: String?
     public var flushIntervalSec: TimeInterval = 5
     public var maxBatch: Int = 50
     public var maxQueueBytes: Int = 512_000
     public var sessionGapSec: TimeInterval = 30*60
-    public var hmacSecret: String? = nil // not recommended in client
     public var debug: Bool = false
+    // NOTE: HMAC signing intentionally omitted on client SDK.
+    // Server-side HMAC (via Server SDK) is the only supported way to sign requests.
+    // Embedding HMAC secret in client code is unsafe (reverse-engineerable from IPA).
 
-    public init(apiKey: String, endpoint: URL, projectId: String) {
-        self.apiKey = apiKey; self.endpoint = endpoint; self.projectId = projectId
+    public init(apiKey: String, endpoint: URL, tenantId: String, appId: String) {
+        self.apiKey = apiKey
+        self.endpoint = endpoint
+        self.tenantId = tenantId
+        self.appId = appId
     }
 }
 
@@ -36,12 +42,13 @@ public final class Pit {
 
     private var queuePath: URL {
         let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
-        return caches.appendingPathComponent("pit_queue_\(opts?.projectId ?? "")_\(deviceId).ndjson")
+        let o = self.opts
+        return caches.appendingPathComponent("pit_queue_\(o?.tenantId ?? "")_\(o?.appId ?? "")_\(deviceId).ndjson")
     }
 
     public func initSDK(_ options: PitOptions) {
         self.opts = options
-        self.deviceId = options.deviceId ?? Self.loadOrCreateDeviceId(projectId: options.projectId)
+        self.deviceId = options.deviceId ?? Self.loadOrCreateDeviceId(tenantId: options.tenantId, appId: options.appId)
         self.restoreQueue()
         self.lastActive = Date().timeIntervalSince1970
         self.ensureTimer()
@@ -59,7 +66,8 @@ public final class Pit {
         let e = Event(
             event_id: Self.uuidv7(),
             event_name: name,
-            project_id: o.projectId,
+            tenant_id: o.tenantId,
+            app_id: o.appId,
             user_id: userId,
             device_id: deviceId,
             session_id: sessionId,
@@ -114,13 +122,9 @@ public final class Pit {
         let raw = Data(ndjson.utf8)
         let body: Data
         if let gz = Self.gzip(raw) { body = gz; req.setValue("gzip", forHTTPHeaderField: "content-encoding") } else { body = raw }
-        if let secret = o.hmacSecret {
-            let t = String(Int(Date().timeIntervalSince1970))
-            let sigData = Data((t + "." + ndjson).utf8)
-            let mac = HMAC<SHA256>.authenticationCode(for: sigData, using: SymmetricKey(data: Data(secret.utf8)))
-            let sig = mac.map { String(format: "%02x", $0) }.joined()
-            req.setValue("t=\(t), s=\(sig)", forHTTPHeaderField: "x-signature")
-        }
+        // NOTE: HMAC signature intentionally NOT added here.
+        // Client SDK authenticates via x-api-key only. Adding HMAC would
+        // require shipping the secret in client code, which is unsafe.
         req.httpBody = body
 
         let sem = DispatchSemaphore(value: 0)
@@ -152,8 +156,8 @@ public final class Pit {
 
     private func recalcQueueBytesNoLock() { queueBytes = queue.reduce(0) { $0 + $1.estimateSize() } }
 
-    private static func loadOrCreateDeviceId(projectId: String) -> String {
-        let key = "pit_device_id_\(projectId)"
+    private static func loadOrCreateDeviceId(tenantId: String, appId: String) -> String {
+        let key = "pit_device_id_\(tenantId)_\(appId)"
         if let existing = UserDefaults.standard.string(forKey: key), !existing.isEmpty { return existing }
         let idfv = UIDevice.current.identifierForVendor?.uuidString ?? UUID().uuidString
         let hashed = "d_" + SHA1hex(idfv).prefix(24)
@@ -216,7 +220,8 @@ public final class Pit {
     private struct Event {
         let event_id: String
         let event_name: String
-        let project_id: String
+        let tenant_id: String
+        let app_id: String
         let user_id: String?
         let device_id: String
         let session_id: String?
@@ -234,7 +239,8 @@ public final class Pit {
             func f(_ k: String, _ v: String) { a.append("\"\(k)\":\"\(escape(v))\"") }
             func n(_ k: String, _ v: Int64) { a.append("\"\(k)\":\(v)") }
             func o(_ k: String, _ m: [String: Any]) { a.append("\"\(k)\":\(mapToJson(m))") }
-            f("event_id", e.event_id); f("event_name", e.event_name); f("project_id", e.project_id)
+            f("event_id", e.event_id); f("event_name", e.event_name)
+            f("tenant_id", e.tenant_id); f("app_id", e.app_id)
             if let u = e.user_id { f("user_id", u) }
             f("device_id", e.device_id)
             if let s = e.session_id { f("session_id", s) }
@@ -293,8 +299,11 @@ public final class Pit {
         for v in variants { acc += max(1,v.weight); if h < acc { return v.name } }
         return variants[0].name
     }
-    public func fetchExperiments(controlURL: URL, projectId: String, completion: @escaping (Result<Data,Error>)->Void) {
-        var u = controlURL; u.appendPathComponent("api/config/\(projectId)")
+
+    /** Fetch experiments config (running) from control-service. */
+    public func fetchExperiments(controlURL: URL, tenantId: String, appId: String, completion: @escaping (Result<Data,Error>)->Void) {
+        var u = controlURL
+        u.appendPathComponent("api/config/\(tenantId)/\(appId)")
         var req = URLRequest(url: u); req.httpMethod = "GET"; req.setValue("application/json", forHTTPHeaderField: "accept")
         URLSession.shared.dataTask(with: req) { data, resp, err in
             if let e = err { completion(.failure(e)); return }
@@ -303,35 +312,35 @@ public final class Pit {
     }
 
     // ===== Experiments cache & auto refresh =====
-    private func expsKey(_ pid: String) -> String { "pt_experiments_\(pid)" }
+    private func expsKey(_ tid: String, _ aid: String) -> String { "pt_experiments_\(tid)_\(aid)" }
 
-    public func getCachedExperiments(_ projectId: String) -> Data? {
-        if let s = UserDefaults.standard.string(forKey: expsKey(projectId)) {
+    public func getCachedExperiments(_ tenantId: String, _ appId: String) -> Data? {
+        if let s = UserDefaults.standard.string(forKey: expsKey(tenantId, appId)) {
             let parts = s.split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: false)
             if parts.count == 2 { return Data(String(parts[1]).utf8) }
         }
         return nil
     }
 
-    public func fetchExperimentsCached(controlURL: URL, projectId: String, ttlSec: TimeInterval = 300, completion: @escaping (Data)->Void) {
+    public func fetchExperimentsCached(controlURL: URL, tenantId: String, appId: String, ttlSec: TimeInterval = 300, completion: @escaping (Data)->Void) {
         let now = Date().timeIntervalSince1970
-        if let s = UserDefaults.standard.string(forKey: expsKey(projectId)) {
+        if let s = UserDefaults.standard.string(forKey: expsKey(tenantId, appId)) {
             let parts = s.split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: false)
             if parts.count == 2, let ts = TimeInterval(parts[0]), now - ts < ttlSec {
                 completion(Data(String(parts[1]).utf8))
                 // background refresh
-                self.fetchExperiments(controlURL: controlURL, projectId: projectId) { res in
+                self.fetchExperiments(controlURL: controlURL, tenantId: tenantId, appId: appId) { res in
                     if case .success(let data) = res {
-                        let entry = String(Int(Date().timeIntervalSince1970)) + "\n" + String(data: data, encoding: .utf8)!
-                        UserDefaults.standard.set(entry, forKey: self.expsKey(projectId))
+                        let entry = String(Int(Date().timeIntervalSince1970)) + "\n" + (String(data: data, encoding: .utf8) ?? "")
+                        UserDefaults.standard.set(entry, forKey: self.expsKey(tenantId, appId))
                     }
                 }
                 return
             }
         }
-        self.fetchExperiments(controlURL: controlURL, projectId: projectId) { res in
+        self.fetchExperiments(controlURL: controlURL, tenantId: tenantId, appId: appId) { res in
             if case .success(let data) = res {
-                UserDefaults.standard.set(String(Int(now)) + "\n" + String(data: data, encoding: .utf8)!, forKey: self.expsKey(projectId))
+                UserDefaults.standard.set(String(Int(now)) + "\n" + (String(data: data, encoding: .utf8) ?? ""), forKey: self.expsKey(tenantId, appId))
                 completion(data)
             } else {
                 completion(Data())
@@ -340,11 +349,11 @@ public final class Pit {
     }
 
     @discardableResult
-    public func startExperimentsAutoRefresh(controlURL: URL, projectId: String, intervalSec: TimeInterval = 300, onUpdate: @escaping (Data)->Void) -> Timer {
+    public func startExperimentsAutoRefresh(controlURL: URL, tenantId: String, appId: String, intervalSec: TimeInterval = 300, onUpdate: @escaping (Data)->Void) -> Timer {
         let t = Timer.scheduledTimer(withTimeInterval: intervalSec, repeats: true) { _ in
-            self.fetchExperiments(controlURL: controlURL, projectId: projectId) { res in
+            self.fetchExperiments(controlURL: controlURL, tenantId: tenantId, appId: appId) { res in
                 if case .success(let data) = res {
-                    UserDefaults.standard.set(String(Int(Date().timeIntervalSince1970)) + "\n" + String(data: data, encoding: .utf8)!, forKey: self.expsKey(projectId))
+                    UserDefaults.standard.set(String(Int(Date().timeIntervalSince1970)) + "\n" + (String(data: data, encoding: .utf8) ?? ""), forKey: self.expsKey(tenantId, appId))
                     onUpdate(data)
                 }
             }

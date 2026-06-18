@@ -61,17 +61,18 @@ public class FunnelsJob {
                     String ev = n.toString();
                     return ev.equals(step1) || ev.equals(step2);
                 })
-                .keyBy(r -> (r.get("project_id")+"|"+ uidOf(r)))
+                .keyBy(r -> (r.get("tenant_id")+"|"+r.get("app_id")+"|"+ uidOf(r)))
                 .process(new FunnelProcess(step1, step2, timeoutMs))
                 .addSink(JdbcSink.sink(
-                        "INSERT INTO funnels_2step (project_id, event_date, step1, step2, started, completed) VALUES (?,?,?,?,?,?)",
+                        "INSERT INTO funnels_2step (tenant_id, app_id, event_date, step1, step2, started, completed) VALUES (?,?,?,?,?,?,?)",
                         (ps, row) -> {
-                            ps.setString(1, row.projectId);
-                            ps.setDate(2, new java.sql.Date(row.eventDateEpochDay*24*3600*1000));
-                            ps.setString(3, step1);
-                            ps.setString(4, step2);
-                            ps.setLong(5, row.started);
-                            ps.setLong(6, row.completed);
+                            ps.setString(1, row.tenantId);
+                            ps.setString(2, row.appId);
+                            ps.setDate(3, new java.sql.Date(row.eventDateEpochDay*24*3600*1000));
+                            ps.setString(4, step1);
+                            ps.setString(5, step2);
+                            ps.setLong(6, row.started);
+                            ps.setLong(7, row.completed);
                         },
                         JdbcExecutionOptions.builder().withBatchIntervalMs(1000).withBatchSize(2000).withMaxRetries(3).build(),
                         new JdbcConnectionOptions.JdbcConnectionOptionsBuilder()
@@ -88,7 +89,7 @@ public class FunnelsJob {
         return String.valueOf(r.get("device_id"));
     }
 
-    static class FunnelRow { String projectId; long eventDateEpochDay; long started; long completed; }
+    static class FunnelRow { String tenantId; String appId; long eventDateEpochDay; long started; long completed; }
 
     static class FunnelProcess extends KeyedProcessFunction<String, GenericRecord, FunnelRow> {
         private final String step1; private final String step2; private final long timeoutMs;
@@ -106,7 +107,8 @@ public class FunnelsJob {
 
         @Override
         public void processElement(GenericRecord value, Context ctx, Collector<FunnelRow> out) throws Exception {
-            String project = value.get("project_id").toString();
+            String tenantId = value.get("tenant_id").toString();
+            String appId = value.get("app_id").toString();
             String ev = value.get("event_name").toString();
             long ts = tsMs(value);
             long day = ts / 86_400_000L;
@@ -114,7 +116,7 @@ public class FunnelsJob {
                 Long seen = state.get("started_day_"+day);
                 if (seen == null) {
                     state.put("started_day_"+day, 1L);
-                    FunnelRow r = new FunnelRow(); r.projectId = project; r.eventDateEpochDay = day; r.started = 1; r.completed = 0; out.collect(r);
+                    FunnelRow r = new FunnelRow(); r.tenantId = tenantId; r.appId = appId; r.eventDateEpochDay = day; r.started = 1; r.completed = 0; out.collect(r);
                 }
                 state.put("last_step1_ts", ts);
             } else if (ev.equals(step2)) {
@@ -123,7 +125,7 @@ public class FunnelsJob {
                     Long seen = state.get("completed_day_"+day);
                     if (seen == null) {
                         state.put("completed_day_"+day, 1L);
-                        FunnelRow r = new FunnelRow(); r.projectId = project; r.eventDateEpochDay = day; r.started = 0; r.completed = 1; out.collect(r);
+                        FunnelRow r = new FunnelRow(); r.tenantId = tenantId; r.appId = appId; r.eventDateEpochDay = day; r.started = 0; r.completed = 1; out.collect(r);
                     }
                 }
             }

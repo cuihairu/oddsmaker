@@ -10,7 +10,8 @@ void Start() {
   Pit.Pit.Init(new Options {
     apiKey = "pk_test_example",
     endpoint = "http://localhost:8080",
-    projectId = "p1",
+    tenantId = "org_demo",
+    appId = "game_demo__prod",
     debug = true,
   });
 }
@@ -30,7 +31,7 @@ Pit.Pit.Flush();
 - 离线容错：队列持久化到 `Application.persistentDataPath`（ndjson 文件）
 - 会话管理：默认 30 分钟闲置切换 `session_id`
 - 轻量 JSON 序列化（手写），限制嵌套≤3、数组≤50
-- 可选 HMAC（demo）：`x-signature: t=ts, s=hmacSha256(secret, t + '.' + body)`，仅供测试，不建议在客户端放 secret
+- 鉴权：仅 `x-api-key`（客户端 SDK 不支持 HMAC，避免 secret 反编译泄漏）
 
 注意
 - 在移动端建议将 `endpoint` 指向你可访问的网关地址（Android 模拟器访问宿主机可用 `http://10.0.2.2:8080`）

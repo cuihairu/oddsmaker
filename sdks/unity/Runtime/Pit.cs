@@ -19,14 +19,17 @@ namespace Pit
     {
         public string apiKey;
         public string endpoint;  // e.g. http://localhost:8080
-        public string projectId;
+        public string tenantId;  // = organization_id
+        public string appId;     // = game_id + environment
         public string deviceId = null; // optional override
         public int flushIntervalSec = 5;
         public int maxBatch = 50;
         public int maxQueueBytes = 512 * 1024;
         public int sessionGapSec = 30 * 60;
-        public string hmacSecret = null; // not recommended in client (demo only)
         public bool debug = false;
+        // NOTE: HMAC signing intentionally omitted on client SDK.
+        // Server-side HMAC (via Server SDK) is the only supported way to sign requests.
+        // Embedding HMAC secret in client code is unsafe (reverse-engineerable from IL2CPP/Mono assemblies).
     }
 
     [Serializable]
@@ -34,7 +37,8 @@ namespace Pit
     {
         public string event_id;
         public string event_name;
-        public string project_id;
+        public string tenant_id;
+        public string app_id;
         public string user_id;  // optional
         public string device_id;
         public string session_id; // optional
@@ -59,8 +63,8 @@ namespace Pit
         private int _queueBytes = 0;
         private bool _isFlushing = false;
 
-        private string QueuePath => Path.Combine(Application.persistentDataPath, $"pit_queue_{_opts.projectId}_{_deviceId}.ndjson");
-        private string DevKey => $"pit_device_id_{_opts.projectId}";
+        private string QueuePath => Path.Combine(Application.persistentDataPath, $"pit_queue_{_opts.tenantId}_{_opts.appId}_{_deviceId}.ndjson");
+        private string DevKey => $"pit_device_id_{_opts.tenantId}_{_opts.appId}";
 
         public static void Init(Options options)
         {
@@ -127,7 +131,8 @@ namespace Pit
             {
                 event_id = UuidV7(),
                 event_name = eventName,
-                project_id = _opts.projectId,
+                tenant_id = _opts.tenantId,
+                app_id = _opts.appId,
                 user_id = _userId,
                 device_id = _deviceId,
                 session_id = _sessionId,
@@ -176,14 +181,9 @@ namespace Pit
                 req.SetRequestHeader("content-type", "application/x-ndjson");
                 if (gzOk) req.SetRequestHeader("content-encoding", "gzip");
 
-                if (!string.IsNullOrEmpty(_opts.hmacSecret))
-                {
-                    string t = (NowMs() / 1000L).ToString();
-                    // HMAC must sign the uncompressed body per our contract; here we sign the original NDJSON
-                    byte[] raw = Encoding.UTF8.GetBytes(ndjson);
-                    string sig = HmacSha256Hex(_opts.hmacSecret, t + "." + Encoding.UTF8.GetString(raw));
-                    req.SetRequestHeader("x-signature", $"t={t}, s={sig}");
-                }
+                // NOTE: HMAC signature intentionally NOT added here.
+                // Client SDK authenticates via x-api-key only. Adding HMAC would
+                // require shipping the secret in client code, which is unsafe.
 
                 yield return req.SendWebRequest();
                 if (req.result == UnityWebRequest.Result.Success && req.responseCode >= 200 && req.responseCode < 300)
@@ -267,7 +267,8 @@ namespace Pit
             sb.Append('{');
             JField(sb, "event_id", e.event_id);
             JField(sb, "event_name", e.event_name);
-            JField(sb, "project_id", e.project_id);
+            JField(sb, "tenant_id", e.tenant_id);
+            JField(sb, "app_id", e.app_id);
             if (!string.IsNullOrEmpty(e.user_id)) JField(sb, "user_id", e.user_id);
             JField(sb, "device_id", e.device_id);
             if (!string.IsNullOrEmpty(e.session_id)) JField(sb, "session_id", e.session_id);
@@ -354,19 +355,6 @@ namespace Pit
                 return true;
             }
             catch { return false; }
-        }
-
-        private static string HmacSha256Hex(string secret, string message)
-        {
-            try
-            {
-                using var h = new HMACSHA256(Encoding.UTF8.GetBytes(secret));
-                var bytes = h.ComputeHash(Encoding.UTF8.GetBytes(message));
-                var sb = new StringBuilder(bytes.Length * 2);
-                foreach (var b in bytes) sb.AppendFormat("{0:x2}", b);
-                return sb.ToString();
-            }
-            catch { return null; }
         }
 
         private static long NowMs() => DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();

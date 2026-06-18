@@ -73,7 +73,7 @@ public class EventsEnrichJob {
         DataStream<GenericRecord> validated = stream.process(new org.apache.flink.streaming.api.functions.ProcessFunction<GenericRecord, GenericRecord>() {
             @Override
             public void processElement(GenericRecord r, Context ctx, Collector<GenericRecord> out) throws Exception {
-                if (r.get("event_id") == null || r.get("event_name") == null || r.get("project_id") == null || r.get("device_id") == null) {
+                if (r.get("event_id") == null || r.get("event_name") == null || r.get("tenant_id") == null || r.get("app_id") == null || r.get("device_id") == null) {
                     ctx.output(DLQ, toDlqJson(r, "invalid_schema"));
                     return;
                 }
@@ -95,7 +95,8 @@ public class EventsEnrichJob {
 
         var mapped = deduped.map((MapFunction<GenericRecord, EventRow>) record -> {
             EventRow row = new EventRow();
-            row.project_id = str(record.get("project_id"));
+            row.tenant_id = str(record.get("tenant_id"));
+            row.app_id = str(record.get("app_id"));
             row.ts_server = toTimestamp(record.get("ts_server"));
             if (row.ts_server == null) row.ts_server = new Timestamp(System.currentTimeMillis());
             row.event_id = str(record.get("event_id"));
@@ -131,21 +132,22 @@ public class EventsEnrichJob {
         });
 
         var sink = JdbcSink.sink(
-                "INSERT INTO events (project_id, ts_server, event_id, event_name, user_id, device_id, session_id, platform, app_version, country, props_json, revenue_amount, revenue_currency) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "INSERT INTO events (tenant_id, app_id, ts_server, event_id, event_name, user_id, device_id, session_id, platform, app_version, country, props_json, revenue_amount, revenue_currency) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (ps, r) -> {
-                    ps.setString(1, r.project_id);
-                    ps.setTimestamp(2, r.ts_server);
-                    ps.setString(3, r.event_id);
-                    ps.setString(4, r.event_name);
-                    ps.setString(5, r.user_id);
-                    ps.setString(6, r.device_id);
-                    ps.setString(7, r.session_id);
-                    ps.setString(8, r.platform);
-                    ps.setString(9, r.app_version);
-                    ps.setString(10, r.country);
-                    ps.setString(11, r.props_json);
-                    ps.setBigDecimal(12, r.revenue_amount);
-                    ps.setString(13, r.revenue_currency);
+                    ps.setString(1, r.tenant_id);
+                    ps.setString(2, r.app_id);
+                    ps.setTimestamp(3, r.ts_server);
+                    ps.setString(4, r.event_id);
+                    ps.setString(5, r.event_name);
+                    ps.setString(6, r.user_id);
+                    ps.setString(7, r.device_id);
+                    ps.setString(8, r.session_id);
+                    ps.setString(9, r.platform);
+                    ps.setString(10, r.app_version);
+                    ps.setString(11, r.country);
+                    ps.setString(12, r.props_json);
+                    ps.setBigDecimal(13, r.revenue_amount);
+                    ps.setString(14, r.revenue_currency);
                 },
                 JdbcExecutionOptions.builder().withBatchIntervalMs(200).withBatchSize(2000).withMaxRetries(3).build(),
                 new JdbcConnectionOptions.JdbcConnectionOptionsBuilder()
@@ -181,7 +183,8 @@ public class EventsEnrichJob {
     }
 
     public static class EventRow {
-        public String project_id;
+        public String tenant_id;
+        public String app_id;
         public Timestamp ts_server;
         public String event_id;
         public String event_name;

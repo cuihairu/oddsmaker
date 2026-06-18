@@ -9,35 +9,41 @@ import java.util.Timer
 import java.util.TimerTask
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.zip.GZIPOutputStream
-import javax.crypto.Mac
-import javax.crypto.spec.SecretKeySpec
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody
 
 /**
- * Minimal Android SDK that mirrors the Web SDK behavior: batching, NDJSON, optional gzip & HMAC,
+ * Minimal Android SDK that mirrors the Web SDK behavior: batching, NDJSON, optional gzip,
  * offline persistence (SharedPreferences), and simple session handling.
+ *
+ * Authentication: x-api-key header only. HMAC signing is intentionally NOT supported
+ * on the client SDK — embedding HMAC secret in client code is unsafe (reverse-engineering).
+ * Server-to-server traffic must use the dedicated Server SDK which signs requests with HMAC.
  */
 class Pit(private val ctx: Context, private val opts: Options) {
   data class Options(
     val apiKey: String,
     val endpoint: String,
-    val projectId: String,
+    val tenantId: String,
+    val appId: String,
     val deviceId: String? = null,
     val flushIntervalMs: Long = 5000,
     val maxBatch: Int = 50,
     val maxQueueBytes: Int = 512_000,
     val sessionGapMs: Long = 30*60*1000,
-    val hmacSecret: String? = null, // Caution: embedding secret in client is not recommended for production.
     val debug: Boolean = false
+    // NOTE: HMAC signing intentionally omitted on client SDK.
+    // Server-side HMAC (via Server SDK) is the only supported way to sign requests.
+    // Embedding HMAC secret in client code is unsafe and can be reverse-engineered.
   )
 
   data class Event(
     val event_id: String,
     val event_name: String,
-    val project_id: String,
+    val tenant_id: String,
+    val app_id: String,
     val user_id: String? = null,
     val device_id: String,
     val session_id: String? = null,
@@ -77,7 +83,8 @@ class Pit(private val ctx: Context, private val opts: Options) {
     val evt = Event(
       event_id = uuidv7(),
       event_name = eventName,
-      project_id = opts.projectId,
+      tenant_id = opts.tenantId,
+      app_id = opts.appId,
       user_id = userId,
       device_id = deviceId,
       session_id = sessionId,
@@ -150,13 +157,10 @@ class Pit(private val ctx: Context, private val opts: Options) {
       reqBuilder.addHeader("content-encoding", "gzip")
     }
 
-    // optional HMAC signature (not recommended to ship secret in client)
-    opts.hmacSecret?.let { secret ->
-      val t = (System.currentTimeMillis() / 1000).toString()
-      val msg = "$t." + String(bodyBytes, Charsets.UTF_8)
-      val s = hmacSha256Hex(secret, msg)
-      reqBuilder.addHeader("x-signature", "t=$t, s=$s")
-    }
+    // NOTE: HMAC signature intentionally NOT added here.
+    // Client SDK authenticates via x-api-key only. Server SDK (server-to-server)
+    // is the only channel permitted to attach x-signature HMAC headers.
+    // Adding HMAC here would require shipping the secret in client code.
 
     val req = reqBuilder.post(RequestBody.create("application/octet-stream".toMediaType(), bodyBytes)).build()
     try {
@@ -181,7 +185,8 @@ class Pit(private val ctx: Context, private val opts: Options) {
       sb.append('{')
       field(sb, "event_id", e.event_id)
       field(sb, "event_name", e.event_name)
-      field(sb, "project_id", e.project_id)
+      field(sb, "tenant_id", e.tenant_id)
+      field(sb, "app_id", e.app_id)
       e.user_id?.let { field(sb, "user_id", it) }
       field(sb, "device_id", e.device_id)
       e.session_id?.let { field(sb, "session_id", it) }
@@ -253,8 +258,8 @@ class Pit(private val ctx: Context, private val opts: Options) {
     } catch (_: Throwable) { null }
   }
 
-  private fun devKey() = "pit_device_id_${opts.projectId}"
-  private fun queueKey() = "pt_queue_${opts.projectId}_${deviceId}"
+  private fun devKey() = "pit_device_id_${opts.tenantId}_${opts.appId}"
+  private fun queueKey() = "pt_queue_${opts.tenantId}_${opts.appId}_${deviceId}"
 
   private fun persistQueue() {
     try {
@@ -274,13 +279,6 @@ class Pit(private val ctx: Context, private val opts: Options) {
         // To keep simple, ignore restore content for now.
       }
     } catch (_: Throwable) {}
-  }
-
-  private fun hmacSha256Hex(secret: String, message: String): String {
-    val mac = Mac.getInstance("HmacSHA256")
-    mac.init(SecretKeySpec(secret.toByteArray(Charsets.UTF_8), "HmacSHA256"))
-    val out = mac.doFinal(message.toByteArray(Charsets.UTF_8))
-    return out.joinToString("") { b -> "%02x".format(b) }
   }
 
   private fun genDeviceId(): String = "d_" + UUID.randomUUID().toString().replace("-", "")
@@ -309,66 +307,65 @@ class Pit(private val ctx: Context, private val opts: Options) {
     return variants[0].name
   }
   /** Fetch experiments config (running) from control-service. WARNING: network on caller thread. */
-  fun fetchExperiments(controlEndpoint: String, projectId: String): String? {
+  fun fetchExperiments(controlEndpoint: String, tenantId: String, appId: String): String? {
     return try {
-      val url = controlEndpoint.trimEnd('/') + "/api/config/" + projectId
+      val url = controlEndpoint.trimEnd('/') + "/api/config/" + tenantId + "/" + appId
       val req = okhttp3.Request.Builder().url(url).get().build()
       client.newCall(req).execute().use { resp -> if (resp.isSuccessful) resp.body?.string() else null }
     } catch (_: Throwable) { null }
   }
 
   // ===== Experiments cache & auto refresh =====
-  private fun expsKey(pid: String) = "pt_experiments_" + pid
+  private fun expsKey(tid: String, aid: String) = "pt_experiments_${tid}_${aid}"
 
   /** Return cached experiments JSON if available, else null. */
-  fun getCachedExperiments(projectId: String = opts.projectId): String? {
+  fun getCachedExperiments(tenantId: String = opts.tenantId, appId: String = opts.appId): String? {
     return try {
-      val raw = prefs.getString(expsKey(projectId), null) ?: return null
-      val parts = raw.split('
-', limit = 2)
+      val raw = prefs.getString(expsKey(tenantId, appId), null) ?: return null
+      val parts = raw.split('\n', limit = 2)
       if (parts.size == 2) parts[1] else null
     } catch (_: Throwable) { null }
   }
 
   /** Fetch experiments with TTL cache. Returns JSON (string) or null. */
-  fun fetchExperimentsCached(controlEndpoint: String, projectId: String = opts.projectId, ttlMs: Long = 300_000): String? {
+  fun fetchExperimentsCached(controlEndpoint: String, tenantId: String = opts.tenantId, appId: String = opts.appId, ttlMs: Long = 300_000): String? {
     val now = System.currentTimeMillis()
     try {
-      val raw = prefs.getString(expsKey(projectId), null)
+      val raw = prefs.getString(expsKey(tenantId, appId), null)
       if (raw != null) {
-        val parts = raw.split('
-', limit = 2)
+        val parts = raw.split('\n', limit = 2)
         if (parts.size == 2) {
           val ts = parts[0].toLongOrNull() ?: 0L
           val js = parts[1]
           if (now - ts < ttlMs) {
             // background refresh
-            Thread { fetchAndStore(controlEndpoint, projectId) }.start()
+            Thread { fetchAndStore(controlEndpoint, tenantId, appId) }.start()
             return js
           }
         }
       }
     } catch (_: Throwable) {}
-    val js = fetchExperiments(controlEndpoint, projectId)
-    if (js != null) prefs.edit().putString(expsKey(projectId), f"{now}
-{js}").apply()
+    val js = fetchExperiments(controlEndpoint, tenantId, appId)
+    if (js != null) prefs.edit().putString(expsKey(tenantId, appId), "$now\n$js").apply()
     return js
   }
 
   /** Start a background timer to refresh experiments and invoke callback with latest JSON. Returns a cancel function. */
-  fun startExperimentsAutoRefresh(controlEndpoint: String, projectId: String = opts.projectId, intervalMs: Long = 300_000, onUpdate: (String)->Unit): ()->Unit {
+  fun startExperimentsAutoRefresh(controlEndpoint: String, tenantId: String = opts.tenantId, appId: String = opts.appId, intervalMs: Long = 300_000, onUpdate: (String)->Unit): ()->Unit {
     val t = Timer(true)
     val task = object: TimerTask() {
-      override fun run() { fetchAndStore(controlEndpoint, projectId)?.let { onUpdate(it) } }
+      override fun run() { fetchAndStore(controlEndpoint, tenantId, appId)?.let { onUpdate(it) } }
     }
     t.schedule(task, 0L, intervalMs)
     return { try { t.cancel() } catch (_: Throwable) {} }
   }
 
-  private fun fetchAndStore(controlEndpoint: String, projectId: String): String? {
-    val js = fetchExperiments(controlEndpoint, projectId)
-    if (js != null) prefs.edit().putString(expsKey(projectId), System.currentTimeMillis().toString() + "
-" + js).apply()
+  private fun fetchAndStore(controlEndpoint: String, tenantId: String, appId: String): String? {
+    val js = fetchExperiments(controlEndpoint, tenantId, appId)
+    if (js != null) {
+      val now = System.currentTimeMillis()
+      prefs.edit().putString(expsKey(tenantId, appId), "$now\n$js").apply()
+    }
     return js
   }
 
