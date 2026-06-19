@@ -52,14 +52,14 @@ class GameServiceTest {
         testGame = new GameEntity();
         testGame.id = "game_test123";
         testGame.name = "Test Game";
-        testGame.genre = "rpg";
+        testGame.genre = GameEntity.GameGenre.RPG;
         testGame.status = GameEntity.GameStatus.DRAFT;
         testGame.createdAt = LocalDateTime.now();
 
         testGameDTO = new GameDTO();
         testGameDTO.id = "game_test123";
         testGameDTO.name = "Test Game";
-        testGameDTO.genre = "rpg";
+        testGameDTO.genre = "RPG";
     }
 
     @Test
