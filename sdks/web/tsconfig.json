@@ -3,6 +3,7 @@
     "target": "ES2019",
     "module": "ES2020",
     "declaration": true,
+    "rootDir": "src",
     "outDir": "dist",
     "strict": true,
     "moduleResolution": "Bundler",
