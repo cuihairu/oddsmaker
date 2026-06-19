@@ -6,7 +6,7 @@ WORKDIR /workspace
 
 # Copy build files first for better caching
 COPY build.gradle.kts settings.gradle.kts ./
-COPY gradle ./gradle
+COPY services/control-service/build.gradle.kts ./services/control-service/
 
 # Download dependencies (cached if build files unchanged)
 RUN gradle dependencies --no-daemon || true
