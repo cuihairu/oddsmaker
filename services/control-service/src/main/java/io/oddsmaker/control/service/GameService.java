@@ -55,6 +55,11 @@ public class GameService {
             dto.id = "game_" + UUID.randomUUID().toString().replace("-", "").substring(0, 16);
         }
 
+        // 检查ID是否已存在
+        if (gameRepo.existsById(dto.id)) {
+            throw new IllegalArgumentException("Game already exists with ID: " + dto.id);
+        }
+
         // 转换并保存
         GameEntity entity = dto.toEntity();
         entity = gameRepo.save(entity);

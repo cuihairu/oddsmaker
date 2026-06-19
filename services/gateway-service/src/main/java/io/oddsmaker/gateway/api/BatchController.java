@@ -87,8 +87,11 @@ public class BatchController {
 
             BatchResponse resp = new BatchResponse();
             for (Event event : events) {
+                if (event == null) {
+                    continue;  // Skip null events
+                }
                 normalizeCompatFields(event);
-                if (event == null || event.eventId == null || event.eventName == null || event.gameId == null || event.environment == null || event.deviceId == null) {
+                if (event.eventId == null || event.eventName == null || event.gameId == null || event.environment == null || event.deviceId == null) {
                     reject(resp, event, "invalid_schema");
                     continue;
                 }
@@ -150,7 +153,14 @@ public class BatchController {
                     if (line.isEmpty()) {
                         continue;
                     }
-                    out.add(readCompatEvent(line));
+                    try {
+                        Event event = readCompatEvent(line);
+                        if (event != null) {
+                            out.add(event);
+                        }
+                    } catch (Exception e) {
+                        // Skip malformed lines
+                    }
                 }
                 return out;
             }
@@ -158,13 +168,26 @@ public class BatchController {
             if (node.isArray()) {
                 List<Event> out = new ArrayList<>();
                 for (JsonNode child : node) {
-                    out.add(readCompatEvent(child));
+                    if (child == null || child.isNull()) {
+                        continue;  // Skip null elements
+                    }
+                    try {
+                        Event event = readCompatEvent(child);
+                        if (event != null) {
+                            out.add(event);
+                        }
+                    } catch (Exception e) {
+                        // Skip malformed elements
+                    }
                 }
                 return out;
             }
             return List.of(readCompatEvent(node));
         } catch (Exception e) {
-            return List.of();
+            throw new ResponseStatusException(
+                org.springframework.http.HttpStatus.BAD_REQUEST,
+                "Invalid JSON payload: " + e.getMessage()
+            );
         }
     }
 

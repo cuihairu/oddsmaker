@@ -6,11 +6,15 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.core.env.Environment;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 @Component
 public class AdminTokenFilter extends OncePerRequestFilter {
@@ -32,15 +36,29 @@ public class AdminTokenFilter extends OncePerRequestFilter {
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
-        if (token == null || token.isEmpty()) { // dev mode - no auth
+        if (token == null || token.isEmpty()) {
+            // Dev mode - set anonymous authentication for /api/** to satisfy authenticated()
+            var auth = new UsernamePasswordAuthenticationToken(
+                "dev-admin", null,
+                List.of(new SimpleGrantedAuthority("ROLE_ADMIN"))
+            );
+            SecurityContextHolder.getContext().setAuthentication(auth);
             filterChain.doFilter(request, response);
             return;
         }
+
         String hdr = request.getHeader("x-admin-token");
         if (hdr != null && hdr.equals(token)) {
+            // Valid token - set authentication in SecurityContext
+            var auth = new UsernamePasswordAuthenticationToken(
+                "admin", null,
+                List.of(new SimpleGrantedAuthority("ROLE_ADMIN"))
+            );
+            SecurityContextHolder.getContext().setAuthentication(auth);
             filterChain.doFilter(request, response);
             return;
         }
+
         response.setStatus(401);
         response.setContentType("application/json");
         String json = "{\"code\":\"unauthorized\",\"message\":\"missing_or_invalid_admin_token\"}";

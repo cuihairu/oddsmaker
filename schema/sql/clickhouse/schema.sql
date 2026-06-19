@@ -44,6 +44,9 @@ CREATE TABLE IF NOT EXISTS events
   flow_type LowCardinality(String) DEFAULT '',
   item_id String DEFAULT '',
 
+  resource_id String DEFAULT '',
+  resource_amount Decimal(18,4) DEFAULT 0,
+
   ad_network LowCardinality(String) DEFAULT '',
   ad_placement String DEFAULT '',
   ad_format LowCardinality(String) DEFAULT '',
