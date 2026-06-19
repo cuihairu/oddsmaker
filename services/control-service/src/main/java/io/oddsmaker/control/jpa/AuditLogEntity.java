@@ -127,6 +127,7 @@ public class AuditLogEntity {
 
         // 安全相关
         SECURITY_ALERT,         // 安全告警
+        SECURITY_EVENT,         // 安全事件
         RATE_LIMIT_EXCEEDED,    // 超过限流
         UNAUTHORIZED_ACCESS,    // 未授权访问
         SUSPICIOUS_ACTIVITY,    // 可疑活动

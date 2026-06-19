@@ -215,9 +215,8 @@ public class WebhookService {
 
             // 检查是否需要重试
             if (config.shouldRetry() && log.retryCount < config.maxRetries) {
-                LocalDateTime nextRetry = LocalDateTime.now().plusMillis(
-                    config.retryBackoffMs * (long) Math.pow(2, log.retryCount)
-                );
+                long delayMs = config.retryBackoffMs * (long) Math.pow(2, log.retryCount);
+                LocalDateTime nextRetry = LocalDateTime.now().plus(java.time.Duration.ofMillis(delayMs));
                 log.scheduleRetry(nextRetry);
                 logger.info("Scheduling webhook retry: {} at {}", config.name, nextRetry);
             }
