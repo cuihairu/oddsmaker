@@ -54,7 +54,7 @@ An environment is a logical lifecycle stage, not a synonym for a dedicated datab
 
 | Method | Endpoint | Description |
 |---|---|---|
-| POST | `/api/api-keys` | Create an API key bound to `game_id + environment` |
+| POST | `/api/api-keys` | Create an API key bound to `gameId + environmentId` |
 | GET | `/api/api-keys?gameId=&environmentId=` | List API keys |
 | GET | `/api/api-keys/{keyId}` | Get API key details |
 | PUT | `/api/api-keys/{keyId}` | Update limits or policy bindings |
