@@ -63,13 +63,16 @@ public class HmacFilter implements WebFilter {
         }
 
         // 缓存请求体并验证 HMAC，再重放给后续链路
+        final String finalSecret = secret;
+        final String finalT = t;
+        final String finalS = s;
         return DataBufferUtils.join(exchange.getRequest().getBody()).flatMap(dataBuffer -> {
             byte[] bodyBytes = new byte[dataBuffer.readableByteCount()];
             dataBuffer.read(bodyBytes);
             DataBufferUtils.release(dataBuffer);
 
-            String computed = HmacSigner.hmacSha256Hex(secret, t + "." + new String(bodyBytes, StandardCharsets.UTF_8));
-            if (!computed.equalsIgnoreCase(s)) {
+            String computed = HmacSigner.hmacSha256Hex(finalSecret, finalT + "." + new String(bodyBytes, StandardCharsets.UTF_8));
+            if (!computed.equalsIgnoreCase(finalS)) {
                 return unauthorized(exchange, "invalid_signature");
             }
 
