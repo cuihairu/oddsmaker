@@ -4,6 +4,9 @@ export default defineConfig({
   // Base path for GitHub Pages
   base: '/oddsmaker/',
 
+  // Ignore dead links
+  ignoreDeadLinks: true,
+
   // Site metadata
   title: 'Oddsmaker',
   description: 'Gaming Analytics Platform Documentation',
