@@ -116,8 +116,7 @@ public class OpenApiConfig {
                 - **Company**: %s
                 - **Deployment**: %s
                 - **Repository**: configure your own GitHub remote and docs endpoint for your deployment
-                """)
-                .formatted(companyContext.getName(), companyContext.getDeploymentId()))
+                """.formatted(companyContext.getName(), companyContext.getDeploymentId())))
             .version(applicationVersion)
             .contact(new Contact()
                 .name(companyContext.getName())
