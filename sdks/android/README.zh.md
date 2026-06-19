@@ -1,4 +1,4 @@
-# Pit Android SDK（Kotlin）
+# Oddsmaker Android SDK（Kotlin）
 
 特性
 - 批量发送：默认 5s 或 50 条；`application/x-ndjson`；自动 `gzip`
@@ -8,21 +8,21 @@
 
 快速开始
 ```kotlin
-val pt = Pit(
+val sdk = Oddsmaker(
   context,
-  Pit.Options(
+  Oddsmaker.Options(
     apiKey = "pk_test_example",
     endpoint = "http://10.0.2.2:8080", // 模拟器访问本机网关
-    tenantId = "org_demo",
-    appId = "game_demo__prod",
+    gameId = "game_demo",
+    environment = "prod",
     debug = true
   )
 )
-pt.track("level_start", mapOf("level" to 1))
-pt.setUserId("u1")
-pt.expose("paywall", "B")
-pt.revenue(9.99, "USD", mapOf("sku" to "noads"))
-pt.flush()
+sdk.track("level_start", mapOf("level" to 1))
+sdk.setUserId("u1")
+sdk.expose("paywall", "B")
+sdk.revenue(9.99, "USD", mapOf("sku" to "noads"))
+sdk.flush()
 ```
 
 集成

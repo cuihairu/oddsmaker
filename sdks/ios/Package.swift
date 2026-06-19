@@ -2,11 +2,13 @@
 import PackageDescription
 
 let package = Package(
-    name: "Pit",
-    platforms: [ .iOS(.v13), .macOS(.v12) ],
-    products: [ .library(name: "Pit", targets: ["Pit"]) ],
+    name: "Oddsmaker",
+    platforms: [.iOS(.v13)],
+    products: [
+        .library(name: "Oddsmaker", targets: ["Oddsmaker"])
+    ],
     targets: [
-        .target(name: "Pit", path: "Sources/Pit"),
-        .testTarget(name: "PitTests", dependencies: ["Pit"], path: "Tests/PitTests")
+        .target(name: "Oddsmaker", path: "Sources/Oddsmaker"),
+        .testTarget(name: "OddsmakerTests", dependencies: ["Oddsmaker"], path: "Tests/OddsmakerTests")
     ]
 )

@@ -7,9 +7,9 @@
 - k6：
   - 可使用 Docker 运行：
     ```bash
-    docker run --rm -i grafana/k6 run - < scripts/loadtest/k6-pit.js \
+    docker run --rm -i grafana/k6 run - < scripts/loadtest/k6-oddsmaker.js \
       -e ENDPOINT=http://host.docker.internal:8080 \
-      -e API_KEY=pk_test_example -e PROJECT_ID=p1 \
+      -e API_KEY=pk_test_example -e GAME_ID=p1 -e ENVIRONMENT=dev \
       -e RATE=200 -e DURATION=60s -e BATCH=50
     ```
 
@@ -27,7 +27,7 @@
 参数建议（起步）
 - 批量：客户端 50～100；服务端批入 Kafka linger.ms=5–20ms、batch.size 64–256KB
 - 并发：常见 10–20k evts/s 单副本可达；需按机器与网络调优
-- 限速策略：按项目设置 rpm/ipRpm，防止恶意或异常流量冲击
+- 限速策略：按游戏和环境设置 rpm/ipRpm，防止恶意或异常流量冲击
 
 结果记录
 - 压测时记录 RATE/BATCH、响应 P95/P99、2xx/4xx/429 比例、CPU/内存占用

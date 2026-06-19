@@ -1,4 +1,4 @@
-# 生产部署与运维建议（Pit）
+# 生产部署与运维建议（Oddsmaker）
 
 目标：高可用、低延迟、可回放可重算、监控完善。以下建议按组件给出容量估算、关键参数、监控点与告警阈值。
 
@@ -24,13 +24,13 @@
   - 并行度：按 Kafka 分区数对齐；每并行 Subtask 对应 1–2 vCPU
   - 监控：Checkpoint 失败率/时长、BackPressure 比例、Busy 时间、消费 Lag；Job 重启次数
 - ClickHouse
-  - 表：MergeTree；分区（project_id, 月）；OrderBy（project, user/device, ts, name, id）
+  - 表：MergeTree；分区（game_id, environment, 月）；OrderBy（game/environment, user/device, ts, name, id）
   - 资源：专用节点，内存 64–128 GB；快速 SSD；后台合并与压缩要监控
   - 写入：批量 1–10K 行；`max_insert_block_size`、`max_partitions_per_insert_block` 合理配置；控制作业对 CH 的并发
   - TTL：原始 30–90 天；聚合长保留；冷热分层（S3/HDFS）可选
   - 监控：Insert 失败/重试、Parts 数量、Merge 队列、查询延迟/错误、磁盘空间/IOPS
 - Superset/Metabase
-  - 只读连接；权限按项目隔离；缓存策略与慢查询超时配置
+  - 只读连接；权限按游戏与环境隔离；缓存策略与慢查询超时配置
 - Schema Registry（Apicurio）
   - 生产建议使用外部 DB 存储（PostgreSQL）而非内存；开启兼容性校验
 

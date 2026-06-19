@@ -5,7 +5,7 @@ spring:
   application:
     name: control-service
 
-  # 数据库配置 - 升级到PostgreSQL支持企业级多租户
+  # 数据库配置
   datasource:
     # 开发环境：使用H2内存数据库
     url: jdbc:h2:file:./var/controldb;DB_CLOSE_DELAY=-1;AUTO_SERVER=true
@@ -14,10 +14,10 @@ spring:
     password:
 
     # 生产环境配置示例（通过环境变量覆盖）
-    # url: jdbc:postgresql://localhost:5432/pit_control
+    # url: jdbc:postgresql://localhost:5432/oddsmaker_control
     # driverClassName: org.postgresql.Driver
-    # username: ${DB_USERNAME:pit_user}
-    # password: ${DB_PASSWORD:pit_password}
+    # username: ${DB_USERNAME:oddsmaker_user}
+    # password: ${DB_PASSWORD:oddsmaker_password}
 
   jpa:
     hibernate:
@@ -44,45 +44,28 @@ spring:
       name: admin
       password: ${ADMIN_PASSWORD:admin123}
 
-# Pit平台配置
-pit:
+# Oddsmaker 平台配置
+oddsmaker:
   admin:
     # 管理令牌 - 生产环境必须更换
-    token: ${PIT_ADMIN_TOKEN:admin}
+    token: ${ODDSMAKER_ADMIN_TOKEN:admin}
 
-  # 多租户配置
-  tenant:
-    # 默认组织配置
-    default-org-tier: FREE
-    max-games-per-org:
-      free: 5
-      pro: 50
-      enterprise: 1000
-
-    # 默认配额
-    default-quotas:
-      free:
-        events-per-month: 1000000      # 100万事件/月
-        data-retention-days: 90        # 90天数据保留
-        max-api-keys: 10              # 最多10个API密钥
-      pro:
-        events-per-month: 100000000    # 1亿事件/月
-        data-retention-days: 365       # 1年数据保留
-        max-api-keys: 100             # 最多100个API密钥
-      enterprise:
-        events-per-month: -1           # 无限制
-        data-retention-days: 1095      # 3年数据保留
-        max-api-keys: 1000            # 最多1000个API密钥
+  company:
+    # 单公司部署元信息
+    name: ${ODDSMAKER_COMPANY_NAME:Oddsmaker Studio}
+    deployment-id: ${ODDSMAKER_DEPLOYMENT_ID:local}
+    default-timezone: ${ODDSMAKER_DEFAULT_TIMEZONE:Asia/Shanghai}
+    data-region: ${ODDSMAKER_DATA_REGION:cn}
 
   # 邀请配置
   invitation:
     expire-hours: 72                   # 邀请链接72小时过期
-    base-url: ${PIT_BASE_URL:http://localhost:8085}
+    base-url: ${ODDSMAKER_BASE_URL:http://localhost:8085}
 
   # 安全配置
   security:
     jwt:
-      secret: ${JWT_SECRET:pit-jwt-secret-key-change-in-production}
+      secret: ${JWT_SECRET:oddsmaker-jwt-secret-key-change-in-production}
       expiration: 86400000             # 24小时 (毫秒)
     api-key:
       default-rotation-days: 90        # API密钥默认90天轮换
@@ -108,7 +91,7 @@ management:
 # 日志配置
 logging:
   level:
-    io.pit: DEBUG                      # 开发环境详细日志
+    io.oddsmaker: DEBUG                      # 开发环境详细日志
     org.springframework.security: DEBUG
     org.hibernate.SQL: DEBUG
   pattern:
@@ -123,9 +106,9 @@ spring:
       on-profile: production
 
   datasource:
-    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:pit_control}
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:oddsmaker_control}
     driverClassName: org.postgresql.Driver
-    username: ${DB_USERNAME:pit_user}
+    username: ${DB_USERNAME:oddsmaker_user}
     password: ${DB_PASSWORD}
     hikari:
       maximum-pool-size: 20
@@ -146,11 +129,11 @@ spring:
 
 logging:
   level:
-    io.pit: INFO                       # 生产环境标准日志级别
+    io.oddsmaker: INFO                       # 生产环境标准日志级别
     org.springframework.security: WARN
     org.hibernate.SQL: WARN
   file:
-    name: /var/log/pit/control-service.log
+    name: /var/log/oddsmaker/control-service.log
 
 ---
 # 测试环境配置
@@ -176,5 +159,5 @@ spring:
 
 logging:
   level:
-    io.pit: DEBUG
+    io.oddsmaker: DEBUG
     org.springframework.security: DEBUG

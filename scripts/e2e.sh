@@ -34,11 +34,10 @@ $GBIN :services:gateway-service:bootRun &
 GW_PID=$!
 wait_http http://localhost:8080/actuator/health 60 2 || { echo "gateway-service not ready"; kill $CTRL_PID || true; exit 1; }
 
-# 3) Create project and key via control-service
-echo "[4/6] Create project and API key"
+# 3) Create API key via control-service
+echo "[4/6] Create API key"
 ADM=admin
-curl -fsS -X POST 'http://localhost:8085/api/projects' -H 'content-type: application/json' -H "x-admin-token: $ADM" -d '{"id":"p1","name":"E2E"}' >/dev/null || true
-KEY_JSON=$(curl -fsS -X POST 'http://localhost:8085/api/keys' -H 'content-type: application/json' -H "x-admin-token: $ADM" -d '{"projectId":"p1","name":"e2e"}')
+KEY_JSON=$(curl -fsS -X POST 'http://localhost:8085/api/keys' -H 'content-type: application/json' -H "x-admin-token: $ADM" -d '{"gameId":"p1","environmentId":"dev","name":"e2e"}')
 API_KEY=$(echo "$KEY_JSON" | sed -n 's/.*"apiKey"\s*:\s*"\([^"]*\)".*/\1/p')
 if [ -z "$API_KEY" ]; then echo "Failed to create api key: $KEY_JSON"; kill $GW_PID $CTRL_PID || true; exit 1; fi
 
@@ -47,8 +46,8 @@ echo "API_KEY=$API_KEY"
 # 4) Send sample batch to gateway
 TS=$(date +%s000)
 NDJSON=$(cat <<EOL
-{"event_id":"01JE2E0001","event_name":"level_start","project_id":"p1","device_id":"d1","ts_client":$TS,"props":{"level":1}}
-{"event_id":"01JE2E0002","event_name":"level_complete","project_id":"p1","device_id":"d1","ts_client":$((TS+1000)),"props":{"level":1,"stars":3}}
+{"event_id":"01JE2E0001","event_type":"progression","event_name":"level_start","game_id":"p1","environment":"dev","device_id":"d1","ts_client":$TS,"props":{"level":1}}
+{"event_id":"01JE2E0002","event_type":"progression","event_name":"level_complete","game_id":"p1","environment":"dev","device_id":"d1","ts_client":$((TS+1000)),"props":{"level":1,"stars":3}}
 EOL
 )
 RES=$(curl -fsS 'http://localhost:8080/v1/batch' -H "x-api-key: $API_KEY" -H 'content-type: application/x-ndjson' --data-binary "$NDJSON") || {
@@ -61,12 +60,12 @@ if command -v flink >/dev/null 2>&1; then
   CLICKHOUSE_URL=${CLICKHOUSE_URL:-jdbc:clickhouse://localhost:8123/default} \
   KAFKA_BOOTSTRAP=${KAFKA_BOOTSTRAP:-localhost:9092} \
   REGISTRY_URL=${REGISTRY_URL:-http://localhost:8081/apis/registry/v2} \
-  KAFKA_TOPIC=${KAFKA_TOPIC:-pit.events_raw} \
+  KAFKA_TOPIC=${KAFKA_TOPIC:-oddsmaker.events_raw} \
   bash scripts/run_flink.sh || true
   echo "Wait 10s for sinks to flush"
   sleep 10
   # Verify ClickHouse events count
-  CNT=$(curl -fsS "http://localhost:8123/?query=SELECT%20count()%20FROM%20events%20WHERE%20project_id%3D'p1'") || CNT=0
+  CNT=$(curl -fsS "http://localhost:8123/?query=SELECT%20count()%20FROM%20events%20WHERE%20game_id%3D'p1'%20AND%20environment%3D'dev'") || CNT=0
   echo "ClickHouse events count: $CNT"
   if [ "$CNT" -ge 2 ]; then echo "[PASS] end-to-end to ClickHouse"; else echo "[WARN] Flink not inserted or not available"; fi
 else

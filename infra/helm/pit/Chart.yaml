@@ -1,6 +1,0 @@
-apiVersion: v2
-name: pit
-version: 0.1.0
-appVersion: "0.1.0"
-description: Pit gateway & control chart (assumes external Kafka/SchemaRegistry/ClickHouse)
-type: application

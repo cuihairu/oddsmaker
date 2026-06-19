@@ -1,8 +1,0 @@
-Pit deployed.
-- Gateway: svc/pit-gateway (port {{ .Values.service.gateway.port }})
-- Control: svc/pit-control (port {{ .Values.service.control.port }})
-
-Assumes external Kafka ({{ .Values.env.kafkaBootstrap }}), Schema Registry ({{ .Values.env.registryUrl }}), and ClickHouse ({{ .Values.env.clickhouseUrl }}).
-
-Update values.yaml accordingly and run:
-  helm upgrade --install pit ./infra/helm/pit -n pit --create-namespace

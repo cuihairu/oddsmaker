@@ -14,5 +14,5 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "pit-android"
-include(":pit-android")
+rootProject.name = "oddsmaker-android"
+include(":oddsmaker-android")

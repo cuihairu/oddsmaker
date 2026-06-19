@@ -1,4 +1,4 @@
-# Pit Web SDK
+# Oddsmaker Web SDK
 
 特性
 - 批量发送：默认 5s 或 50 条；`application/x-ndjson`；支持 `gzip`（浏览器支持 CompressionStream 时）
@@ -8,12 +8,13 @@
 
 快速开始
 ```ts
-import { Pit } from './dist/index.js';
+import { Oddsmaker } from './dist/index.js';
 
-const pt = new Pit({
+const pt = new Oddsmaker({
   apiKey: 'pk_test_example',
   endpoint: 'http://localhost:8080',
-  projectId: 'p1',
+  gameId: 'game_demo',
+  environment: 'prod',
 });
 
 pt.track('level_start', { level: 3 });

@@ -1,0 +1,108 @@
+image:
+  gateway: your-registry/oddsmaker-gateway:latest
+  control: your-registry/oddsmaker-control:latest
+  pullPolicy: IfNotPresent
+
+commonLabels: {}
+
+replicaCount:
+  gateway: 2
+  control: 1
+
+resources:
+  gateway:
+    limits: { cpu: "2", memory: "2Gi" }
+    requests: { cpu: "500m", memory: "512Mi" }
+  control:
+    limits: { cpu: "1", memory: "1Gi" }
+    requests: { cpu: "200m", memory: "256Mi" }
+
+gateway:
+  podAnnotations: {}
+  podLabels: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  topologySpreadConstraints: []
+  extraEnv: []
+  livenessProbe:
+    path: /actuator/health
+    initialDelaySeconds: 20
+    periodSeconds: 10
+    timeoutSeconds: 2
+    failureThreshold: 6
+  readinessProbe:
+    path: /actuator/health
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    timeoutSeconds: 2
+    failureThreshold: 6
+
+control:
+  podAnnotations: {}
+  podLabels: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  topologySpreadConstraints: []
+  extraEnv: []
+  livenessProbe:
+    path: /actuator/health
+    initialDelaySeconds: 20
+    periodSeconds: 10
+    timeoutSeconds: 2
+    failureThreshold: 6
+  readinessProbe:
+    path: /actuator/health
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    timeoutSeconds: 2
+    failureThreshold: 6
+
+env:
+  kafkaBootstrap: kafka:9092
+  kafkaTopic: oddsmaker.events_raw
+  registryUrl: http://apicurio:8080/apis/registry/v2
+  dlqTopic: oddsmaker.deadletter
+  controlUrl: http://oddsmaker-control:8085
+  adminToken: "admin"
+  clickhouseUrl: jdbc:clickhouse://clickhouse:8123/default
+
+service:
+  gateway:
+    type: ClusterIP
+    annotations: {}
+    port: 8080
+  control:
+    type: ClusterIP
+    annotations: {}
+    port: 8085
+
+hpa:
+  gateway:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+
+ingress:
+  gateway:
+    enabled: false
+    className: ""
+    annotations: {}
+    hosts:
+      - host: oddsmaker-gateway.local
+        paths:
+          - path: /
+            pathType: Prefix
+    tls: []
+  control:
+    enabled: false
+    className: ""
+    annotations: {}
+    hosts:
+      - host: oddsmaker-control.local
+        paths:
+          - path: /
+            pathType: Prefix
+    tls: []

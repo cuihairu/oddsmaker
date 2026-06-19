@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://pit.io/schemas/experiment-config.schema.json",
-  "title": "Pit Experiment Config",
+  "$id": "classpath:schemas/experiment-config.schema.json",
+  "title": "Oddsmaker Experiment Config v1",
   "type": "object",
   "properties": {
     "variants": {

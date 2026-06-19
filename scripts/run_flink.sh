@@ -12,9 +12,9 @@ GRADLE_BIN="./gradlew"; if [ ! -x "$GRADLE_BIN" ]; then GRADLE_BIN="gradle"; fi
 
 BOOTSTRAP=${KAFKA_BOOTSTRAP:-localhost:9092}
 REGISTRY=${REGISTRY_URL:-http://localhost:8081/apis/registry/v2}
-TOPIC=${KAFKA_TOPIC:-pit.events_raw}
+TOPIC=${KAFKA_TOPIC:-oddsmaker.events_raw}
 CH_URL=${CLICKHOUSE_URL:-jdbc:clickhouse://localhost:8123/default}
-DLQ=${KAFKA_DLQ:-pit.deadletter}
+DLQ=${KAFKA_DLQ:-oddsmaker.deadletter}
 GEOIP=${GEOIP_MMDB:-}
 
 echo "Building Flink jobs..."
@@ -34,9 +34,9 @@ run_job() {
     -Dclickhouse.url="$CH_URL" -Dkafka.dlq="$DLQ" -Dgeoip.mmdb="$GEOIP" "$@" &
 }
 
-run_job io.pit.jobs.enrich.EventsEnrichJob "$JAR_ENR"
-run_job io.pit.jobs.sessions.SessionsJob "$JAR_SES"
-run_job io.pit.jobs.retention.RetentionJob "$JAR_RET"
-run_job io.pit.jobs.funnels.FunnelsJob "$JAR_FUN"
+run_job io.oddsmaker.jobs.enrich.EventsEnrichJob "$JAR_ENR"
+run_job io.oddsmaker.jobs.sessions.SessionsJob "$JAR_SES"
+run_job io.oddsmaker.jobs.retention.RetentionJob "$JAR_RET"
+run_job io.oddsmaker.jobs.funnels.FunnelsJob "$JAR_FUN"
 
 echo "All jobs started in background. Use 'jobs' or 'ps' to view, 'kill' to stop."

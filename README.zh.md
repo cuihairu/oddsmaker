@@ -1,20 +1,28 @@
-# Pit（游戏数据分析栈）
+# Oddsmaker（游戏实时分析与风控平台）
 
-- 入口：Spring Boot 网关（限流/治理/PII/Schema）→ Kafka（Avro+Registry）→ Flink（富化/会话/留存/漏斗）→ ClickHouse → Superset
-- SDK：Web/Android/Unity/iOS（批量/NDJSON/gzip/离线/会话）
+Oddsmaker 面向一个游戏公司内部使用：一套平台管理多个游戏、多个环境，提供实时采集、游戏分析、A/B 实验和风控闭环。核心边界是 `game_id + environment`。
 
-快速体验
+## 主链路
+
+- SDK：Web / Android / iOS / Unity / Server
+- 采集：Spring Boot Gateway，负责 API Key、Server HMAC、Schema、PII、限流和风控前置
+- 消息：Kafka + Avro + Schema Registry
+- 计算：Flink 富化、去重、会话、留存、漏斗、收入、风控
+- 存储：ClickHouse 事件与聚合，PostgreSQL 元数据，Redis 实时计数和风控短窗状态
+- 展示：Superset / Metabase / 自研实时与风控大屏
+
+## 快速体验
+
 ```bash
 bash scripts/e2e.sh
-bash scripts/superset-import.sh   # 导入仪表盘（可选）
+bash scripts/superset-import.sh
 ```
 
-文档
-- 架构：docs/architecture.zh.md
-- E2E：docs/e2e.zh.md
-- 运维：docs/ops.zh.md
-- 部署：docs/deploy.k8s.zh.md
-- 发布：docs/release.zh.md
- - 实验：docs/experiments.zh.md
- - 路线图：docs/roadmap.zh.md
- - 贡献指南：docs/contributing.zh.md
+## 文档
+
+- 架构：`docs/architecture.zh.md`
+- 重设计：`docs/redesign/README.zh.md`
+- 采集 API：`docs/api.zh.md`
+- 控制面：`docs/control.zh.md`
+- 路线图：`docs/roadmap.zh.md`
+- 运维：`docs/ops.zh.md`

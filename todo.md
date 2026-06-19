@@ -1,37 +1,44 @@
 # TODO（短期执行）
 
-面向 v0.2.0 Phase 1 的落地事项与代码内 TODO 梳理。
+面向新架构的短期落地事项。参考：`docs/redesign/05-roadmap.zh.md`。
 
-参考：docs/roadmap.zh.md
+## P0 模型统一与安全修复
 
-## P0 立即项
-- [x] 后端：禁止删除最后一位 SUPER_ADMIN（UserService.deleteUser 校验）
-  - 变更：UserRepo 增加 `countByGlobalRoleAndDeletedAtIsNull(GlobalRole)`；UserService 删除逻辑校验计数
-  - 验收：当仅剩 1 位 SUPER_ADMIN 时，删除应抛错；存在 >=2 位时可删除
-- [x] Web SDK：在 `assignAllAndExpose` 中应用 targeting（platform/appVersion）
-  - 说明：与 `assignAllWithTargeting` 对齐，完善基础定向逻辑；需要 `country` 时建议使用后者
-  - 验收：当 `config.targeting` 不匹配时不分配也不曝光
+- [ ] 事件契约 v1：统一为 `game_id + environment`，废弃目标模型中的 `tenant_id`、`org_id`、`project_id`
+- [ ] Gateway 兼容层：旧 `project_id`、`tenant_id/app_id` 映射到新字段
+- [ ] ClickHouse 新建 `events_v1`，按 `(game_id, environment, event_date)` 分区
+- [ ] Flink 作业按 `game_id + environment` 重写 key
+- [ ] SDK 参数统一：客户端只传 `apiKey/gameId/environment`
+- [ ] 移除客户端 SDK HMAC secret；HMAC 仅保留给 Server SDK
 
-## P0 Phase 1.1 多层级租户模型
-- [ ] DDL/Migration 校验：组织/游戏/环境/用户模型与索引齐备（含软删字段）
-- [ ] API 草案与实现：组织/游戏/环境增删改查；约束与校验（跨租户隔离）
-- [ ] API Key 管理：按 org/game/env 维度的限流/PII/配额策略
-- [ ] 审计与监控：关键操作审计日志；关键指标埋点
+## P1 单公司多游戏控制面
 
-## P0 Phase 1.2 企业级权限（RBAC）
-- [ ] 权限模型落地：Super Admin/Org Admin/Game Admin/Analyst/Viewer
-- [ ] 鉴权：JWT/Cookie 会话；方法级权限注解与自定义校验器
-- [ ] 角色管理：用户角色分配/移除接口，范围（GLOBAL/ORG/GAME/ENV）一致性校验
+- [ ] Game API：游戏增删改查、状态、平台、默认时区、默认货币
+- [ ] Environment API：`dev/staging/prod` 配置、采样、数据保留、策略绑定
+- [ ] API Key 管理：绑定 `(game_id, environment)`，区分 `client/server/admin`
+- [ ] Tracking Plan：事件名、字段字典、枚举、cardinality 上限
+- [ ] 公司内 RBAC：`global/game/environment` scope，角色包含 `owner/operator/analyst/developer/risk_admin/viewer`
+- [ ] 审计日志：策略、密钥、权限、风控动作全部记录
 
-## P0 Phase 1.3 管理控制台（Web UI）
-- [ ] 页面：Dashboard/组织/游戏/环境/API Key/用户/系统设置（Ant Design）
-- [ ] 接口对接：与 Control Service API 对齐；状态展现与操作反馈
+## P2 风控基础
 
-## P1 计费与配额（Phase 1.4）
-- [ ] 计费维度：事件量/API 调用/存储/保留期
-- [ ] 配额执行：Gateway/Control Service 统一扣配额与告警
+- [ ] RiskRule API：阈值、黑名单、速度、序列、模型规则
+- [ ] Gateway 风控前置：黑名单、重放、时间窗、非法环境、body size
+- [ ] Flink risk job：高频事件、重复收据、资源异常、广告 reward 异常
+- [ ] ClickHouse 表：`risk_events`、`risk_scores`、`risk_actions`
+- [ ] 风控 Webhook：输出 block/review/mark/throttle 到游戏服
+- [ ] 风控大屏：风险趋势、规则命中、严重等级、处置状态
 
-## 代码清单（跟踪）
-- [ ] services/control-service：补充单元测试（UserService 删除最后 SUPER_ADMIN）
-- [ ] sdks/web：增加针对 targeting 的用例（构建后脚本或轻量测试）
+## P3 游戏分析能力
 
+- [ ] 事件类型化：session/user/business/resource/progression/design/error/ad/risk
+- [ ] Identity Merge：`device_id/user_id/player_id/character_id`
+- [ ] 留存：N-Day + Rolling
+- [ ] 漏斗：N 步、有序/无序、时间窗
+- [ ] 商业化：IAP、广告、LTV
+- [ ] 玩法分析：关卡、任务、对局、虚拟经济
+
+## 暂停项
+
+- [ ] 不继续实现 Organization/Tenant 相关新功能
+- [ ] 不继续做租户套餐、租户升级、跨公司 Row Policy

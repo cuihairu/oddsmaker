@@ -10,7 +10,7 @@ const vectors = [
   ['', 0x811c9dc5 >>> 0],
   ['a', 0xe40c292c >>> 0],
   ['foobar', 0xbf9cf968 >>> 0],
-  ['Pit', hash32('Pit')], // self-check
+  ['Oddsmaker', hash32('Oddsmaker')], // self-check
 ];
 
 for (const [s, expected] of vectors) {

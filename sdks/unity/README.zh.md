@@ -1,28 +1,28 @@
-# Pit Unity SDK（C#）
+# Oddsmaker Unity SDK（C#）
 
 用法
-1) 将 `sdks/unity/Runtime/Pit.cs` 拷贝到你的 Unity 工程（建议 `Assets/Pit/Runtime/`）
+1) 将 `sdks/unity/Runtime/Oddsmaker.cs` 拷贝到你的 Unity 工程（建议 `Assets/Oddsmaker/Runtime/`）
 2) 启动时初始化：
 ```csharp
-using Pit;
+using Oddsmaker;
 
 void Start() {
-  Pit.Pit.Init(new Options {
+  Oddsmaker.Oddsmaker.Init(new Options {
     apiKey = "pk_test_example",
     endpoint = "http://localhost:8080",
-    tenantId = "org_demo",
-    appId = "game_demo__prod",
+    gameId = "game_demo",
+    environment = "prod",
     debug = true,
   });
 }
 ```
 3) 上报事件：
 ```csharp
-Pit.Pit.Track("level_start", new Dictionary<string, object>{{"level",1}});
-Pit.Pit.SetUserId("u1");
-Pit.Pit.Expose("paywall","B");
-Pit.Pit.Revenue(9.99, "USD", new Dictionary<string, object>{{"sku","noads"}});
-Pit.Pit.Flush();
+Oddsmaker.Oddsmaker.Track("level_start", new Dictionary<string, object>{{"level",1}});
+Oddsmaker.Oddsmaker.SetUserId("u1");
+Oddsmaker.Oddsmaker.Expose("paywall","B");
+Oddsmaker.Oddsmaker.Revenue(9.99, "USD", new Dictionary<string, object>{{"sku","noads"}});
+Oddsmaker.Oddsmaker.Flush();
 ```
 
 特性

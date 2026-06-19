@@ -3,7 +3,8 @@
 -- 1) Exposure users (one row per exposure event with user + dims)
 CREATE TABLE IF NOT EXISTS exp_exposure_users
 (
-  project_id String,
+  game_id String,
+  environment LowCardinality(String),
   exp String,
   variant String,
   uid String,
@@ -13,12 +14,13 @@ CREATE TABLE IF NOT EXISTS exp_exposure_users
   country FixedString(2)
 )
 ENGINE = MergeTree
-PARTITION BY (project_id, toYYYYMM(expose_ts))
-ORDER BY (project_id, exp, variant, uid, expose_ts);
+PARTITION BY (game_id, environment, toYYYYMM(expose_ts))
+ORDER BY (game_id, environment, exp, variant, uid, expose_ts);
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS mv_exp_exposure_users
 TO exp_exposure_users AS
-SELECT project_id,
+SELECT game_id,
+       environment,
        JSONExtractString(props_json,'exp') AS exp,
        JSONExtractString(props_json,'variant') AS variant,
        if(user_id!='',user_id,device_id) AS uid,
@@ -30,18 +32,20 @@ WHERE event_name='experiment_exposure';
 -- 2) First conversion per user (primary metric assumed 'level_complete' for MVP)
 CREATE TABLE IF NOT EXISTS exp_first_level_complete
 (
-  project_id String,
+  game_id String,
+  environment LowCardinality(String),
   uid String,
   conv_ts DateTime64(3)
 )
 ENGINE = ReplacingMergeTree
-ORDER BY (project_id, uid);
+ORDER BY (game_id, environment, uid);
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS mv_exp_first_level_complete
 TO exp_first_level_complete AS
-SELECT project_id,
+SELECT game_id,
+       environment,
        if(user_id!='',user_id,device_id) AS uid,
        min(ts_server) AS conv_ts
 FROM events
 WHERE event_name='level_complete'
-GROUP BY project_id, uid;
+GROUP BY game_id, environment, uid;

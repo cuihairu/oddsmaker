@@ -1,4 +1,4 @@
-# Superset 仪表盘（Pit 快速搭建）
+# Superset 仪表盘（Oddsmaker 快速搭建）
 
 目标：基于 ClickHouse 的 `v_events_trend`、`v_dau_trend`、`retention_daily`、`funnels_2step` 快速创建 4 张图表并组合成仪表盘。
 
@@ -53,7 +53,7 @@
 - Save as `Funnels`
 
 四、创建仪表盘（Dashboard）
-- Dashboards -> + Dashboard -> 命名 `Pit Overview`
+- Dashboards -> + Dashboard -> 命名 `Oddsmaker Overview`
 - Edit -> 从左侧添加上述四个图表，排版后保存
 
 五、常见问题

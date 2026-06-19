@@ -3,7 +3,8 @@
 -- 1) Daily exposures with dimensions
 CREATE TABLE IF NOT EXISTS exp_daily_exposures_dim
 (
-  project_id String,
+  game_id String,
+  environment LowCardinality(String),
   event_date Date,
   exp String,
   variant String,
@@ -14,13 +15,14 @@ CREATE TABLE IF NOT EXISTS exp_daily_exposures_dim
   users UInt64
 )
 ENGINE = SummingMergeTree
-PARTITION BY (project_id, toYYYYMM(event_date))
-ORDER BY (project_id, event_date, exp, variant, platform, app_version, country)
+PARTITION BY (game_id, environment, toYYYYMM(event_date))
+ORDER BY (game_id, environment, event_date, exp, variant, platform, app_version, country)
 TTL event_date + INTERVAL 400 DAY DELETE;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS mv_exp_daily_exposures_dim
 TO exp_daily_exposures_dim AS
-SELECT project_id,
+SELECT game_id,
+       environment,
        toDate(expose_ts) AS event_date,
        exp,
        variant,
@@ -30,12 +32,13 @@ SELECT project_id,
        count() AS exposures,
        uniqExact(uid) AS users
 FROM exp_exposure_users
-GROUP BY project_id, event_date, exp, variant, platform, app_version, country;
+GROUP BY game_id, environment, event_date, exp, variant, platform, app_version, country;
 
 -- 2) Daily 24h conversion with dimensions
 CREATE TABLE IF NOT EXISTS exp_daily_conv_24h_dim
 (
-  project_id String,
+  game_id String,
+  environment LowCardinality(String),
   exposure_date Date,
   exp String,
   variant String,
@@ -47,18 +50,19 @@ CREATE TABLE IF NOT EXISTS exp_daily_conv_24h_dim
   cr_24h Float32
 )
 ENGINE = ReplacingMergeTree
-PARTITION BY (project_id, toYYYYMM(exposure_date))
-ORDER BY (project_id, exposure_date, exp, variant, platform, app_version, country)
+PARTITION BY (game_id, environment, toYYYYMM(exposure_date))
+ORDER BY (game_id, environment, exposure_date, exp, variant, platform, app_version, country)
 TTL exposure_date + INTERVAL 400 DAY DELETE;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS mv_exp_daily_conv_24h_dim
 TO exp_daily_conv_24h_dim AS
 WITH conv AS (
-  SELECT project_id, uid, min(conv_ts) AS conv_ts
+  SELECT game_id, environment, uid, min(conv_ts) AS conv_ts
   FROM exp_first_level_complete
-  GROUP BY project_id, uid
+  GROUP BY game_id, environment, uid
 )
-SELECT e.project_id,
+SELECT e.game_id,
+       e.environment,
        toDate(e.expose_ts) AS exposure_date,
        e.exp,
        e.variant,
@@ -69,13 +73,14 @@ SELECT e.project_id,
        countIf(c.conv_ts >= e.expose_ts AND c.conv_ts <= e.expose_ts + INTERVAL 24 HOUR) AS converted_users,
        round(converted_users / nullIf(exposed_users,0), 4) AS cr_24h
 FROM exp_exposure_users e
-LEFT JOIN conv c ON c.project_id=e.project_id AND c.uid=e.uid
-GROUP BY e.project_id, exposure_date, e.exp, e.variant, e.platform, e.app_version, e.country;
+LEFT JOIN conv c ON c.game_id=e.game_id AND c.environment=e.environment AND c.uid=e.uid
+GROUP BY e.game_id, e.environment, exposure_date, e.exp, e.variant, e.platform, e.app_version, e.country;
 
 -- 3) Daily 7d conversion with dimensions
 CREATE TABLE IF NOT EXISTS exp_daily_conv_7d_dim
 (
-  project_id String,
+  game_id String,
+  environment LowCardinality(String),
   exposure_date Date,
   exp String,
   variant String,
@@ -87,18 +92,19 @@ CREATE TABLE IF NOT EXISTS exp_daily_conv_7d_dim
   cr_7d Float32
 )
 ENGINE = ReplacingMergeTree
-PARTITION BY (project_id, toYYYYMM(exposure_date))
-ORDER BY (project_id, exposure_date, exp, variant, platform, app_version, country)
+PARTITION BY (game_id, environment, toYYYYMM(exposure_date))
+ORDER BY (game_id, environment, exposure_date, exp, variant, platform, app_version, country)
 TTL exposure_date + INTERVAL 400 DAY DELETE;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS mv_exp_daily_conv_7d_dim
 TO exp_daily_conv_7d_dim AS
 WITH conv AS (
-  SELECT project_id, uid, min(conv_ts) AS conv_ts
+  SELECT game_id, environment, uid, min(conv_ts) AS conv_ts
   FROM exp_first_level_complete
-  GROUP BY project_id, uid
+  GROUP BY game_id, environment, uid
 )
-SELECT e.project_id,
+SELECT e.game_id,
+       e.environment,
        toDate(e.expose_ts) AS exposure_date,
        e.exp,
        e.variant,
@@ -109,5 +115,5 @@ SELECT e.project_id,
        countIf(c.conv_ts >= e.expose_ts AND c.conv_ts <= e.expose_ts + INTERVAL 7 DAY) AS converted_users,
        round(converted_users / nullIf(exposed_users,0), 4) AS cr_7d
 FROM exp_exposure_users e
-LEFT JOIN conv c ON c.project_id=e.project_id AND c.uid=e.uid
-GROUP BY e.project_id, exposure_date, e.exp, e.variant, e.platform, e.app_version, e.country;
+LEFT JOIN conv c ON c.game_id=e.game_id AND c.environment=e.environment AND c.uid=e.uid
+GROUP BY e.game_id, e.environment, exposure_date, e.exp, e.variant, e.platform, e.app_version, e.country;

@@ -41,4 +41,4 @@ dependencies {
   testImplementation("org.springframework.security:spring-security-test")
 }
 
-springBoot { mainClass.set("io.pit.control.Application") }
+springBoot { mainClass.set("io.oddsmaker.control.Application") }

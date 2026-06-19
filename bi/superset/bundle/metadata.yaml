@@ -2,7 +2,7 @@ version: 1.0.0
 type: Bundle
 bundle:
   databases:
-    - path: databases/pit_ch.yaml
+    - path: databases/oddsmaker_ch.yaml
   datasets:
     - path: datasets/v_events_trend.yaml
     - path: datasets/v_dau_trend.yaml
@@ -51,5 +51,5 @@ bundle:
     - path: charts/exp_exposures_dim_table_fast.yaml
     - path: charts/exp_cr_24h_dim_table_fast.yaml
   dashboards:
-    - path: dashboards/pit_overview.yaml
-    - path: dashboards/pit_experiments.yaml
+    - path: dashboards/oddsmaker_overview.yaml
+    - path: dashboards/oddsmaker_experiments.yaml

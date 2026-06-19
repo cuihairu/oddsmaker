@@ -15,14 +15,14 @@ scripts/run_flink.sh
 环境变量（可选覆盖）
 - KAFKA_BOOTSTRAP（默认 localhost:9092）
 - REGISTRY_URL（默认 http://localhost:8081/apis/registry/v2）
-- KAFKA_TOPIC（默认 pit.events_raw）
+- KAFKA_TOPIC（默认 oddsmaker.events_raw）
 - CLICKHOUSE_URL（默认 jdbc:clickhouse://localhost:8123/default）
-- KAFKA_DLQ（默认 pit.deadletter）
+- KAFKA_DLQ（默认 oddsmaker.deadletter）
 - GEOIP_MMDB（GeoLite mmdb 路径，可空）
 
 验证
 - ClickHouse：`SELECT count() FROM events;`、`SELECT count() FROM sessions;`
-- DLQ：消费 `pit.deadletter` 查看无效/重复事件
+- DLQ：消费 `oddsmaker.deadletter` 查看无效/重复事件
 
 说明
 - JDBC Sink 已做批量与重试；如需端到端事务语义，后续可替换为两阶段提交 sink

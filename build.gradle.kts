@@ -5,7 +5,7 @@ plugins {
 }
 
 allprojects {
-  group = "io.pit"
+  group = "io.oddsmaker"
   version = "0.1.0"
 
   repositories {

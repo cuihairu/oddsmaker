@@ -26,4 +26,4 @@ tasks.withType<JavaCompile> { options.release.set(21) }
 
 java { toolchain { languageVersion.set(JavaLanguageVersion.of(21)) } }
 
-springBoot { mainClass.set("io.pit.gateway.Application") }
+springBoot { mainClass.set("io.oddsmaker.gateway.Application") }

@@ -1,32 +1,32 @@
-# Pit iOS SDK（Swift Package）
+# Oddsmaker iOS SDK（Swift Package）
 
 集成
 - 在 Xcode 中：File -> Add Packages -> 选择本地文件夹 `sdks/ios`（或将其作为 SPM 依赖）
 
 用法
 ```swift
-import Pit
+import Oddsmaker
 
-var opts = PitOptions(apiKey: "pk_test_example",
-                           endpoint: URL(string: "http://localhost:8080")!,
-                           tenantId: "org_demo",
-                           appId: "game_demo__prod")
+var opts = OddsmakerOptions(apiKey: "pk_test_example",
+                            endpoint: URL(string: "http://localhost:8080")!,
+                            gameId: "game_demo",
+                            environment: "prod")
 opts.debug = true
-Pit.shared.initSDK(opts)
+Oddsmaker.shared.initSDK(opts)
 
-Pit.shared.setUserId("u1")
-_ = Pit.shared.track("level_start", props: ["level": 3])
-_ = Pit.shared.expose("paywall", variant: "B")
-_ = Pit.shared.revenue(amount: 9.99, currency: "USD", props: ["sku": "noads"])
-Pit.shared.flush()
+Oddsmaker.shared.setUserId("u1")
+_ = Oddsmaker.shared.track("level_start", props: ["level": 3])
+_ = Oddsmaker.shared.expose("paywall", variant: "B")
+_ = Oddsmaker.shared.revenue(amount: 9.99, currency: "USD", props: ["sku": "noads"])
+Oddsmaker.shared.flush()
 
 // 实验配置（可选）
 // 读取缓存（默认 5 分钟 TTL），并在后台刷新
-Pit.shared.fetchExperimentsCached(controlURL: URL(string: "http://localhost:8085")!, tenantId: "org_demo", appId: "game_demo__prod") { data in
+Oddsmaker.shared.fetchExperimentsCached(controlURL: URL(string: "http://localhost:8085")!, gameId: "game_demo", environment: "prod") { data in
     // data 为 JSON（二进制）；可解析后用于分流/曝光
 }
 // 自动刷新，回调更新
-let timer = Pit.shared.startExperimentsAutoRefresh(controlURL: URL(string:"http://localhost:8085")!, tenantId: "org_demo", appId: "game_demo__prod", intervalSec: 300) { data in
+let timer = Oddsmaker.shared.startExperimentsAutoRefresh(controlURL: URL(string:"http://localhost:8085")!, gameId: "game_demo", environment: "prod", intervalSec: 300) { data in
     // 解析并在合适时机更新
 }
 // 停止：timer.invalidate()

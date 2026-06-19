@@ -14,6 +14,9 @@
 # Node (future SDKs)
 node_modules/
 
+# SwiftPM
+**/.build/
+
 # Logs
 *.log
 

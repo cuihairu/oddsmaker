@@ -1,0 +1,28 @@
+{
+  "$id": "classpath:schemas/oddsmaker-event-schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Oddsmaker Event v1",
+  "type": "object",
+  "required": ["event_id", "game_id", "environment", "event_name", "device_id", "ts_client"],
+  "properties": {
+    "event_id": {"type": "string", "minLength": 8, "maxLength": 64},
+    "game_id": {"type": "string", "minLength": 1, "maxLength": 64},
+    "environment": {"type": "string", "minLength": 1, "maxLength": 32},
+    "event_type": {"type": ["string", "null"], "maxLength": 32},
+    "event_name": {"type": "string", "minLength": 1, "maxLength": 96},
+    "user_id": {"type": ["string", "null"], "maxLength": 128},
+    "device_id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "session_id": {"type": ["string", "null"], "maxLength": 128},
+    "ts_client": {"oneOf": [ {"type": "string", "format": "date-time"}, {"type": "number"} ]},
+    "ts_server": {"oneOf": [ {"type": "string", "format": "date-time"}, {"type": "number"}, {"type": "null"} ]},
+    "platform": {"type": ["string","null"], "maxLength": 32},
+    "app_version": {"type": ["string","null"], "maxLength": 32},
+    "country": {"type": ["string","null"], "maxLength": 2},
+    "client_ip": {"type": ["string","null"], "maxLength": 64},
+    "user_agent": {"type": ["string","null"], "maxLength": 512},
+    "revenue_amount": {"type": ["number","null"]},
+    "revenue_currency": {"type": ["string","null"], "maxLength": 3},
+    "props": {"type": ["object","null"], "additionalProperties": true}
+  },
+  "additionalProperties": true
+}

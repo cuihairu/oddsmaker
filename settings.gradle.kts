@@ -1,4 +1,4 @@
-rootProject.name = "pit"
+rootProject.name = "oddsmaker"
 
 include(
   "libs:common-model",

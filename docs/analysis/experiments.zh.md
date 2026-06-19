@@ -3,7 +3,7 @@
 目标：提供可配置的实验（variants/权重/目标规则），SDK 侧一致性分流与曝光事件，ClickHouse 侧快速聚合曝光/转化指标。
 
 数据模型（控制面）
-- Experiment: { id, projectId, name, status(draft|running|paused), salt, config }
+- Experiment: { id, gameId, environment, name, status(draft|running|paused), salt, config }
 - config 示例：
 ```json
 {
@@ -14,10 +14,10 @@
 ```
 
 控制面 API（简要）
-- POST /api/experiments {id,projectId,name,status,salt,config}
-- GET /api/experiments?projectId=&status=
+- POST /api/experiments {id,gameId,environment,name,status,salt,config}
+- GET /api/experiments?gameId=&environment=&status=
 - POST /api/experiments/{id}/publish | /pause | DELETE /api/experiments/{id}
-- Public 配置：GET /api/config/{projectId} → [{id,salt,config}]
+- Public 配置：GET /api/config/{gameId}/{environment} → [{id,salt,config}]
 
 SDK 分流与曝光（伪代码，TypeScript）
 ```ts
@@ -28,8 +28,8 @@ function assign(exp: {id:string,salt:string,variants:{name:string,weight:number}
   let acc = 0; for (const v of exp.variants) { acc += v.weight; if (h < acc) return v.name; }
   return exp.variants[0].name;
 }
-// 使用：从 /api/config/{projectId} 拉取实验；过滤 targeting；按 userId/设备分配 variant；上报曝光
-pit.expose(exp.id, variant);
+// 使用：从 /api/config/{gameId}/{environment} 拉取实验；过滤 targeting；按 userId/设备分配 variant；上报曝光
+oddsmaker.track("experiment_exposure", { exp: exp.id, variant });
 ```
 
 SDK 使用示例
@@ -38,29 +38,30 @@ SDK 使用示例
 import { fetchExperimentsCached, assignAllWithTargeting, startExperimentsAutoRefresh } from './dist/index.js';
 // 读取本地缓存（默认 5 分钟 TTL），并后台刷新
 const exps = await fetchExperimentsCached('http://localhost:8085', 'p1');
+const environment = 'prod';
 const ctx = { platform: 'web', appVersion: '1.2.3', country: 'US' };
-const assignments = await assignAllWithTargeting(pt, exps, userId || deviceId, ctx);
+const assignments = await assignAllWithTargeting(oddsmaker, exps, userId || deviceId, ctx);
 // 可选：自动刷新实验配置（默认每 5 分钟），刷新后回调
-const stop = startExperimentsAutoRefresh('http://localhost:8085', 'p1', (newExps)=>{
+const stop = startExperimentsAutoRefresh('http://localhost:8085', 'p1', environment, (newExps)=>{
   // 在合适时机重新分配/曝光，或仅用于 UI 控制
 });
 // 需要时停止：stop();
 ```
 - Android (Kotlin)
 ```kotlin
-val raw = pt.fetchExperiments("http://10.0.2.2:8085", "p1") // returns JSON string
-// parse and call pt.assignVariant(expId, salt, listOf(Variant("A",50), Variant("B",50)), userKey)
+val raw = oddsmaker.fetchExperiments("http://10.0.2.2:8085", "p1", "prod") // returns JSON string
+// parse and call oddsmaker.assignVariant(expId, salt, listOf(Variant("A",50), Variant("B",50)), userKey)
 ```
 - iOS (Swift)
 ```swift
-Pit.shared.fetchExperiments(URL(string:"http://localhost:8085")!, projectId:"p1") { result in
-  if case .success(let data) = result { /* decode and assign via Pit.assignVariant */ }
+Oddsmaker.shared.fetchExperiments(URL(string:"http://localhost:8085")!, gameId:"p1", environment:"prod") { result in
+  if case .success(let data) = result { /* decode and assign via Oddsmaker.assignVariant */ }
 }
 ```
 - Unity (C#)
 ```csharp
-var variant = Pit.Pit.AssignVariant("exp1", "salt", new List<Tuple<string,int>>{ Tuple.Create("A",50), Tuple.Create("B",50) }, userKey);
-Pit.Pit.Track("experiment_exposure", new Dictionary<string,object>{{"exp","exp1"},{"variant",variant}});
+var variant = Oddsmaker.Oddsmaker.AssignVariant("exp1", "salt", new List<Tuple<string,int>>{ Tuple.Create("A",50), Tuple.Create("B",50) }, userKey);
+Oddsmaker.Oddsmaker.Track("experiment_exposure", new Dictionary<string,object>{{"exp","exp1"},{"variant",variant}});
 ```
 
 事件规范

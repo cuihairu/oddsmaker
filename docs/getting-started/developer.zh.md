@@ -16,7 +16,7 @@ bash scripts/run_flink.sh
 ```bash
 curl -sS 'http://localhost:8080/v1/batch' \
   -H 'x-api-key: pk_test_example' -H 'content-type: application/x-ndjson' \
-  --data-binary $'{"event_id":"01J..1","event_name":"level_start","project_id":"p1","device_id":"d1","ts_client":'$(date +%s000)'}\n'{"event_id":"01J..2","event_name":"level_complete","project_id":"p1","device_id":"d1","ts_client":'$(date +%s000)'}'
+  --data-binary $'{"event_id":"01J..1","event_name":"level_start","game_id":"game_demo","environment":"production","device_id":"d1","ts_client":'$(date +%s000)'}\n'{"event_id":"01J..2","event_name":"level_complete","game_id":"game_demo","environment":"production","device_id":"d1","ts_client":'$(date +%s000)'}'
 ```
 
 BI 仪表盘

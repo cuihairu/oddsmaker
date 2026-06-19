@@ -1,302 +1,248 @@
-# 05 - 实施路线（P0 → P4）
+# 05 - 实施路线
 
-按优先级分阶段落地，每个阶段独立可发布。
+路线目标：先把模型改正确，再补游戏分析和风控。每个阶段都必须能独立发布。
 
 ## 阶段总览
 
 | 阶段 | 周期 | 目标 | 交付物 |
 |---|---|---|---|
-| **P0** | 2 周 | 安全/阻塞修复 | 修复 3 个 P0 问题 |
-| **P1** | 4-6 周 | 游戏事件化 | 7 类事件 + Identity Merge + 双留存 + N 步漏斗 |
-| **P2** | 4-6 周 | 实时与商业 | LTV + 关卡分析 + 虚拟经济 + 广告 + 异常检测 |
-| **P3** | 8 周 | 智能化 | A/B 完整 + 流失预测 + Crash 系统 |
-| **P4** | 8 周 | 生态化 | 反向 ETL + Remote Config + LiveOps + 插件 |
-
----
-
-## P0 立即修复（2 周）
-
-### P0.1 修复 Android SDK HMAC 安全漏洞
+| P0 | 2 周 | 去多租户、统一命名、安全修复 | `game_id + environment` 目标契约、客户端移除 HMAC、迁移方案 |
+| P1 | 3-4 周 | 单公司多游戏控制面 | Game/Environment/API Key/Role/Policy API |
+| P2 | 4-6 周 | 游戏事件化和核心分析 | 事件 v1、SDK typed API、留存、漏斗、Identity |
+| P3 | 4-6 周 | 风控闭环 | 风控规则、risk job、risk_events、告警和处置 |
+| P4 | 6-8 周 | 商业化与智能分析 | LTV、广告、实验统计、Crash、预测 |
 
-**任务**：
-- 移除 `sdks/android/pit-android/src/main/java/io/pit/android/Pit.kt` 中 `hmacSecret` 字段
-- 移除 `send()` 中 HMAC 签名逻辑（第 153-159 行）
-- 注释清楚：HMAC 仅 Server SDK 使用
-- 增加 lint 警告：禁止在客户端代码 import `HmacSHA256`
-
-**验收**：
-- Android SDK 不再持任何 secret
-- 客户端到服务端请求仅含 `x-api-key`
-- 单元测试覆盖：禁止 hmac 选项
-
-**风险**：极低，纯移除逻辑
+## P0 去多租户和安全修正
 
-### P0.2 统一多租户语义模型
-
-**任务**：
-1. 删除 `ProjectEntity.java` 和 `ProjectRepo.java`
-2. 在 `ApiKeyEntity` 中删除 `projectId` 字段及其向后兼容方法
-3. 新增字段到事件 schema：
-   - `tenant_id` = organization_id
-   - `app_id` = `${game_id}_${environment}`
-4. ClickHouse 表迁移：
-   - 重命名 `project_id` 列为 `tenant_id` + 新增 `app_id`
-   - 调整 `PARTITION BY (tenant_id, app_id, toYYYYMM(event_date))`
-5. Flink 作业改造：
-   - `EventsEnrichJob` / `SessionsJob` / `RetentionJob` / `FunnelsJob` 全部按 `(tenant_id, app_id)` 分组
-6. `ApiController` 接通 `Organization/Game/Environment` 模型，废弃 Project
-
-**验收**：
-- ClickHouse 表分区键改造完成
-- 数据迁移脚本（旧 project_id → tenant_id+app_id 映射）
-- Flink 作业 4 个全部改造
-- e2e 测试通过
-
-**风险**：中，需要数据迁移，建议先 dev 环境验证
-
-### P0.3 启用 disabled 控制器，接通 DB
-
-**任务**：
-1. 逐一启用 8 个 `.disabled` 控制器
-2. 验证 JPA 实体与数据库 schema 一致
-3. 补充缺失的 Service 层实现
-4. Spring Security + JWT 配置（`SecurityConfig.java.disabled` + `JwtUtil.java.disabled`）
-5. 集成测试覆盖核心 API
+### P0.1 明确目标字段
 
-**验收**：
-- 所有 `/api/organizations/*`、`/api/games/*`、`/api/users/*`、`/api/api-keys/*` API 可用
-- 登录/注册/角色分配/权限校验完整
-- OpenAPI 文档与代码一致
-
-**风险**：中，控制器代码量大，需逐个验证
+任务：
 
-### P0.4 PII 治理代码化
+- 目标事件契约改为 `game_id + environment`。
+- 文档、schema、ClickHouse DDL 不再使用 `tenant_id`。
+- 兼容层允许短期读取旧字段：
+  - `project_id -> game_id`
+  - `app_id -> game_id + environment` 解析
+  - `tenant_id` 忽略或仅用于历史迁移映射
 
-**任务**：
-1. 启用 `services/gateway-service/.../api/BatchController.java.disabled`
-2. 落地 `denyKeys` / `maskKeys` / `piiEmail` / `piiPhone` / `piiIp` 处理逻辑
-3. 单元测试覆盖：邮件掩码、电话掩码、IP 粗化、拒绝字段
-4. DLQ 流转：违规事件入 `pit.deadletter` 主题
+验收：
 
-**验收**：
-- 配置 `denyKeys=["ssn"]`，事件含该字段时被拒绝入 DLQ
-- 配置 `piiEmail=mask`，事件中 email 字段被 MD5 截断
-- 单元测试通过
+- 新文档没有把 `Organization/Tenant` 作为目标架构。
+- 新 schema 和 DDL 以 `game_id + environment` 为主键边界。
 
-**风险**：低，仅 Gateway 代码
+### P0.2 移除客户端 HMAC
 
----
+任务：
 
-## P1 游戏事件化（4-6 周）
+- Android/iOS/Unity/Web SDK 不允许配置 HMAC secret。
+- Server SDK 保留 HMAC。
+- Gateway 区分 client key 和 server key。
 
-### P1.1 事件 Schema 扩展（7 类事件）
+验收：
 
-**任务**：
-1. 更新 `schema/avro/pit-event.avsc` 到 v2（详见 [04-redesign.zh.md](./04-redesign.zh.md)）
-2. 更新 `schema/json/pit-event-schema.json` 同步
-3. ClickHouse 表重建（先建新表 `events_v2`，迁移后改名）
-4. SDK 4 套（Web/Android/iOS/Unity）支持新字段
-5. 提供 SDK 类型化 API：`pit.session()/business()/resource()/progression()/design()/error()/ad()`
-6. Tracking Plan YAML + CI 校验
+- 客户端请求只包含 public `x-api-key`。
+- 任何客户端 SDK 不包含 `secret`、`HmacSHA256` 签名逻辑。
 
-**验收**：
-- 7 类事件全部能上报
-- Tracking Plan 校验在 CI 阶段拦截不合规事件名
+### P0.3 制定代码迁移兼容层
 
-### P1.2 Identity Merge（用户身份合并）
+任务：
 
-**任务**：
-1. 新增 `identities` 表（详见 [04-redesign.zh.md](./04-redesign.zh.md)）
-2. Flink enrich 作业维护 `device_id → user_id` 映射（状态机）
-3. 新增 SDK API：`pit.identify(userId)` / `pit.alias(deviceId, userId)`
-4. 查询层走 `user_id` 而非 `device_id`，自动合并设备
+- Gateway 解析旧字段并输出新事件模型。
+- Avro/JSON Schema 发布 v1。
+- ClickHouse 新建规范化事件表，不原地破坏旧表。
+- Flink 作业支持从新 topic 消费。
 
-**验收**：
-- 游客→注册→第三方登录场景下，所有事件归属同一 user_id
-- LTV/留存指标准确
+验收：
 
-### P1.3 双口径留存（N-Day + Rolling）
+- 旧 SDK 能继续上报。
+- 新 SDK 能直接上报 `game_id + environment`。
+- 新旧数据可在查询层统一。
 
-**任务**：
-1. 重写 `retention-job` 支持任意 N 天
-2. 新增 Rolling Retention 计算逻辑
-3. 新增分层留存（付费/等级/渠道/行为）
-4. ClickHouse 表 `retention` 支持 `retention_type` 字段
-5. Superset 看板新增 D1/D3/D7/D14/D30/D60/D90 留存曲线
+## P1 单公司多游戏控制面
 
-**验收**：
-- 任意 N 天留存可计算
-- Rolling 与 N-Day 数据双口径并存
+### P1.1 游戏与环境管理
 
-### P1.4 N 步可配置漏斗
+任务：
 
-**任务**：
-1. 新增 `funnel_configs` 表（Control Service 管理）
-2. 重写 `funnels-job` 支持任意步数 + 有序/无序 + 时间窗
-3. SDK API：`pit.funnel(funnel_id, step, props)`
-4. Superset 看板新增漏斗可视化
+- 保留 `Game` 和 `GameEnvironment`。
+- 删除目标 API 中的 `Organization`。
+- 游戏字段聚焦：名称、类型、平台、时区、状态、默认货币、数据保留。
+- 环境字段聚焦：`dev/staging/prod`、采样、限流、Schema 策略、风控策略。
 
-**验收**：
-- 配置 6 步新手引导漏斗，可视化各步转化率
-- 支持按用户分群（付费/等级/渠道）切片
+验收：
 
-### P1.5 Schema 治理落地
+- 可以创建游戏和环境。
+- 每个环境可独立配置 API Key、Tracking Plan、PII、风控规则。
 
-**任务**：
-1. Tracking Plan YAML schema 定义
-2. SDK 代码生成器：YAML → TypeScript / Kotlin / Swift 类型
-3. CI 阶段校验：SDK 调用 vs Tracking Plan 一致
-4. Apicurio Schema Registry 版本兼容性检查
+### P1.2 API Key 管理
 
-**验收**：
-- Tracking Plan 变更自动触发 SDK 类型重新生成
-- 不合规 SDK 调用 CI 阶段失败
+任务：
 
----
+- API Key 绑定 `(game_id, environment)`。
+- Key 类型：`client`、`server`、`admin`。
+- client key 只允许写事件。
+- server key 可写服务端事件、支付校验、风控反馈。
 
-## P2 实时与商业（4-6 周）
+验收：
 
-### P2.1 实时大屏（5 分钟滚动）
+- Gateway 根据 key 自动补齐或校验 `game_id + environment`。
+- 跨游戏、跨环境写入被拒绝。
 
-**任务**：
-1. Flink 作业：事件流 → `realtime_5min` 表
-2. Redis 实时计数器加速（DAU/Session/Revenue/Events）
-3. 自研大屏前端（React + ECharts + WebSocket）
-4. 替代/补充 Superset 看板
+### P1.3 公司内 RBAC
 
-**验收**：
-- 大屏延迟 < 5 秒
-- 今日 DAU/Revenue 实时刷新
+任务：
 
-### P2.2 LTV + pLTV
+- 全局角色：`admin`、`user`。
+- 范围角色：`owner`、`operator`、`analyst`、`developer`、`risk_admin`、`viewer`。
+- Scope：`global`、`game`、`environment`。
 
-**任务**：
-1. Cohort LTV 计算（ARPDAU × Lifetime）
-2. 留存曲线拟合（幂律 / 指数）
-3. Python 服务做 pLTV 预测（scikit-learn + TensorFlow）
-4. Superset 看板新增 LTV 趋势
+验收：
 
-**验收**：
-- D7/D30/D90 LTV 可查
-- pLTV 预测误差 < 15%
+- 用户只能访问授权游戏和环境。
+- 风控策略只有 `risk_admin` 或 `owner` 能改。
 
-### P2.3 关卡分析
+## P2 游戏事件化和核心分析
 
-**任务**：
-1. `progression_attempts` 表落地
-2. Flink 作业聚合：通过率、首次通过率、平均尝试次数
-3. 难度系数算法：`难度 = 1 - 通过率`
-4. Superset 看板新增关卡分析
+### P2.1 事件 v1
 
-### P2.4 虚拟经济
+任务：
 
-**任务**：
-1. `resource_flows` 表落地
-2. Flink 作业计算 source/sink 净流
-3. 玩家货币分布（P50/P90/P99）
-4. 通胀监控看板
+- 扩展 Avro/JSON Schema。
+- SDK 提供类型化 API：
+  - `session`
+  - `user`
+  - `business`
+  - `resource`
+  - `progression`
+  - `design`
+  - `error`
+  - `ad`
+  - `risk`
+- Tracking Plan 校验事件名和属性。
 
-### P2.5 广告分析
+验收：
 
-**任务**：
-1. 事件 schema 新增 `ad` 类型
-2. Flink 作业聚合：impression/click/reward/eCPM/ARPU(Ad)
-3. Superset 看板新增广告分析
+- 事件名符合 `category:subject:action`。
+- 未登记字段可按策略拒绝、丢弃或进入 DLQ。
 
-### P2.6 异常检测（CEP）
+### P2.2 Identity Merge
 
-**任务**：
-1. Flink CEP 作业：识别作弊行为（高速重复事件）
-2. 异常付费模式检测（短时大额、多地登录）
-3. 游戏平衡性监控（胜率偏置）
-4. 告警通知（邮件/Webhook）
+任务：
 
----
+- 新增 `identities` 表。
+- 支持 `device_id/user_id/player_id/character_id` 归并。
+- SDK 提供 `identify` 和 `setPlayer`。
 
-## P3 智能化（8 周）
+验收：
 
-### P3.1 A/B 完整平台
+- 游客转账号后，留存和 LTV 不重复计算。
 
-**任务**：
-1. Control Service：实验 CRUD + 流量分桶 + 目标绑定 + 定向
-2. CUPED 方差缩减
-3. 显著性检验（t-test / z-test）
-4. SRM 检查（样本比失衡）
-5. 95% CI 计算
-6. Superset 看板：实验效果对比
+### P2.3 留存和漏斗
 
-### P3.2 流失预测
+任务：
 
-**任务**：
-1. Python 训练服务：特征工程（行为、社交、付费）
-2. GBDT 模型（参考 LightGBM）
-3. 实时评分：用户级流失风险
-4. 高风险用户自动告警 → LiveOps 触达
+- 留存支持 N-Day 和 Rolling。
+- 漏斗支持 N 步、时间窗、有序/无序。
+- 所有聚合按 `game_id + environment`。
 
-### P3.3 Crash 报告系统
+验收：
 
-**任务**：
-1. 事件 schema 新增 `error` 类型完整支持
-2. SDK Crash 自动捕获（Android/iOS 原生 + Unity）
-3. 服务端符号化（dSYM / Proguard mapping / Source map）
-4. 按 stack hash 聚合 + 影响用户数 + 趋势
+- 可配置新手 6 步漏斗。
+- 可查询 D1/D3/D7/D14/D30/D60/D90 留存。
 
-### P3.4 自定义 Dashboard
+## P3 风控闭环
 
-**任务**：
-1. 拖拽式看板编辑器（参考 Metabase）
-2. 自定义指标计算引擎
-3. 定时报告（邮件 / Slack）
-4. 移动端响应式
+### P3.1 风控规则管理
 
----
+任务：
 
-## P4 生态化（8 周）
+- Control Service 新增 RiskRule API。
+- 支持阈值、黑白名单、速度、序列、模型规则。
+- 规则按游戏环境发布。
 
-### P4.1 反向 ETL / 数仓导出
-- S3 / BigQuery / Snowflake 导出
-- CDC 实时同步
-- 第三方工具集成（dbt、Airflow）
+验收：
 
-### P4.2 Remote Config
-- 服务端配置下发（Countly 风格）
-- 按 cohort/实验分组下发不同配置
-- SDK 端缓存 + 热更新
+- `prod` 和 `staging` 可配置不同规则。
+- 每次规则变更写审计日志。
 
-### P4.3 LiveOps 推送
-- 用户分群 → 推送
-- A/B 触达文案
-- 触达效果回流分析
+### P3.2 实时风控作业
 
-### P4.4 插件 SDK
-- 插件接口规范
-- 第三方插件市场（参考 Countly）
-- 社区贡献机制
+任务：
 
----
+- Flink risk job 消费 `events_validated`。
+- 检测：
+  - 高频事件
+  - 异常资源 source/sink
+  - 重复收据
+  - 多设备多 IP 异常登录
+  - 广告 reward 异常
+  - 关卡耗时异常
+- 输出 `oddsmaker.risk_events` 和 ClickHouse `risk_events`。
+
+验收：
+
+- 策略命中延迟小于 10 秒。
+- 每条 risk event 包含 rule、subject、score、evidence、action。
+
+### P3.3 风控处置和告警
+
+任务：
+
+- Dashboard 展示风险趋势、严重等级、命中规则。
+- Webhook 通知游戏服。
+- 支持 block/review/mark/throttle。
+
+验收：
+
+- 支付收据复用可自动 block。
+- 资源异常可 alert 并进入审核队列。
+
+## P4 商业化与智能分析
+
+### P4.1 LTV 和广告分析
+
+任务：
+
+- Cohort LTV。
+- IAP + Ad 收入统一。
+- 广告 impression/click/reward/eCPM。
+- 支付和广告风控联动。
+
+### P4.2 实验平台
+
+任务：
+
+- 实验配置、分桶、目标事件。
+- 显著性、置信区间、SRM。
+- 风控过滤作弊样本，避免污染实验结论。
+
+### P4.3 Crash/Error
+
+任务：
+
+- Error 事件。
+- stack hash 聚合。
+- dSYM/Proguard mapping/source map 管理。
+- 按版本、设备、国家统计影响用户数。
+
+### P4.4 预测模型
+
+任务：
+
+- 流失预测。
+- pLTV。
+- 付费倾向。
+- 风险评分模型。
 
 ## 成功指标
 
-### 技术指标
-- 性能：采集延迟 < 100ms，查询响应 < 2s
-- 可用性：SLA 99.9%+，故障恢复 < 5min
-- 扩展性：支持千万级 DAU，万亿级事件
-- 准确性：数据准确率 99.99%+
+- 采集入口 P95 延迟 < 100ms。
+- 事件进入 ClickHouse P50 < 5s。
+- 风控命中输出 P95 < 10s。
+- 查询常用指标 P95 < 2s。
+- 支持单公司多游戏，单游戏千万级 DAU。
+- 事件字段和 Tracking Plan 变更可审计、可回滚。
 
-### 业务指标
-- 用户采用：月活跃游戏公司 100+
-- 数据规模：日处理事件 10 亿+
-- 客户满意：NPS > 50，续费率 > 90%
-- 生态健康：API 调用 1000 万+/月
+## 当前最优下一步
 
----
-
-## 风险评估
-
-| 风险 | 应对 |
-|---|---|
-| 技术复杂度（AI/pLTV） | 分阶段实施，先 MVP 后优化 |
-| 数据合规（GDPR/CCPA） | 内置多地区合规模板 |
-| 大客户定制化 | 预留扩展点，模块化设计 |
-| 数据迁移（schema 改造） | 双写过渡，灰度迁移 |
-| 性能退化（字段增加） | 物化视图预聚合 + 冷热分层 |
+先做 P0：把目标字段、schema、DDL、SDK 参数和文档统一到 `game_id + environment`。这一步不完成，后续任何控制面、风控、分析能力都会继续被 `Project/Tenant/App` 混乱拖住。

@@ -10,12 +10,12 @@ management:
       exposure:
         include: health,info,metrics
 
-pit:
+oddsmaker:
   kafka:
     bootstrap: localhost:9092
-    topic: pit.events_raw
+    topic: oddsmaker.events_raw
     registryUrl: http://localhost:8081/apis/registry/v2
-    dlqTopic: pit.deadletter
+    dlqTopic: oddsmaker.deadletter
     producer:
       lingerMs: 5
       batchSize: 65536

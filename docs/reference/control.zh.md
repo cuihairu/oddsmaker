@@ -1,65 +1,208 @@
-# 控制面（最小版）
+# Oddsmaker 控制面 API（目标模型）
 
-目的：集中管理项目、API Key 与策略（限速、Props 白名单），供网关动态拉取并缓存。
+控制面负责管理一个公司内部的游戏、环境、API Key、Tracking Plan、PII 策略、风控策略、用户权限和审计日志。
 
-接口（默认端口 8085）
-- 创建/更新项目
-  - POST /api/projects
-  - body: {"id":"p1","name":"Demo"}
-  - 说明：若 id 已存在则更新 name（幂等 upsert）
-- 列出项目
-  - GET /api/projects（支持 `q`/`page`/`size` 分页搜索）
-- 生成 API Key
-  - POST /api/keys
-  - body: {"projectId":"p1","name":"web"}
-  - 返回: { apiKey, secret, projectId, name }
-- 查询 Key 详情
-  - GET /api/keys/{apiKey}
-  - 返回: { apiKey, secret, projectId, rpm, ipRpm, propsAllowlist }
-- 更新 Key 策略
-  - PUT /api/keys/{apiKey}/policy
-  - body 支持：
-    - 限速：`rpm`, `ipRpm`
-    - 允许字段：`propsAllowlist`
-    - PII：`piiEmail`(`allow|mask|drop`), `piiPhone`(`allow|mask|drop`), `piiIp`(`allow|coarse|drop`), `denyKeys`, `maskKeys`
-  - 示例：
-    ```json
-    {
-      "rpm": 800,
-      "ipRpm": 400,
-      "propsAllowlist": ["level","stars","amount","currency"],
-      "piiEmail": "mask",
-      "piiPhone": "drop",
-      "piiIp": "coarse",
-      "denyKeys": ["password","credit_card"],
-      "maskKeys": ["email","mobile"]
-    }
-    ```
+不再设计 Organization/Tenant API。公司信息属于部署配置，不作为业务资源。
 
-网关集成
-- application.yaml 配置 `pit.control.url: http://localhost:8085`
- - 网关在鉴权与限流/过滤阶段动态拉取策略，60 秒缓存（每个 API Key 独立缓存）
- - 覆盖范围：`rpm`/`ipRpm`、`propsAllowlist`、`piiEmail`/`piiPhone`/`piiIp`、`denyKeys`、`maskKeys`
-- 支持覆盖：
-  - 限速：每 Key/每 IP（rpm/ipRpm）
-  - Props 白名单：覆盖默认 allowlist
+## 核心资源
 
-运行
-- 启动控制面：
-  - `./gradlew :services:control-service:bootRun`
-- 测试：
-```bash
-curl -sS -X POST 'http://localhost:8085/api/projects' -H 'content-type: application/json' -d '{"id":"p1","name":"Demo"}'
-curl -sS -X POST 'http://localhost:8085/api/keys' -H 'content-type: application/json' -d '{"projectId":"p1","name":"web"}'
+### Game
+
+```http
+POST /api/games
+GET /api/games
+GET /api/games/{gameId}
+PUT /api/games/{gameId}
+DELETE /api/games/{gameId}
 ```
 
-安全（简单模式）
-- `pit.admin.token`: 控制面 API 的简易管理令牌（默认 `admin`，生产请更换或接入企业认证）
-- 客户端请求需携带 `x-admin-token: <token>`；静态页面可在顶部填写后保存，后续请求自动附带
-- 列出/搜索 Keys
-  - GET /api/keys?q=&projectId=&page=&size=
-  - 返回: 若分页则 { items:[], total:N }；否则为数组
-- 删除
-  - DELETE /api/keys/{apiKey}
-  - POST /api/keys/batch-delete body: {"apiKeys":["pk_x","pk_y"]}
-  - DELETE /api/projects/{projectId}（同时删除该项目下全部 Key）
+示例：
+
+```json
+{
+  "id": "game_demo",
+  "name": "Demo Game",
+  "genre": "rpg",
+  "platforms": ["android", "ios"],
+  "timezone": "Asia/Shanghai",
+  "defaultCurrency": "USD"
+}
+```
+
+### Environment
+
+```http
+POST /api/games/{gameId}/environments
+GET /api/games/{gameId}/environments
+GET /api/games/{gameId}/environments/{environment}
+PUT /api/games/{gameId}/environments/{environment}
+```
+
+`environment` 取值：`dev`、`staging`、`prod`。
+
+环境配置包括：
+
+- 数据保留时间。
+- 采样策略。
+- Schema 校验模式。
+- PII 策略绑定。
+- 风控策略绑定。
+- 限流默认值。
+
+### API Key
+
+```http
+POST /api/api-keys
+GET /api/api-keys?gameId=&environment=
+GET /api/api-keys/{keyId}
+PUT /api/api-keys/{keyId}
+DELETE /api/api-keys/{keyId}
+POST /api/api-keys/{keyId}/rotate
+POST /api/api-keys/{keyId}/disable
+```
+
+示例：
+
+```json
+{
+  "gameId": "game_demo",
+  "environment": "prod",
+  "name": "android-client",
+  "keyType": "client",
+  "rateLimit": {
+    "rpm": 10000,
+    "ipRpm": 300
+  }
+}
+```
+
+Key 类型：
+
+- `client`: 客户端写事件，只返回 public key。
+- `server`: 服务端写事件和支付校验，返回 secret 一次。
+- `admin`: 控制面或内部服务使用。
+
+### Tracking Plan
+
+```http
+POST /api/games/{gameId}/environments/{environment}/tracking-plans
+GET /api/games/{gameId}/environments/{environment}/tracking-plans/current
+POST /api/tracking-plans/{planId}/publish
+POST /api/tracking-plans/{planId}/rollback
+```
+
+Tracking Plan 管理：
+
+- 事件名。
+- 事件类型。
+- 必填字段。
+- 字段类型。
+- 枚举值。
+- cardinality 上限。
+- 兼容性策略。
+
+### PII Policy
+
+```http
+POST /api/pii-policies
+GET /api/pii-policies/{policyId}
+PUT /api/pii-policies/{policyId}
+```
+
+示例：
+
+```json
+{
+  "name": "default-prod",
+  "email": "mask",
+  "phone": "drop",
+  "ip": "coarse",
+  "denyKeys": ["password", "credit_card"],
+  "maskKeys": ["email", "mobile"]
+}
+```
+
+### Risk Rule
+
+```http
+POST /api/risk-rules
+GET /api/risk-rules?gameId=&environment=
+GET /api/risk-rules/{ruleId}
+PUT /api/risk-rules/{ruleId}
+DELETE /api/risk-rules/{ruleId}
+POST /api/risk-rules/{ruleId}/publish
+POST /api/risk-rules/{ruleId}/disable
+```
+
+示例：
+
+```json
+{
+  "gameId": "game_demo",
+  "environment": "prod",
+  "ruleId": "payment_receipt_reuse",
+  "riskType": "payment",
+  "severity": "high",
+  "ruleType": "threshold",
+  "window": "24h",
+  "condition": {
+    "receiptHashDistinctUsersGt": 1
+  },
+  "action": "block"
+}
+```
+
+### User 与 RoleBinding
+
+```http
+GET /api/users
+POST /api/users
+GET /api/users/{userId}
+PUT /api/users/{userId}
+POST /api/users/{userId}/role-bindings
+DELETE /api/users/{userId}/role-bindings/{bindingId}
+```
+
+权限范围：
+
+- `global`
+- `game`
+- `environment`
+
+角色：
+
+- `owner`
+- `operator`
+- `analyst`
+- `developer`
+- `risk_admin`
+- `viewer`
+
+### Audit Log
+
+```http
+GET /api/audit-logs?gameId=&environment=&actor=&action=&from=&to=
+```
+
+必须审计：
+
+- API Key 创建、轮换、禁用。
+- Tracking Plan 发布和回滚。
+- PII 策略变更。
+- 风控规则发布、禁用、阈值变更。
+- 用户授权变更。
+- 风控处置动作。
+
+## 网关集成
+
+Gateway 根据 `x-api-key` 从控制面拉取并缓存：
+
+- `game_id`
+- `environment`
+- key 类型和状态
+- 限流策略
+- PII 策略
+- Tracking Plan 版本
+- 风控策略版本
+
+缓存建议 30-60 秒，策略发布可通过事件或主动刷新缩短生效时间。

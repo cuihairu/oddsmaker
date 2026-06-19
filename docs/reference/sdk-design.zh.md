@@ -1,7 +1,7 @@
 # SDK 设计规范（跨端一致）
 
 初始化
-- `apiKey`, `endpoint`, `projectId`，自动生成 `deviceId`（可覆盖）。
+- `apiKey`, `endpoint`, `gameId`, `environment`，自动生成 `deviceId`（可覆盖）。
 - 批量发送：默认 5s 或 50 条触发；NDJSON+gzip；指数退避重试。
 - 离线容错：断网持久化（Web IndexedDB/LocalStorage；Android Room；iOS 文件）。
 
@@ -31,10 +31,10 @@
 
 示例（Web TS）
 ```ts
-Pit.init({ apiKey, endpoint, projectId });
-Pit.track('level_start', { level: 3 });
-Pit.setUserId('u123');
-Pit.expose('paywall', 'B');
-Pit.revenue(9.99, 'USD', { sku: 'noads' });
-await Pit.flush();
+Oddsmaker.init({ apiKey, endpoint, gameId, environment });
+Oddsmaker.track('level_start', { level: 3 });
+Oddsmaker.setUserId('u123');
+Oddsmaker.expose('paywall', 'B');
+Oddsmaker.revenue(9.99, 'USD', { sku: 'noads' });
+await Oddsmaker.flush();
 ```

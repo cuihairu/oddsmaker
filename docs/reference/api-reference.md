@@ -1,208 +1,139 @@
-# Pit Gaming Analytics Platform API Reference
+# Oddsmaker Control Service API Reference
 
-## 概述
+Oddsmaker is a single-company, multi-game analytics and risk-control platform. The control service manages games, environments, API keys, tracking plans, PII policies, risk rules, users, role bindings, and audit logs.
 
-Pit 是一个专业的多租户游戏分析平台，提供企业级的游戏数据分析和管理功能。本文档描述了控制服务的完整 REST API。
+Oddsmaker does not model `Organization` or `Tenant` as target business resources. The core boundary is `game_id + environment`.
 
-## 认证
+## Authentication
 
-大多数 API 端点需要 JWT 认证。在请求头中包含访问令牌：
+Most endpoints require an admin session or bearer token:
 
+```http
+Authorization: Bearer YOUR_TOKEN
 ```
-Authorization: Bearer YOUR_JWT_TOKEN
-```
 
-## API 端点概览
+## Resources
 
-### 认证管理 (`/api/auth`)
+### Games
 
-| 方法 | 端点 | 描述 | 权限要求 |
-|------|------|------|----------|
-| POST | `/login` | 用户登录 | 无 |
-| POST | `/register` | 用户注册 | 无 |
-| POST | `/verify-email` | 邮箱验证 | 无 |
-| POST | `/forgot-password` | 请求密码重置 | 无 |
-| POST | `/reset-password` | 重置密码 | 无 |
-| POST | `/refresh-token` | 刷新访问令牌 | 有效JWT |
+| Method | Endpoint | Description |
+|---|---|---|
+| POST | `/api/games` | Create a game |
+| GET | `/api/games` | List games |
+| GET | `/api/games/{gameId}` | Get game details |
+| PUT | `/api/games/{gameId}` | Update a game |
+| DELETE | `/api/games/{gameId}` | Delete or archive a game |
 
-### 组织管理 (`/api/organizations`)
+### Environments
 
-| 方法 | 端点 | 描述 | 权限要求 |
-|------|------|------|----------|
-| POST | `/` | 创建组织 | SUPER_ADMIN |
-| GET | `/` | 获取所有组织 | SUPER_ADMIN |
-| GET | `/search` | 搜索组织 | SUPER_ADMIN |
-| GET | `/{orgId}` | 获取组织详情 | SUPER_ADMIN, ORG_ADMIN |
-| PUT | `/{orgId}` | 更新组织 | SUPER_ADMIN, ORG_ADMIN |
-| DELETE | `/{orgId}` | 删除组织 | SUPER_ADMIN |
-| POST | `/{orgId}/upgrade` | 升级组织层级 | SUPER_ADMIN |
-| GET | `/by-tier/{tier}` | 按层级获取组织 | SUPER_ADMIN |
-| GET | `/statistics` | 获取组织统计 | SUPER_ADMIN |
-| GET | `/check-name` | 检查组织名称可用性 | SUPER_ADMIN, ORG_ADMIN |
-| GET | `/upgrade-candidates` | 获取升级候选组织 | SUPER_ADMIN |
+| Method | Endpoint | Description |
+|---|---|---|
+| POST | `/api/games/{gameId}/environments` | Create an environment |
+| GET | `/api/games/{gameId}/environments` | List environments |
+| GET | `/api/games/{gameId}/environments/{environment}` | Get environment config |
+| PUT | `/api/games/{gameId}/environments/{environment}` | Update environment config |
 
-### 游戏管理 (`/api/games`)
+Supported environments: `dev`, `staging`, `prod`.
 
-| 方法 | 端点 | 描述 | 权限要求 |
-|------|------|------|----------|
-| POST | `/` | 创建游戏 | SUPER_ADMIN, ORG_ADMIN, GAME_ADMIN |
-| GET | `/` | 获取游戏列表 | 基于权限 |
-| GET | `/search` | 搜索游戏 | 基于权限 |
-| GET | `/{gameId}` | 获取游戏详情 | 基于权限 |
-| PUT | `/{gameId}` | 更新游戏 | SUPER_ADMIN, ORG_ADMIN, GAME_ADMIN |
-| DELETE | `/{gameId}` | 删除游戏 | SUPER_ADMIN, ORG_ADMIN |
-| POST | `/{gameId}/publish` | 发布游戏 | SUPER_ADMIN, ORG_ADMIN, GAME_ADMIN |
-| POST | `/{gameId}/unpublish` | 下线游戏 | SUPER_ADMIN, ORG_ADMIN, GAME_ADMIN |
-| GET | `/by-status/{status}` | 按状态获取游戏 | SUPER_ADMIN |
-| GET | `/by-genre/{genre}` | 按类型获取游戏 | SUPER_ADMIN |
-| GET | `/by-platform/{platform}` | 按平台获取游戏 | SUPER_ADMIN |
-| GET | `/statistics` | 获取游戏统计 | SUPER_ADMIN |
-| GET | `/statistics/{orgId}` | 获取组织游戏统计 | 基于权限 |
+### API Keys
 
-### 用户管理 (`/api/users`)
+| Method | Endpoint | Description |
+|---|---|---|
+| POST | `/api/api-keys` | Create an API key bound to `game_id + environment` |
+| GET | `/api/api-keys?gameId=&environment=` | List API keys |
+| GET | `/api/api-keys/{keyId}` | Get API key details |
+| PUT | `/api/api-keys/{keyId}` | Update limits or policy bindings |
+| DELETE | `/api/api-keys/{keyId}` | Delete an API key |
+| POST | `/api/api-keys/{keyId}/rotate` | Rotate an API key |
+| POST | `/api/api-keys/{keyId}/disable` | Disable an API key |
 
-| 方法 | 端点 | 描述 | 权限要求 |
-|------|------|------|----------|
-| POST | `/` | 创建用户 | SUPER_ADMIN, ORG_ADMIN |
-| GET | `/` | 获取用户列表 | 基于权限 |
-| GET | `/search` | 搜索用户 | SUPER_ADMIN, ORG_ADMIN |
-| GET | `/{userId}` | 获取用户详情 | 基于权限 |
-| GET | `/me` | 获取当前用户信息 | 已认证用户 |
-| PUT | `/{userId}` | 更新用户 | 基于权限 |
-| DELETE | `/{userId}` | 删除用户 | SUPER_ADMIN, ORG_ADMIN |
-| POST | `/{userId}/roles` | 分配角色 | SUPER_ADMIN, ORG_ADMIN |
-| DELETE | `/{userId}/roles/{roleId}` | 移除角色 | SUPER_ADMIN, ORG_ADMIN |
-| GET | `/{userId}/roles` | 获取用户角色 | 基于权限 |
+Key types:
 
-### API密钥管理 (`/api/api-keys`)
+- `client`: public write-only key for client SDKs.
+- `server`: server-to-server key with one-time secret material for HMAC.
+- `admin`: internal service key.
 
-| 方法 | 端点 | 描述 | 权限要求 |
-|------|------|------|----------|
-| POST | `/` | 创建API密钥 | SUPER_ADMIN, ORG_ADMIN, GAME_ADMIN |
-| GET | `/` | 获取API密钥列表 | 基于权限 |
-| GET | `/{keyId}` | 获取API密钥详情 | 基于权限 |
-| PUT | `/{keyId}` | 更新API密钥 | 基于权限 |
-| DELETE | `/{keyId}` | 删除API密钥 | 基于权限 |
-| POST | `/{keyId}/regenerate` | 重新生成API密钥 | 基于权限 |
-| POST | `/{keyId}/toggle` | 启用/禁用API密钥 | 基于权限 |
-| GET | `/{keyId}/statistics` | 获取API密钥统计 | 基于权限 |
-| POST | `/validate` | 验证API密钥 | 无 |
+### Tracking Plans
 
-### 环境管理 (`/api/environments`)
+| Method | Endpoint | Description |
+|---|---|---|
+| POST | `/api/games/{gameId}/environments/{environment}/tracking-plans` | Create a tracking plan draft |
+| GET | `/api/games/{gameId}/environments/{environment}/tracking-plans/current` | Get the active plan |
+| POST | `/api/tracking-plans/{planId}/publish` | Publish a plan |
+| POST | `/api/tracking-plans/{planId}/rollback` | Roll back a plan |
 
-| 方法 | 端点 | 描述 | 权限要求 |
-|------|------|------|----------|
-| POST | `/` | 创建环境 | SUPER_ADMIN, ORG_ADMIN, GAME_ADMIN |
-| GET | `/` | 获取环境列表 | 基于权限 |
-| GET | `/{envId}` | 获取环境详情 | 基于权限 |
-| PUT | `/{envId}` | 更新环境 | 基于权限 |
-| DELETE | `/{envId}` | 删除环境 | SUPER_ADMIN, ORG_ADMIN |
-| POST | `/{envId}/activate` | 激活环境 | 基于权限 |
-| POST | `/{envId}/deactivate` | 停用环境 | 基于权限 |
-| POST | `/{envId}/reset` | 重置环境 | 基于权限 |
-| POST | `/{envId}/clone` | 克隆环境 | 基于权限 |
-| GET | `/{envId}/statistics` | 获取环境统计 | 基于权限 |
-| GET | `/templates` | 获取环境配置模板 | SUPER_ADMIN, ORG_ADMIN, GAME_ADMIN |
+### PII Policies
 
-## 权限等级
+| Method | Endpoint | Description |
+|---|---|---|
+| POST | `/api/pii-policies` | Create a PII policy |
+| GET | `/api/pii-policies/{policyId}` | Get policy details |
+| PUT | `/api/pii-policies/{policyId}` | Update a policy |
 
-### 全局角色
+### Risk Rules
 
-- **SUPER_ADMIN**: 系统超级管理员，拥有所有权限
-- **ORG_ADMIN**: 组织管理员，管理组织内所有资源
-- **GAME_ADMIN**: 游戏管理员，管理特定游戏资源
-- **ANALYST**: 分析师，拥有数据查看和分析权限
-- **VIEWER**: 查看者，只读权限
-- **DEVELOPER**: 开发者，开发环境访问权限
-- **QA**: 测试人员，测试环境访问权限
-- **MARKETING**: 市场人员，营销数据访问权限
+| Method | Endpoint | Description |
+|---|---|---|
+| POST | `/api/risk-rules` | Create a risk rule |
+| GET | `/api/risk-rules?gameId=&environment=` | List risk rules |
+| GET | `/api/risk-rules/{ruleId}` | Get risk rule details |
+| PUT | `/api/risk-rules/{ruleId}` | Update a rule |
+| DELETE | `/api/risk-rules/{ruleId}` | Delete a rule |
+| POST | `/api/risk-rules/{ruleId}/publish` | Publish a rule |
+| POST | `/api/risk-rules/{ruleId}/disable` | Disable a rule |
 
-### 权限范围
+### Users And Role Bindings
 
-- **GLOBAL**: 全局权限
-- **ORGANIZATION**: 组织级权限
-- **GAME**: 游戏级权限
-- **ENVIRONMENT**: 环境级权限
+| Method | Endpoint | Description |
+|---|---|---|
+| GET | `/api/users` | List users |
+| POST | `/api/users` | Create a user |
+| GET | `/api/users/{userId}` | Get user details |
+| PUT | `/api/users/{userId}` | Update a user |
+| POST | `/api/users/{userId}/role-bindings` | Add a role binding |
+| DELETE | `/api/users/{userId}/role-bindings/{bindingId}` | Remove a role binding |
 
-## 响应格式
+Scopes:
 
-所有 API 响应都遵循统一的格式：
+- `global`
+- `game`
+- `environment`
 
-### 成功响应
+Roles:
+
+- `owner`
+- `operator`
+- `analyst`
+- `developer`
+- `risk_admin`
+- `viewer`
+
+### Audit Logs
+
+| Method | Endpoint | Description |
+|---|---|---|
+| GET | `/api/audit-logs?gameId=&environment=&actor=&action=&from=&to=` | Search audit logs |
+
+## Response Format
 
 ```json
 {
   "code": 200,
   "message": "Success",
-  "data": {
-    // 响应数据
-  },
-  "timestamp": "2024-01-01 12:00:00",
-  "traceId": "abc123def456"
+  "data": {},
+  "timestamp": "2026-06-18T12:00:00Z",
+  "traceId": "abc123"
 }
 ```
 
-### 分页响应
+## Error Codes
 
-```json
-{
-  "code": 200,
-  "message": "Success",
-  "data": [
-    // 数据数组
-  ],
-  "pageInfo": {
-    "total": 100,
-    "page": 0,
-    "size": 20,
-    "totalPages": 5
-  },
-  "timestamp": "2024-01-01 12:00:00",
-  "traceId": "abc123def456"
-}
-```
-
-### 错误响应
-
-```json
-{
-  "code": 400,
-  "message": "Validation failed",
-  "data": {
-    "email": "Invalid email format",
-    "password": "Password must be at least 8 characters"
-  },
-  "timestamp": "2024-01-01 12:00:00",
-  "traceId": "abc123def456"
-}
-```
-
-## 错误代码
-
-| 代码 | 描述 |
-|------|------|
-| 200 | 成功 |
-| 201 | 创建成功 |
-| 400 | 请求参数错误 |
-| 401 | 未认证 |
-| 403 | 权限不足 |
-| 404 | 资源未找到 |
-| 409 | 资源冲突 |
-| 423 | 账户被锁定 |
-| 429 | 请求频率超限 |
-| 500 | 服务器内部错误 |
-
-## 限流规则
-
-基于组织层级的API调用限制：
-
-- **FREE 层级**: 1,000 次/小时
-- **PRO 层级**: 10,000 次/小时
-- **ENTERPRISE 层级**: 无限制
-
-## 支持与联系
-
-- **文档**: https://docs.pit.example.com
-- **GitHub**: https://github.com/yourusername/pit
-- **支持邮箱**: support@pit.example.com
-- **技术支持**: dev@pit.example.com
+| Code | Description |
+|---|---|
+| 400 | Bad request |
+| 401 | Unauthenticated |
+| 403 | Permission denied |
+| 404 | Resource not found |
+| 409 | Conflict |
+| 429 | Rate limited |
+| 500 | Internal error |

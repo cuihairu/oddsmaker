@@ -1,13 +1,12 @@
-# Pit 全 Java 架构（Monorepo）
+# Oddsmaker 全 Java 架构（单公司多游戏）
 
-目标：统一 Java 技术栈，提供高吞吐采集、实时/离线计算、快速查询与完善治理；优先 ClickHouse 存储。
+目标：为一个游戏公司内部提供多游戏、多环境的实时分析和风控平台。公司是部署边界，不做多公司共用的多租户 SaaS。
+
+## 总览
 
 ```mermaid
 flowchart LR
-  %% GitHub Mermaid 兼容写法：subgraph 不使用方括号标题
-
   subgraph Clients
-    direction LR
     W[Web]
     A[Android]
     U[Unity]
@@ -16,107 +15,147 @@ flowchart LR
   end
 
   subgraph Ingest
-    direction TB
     GW[Gateway /v1/batch]
-    AUTH[Auth / HMAC / 限流]
+    AUTH[API Key / Server HMAC / 限流]
+    PRE[Schema / PII / 风控前置]
   end
 
   subgraph Stream
-    direction TB
     K[(Kafka)]
     V[Validate + Dedup + Enrich]
     SS[Sessions]
-    AGG[Retention / Funnels / Cohorts]
+    AGG[Retention / Funnels / Revenue]
+    RISK[Risk Detection]
     DLQ[Dead Letter]
   end
 
   subgraph Storage
-    direction TB
-    CH[(ClickHouse)]
-    MV[(物化视图 / 聚合表)]
+    PG[(PostgreSQL 元数据)]
+    CH[(ClickHouse 事件与聚合)]
+    REDIS[(Redis 计数器与风控状态)]
+    S3[(S3 归档)]
   end
 
   subgraph Control
-    direction TB
     API[Control API]
-    SR[Schema Registry]
-    CFG[采样 / PII / 配额]
+    TP[Tracking Plan]
+    CFG[采样 / PII / 限流]
+    RP[Risk Rules]
   end
 
-  subgraph BI
-    direction TB
-    SP[Superset]
-    MB[Metabase]
+  subgraph App
+    DASH[运营与风控大屏]
+    BI[Superset / Metabase]
+    WEBHOOK[Webhook 到游戏服]
   end
 
   Clients -->|HTTP NDJSON + gzip| GW
   GW --> AUTH
-  AUTH -->|Avro| K
+  AUTH --> PRE
+  PRE -->|Avro| K
   K --> V
-  V -->|events_enriched| K
   V --> DLQ
   V --> CH
   K --> SS
-  SS --> CH
-  SS --> MV
   K --> AGG
+  K --> RISK
+  SS --> CH
   AGG --> CH
-  CH <-->|SQL| SP
-  CH <-->|SQL| MB
+  RISK --> CH
+  RISK --> REDIS
+  RISK --> WEBHOOK
   API <--> GW
+  API --> TP
+  API --> CFG
+  API --> RP
+  PG --> API
+  CH --> DASH
+  CH --> BI
+  REDIS --> DASH
 ```
 
-关键设计
-- 幂等/去重：客户端 `uuidv7` 作为 `event_id`；Flink 按 `event_id` 去重（状态 TTL 7d）。
-- 乱序/迟到：事件时间 + Watermark（如 10 分钟）；迟到数据旁路补写。
-- Exactly-once：Kafka→Flink→ClickHouse 使用 2PC/幂等写入策略。
-- 存储建模：ClickHouse 以项目+月份分区，`props_json` JSON 列避免 schema 爆炸；物化视图生成留存/漏斗等指标。
-- 安全治理：项目级 API Key + HMAC；PII 白名单/掩码；速率限制与采样策略由控制面下发。
-- 可观测：OpenTelemetry（Java Agent+代码）→ Collector → 存储（CH/Prom/Grafana）。
+## 核心边界
 
-组件与语言
-- Java 21；Spring Boot 3(WebFlux/Netty)；Kafka 3；Flink 1.19；ClickHouse 24；Avro；Schema Registry（Apicurio 推荐）。
+- 公司：部署级配置，不进入事件分区键。
+- 游戏：核心业务对象，字段为 `game_id`。
+- 环境：`dev`、`staging`、`prod`，字段为 `environment`。
+- API Key：绑定 `game_id + environment`。
+- 权限：绑定全局、游戏或环境范围。
+- 风控策略：绑定 `game_id + environment`，可灰度发布。
 
-目录（Monorepo）
-- `build.gradle.kts`、`settings.gradle.kts`：根构建与依赖对齐
+## 数据模型
+
+事件核心字段：
+
+- 标识：`event_id,event_type,event_name,game_id,environment`
+- 身份：`device_id,user_id,player_id,character_id,session_id`
+- 时间：`ts_client,ts_server,event_date`
+- 客户端：`platform,app_version,sdk_version,country,user_agent`
+- 游戏：`server_id,guild_id,match_id,level_id,game_mode,difficulty`
+- 商业化：`order_id,product_id,revenue_amount,revenue_currency,receipt_hash`
+- 虚拟经济：`virtual_currency,virtual_amount,flow_type,item_id`
+- 广告：`ad_network,ad_placement,ad_format,ad_impression_id`
+- 风控：`risk_context,client_integrity,device_fingerprint`
+- 扩展：`props,experiments,attribution`
+
+ClickHouse 分区：
+
+```sql
+PARTITION BY (game_id, environment, toYYYYMM(event_date))
+ORDER BY (game_id, environment, event_type, event_date, player_id, user_id, device_id, ts_server, event_id)
+```
+
+## 关键设计
+
+- 幂等去重：客户端生成 `event_id`，Flink 按 `game_id + environment + event_id` 去重。
+- 乱序处理：Flink 使用事件时间和 watermark，迟到事件进入补偿链路。
+- Schema 治理：Tracking Plan 管事件名、字段字典、枚举、cardinality 上限。
+- 客户端安全：客户端只持 public `api_key`；HMAC 只用于 Server SDK。
+- PII 治理：Gateway 执行 deny/mask/coarse，违规事件进入 DLQ。
+- 风控闭环：Gateway 硬拦截，Flink 实时检测，ClickHouse 回溯，Webhook 输出处置。
+
+## 风控能力
+
+风控输入：
+
+- IP、UA、API Key、签名、时间窗。
+- 设备指纹、模拟器、Root/Jailbreak、调试器。
+- 登录、支付、广告、关卡、资源流、对局结果。
+
+风控输出：
+
+- `risk_events`：每次命中规则的事实表。
+- `risk_scores`：账号、设备、玩家、IP 的风险评分。
+- `risk_actions`：block、review、mark、throttle、webhook。
+
+## 组件与语言
+
+- Java 21
+- Spring Boot 3 WebFlux
+- Kafka 3
+- Flink 1.19
+- ClickHouse 24
+- PostgreSQL
+- Redis
+- Avro / JSON Schema / Apicurio Registry
+- OpenTelemetry + Prometheus + Grafana
+
+## 目录
+
 - `schema/`：Avro/JSON Schema、ClickHouse DDL
-- `libs/`：公共库（model、auth、kafka、otel、utils）
-- `services/`：微服务（gateway-service、control-service）
-- `jobs/flink/`：Flink 作业（events-enrich、sessions、retention、funnels）
-- `bi/`：Superset/Metabase 资源
-- `infra/`：本地/部署编排（Kafka、ClickHouse、Registry、OTel）
-- `docs/`：架构、API、SDK 设计
+- `libs/`：公共模型、鉴权、Kafka、OTel
+- `services/gateway-service/`：采集入口
+- `services/control-service/`：游戏、环境、密钥、策略、风控、权限
+- `jobs/flink/`：富化、会话、留存、漏斗、风控等作业
+- `sdks/`：Web、Android、iOS、Unity
+- `bi/`：Superset 资源
+- `infra/`：本地和部署编排
+- `docs/`：架构、API、运维、路线图
 
-数据模型（核心字段）
-- 基础：`event_id,event_name,project_id,device_id,user_id?,session_id?,ts_client,ts_server`
-- 环境：`platform,app_version,locale,country,os,device_model,net_type`
-- 归因：`campaign,source,medium,ad_group`
-- 计费：`currency,amount,item_id,quantity`
-- 实验：`exposures=[{exp,variant,ts}]`
-- 自定义：`props_json`（层级≤3，体积限额）
-- 观测：`trace_id,span_id`（可选）
+## 演进顺序
 
-SLA/容量（示例）
-- 入口吞吐：>= 10k events/sec（单副本）
-- 延迟：入口→CH 可见 P50 < 5s；端到端 exactly-once
-- 成本：CH 冷热分层，原始保留 30～90 天；聚合长保留
-
-演进
-- 首期：events-enrich + sessions + 常用 MV（留存/DAU/漏斗）
-- 二期：实验平台/特征库、Streaming Join、回溯重算管道
-
-## 常见问题
-
-为什么有了 Kafka 还需要 Flink？
-- Kafka 是消息队列/日志，不做有状态计算；Flink 负责去重（event_id/状态TTL）、会话切分、窗口聚合、乱序/迟到数据处理、流表 Join、Exactly-once 端到端语义。
-- 仅用 ClickHouse 物化视图可覆盖部分聚合，但对乱序/迟到与复杂状态计算（会话/漏斗）成本更高，且难以做到精确一次。
-- 结论：Kafka 负责可靠传递与回压；Flink 负责实时有状态计算；ClickHouse 负责查询与长期存储。
-
-Schema Registry 选型：Apicurio vs Confluent
-- 推荐 Apicurio（开源、自管轻量，支持 Avro/JSON Schema/Protobuf）。当前仓库已接入：
-  - Gateway 生产端：`io.apicurio.registry.serde.avro.AvroKafkaSerializer`
-  - Flink 消费端：`jobs/flink/events-enrich-job/.../ApicurioAvroFlinkDeserializer.java`
-- 如已使用 Confluent 生态，也可切换：
-  - 生产端改为 `io.confluent.kafka.serializers.KafkaAvroSerializer`
-  - 消费端改为 Confluent 反序列化器；同时调整 subject 命名策略与兼容性级别
-- 二者在协议上兼容“magic byte + schema id”思路，但管理 API/配置有差异。自管场景下 Apicurio 成本更低；已有 Confluent 平台则沿用即可。
+1. 统一 `game_id + environment`，移除目标架构中的 `tenant_id`。
+2. 接通单公司多游戏控制面。
+3. 扩展游戏事件 v1。
+4. 增加风控规则、实时检测和处置闭环。
+5. 完善 LTV、广告、实验、Crash 和预测模型。

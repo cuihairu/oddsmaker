@@ -1,556 +1,159 @@
 <!doctype html>
-<!--
-  DEPRECATED: This legacy admin UI is based on the old "project_id" model.
-  It will be replaced in Phase 1.3 by a new React + Ant Design console aligned
-  with the v2 multi-tenant model (Organization → Game → Environment → App).
-  See docs/redesign/05-roadmap.zh.md for the migration plan.
-
-  Known issues:
-   - Calls removed endpoints (POST /api/projects, DELETE /api/projects/{id})
-   - Uses field "projectId" which no longer exists in ApiKeyResp / KeyDetailResp
-   - Experiment UI calls disabled ExperimentController
-
-  Until rewritten, use the REST API directly via /api/keys?orgId=&gameId=&environmentId=
--->
-<html>
+<html lang="zh-CN">
 <head>
   <meta charset="utf-8" />
-  <title>Pit Control</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Oddsmaker Control</title>
   <style>
-    body { font-family: -apple-system, Segoe UI, Arial; margin: 20px; }
-    section { margin-bottom: 24px; }
-    input, button, textarea { padding: 6px; margin: 4px; }
-    pre { background: #f6f8fa; padding: 8px; }
-    @keyframes flashBorder { 0% { box-shadow: 0 0 0 0 rgba(255,0,0,0.6);} 100%{ box-shadow: 0 0 0 8px rgba(255,0,0,0);} }
-    .flash { animation: flashBorder 0.8s ease-out; }
+    :root {
+      --bg: #f5f1e8;
+      --panel: #fffdf7;
+      --text: #1f1d19;
+      --muted: #6e675d;
+      --line: #d9cfbf;
+      --accent: #8b3a1a;
+      --accent-soft: #f3dfd3;
+      --code: #2f2a24;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      background:
+        radial-gradient(circle at top left, #efe3d1 0, transparent 32%),
+        linear-gradient(180deg, #f7f2e8 0%, var(--bg) 100%);
+      color: var(--text);
+    }
+    main {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 48px 20px 72px;
+    }
+    h1 {
+      margin: 0 0 12px;
+      font-size: clamp(32px, 6vw, 56px);
+      line-height: 1;
+      letter-spacing: -0.03em;
+    }
+    p {
+      margin: 0 0 16px;
+      color: var(--muted);
+      font-size: 16px;
+      line-height: 1.7;
+    }
+    .badge {
+      display: inline-block;
+      margin-bottom: 18px;
+      padding: 6px 10px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.7);
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 16px;
+      margin-top: 28px;
+    }
+    .card {
+      padding: 20px;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: var(--panel);
+      box-shadow: 0 10px 30px rgba(60, 43, 22, 0.06);
+    }
+    .card h2 {
+      margin: 0 0 10px;
+      font-size: 18px;
+    }
+    ul {
+      margin: 0;
+      padding-left: 18px;
+      color: var(--muted);
+      line-height: 1.7;
+    }
+    pre {
+      margin: 0;
+      padding: 16px;
+      overflow: auto;
+      border-radius: 14px;
+      background: #211d18;
+      color: #f6eadb;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+    code {
+      color: var(--code);
+      font-family: Consolas, "SFMono-Regular", Monaco, monospace;
+    }
+    .inline-code {
+      padding: 2px 6px;
+      border-radius: 8px;
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
   </style>
 </head>
 <body>
-  <h2>Pit Control</h2>
-  <section>
-    <h3>Admin Token</h3>
-    <input id="admintok" placeholder="x-admin-token (默认 admin)" />
-    <button onclick="saveTok()">Save</button>
-  </section>
-  <section>
-    <h3>Create/Update Project</h3>
-    <input id="pid" placeholder="project id" />
-    <input id="pname" placeholder="project name" />
-    <button onclick="createProject()">Save</button>
-  </section>
-  <section>
-    <h3>Projects</h3>
-    <div>
-      <input id="pq" placeholder="search id/name" />
-      <input id="ppageSize" placeholder="size" value="20" size="4" />
-      <button onclick="listProjectsPaged(0)">Search</button>
-      <button onclick="clearProjectSearch()">Clear</button>
+  <main>
+    <div class="badge">Oddsmaker Control</div>
+    <h1>控制台占位页</h1>
+    <p>
+      当前控制面的真实模型已经固定为 <span class="inline-code">单公司部署</span>、
+      <span class="inline-code">多游戏</span>、
+      <span class="inline-code">多环境</span>。
+      这个静态页只保留最小说明，等待正式控制台替换。
+    </p>
+    <p>
+      Oddsmaker 的目标边界是 <span class="inline-code">单公司部署</span>、
+      <span class="inline-code">多游戏</span>、
+      <span class="inline-code">多环境</span>，公开管理接口应围绕
+      <span class="inline-code">gameId + environmentId</span> 展开。
+    </p>
+
+    <div class="grid">
+      <section class="card">
+        <h2>当前约束</h2>
+        <ul>
+          <li>控制面资源围绕 Game / Environment / API Key / Risk Rule 组织。</li>
+          <li>API Key 绑定到游戏和环境，而不是公司租户。</li>
+          <li>风控策略、PII 策略、Tracking Plan 都应按游戏环境下发。</li>
+        </ul>
+      </section>
+
+      <section class="card">
+        <h2>推荐接口</h2>
+        <ul>
+          <li><code>POST /api/keys</code> 创建 API Key</li>
+          <li><code>GET /api/keys?gameId=&amp;environmentId=</code> 查询 API Key</li>
+          <li><code>GET /api/keys/{apiKey}</code> 获取策略明细</li>
+          <li><code>PUT /api/keys/{apiKey}/policy</code> 更新策略</li>
+        </ul>
+      </section>
+
+      <section class="card">
+        <h2>请求示例</h2>
+        <pre>{
+  "gameId": "poker-mobile",
+  "environmentId": "prod",
+  "name": "client-prod-key"
+}</pre>
+      </section>
+
+      <section class="card">
+        <h2>后续工作</h2>
+        <ul>
+          <li>正式控制台改为 Game / Environment / API Key / Risk Rule 结构。</li>
+          <li>实验与配置接口统一使用 <code>gameId + environmentId</code>。</li>
+          <li>控制面权限模型改成公司内按游戏和环境授权。</li>
+        </ul>
+      </section>
     </div>
-    <table border="1" cellpadding="6" cellspacing="0">
-      <thead><tr><th>id</th><th>name</th><th>actions</th></tr></thead>
-      <tbody id="proj_tbody"></tbody>
-    </table>
-    <div>
-      <button onclick="projPrev()">Prev</button>
-      <span id="proj_page_info"></span>
-      <button onclick="projNext()">Next</button>
-    </div>
-  </section>
-  <section>
-    <h3>Create API Key</h3>
-    <input id="kpid" placeholder="project id" />
-    <input id="kname" placeholder="key name" />
-    <button onclick="createKey()">Create</button>
-  </section>
-  <section>
-    <h3>Update Policy</h3>
-    <input id="k_api" placeholder="api key" />
-    <button onclick="prefillPolicy()">Load</button>
-    <input id="rpm" placeholder="rpm (per key)" />
-    <input id="ipRpm" placeholder="ipRpm (per IP)" />
-    <input id="allowlist" placeholder="propsAllowlist, comma separated" size="60" />
-    <input id="piiEmail" placeholder="piiEmail (allow|mask|drop)" />
-    <input id="piiPhone" placeholder="piiPhone (allow|mask|drop)" />
-    <input id="piiIp" placeholder="piiIp (allow|coarse|drop)" />
-    <input id="denyKeys" placeholder="denyKeys (comma)" size="50" />
-    <input id="maskKeys" placeholder="maskKeys (comma)" size="50" />
-    <button onclick="updatePolicy()">Update</button>
-  </section>
-  <section>
-    <h3>Projects</h3>
-    <button onclick="listProjects()">Refresh</button>
-    <pre id="out_proj"></pre>
-  </section>
-  <section>
-    <h3>Keys</h3>
-    <div>
-      <input id="q" placeholder="search apiKey/name" />
-      <input id="projFilter" placeholder="projectId filter" style="display:none" />
-      <label>Project:</label>
-      <select id="projSelect"><option value="">(All)</option></select>
-      <input id="pageSize" placeholder="size" value="20" size="4" />
-      <button onclick="listKeys(0)">Search</button>
-      <button onclick="clearSearch()">Clear</button>
-    </div>
-    <div>
-      <button onclick="deleteSelected()">Delete Selected</button>
-      <button onclick="exportCsv()">Export CSV</button>
-      <label><input type="checkbox" id="sel_all" onclick="toggleAll(this)"> Select All</label>
-    </div>
-    <table border="1" cellpadding="6" cellspacing="0">
-      <thead><tr><th></th><th>apiKey</th><th>secret</th><th>projectId</th><th>rpm</th><th>ipRpm</th><th>actions</th></tr></thead>
-      <tbody id="keys_tbody"></tbody>
-    </table>
-    <div>
-      <button onclick="prevPage()">Prev</button>
-      <span id="page_info"></span>
-      <button onclick="nextPage()">Next</button>
-    </div>
-  </section>
-
-  <section>
-    <h3>Experiments</h3>
-    <div>
-      <label>Project:</label>
-      <select id="exp_proj"><option value="">(Select project)</option></select>
-      <label>Status:</label>
-      <select id="exp_status">
-        <option value="">(All)</option>
-        <option value="draft">draft</option>
-        <option value="running">running</option>
-        <option value="paused">paused</option>
-      </select>
-      <input id="exp_size" placeholder="size" value="20" size="4" />
-      <button onclick="listExperiments(0)">List</button>
-      <button onclick="expPrev()">Prev</button>
-      <span id="exp_page_info"></span>
-      <button onclick="expNext()">Next</button>
-      <button onclick="exportExperiments()">Export JSON</button>
-    </div>
-    <div>
-      <h4>Create/Update</h4>
-      <input id="exp_id" placeholder="id (unique)" />
-      <input id="exp_pid" placeholder="projectId" />
-      <input id="exp_name" placeholder="name" />
-      <input id="exp_salt" placeholder="salt (optional)" />
-      <select id="exp_status_edit">
-        <option value="draft">draft</option>
-        <option value="running">running</option>
-        <option value="paused">paused</option>
-      </select>
-      <br/>
-      <textarea id="exp_config" placeholder='config JSON (variants/targeting/metrics)' rows="6" cols="100">{"variants":[{"name":"A","weight":50},{"name":"B","weight":50}]}</textarea>
-      <div id="exp_err" style="color:#c00; margin-left:4px;"></div>
-      <br/>
-      <button onclick="validateExperimentRemote()">Validate</button>
-      <span id="exp_status" style="margin-left:8px;color:#555"></span>
-      <button id="exp_save" onclick="upsertExperiment()">Save</button>
-    </div>
-    <div>
-      <table border="1" cellpadding="6" cellspacing="0">
-        <thead><tr><th>id</th><th>name</th><th>status</th><th>updated</th><th>actions</th></tr></thead>
-        <tbody id="exp_tbody"></tbody>
-      </table>
-    </div>
-  </section>
-
-<script>
-let TOK = localStorage.getItem('pt_admin_token') || '';
-let PAGE = 0, SIZE = 20, TOTAL = 0, Q = '', PROJ = '';
-let PPAGE = 0, PSIZE = 20, PTOTAL = 0, PQ = '';
-let KEY_ITEMS = [];
-document.getElementById('admintok').value = TOK;
-function saveTok(){ TOK = document.getElementById('admintok').value.trim(); localStorage.setItem('pt_admin_token', TOK); alert('saved'); }
-async function createProject(){
-  const id = document.getElementById('pid').value.trim();
-  const name = document.getElementById('pname').value.trim();
-  const r = await fetch('/api/projects',{method:'POST',headers:{'content-type':'application/json','x-admin-token':TOK},body:JSON.stringify({id,name})});
-  alert('Saved '+r.status);
-  listProjectsPaged(0);
-}
-async function createKey(){
-  const projectId = document.getElementById('kpid').value.trim();
-  const name = document.getElementById('kname').value.trim();
-  const r = await fetch('/api/keys',{method:'POST',headers:{'content-type':'application/json','x-admin-token':TOK},body:JSON.stringify({projectId,name})});
-  const js = await r.json();
-  alert('apiKey='+js.apiKey+'\nsecret='+js.secret);
-}
-async function updatePolicy(){
-  const apiKey = document.getElementById('k_api').value.trim();
-  const rpm = toInt(document.getElementById('rpm').value);
-  const ipRpm = toInt(document.getElementById('ipRpm').value);
-  const allowlist = toList(document.getElementById('allowlist').value);
-  const piiEmail = strOrNull(document.getElementById('piiEmail').value);
-  const piiPhone = strOrNull(document.getElementById('piiPhone').value);
-  const piiIp = strOrNull(document.getElementById('piiIp').value);
-  const denyKeys = toList(document.getElementById('denyKeys').value);
-  const maskKeys = toList(document.getElementById('maskKeys').value);
-  const body = {rpm, ipRpm, propsAllowlist: allowlist, piiEmail, piiPhone, piiIp, denyKeys, maskKeys};
-  const r = await fetch('/api/keys/'+apiKey+'/policy',{method:'PUT',headers:{'content-type':'application/json','x-admin-token':TOK},body:JSON.stringify(body)});
-  alert('Update '+r.status);
-}
-async function listProjects(){
-  listProjectsPaged(0);
-}
-async function listProjectsPaged(pg){
-  if (typeof pg === 'number') PPAGE = pg;
-  PSIZE = parseInt(document.getElementById('ppageSize').value||'20'); if (isNaN(PSIZE)||PSIZE<1) PSIZE=20;
-  PQ = document.getElementById('pq').value.trim();
-  const params = new URLSearchParams(); params.set('page', PPAGE); params.set('size', PSIZE); if (PQ) params.set('q', PQ);
-  const r = await fetch('/api/projects?'+params.toString(),{headers:{'x-admin-token':TOK}});
-  const js = await r.json();
-  const items = js.items || js; PTOTAL = js.total || items.length;
-  const tb = document.getElementById('proj_tbody'); tb.innerHTML='';
-  for (const p of items) {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${p.id}</td><td>${p.name||''}</td><td><button onclick="delProject('${'${'}p.id}'}')">Delete</button></td>`;
-    const act = tr.lastElementChild || tr.querySelector('td:last-child');
-    const rb = document.createElement('button'); rb.textContent='Rename'; rb.onclick=()=>renameProject(p.id, p.name||'');
-    if (act) act.insertBefore(rb, act.firstChild);
-    tb.appendChild(tr);
-  }
-  const start = PPAGE*PSIZE+1, end = Math.min((PPAGE+1)*PSIZE, PTOTAL);
-  document.getElementById('proj_page_info').textContent = `Page ${PPAGE+1}, showing ${start}-${end} of ${PTOTAL}`;
-}
-function clearProjectSearch(){ document.getElementById('pq').value=''; PPAGE=0; listProjectsPaged(0); }
-function projPrev(){ if (PPAGE>0){ PPAGE--; listProjectsPaged(); } }
-function projNext(){ if ((PPAGE+1)*PSIZE<PTOTAL){ PPAGE++; listProjectsPaged(); } }
-async function delProject(pid){ if (!confirm('delete project and its keys?')) return; await fetch('/api/projects/'+pid,{method:'DELETE',headers:{'x-admin-token':TOK}}); listProjectsPaged(); }
-async function renameProject(pid, oldName){
-  const nn = prompt('New name for project '+pid+':', oldName||'');
-  if (nn===null) return;
-  await fetch('/api/projects',{method:'POST',headers:{'content-type':'application/json','x-admin-token':TOK},body:JSON.stringify({id:pid,name:nn})});
-  await listProjectsPaged();
-  await loadProjectsFilter();
-}
-async function listKeys(){
-  SIZE = parseInt(document.getElementById('pageSize').value||'20'); if (isNaN(SIZE)||SIZE<1) SIZE=20;
-  const params = new URLSearchParams(); params.set('page', PAGE); params.set('size', SIZE);
-  if (Q) params.set('q', Q); if (PROJ) params.set('projectId', PROJ);
-  const r = await fetch('/api/keys?'+params.toString(),{headers:{'x-admin-token':TOK}});
-  const js = await r.json();
-  const items = js.items || js; TOTAL = js.total || items.length; KEY_ITEMS = items;
-  const tb = document.getElementById('keys_tbody'); tb.innerHTML = '';
-  for (const k of items) {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `<td><input type="checkbox" class="sel" value="${k.apiKey}"></td><td><code>${k.apiKey}</code></td>
-                    <td><code>${k.secret||''}</code></td>
-                    <td>${k.projectId||''}</td>
-                    <td>${k.rpm||''}</td>
-                    <td>${k.ipRpm||''}</td>
-                    <td>
-                      <button onclick="copy('${'${'}k.apiKey}')} ">Copy Key</button>
-                      <button onclick="copy('${'${'}k.secret||''}')} ">Copy Secret</button>
-                      <button onclick="document.getElementById('k_api').value='${'${'}k.apiKey}'}'; prefillPolicy();">Edit</button>
-                      <button onclick="delKey('${'${'}k.apiKey}'}')">Delete</button>
-                    </td>`;
-    tb.appendChild(tr);
-  }
-  const start = PAGE*SIZE+1, end = Math.min((PAGE+1)*SIZE, TOTAL);
-  document.getElementById('page_info').textContent = `Page ${PAGE+1}, showing ${start}-${end} of ${TOTAL}`;
-}
-function toList(s){ s=s.trim(); if(!s) return null; return s.split(',').map(x=>x.trim()).filter(Boolean); }
-function strOrNull(s){ s=s.trim(); return s||null; }
-function toInt(s){ s=s.trim(); return s?parseInt(s):null; }
-function copy(txt){ navigator.clipboard.writeText(txt); alert('copied'); }
-async function prefillPolicy(){
-  const apiKey = document.getElementById('k_api').value.trim(); if (!apiKey) return alert('set api key');
-  const r = await fetch('/api/keys/'+apiKey,{headers:{'x-admin-token':TOK}});
-  if (!r.ok) return alert('not found');
-  const k = await r.json();
-  document.getElementById('rpm').value = k.rpm||'';
-  document.getElementById('ipRpm').value = k.ipRpm||'';
-  document.getElementById('allowlist').value = (k.propsAllowlist||[]).join(',');
-  document.getElementById('piiEmail').value = k.piiEmail||'';
-  document.getElementById('piiPhone').value = k.piiPhone||'';
-  document.getElementById('piiIp').value = k.piiIp||'';
-  document.getElementById('denyKeys').value = (k.denyKeys||[]).join(',');
-  document.getElementById('maskKeys').value = (k.maskKeys||[]).join(',');
-}
-function clearSearch(){ document.getElementById('q').value=''; document.getElementById('projFilter').value=''; Q=''; PROJ=''; PAGE=0; listKeys(); }
-function prevPage(){ if (PAGE>0){ PAGE--; listKeys(); } }
-function nextPage(){ if ((PAGE+1)*SIZE < TOTAL){ PAGE++; listKeys(); } }
-document.getElementById('q').addEventListener('change', ()=>{ Q=document.getElementById('q').value.trim(); });
-document.getElementById('projFilter').addEventListener('change', ()=>{ PROJ=document.getElementById('projFilter').value.trim(); });
-document.getElementById('projSelect').addEventListener('change', ()=>{ PROJ=document.getElementById('projSelect').value; PAGE=0; listKeys(); });
-// initial load
-listKeys();
-loadProjectsFilter();
-function delKey(k){ if (!confirm('delete key?')) return; fetch('/api/keys/'+k,{method:'DELETE',headers:{'x-admin-token':TOK}}).then(_=>listKeys()); }
-
-async function loadProjectsFilter(){
-  // fetch up to 1000 projects for filter dropdown
-  const r = await fetch('/api/projects?size=1000',{headers:{'x-admin-token':TOK}});
-  const js = await r.json();
-  const items = js.items || js;
-  const sel = document.getElementById('projSelect');
-  sel.innerHTML = '<option value="">(All)</option>';
-  for (const p of items) {
-    const opt = document.createElement('option');
-    opt.value = p.id; opt.textContent = p.id + (p.name?(' - '+p.name):'');
-    sel.appendChild(opt);
-  }
-  // experiments project select
-  const expsel = document.getElementById('exp_proj');
-  if (expsel) {
-    expsel.innerHTML = '<option value="">(Select project)</option>';
-    for (const p of items) {
-      const opt = document.createElement('option'); opt.value=p.id; opt.textContent=p.id; expsel.appendChild(opt);
-    }
-  }
-}
-
-let EXP_PAGE=0, EXP_SIZE=20, EXP_TOTAL=0;
-async function listExperiments(pg){
-  if (typeof pg==='number') EXP_PAGE=pg;
-  const pid = document.getElementById('exp_proj').value;
-  const st = document.getElementById('exp_status').value;
-  if (!pid) { alert('select project'); return; }
-  const params = new URLSearchParams(); params.set('projectId', pid); if (st) params.set('status', st);
-  EXP_SIZE = parseInt(document.getElementById('exp_size').value||'20'); if (isNaN(EXP_SIZE)||EXP_SIZE<1) EXP_SIZE=20;
-  params.set('page', String(EXP_PAGE)); params.set('size', String(EXP_SIZE));
-  const r = await fetch('/api/experiments?'+params.toString(), {headers:{'x-admin-token':TOK}});
-  const js = await r.json(); const items = js.items || js; EXP_TOTAL = js.total || items.length;
-  const tb = document.getElementById('exp_tbody'); tb.innerHTML='';
-  for (const e of items) {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${e.id}</td><td>${e.name||''}</td><td>${e.status}</td><td>${e.updatedAt||''}</td><td>
-      <button onclick=\"expPublish('${'${'}e.id}'}')\">Publish</button>
-      <button onclick=\"expPause('${'${'}e.id}'}')\">Pause</button>
-      <button onclick=\"expDelete('${'${'}e.id}'}')\">Delete</button>
-      <button onclick=\"expLoad('${'${'}e.id}'}','${'${'}e.projectId}'}','${'${'}(e.name||'').replace(/"/g,'&quot;')}','${'${'}(e.salt||'').replace(/"/g,'&quot;')}','${'${'}e.status}'}')\">Edit</button>
-    </td>`;
-    tb.appendChild(tr);
-  }
-  const start=EXP_PAGE*EXP_SIZE+1, end=Math.min((EXP_PAGE+1)*EXP_SIZE, EXP_TOTAL);
-  document.getElementById('exp_page_info').textContent = `Page ${EXP_PAGE+1}, showing ${start}-${end} of ${EXP_TOTAL}`;
-}
-
-async function upsertExperiment(){
-  const id = document.getElementById('exp_id').value.trim();
-  const projectId = document.getElementById('exp_pid').value.trim();
-  const name = document.getElementById('exp_name').value.trim();
-  const salt = document.getElementById('exp_salt').value.trim();
-  const status = document.getElementById('exp_status_edit').value;
-  let config={}; try { const txt=document.getElementById('exp_config').value; config = txt?JSON.parse(txt):{}; } catch(e){ alert('invalid config JSON'); return; }
-  const verr = validateExperimentConfig(config); const errDiv = document.getElementById('exp_err'); if (errDiv) errDiv.textContent = verr || '';
-  if (verr) { return; }
-  if (!id || !projectId) { alert('id/projectId required'); return; }
-  const body = {id, projectId, name, status, salt, config};
-  const r = await fetch('/api/experiments',{method:'POST',headers:{'content-type':'application/json','x-admin-token':TOK},body:JSON.stringify(body)});
-  if (!r.ok) { try { const js=await r.json(); showExpErr(js.errors||['save failed']); } catch { showExpErr(['save failed']); } }
-  else { alert('saved'); showExpErr([]); listExperiments(); }
-}
-
-async function expPublish(id){ await fetch('/api/experiments/'+id+'/publish',{method:'POST',headers:{'x-admin-token':TOK}}); listExperiments(); }
-async function expPause(id){ await fetch('/api/experiments/'+id+'/pause',{method:'POST',headers:{'x-admin-token':TOK}}); listExperiments(); }
-async function expDelete(id){ if (!confirm('delete experiment?')) return; await fetch('/api/experiments/'+id,{method:'DELETE',headers:{'x-admin-token':TOK}}); listExperiments(); }
-function expLoad(id, projectId, name, salt, status){
-  document.getElementById('exp_id').value = id;
-  document.getElementById('exp_pid').value = projectId;
-  document.getElementById('exp_name').value = name;
-  document.getElementById('exp_salt').value = salt;
-  document.getElementById('exp_status_edit').value = status||'draft';
-  // config remains manual; optionally fetch /api/config for running ones
-}
-
-function expPrev(){ if (EXP_PAGE>0){ listExperiments(EXP_PAGE-1); } }
-function expNext(){ if ((EXP_PAGE+1)*EXP_SIZE < EXP_TOTAL){ listExperiments(EXP_PAGE+1); } }
-async function exportExperiments(){
-  const pid = document.getElementById('exp_proj').value; if (!pid) return alert('select project');
-  const r = await fetch('/api/experiments/export?projectId='+encodeURIComponent(pid),{headers:{'x-admin-token':TOK}});
-  const js = await r.json();
-  const blob = new Blob([JSON.stringify(js,null,2)], {type:'application/json'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a'); a.href=url; a.download=`experiments_${pid}.json`; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-}
-
-function validateExperimentConfig(cfg){
-  const vars = cfg.variants; if (!Array.isArray(vars) || vars.length===0) return 'variants required';
-  if (vars.length < 2) return 'at least 2 variants required';
-  let sum = 0; const names = new Set();
-  for (const v of vars) {
-    if (!v || typeof v.name!== 'string' || !v.name.trim()) return 'variant.name required';
-    if (names.has(v.name)) return 'variant.name must be unique'; names.add(v.name);
-    if (v.weight!=null && typeof v.weight!=='number') return 'variant.weight must be number';
-    if (typeof v.weight==='number' && v.weight < 0) return 'variant.weight must be >= 0';
-    sum += (typeof v.weight==='number') ? Math.floor(v.weight) : 1;
-  }
-  if (sum <= 0) return 'sum of weights must be > 0';
-  const t = cfg.targeting; if (t) {
-    if (t.platform && !Array.isArray(t.platform)) return 'targeting.platform must be array';
-    if (t.appVersionMin && typeof t.appVersionMin!=='string') return 'targeting.appVersionMin must be string';
-    if (t.appVersionMax && typeof t.appVersionMax!=='string') return 'targeting.appVersionMax must be string';
-    if (t.countries && !Array.isArray(t.countries)) return 'targeting.countries must be array';
-  }
-  const m = cfg.metrics; if (m) {
-    if (typeof m !== 'object') return 'metrics must be object';
-    if (m.primary && typeof m.primary !== 'string') return 'metrics.primary must be string';
-    if (m.secondary && !Array.isArray(m.secondary)) return 'metrics.secondary must be array';
-  }
-  return '';
-}
-
-async function validateExperimentRemote(){
-  let cfg={}; try { const txt=document.getElementById('exp_config').value; cfg = txt?JSON.parse(txt):{}; } catch(e){ showExpErr(['invalid config JSON']); return; }
-  const r = await fetch('/api/experiments/validate',{method:'POST',headers:{'content-type':'application/json','x-admin-token':TOK},body:JSON.stringify({config:cfg})});
-  if (!r.ok) { showExpErr(['validation failed']); return; }
-  const js = await r.json();
-  EXP_LAST_REMOTE_OK = !js.errors || js.errors.length===0;
-  showExpErr(js.errors||[]);
-}
-function showExpErr(errs){
-  const d=document.getElementById('exp_err'); if (!d) return;
-  const st=document.getElementById('exp_status');
-  if (!errs || errs.length===0){
-    d.innerHTML='';
-    setExpBorder('');
-    if (st) {
-      st.textContent = EXP_LAST_REMOTE_OK ? 'Valid ✓' : 'Pending…';
-      st.style.color = EXP_LAST_REMOTE_OK ? '#0a0' : '#555';
-    }
-    if (typeof updateExpSaveState === 'function') updateExpSaveState();
-    return;
-  }
-  const items = errs.map(e=>{ const s=String(e); const idx=s.indexOf(':'); if(idx>0){ const path=s.slice(0,idx).trim(); const msg=s.slice(idx+1).trim(); return `<div><a href=\"#\" onclick=\"jumpToPath('${'${'}path.replace(/'/g, "\\'"}')}');return false;\">${'${'}path}</a>: ${'${'}msg}</div>`;} return `<div>${'${'}s}</div>`; });
-  d.innerHTML = `<div style=\"margin-bottom:4px\"><button onclick=\"copyErrors()\">Copy Errors</button> <a href=\"#\" onclick=\"toggleErrors();return false;\" id=\"exp_err_t\">Hide</a></div>` + items.join('');
-  setExpBorder('red');
-  const btn=document.getElementById('exp_save'); if (btn) btn.disabled=true;
-  if (st){ st.textContent='Invalid ✗'; st.style.color='#a00'; }
-}
-function copyErrors(){ try { const d=document.getElementById('exp_err'); if (!d) return; const txt=d.innerText || d.textContent; navigator.clipboard.writeText(txt); } catch{} }
-function toggleErrors(){ const d=document.getElementById('exp_err'); const t=document.getElementById('exp_err_t'); if(!d||!t) return; const vis = d.getAttribute('data-vis')!=='0'; d.setAttribute('data-vis', vis?'0':'1'); Array.from(d.querySelectorAll('div')).forEach((el,i)=>{ if(i>0) el.style.display = vis?'none':''; }); t.textContent = vis? 'Show':'Hide'; }
-function setExpBorder(color){ const el=document.getElementById('exp_config'); if(!el) return; el.style.borderColor = color||''; el.style.borderWidth = color? '2px':'1px'; el.style.borderStyle = 'solid'; }
-function jumpToPath(path){
-  try {
-    const el = document.getElementById('exp_config'); const txt = el.value; if (!txt) return;
-    // Normalize path like $.variants[1].weight
-    let p = String(path||'').replace(/^\$\.?/, '');
-    // Try to progressively find tokens; fall back to last token
-    const segs = p.split('.');
-    const esc = (s)=>s.replace(/[.*+?^${}()|[\]\\]/g,'\$&');
-    let idx = 0; let found = -1;
-    for (let i=0;i<segs.length;i++){
-      let seg = segs[i];
-      // keep raw [n] for arrays but match on property name before index
-      const name = seg.replace(/\[(\d+)\]/g,'');
-      const re = new RegExp('"'+esc(name)+'"\s*:');
-      const m = re.exec(txt.slice(idx));
-      if (m && typeof m.index === 'number') { found = idx + m.index; idx = found + m[0].length; } else { break; }
-    }
-    if (found < 0) {
-      // fallback: last token only
-      const last = segs[segs.length-1].replace(/\[(\d+)\]/g,'');
-      const re = new RegExp('"'+esc(last)+'"\s*:');
-      const m = re.exec(txt);
-      if (m && typeof m.index === 'number') { found = m.index; }
-    }
-    el.focus();
-    if (found >= 0) {
-      const end = Math.min(found+20, txt.length);
-      el.setSelectionRange(found, end);
-    }
-    // Border flash + light background highlight
-    el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash');
-    const oldBg = el.style.backgroundColor; el.style.backgroundColor = '#fffbe6'; setTimeout(()=>{ el.style.backgroundColor = oldBg || ''; }, 700);
-    // Scroll selection roughly to center
-    const ratio = Math.max(0, Math.min(1, (found >= 0 ? found : el.selectionStart) / Math.max(1, txt.length)));
-    el.scrollTop = Math.max(0, Math.floor(el.scrollHeight * ratio - el.clientHeight / 2));
-  } catch {}
-}
-
-function toggleAll(cb){ document.querySelectorAll('#keys_tbody input.sel').forEach(x=>x.checked=cb.checked); }
-async function deleteSelected(){
-  const sel = Array.from(document.querySelectorAll('#keys_tbody input.sel:checked')).map(x=>x.value);
-  if (sel.length===0) return alert('none selected');
-  if (!confirm('delete '+sel.length+' keys?')) return;
-  await fetch('/api/keys/batch-delete',{method:'POST',headers:{'content-type':'application/json','x-admin-token':TOK},body:JSON.stringify({apiKeys:sel})});
-  listKeys();
-}
-async function exportCsv(){
-  // fetch up to 10000 with current filters
-  const params = new URLSearchParams(); params.set('page', 0); params.set('size', 10000);
-  if (Q) params.set('q', Q); if (PROJ) params.set('projectId', PROJ);
-  const r = await fetch('/api/keys?'+params.toString(),{headers:{'x-admin-token':TOK}});
-  const js = await r.json();
-  const items = js.items || js;
-  let csv = 'apiKey,secret,projectId,rpm,ipRpm\n';
-  for (const k of items){
-    csv += `${k.apiKey||''},${k.secret||''},${k.projectId||''},${k.rpm||''},${k.ipRpm||''}\n`;
-  }
-  const blob = new Blob([csv], {type:'text/csv'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a'); a.href=url; a.download='keys.csv'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-}
-</script>
-<script>
-// ----- Experiment validation state and save gating -----
-let EXP_VAL_TIMER = null;
-let EXP_LAST_REMOTE_OK = false;
-let EXP_LAST_VALIDATED_TEXT = '';
-let EXP_LAST_VALIDATED_AT = 0;
-const EXP_VAL_DELAY = 500;
-
-function updateExpSaveState(){
-  try {
-    const btn=document.getElementById('exp_save');
-    const st=document.getElementById('exp_status');
-    const el=document.getElementById('exp_config');
-    if(!btn||!st||!el) return;
-    const txt=el.value;
-    const eligible = EXP_LAST_REMOTE_OK && txt === EXP_LAST_VALIDATED_TEXT;
-    btn.disabled = !eligible;
-    if (eligible) {
-      const d = new Date(EXP_LAST_VALIDATED_AT);
-      const hh=String(d.getHours()).padStart(2,'0');
-      const mm=String(d.getMinutes()).padStart(2,'0');
-      const ss=String(d.getSeconds()).padStart(2,'0');
-      st.textContent = `Valid ✓ ${hh}:${mm}:${ss}`;
-      st.style.color = '#0a0';
-    } else if (EXP_LAST_REMOTE_OK) {
-      st.textContent = 'Pending…';
-      st.style.color = '#555';
-    }
-  } catch {}
-}
-
-document.getElementById('exp_config').addEventListener('input', ()=>{
-  try {
-    const el = document.getElementById('exp_config');
-    const cfgTxt = el.value;
-    const cfg = cfgTxt ? JSON.parse(cfgTxt) : {};
-    const verr = validateExperimentConfig(cfg);
-    EXP_LAST_REMOTE_OK = false;
-    showExpErr(verr ? [verr] : []);
-    setExpBorder(verr ? 'red' : '');
-    if (!verr) {
-      if (EXP_VAL_TIMER) clearTimeout(EXP_VAL_TIMER);
-      EXP_VAL_TIMER = setTimeout(()=>{ validateExperimentRemote().catch(()=>{}); }, EXP_VAL_DELAY);
-    }
-  } catch(e) {
-    EXP_LAST_REMOTE_OK = false; showExpErr(['invalid config JSON']); setExpBorder('red');
-  }
-  updateExpSaveState();
-});
-
-// Override validateExperimentRemote to record last valid text/time
-(function(){
-  const _orig = validateExperimentRemote;
-  validateExperimentRemote = async function(){
-    let cfg={}; let txt='';
-    try { txt=document.getElementById('exp_config').value; cfg = txt?JSON.parse(txt):{}; } catch(e){ showExpErr(['invalid config JSON']); updateExpSaveState(); return; }
-    const r = await fetch('/api/experiments/validate',{method:'POST',headers:{'content-type':'application/json','x-admin-token':TOK},body:JSON.stringify({config:cfg})});
-    if (!r.ok) { showExpErr(['validation failed']); updateExpSaveState(); return; }
-    const js = await r.json();
-    EXP_LAST_REMOTE_OK = !js.errors || js.errors.length===0;
-    if (EXP_LAST_REMOTE_OK) { EXP_LAST_VALIDATED_TEXT = txt; EXP_LAST_VALIDATED_AT = Date.now(); }
-    showExpErr(js.errors||[]);
-    updateExpSaveState();
-  }
-})();
-
-// Initialize save state on load
-updateExpSaveState();
-</script>
+  </main>
 </body>
 </html>

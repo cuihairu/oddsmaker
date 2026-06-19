@@ -14,7 +14,7 @@ bash scripts/e2e.sh
 Superset 仪表盘导入（可选）
 ```bash
 bash scripts/superset-import.sh
-# 浏览器访问 http://localhost:8088 ，登录 admin/admin，看到 Pit Overview 仪表盘
+# 浏览器访问 http://localhost:8088 ，登录 admin/admin，看到 Oddsmaker Overview 仪表盘
 ```
 
 依赖

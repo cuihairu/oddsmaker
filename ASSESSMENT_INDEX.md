@@ -1,18 +1,18 @@
-# PIT 项目功能完成度评估报告
+# Oddsmaker 项目功能完成度评估报告
 
 ## 文件导航
 
-### 1. [pit_completion_assessment.md](pit_completion_assessment.md) - 详细技术评估
+### 1. [oddsmaker_completion_assessment.md](oddsmaker_completion_assessment.md) - 详细技术评估
   - **适合**: 技术负责人/架构师/产品经理
   - **内容**: 
-    - 多租户支持 (Project_ID/用户权限/组织层级)
+    - 历史多租户设计遗留与当前单公司多游戏问题
     - 数据模型 (事件表/游戏字段)
     - 分析能力 (Flink/ClickHouse/Superset)
     - 控制面功能 (API/Web UI)
     - SDK功能 (Web/Android/iOS/Unity)
   - **格式**: 详细表格 + 完成度百分比 + 优先级标注
 
-### 2. [pit_quick_summary.md](pit_quick_summary.md) - 快速摘要
+### 2. [oddsmaker_quick_summary.md](oddsmaker_quick_summary.md) - 快速摘要
   - **适合**: 管理层/融资/快速决策
   - **内容**:
     - 整体健康度评分 (可视化)
@@ -23,7 +23,7 @@
     - 人力资源建议
   - **格式**: 精简版本 + 核心指标 + 行动项清单
 
-### 3. [pit_technical_recommendations.md](pit_technical_recommendations.md) - 技术决策指南
+### 3. [oddsmaker_technical_recommendations.md](oddsmaker_technical_recommendations.md) - 技术决策指南
   - **适合**: 技术团队/工程师/架构师
   - **内容**:
     - 安全框架实施方案 (Keycloak集成)
@@ -45,7 +45,7 @@
 
 | 维度 | 完成度 | 优先级 | 状态 |
 |------|--------|--------|------|
-| **多租户支持** | 65% | 中 | Project_ID完善，缺认证 |
+| **旧模型清理** | 65% | 中 | 仍有 Project/Organization 历史包袱 |
 | **数据模型** | 75% | 低 | Schema完整，游戏字段缺 |
 | **分析能力** | 75% | 中 | Flink完善，需可配置漏斗 |
 | **控制面** | 68% | 低 | API完整，Web UI缺认证 |
@@ -172,9 +172,9 @@
 ## 文件清单
 
 - ASSESSMENT_INDEX.md (本文件)
-- pit_completion_assessment.md (~15KB, 8000字)
-- pit_quick_summary.md (~8KB, 4000字)
-- pit_technical_recommendations.md (~12KB, 6000字)
+- oddsmaker_completion_assessment.md (~15KB, 8000字)
+- oddsmaker_quick_summary.md (~8KB, 4000字)
+- oddsmaker_technical_recommendations.md (~12KB, 6000字)
 
 **总计**: 三份文档, 约18000字, 涵盖战略/战术/执行层面
 

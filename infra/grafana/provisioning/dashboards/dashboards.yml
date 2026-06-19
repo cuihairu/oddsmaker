@@ -1,14 +1,14 @@
 apiVersion: 1
 disableDeletion: false
 folders:
-  - uid: pit
-    title: Pit
+  - uid: oddsmaker
+    title: Oddsmaker
     provisioned: true
     folders: []
     dashboards:
-      - uid: pit-overview
-        file: /var/lib/grafana/dashboards/pit-overview.json
-      - uid: pit-jvm
-        file: /var/lib/grafana/dashboards/pit-jvm.json
-      - uid: pit-http
-        file: /var/lib/grafana/dashboards/pit-http.json
+      - uid: oddsmaker-overview
+        file: /var/lib/grafana/dashboards/oddsmaker-overview.json
+      - uid: oddsmaker-jvm
+        file: /var/lib/grafana/dashboards/oddsmaker-jvm.json
+      - uid: oddsmaker-http
+        file: /var/lib/grafana/dashboards/oddsmaker-http.json

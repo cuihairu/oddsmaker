@@ -13,9 +13,9 @@ docker compose up -d clickhouse superset
 - Database -> + Database -> Connect this database
 - SQLAlchemy URI 示例：
 ```
-clickhouse+http://default:@host.docker.internal:8123/pit
+clickhouse+http://default:@host.docker.internal:8123/oddsmaker
 ```
-或容器内网络：`clickhouse+http://default:@clickhouse:8123/pit`
+或容器内网络：`clickhouse+http://default:@clickhouse:8123/oddsmaker`
 
 4) 导入表
 - 执行 `schema/sql/clickhouse/schema.sql`（已在容器 entrypoint 初始化）；若没自动创建可在 SQL Lab 中粘贴执行。

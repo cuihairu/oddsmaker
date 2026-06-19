@@ -1,4 +1,4 @@
-# 网关性能调参建议（Pit Gateway）
+# 网关性能调参建议（Oddsmaker Gateway）
 
 目标：在高吞吐（10k–50k evts/s）下保持稳定低延迟与低错误率。以下建议按 JVM、Reactor Netty、Kafka Producer、操作系统与部署层面给出。
 
@@ -10,13 +10,13 @@ JVM/GC
 Reactor Netty（服务端）
 - EventLoop 线程数：默认≈CPU 核数 x 2；一般无需修改
 - 响应压缩：已开启 `server.compression.enabled=true`（对较大错误/诊断响应有益）
-- 大请求：限制 `pit.request.maxBytes`（默认 1MB），避免单请求过大带来延迟尖峰
+- 大请求：限制 `oddsmaker.request.maxBytes`（默认 1MB），避免单请求过大带来延迟尖峰
 - JSON 解析：优先 NDJSON；客户端批量 50–100，减少系统调用与序列化开销
 
 Kafka Producer（Avro）
 - 调参：
-  - `pit.kafka.producer.lingerMs`：5–20ms（批量更大、吞吐更高，但延迟上升）
-  - `pit.kafka.producer.batchSize`：64–256KB（视事件大小而定）
+  - `oddsmaker.kafka.producer.lingerMs`：5–20ms（批量更大、吞吐更高，但延迟上升）
+  - `oddsmaker.kafka.producer.batchSize`：64–256KB（视事件大小而定）
   - 其他：`acks=all`（已设），`compression=zstd` 可在 Broker 允许时考虑（需同时在 Producer 上开启）
 - 分区：确保 `events_raw` 分区数与消费并行度对齐，否则下游会形成热点
 
@@ -55,7 +55,7 @@ ClickHouse 查询侧（建议）
     -- 近 30 天曝光与 24h 转化率（无维度）
     SELECT day, exposures, conv_24h, if(exposures>0, conv_24h/exposures, 0) AS cr_24h
     FROM exp_conv_24h_by_day
-    WHERE day >= today()-30 AND project_id='p1' AND exp_id='exp_foo'
+    WHERE day >= today()-30 AND game_id='game_demo' AND environment='production' AND exp_id='exp_foo'
     ORDER BY day;
     ```
 - daily-dim（日级带维度 MV 表，例如 `exp_exposures_by_day_dim`/`exp_conv_24h_by_day_dim`）
@@ -65,12 +65,12 @@ ClickHouse 查询侧（建议）
     -- 近 14 天按国家 Top 10 的 24h 转化率
     SELECT day, country, exposures, conv_24h, round(if(exposures>0, conv_24h/exposures, 0), 4) AS cr_24h
     FROM exp_conv_24h_by_day_dim
-    WHERE day >= today()-14 AND project_id='p1' AND exp_id='exp_foo'
+    WHERE day >= today()-14 AND game_id='game_demo' AND environment='production' AND exp_id='exp_foo'
       AND country IN (
         SELECT country FROM (
           SELECT country, sum(exposures) AS exps
           FROM exp_exposures_by_day_dim
-          WHERE day >= today()-14 AND project_id='p1' AND exp_id='exp_foo'
+          WHERE day >= today()-14 AND game_id='game_demo' AND environment='production' AND exp_id='exp_foo'
           GROUP BY country ORDER BY exps DESC LIMIT 10
         )
       )
@@ -82,8 +82,8 @@ ClickHouse 查询侧（建议）
 
 分区与 TTL 建议（ClickHouse）
 - 分区：
-  - 原始事件与曝光用户表按 `(project_id, toYYYYMM(ts))` 分区；
-  - 日级表按 `(project_id, toYYYYMM(day))` 分区（如 `event_date` / `exposure_date`）。
+  - 原始事件与曝光用户表按 `(game_id, environment, toYYYYMM(ts))` 分区；
+  - 日级表按 `(game_id, environment, toYYYYMM(day))` 分区（如 `event_date` / `exposure_date`）。
 - TTL：可按 400 天或业务需要设置，例如：
   - `TTL event_date + INTERVAL 400 DAY DELETE`（曝光日表）
   - `TTL exposure_date + INTERVAL 400 DAY DELETE`（转化日表）

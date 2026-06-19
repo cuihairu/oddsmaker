@@ -1,0 +1,6 @@
+database_name: Oddsmaker CH
+sqlalchemy_uri: clickhouse+http://default:@host.docker.internal:8123/default
+expose_in_sqllab: true
+allow_run_async: false
+cache_timeout:
+uuid: 9d3f2d6d-1c4f-4f2e-8d55-5a7b9c0c1a01

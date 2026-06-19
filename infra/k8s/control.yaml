@@ -1,17 +1,17 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: pit-control
-  namespace: pit
+  name: oddsmaker-control
+  namespace: oddsmaker
 spec:
   replicas: 1
-  selector: { matchLabels: { app: pit-control } }
+  selector: { matchLabels: { app: oddsmaker-control } }
   template:
-    metadata: { labels: { app: pit-control } }
+    metadata: { labels: { app: oddsmaker-control } }
     spec:
       containers:
         - name: control
-          image: your-registry/pit-control:latest
+          image: your-registry/oddsmaker-control:latest
           ports: [{containerPort: 8085}]
           env:
             - name: SPRING_CONFIG_ADDITIONAL_LOCATION
@@ -22,17 +22,17 @@ spec:
       volumes:
         - name: cfg
           configMap:
-            name: pit-control-config
+            name: oddsmaker-control-config
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: pit-control
-  namespace: pit
+  name: oddsmaker-control
+  namespace: oddsmaker
   annotations: {}
 spec:
   type: ClusterIP
-  selector: { app: pit-control }
+  selector: { app: oddsmaker-control }
   ports:
     - port: 8085
       targetPort: 8085

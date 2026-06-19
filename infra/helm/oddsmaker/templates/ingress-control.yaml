@@ -1,0 +1,31 @@
+{{- if .Values.ingress.control.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: oddsmaker-control
+  annotations:
+    {{- if .Values.ingress.control.className }}kubernetes.io/ingress.class: {{ .Values.ingress.control.className }}{{- end }}
+    {{- range $k, $v := .Values.ingress.control.annotations }}
+    {{ $k }}: {{ $v | quote }}
+    {{- end }}
+spec:
+  {{- if .Values.ingress.control.tls }}
+  tls:
+  {{- toYaml .Values.ingress.control.tls | nindent 2 }}
+  {{- end }}
+  rules:
+    {{- range .Values.ingress.control.hosts }}
+    - host: {{ .host }}
+      http:
+        paths:
+          {{- range .paths }}
+          - path: {{ .path }}
+            pathType: {{ .pathType }}
+            backend:
+              service:
+                name: oddsmaker-control
+                port:
+                  number: {{ $.Values.service.control.port }}
+          {{- end }}
+    {{- end }}
+{{- end }}
