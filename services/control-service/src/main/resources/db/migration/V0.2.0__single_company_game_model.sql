@@ -45,6 +45,22 @@ CREATE TABLE IF NOT EXISTS game_platforms (
     CONSTRAINT fk_game_platforms_game FOREIGN KEY (game_id) REFERENCES games(id)
 );
 
+CREATE TABLE IF NOT EXISTS storage_profiles (
+    id VARCHAR(64) PRIMARY KEY,
+    name VARCHAR(100) NOT NULL UNIQUE,
+    display_name VARCHAR(150),
+    description VARCHAR(500),
+    isolation_strategy VARCHAR(32) NOT NULL DEFAULT 'SHARED',
+    kafka_cluster VARCHAR(100),
+    clickhouse_cluster VARCHAR(100),
+    redis_cluster VARCHAR(100),
+    archive_bucket VARCHAR(200),
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP NULL
+);
+
 CREATE TABLE IF NOT EXISTS game_environments (
     id VARCHAR(32) PRIMARY KEY,
     game_id VARCHAR(32) NOT NULL,
@@ -53,12 +69,12 @@ CREATE TABLE IF NOT EXISTS game_environments (
     description VARCHAR(500),
     type VARCHAR(20) NOT NULL,
     status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
+    storage_profile_id VARCHAR(64),
 
     api_endpoint VARCHAR(500),
     data_namespace VARCHAR(100),
     kafka_topic_prefix VARCHAR(50),
 
-    isolated_storage BOOLEAN DEFAULT FALSE,
     data_retention_days INTEGER,
     max_events_per_day BIGINT,
 
@@ -83,6 +99,7 @@ CREATE TABLE IF NOT EXISTS game_environments (
     deleted_at TIMESTAMP NULL,
 
     CONSTRAINT fk_game_environments_game FOREIGN KEY (game_id) REFERENCES games(id),
+    CONSTRAINT fk_game_environments_storage_profile FOREIGN KEY (storage_profile_id) REFERENCES storage_profiles(id),
     CONSTRAINT uk_game_environment_name UNIQUE (game_id, name)
 );
 
@@ -245,9 +262,12 @@ CREATE INDEX IF NOT EXISTS idx_games_genre ON games(genre);
 CREATE INDEX IF NOT EXISTS idx_games_created_at ON games(created_at);
 
 CREATE INDEX IF NOT EXISTS idx_game_platforms_game_id ON game_platforms(game_id);
+CREATE INDEX IF NOT EXISTS idx_storage_profiles_name ON storage_profiles(name);
+CREATE INDEX IF NOT EXISTS idx_storage_profiles_active ON storage_profiles(is_active);
 CREATE INDEX IF NOT EXISTS idx_game_environments_game_id ON game_environments(game_id);
 CREATE INDEX IF NOT EXISTS idx_game_environments_type ON game_environments(type);
 CREATE INDEX IF NOT EXISTS idx_game_environments_status ON game_environments(status);
+CREATE INDEX IF NOT EXISTS idx_game_environments_storage_profile_id ON game_environments(storage_profile_id);
 
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_users_status ON users(status);
@@ -279,6 +299,36 @@ CREATE INDEX IF NOT EXISTS idx_experiments_status ON experiments(status);
 INSERT INTO users (id, email, name, global_role, status, email_verified)
 VALUES ('user_admin', 'admin@oddsmaker.local', 'System Admin', 'SUPER_ADMIN', 'ACTIVE', TRUE)
 ON CONFLICT (email) DO NOTHING;
+
+INSERT INTO storage_profiles (
+    id, name, display_name, description, isolation_strategy,
+    kafka_cluster, clickhouse_cluster, redis_cluster, archive_bucket, is_active
+) VALUES
+    (
+        'shared-nonprod',
+        'shared-nonprod',
+        'Shared Non-Production',
+        'Default backend for dev, qa, staging and other non-production environments.',
+        'SHARED',
+        'nonprod',
+        'nonprod',
+        'nonprod',
+        'oddsmaker-nonprod-archive',
+        TRUE
+    ),
+    (
+        'shared-prod',
+        'shared-prod',
+        'Shared Production',
+        'Default production backend isolated from non-production environments.',
+        'PROD_ISOLATED',
+        'prod',
+        'prod',
+        'prod',
+        'oddsmaker-prod-archive',
+        TRUE
+    )
+ON CONFLICT (id) DO NOTHING;
 
 CREATE OR REPLACE VIEW v_user_permissions AS
 SELECT

@@ -11,6 +11,7 @@
 
 ## 细分索引
 - [reference/api-reference.zh.md](reference/api-reference.zh.md): 控制服务 API 参考索引
+- [reference/environment-and-storage.zh.md](reference/environment-and-storage.zh.md): 环境与存储隔离设计
 
 ## 说明
 - 主体文档仍在根层，入口已按主题分层。

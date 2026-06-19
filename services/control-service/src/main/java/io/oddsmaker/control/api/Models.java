@@ -13,6 +13,7 @@ public class Models {
         public String secret; // private secret
         public String gameId;
         public String environmentId;
+        public String storageProfileId;
         public String name;
     }
 
@@ -27,6 +28,7 @@ public class Models {
         public String secret;
         public String gameId;
         public String environmentId;
+        public String storageProfileId;
         public Integer rpm;
         public Integer ipRpm;
         public List<String> propsAllowlist;
@@ -35,5 +37,31 @@ public class Models {
         public String piiIp;     // allow|coarse|drop
         public List<String> denyKeys;
         public List<String> maskKeys;
+    }
+
+    public static class StorageProfileResp {
+        public String id;
+        public String name;
+        public String displayName;
+        public String description;
+        public String isolationStrategy;
+        public String kafkaCluster;
+        public String clickhouseCluster;
+        public String redisCluster;
+        public String archiveBucket;
+        public Boolean active;
+    }
+
+    public static class CreateStorageProfileReq {
+        public String id;
+        public String name;
+        public String displayName;
+        public String description;
+        public String isolationStrategy;
+        public String kafkaCluster;
+        public String clickhouseCluster;
+        public String redisCluster;
+        public String archiveBucket;
+        public Boolean active;
     }
 }

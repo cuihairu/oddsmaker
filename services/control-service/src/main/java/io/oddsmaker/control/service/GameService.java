@@ -36,6 +36,12 @@ public class GameService {
     @Autowired
     private ApiKeyRepo apiKeyRepo;
 
+    @Autowired
+    private StorageProfileRepo storageProfileRepo;
+
+    private static final String SHARED_NONPROD_PROFILE_ID = "shared-nonprod";
+    private static final String SHARED_PROD_PROFILE_ID = "shared-prod";
+
     /**
      * 创建新游戏
      */
@@ -51,7 +57,8 @@ public class GameService {
         GameEntity entity = dto.toEntity();
         entity = gameRepo.save(entity);
 
-        // 创建默认生产环境
+        // 创建默认存储策略和环境
+        ensureDefaultStorageProfiles();
         createDefaultEnvironments(entity.id);
 
         logger.info("Game created successfully: {} (ID: {})", entity.name, entity.id);
@@ -260,31 +267,112 @@ public class GameService {
      * 创建默认环境
      */
     private void createDefaultEnvironments(String gameId) {
-        // 创建生产环境
-        GameEnvironmentEntity prodEnv = new GameEnvironmentEntity();
-        prodEnv.id = "env_" + gameId + "_prod";
-        prodEnv.gameId = gameId;
-        prodEnv.name = "production";
-        prodEnv.displayName = "Production Environment";
-        prodEnv.type = GameEnvironmentEntity.EnvironmentType.PRODUCTION;
-        prodEnv.status = GameEnvironmentEntity.EnvironmentStatus.ACTIVE;
-        prodEnv.dataNamespace = gameId + "_prod";
-        prodEnv.requireHttps = true;
-        prodEnv.enableAlerts = true;
-        gameEnvironmentRepo.save(prodEnv);
+        gameEnvironmentRepo.save(newEnvironment(
+            gameId,
+            "dev",
+            "Development",
+            GameEnvironmentEntity.EnvironmentType.DEVELOPMENT,
+            SHARED_NONPROD_PROFILE_ID,
+            gameId + "_dev",
+            false,
+            true
+        ));
 
-        // 创建开发环境
-        GameEnvironmentEntity devEnv = new GameEnvironmentEntity();
-        devEnv.id = "env_" + gameId + "_dev";
-        devEnv.gameId = gameId;
-        devEnv.name = "development";
-        devEnv.displayName = "Development Environment";
-        devEnv.type = GameEnvironmentEntity.EnvironmentType.DEVELOPMENT;
-        devEnv.status = GameEnvironmentEntity.EnvironmentStatus.ACTIVE;
-        devEnv.dataNamespace = gameId + "_dev";
-        devEnv.enableDebugMode = true;
-        devEnv.requireHttps = false;
-        gameEnvironmentRepo.save(devEnv);
+        gameEnvironmentRepo.save(newEnvironment(
+            gameId,
+            "staging",
+            "Staging",
+            GameEnvironmentEntity.EnvironmentType.STAGING,
+            SHARED_NONPROD_PROFILE_ID,
+            gameId + "_staging",
+            true,
+            false
+        ));
+
+        gameEnvironmentRepo.save(newEnvironment(
+            gameId,
+            "prod",
+            "Production",
+            GameEnvironmentEntity.EnvironmentType.PRODUCTION,
+            SHARED_PROD_PROFILE_ID,
+            gameId + "_prod",
+            true,
+            false
+        ));
+    }
+
+    private GameEnvironmentEntity newEnvironment(String gameId,
+                                                 String name,
+                                                 String displayName,
+                                                 GameEnvironmentEntity.EnvironmentType type,
+                                                 String storageProfileId,
+                                                 String dataNamespace,
+                                                 boolean requireHttps,
+                                                 boolean debugMode) {
+        GameEnvironmentEntity environment = new GameEnvironmentEntity();
+        environment.id = "env_" + gameId + "_" + name;
+        environment.gameId = gameId;
+        environment.name = name;
+        environment.displayName = displayName;
+        environment.type = type;
+        environment.status = GameEnvironmentEntity.EnvironmentStatus.ACTIVE;
+        environment.storageProfileId = storageProfileId;
+        environment.dataNamespace = dataNamespace;
+        environment.requireHttps = requireHttps;
+        environment.enableAlerts = true;
+        environment.enableDebugMode = debugMode;
+        environment.kafkaTopicPrefix = dataNamespace;
+        return environment;
+    }
+
+    private void ensureDefaultStorageProfiles() {
+        createStorageProfileIfMissing(
+            SHARED_NONPROD_PROFILE_ID,
+            "shared-nonprod",
+            "Shared Non-Production",
+            "Default backend for dev, qa, staging and other non-production environments.",
+            StorageProfileEntity.IsolationStrategy.SHARED,
+            "nonprod",
+            "nonprod",
+            "nonprod",
+            "oddsmaker-nonprod-archive"
+        );
+        createStorageProfileIfMissing(
+            SHARED_PROD_PROFILE_ID,
+            "shared-prod",
+            "Shared Production",
+            "Default production backend. Production stays isolated from non-production by profile.",
+            StorageProfileEntity.IsolationStrategy.PROD_ISOLATED,
+            "prod",
+            "prod",
+            "prod",
+            "oddsmaker-prod-archive"
+        );
+    }
+
+    private void createStorageProfileIfMissing(String id,
+                                               String name,
+                                               String displayName,
+                                               String description,
+                                               StorageProfileEntity.IsolationStrategy strategy,
+                                               String kafkaCluster,
+                                               String clickhouseCluster,
+                                               String redisCluster,
+                                               String archiveBucket) {
+        if (storageProfileRepo.existsById(id)) {
+            return;
+        }
+        StorageProfileEntity profile = new StorageProfileEntity();
+        profile.id = id;
+        profile.name = name;
+        profile.displayName = displayName;
+        profile.description = description;
+        profile.isolationStrategy = strategy;
+        profile.kafkaCluster = kafkaCluster;
+        profile.clickhouseCluster = clickhouseCluster;
+        profile.redisCluster = redisCluster;
+        profile.archiveBucket = archiveBucket;
+        storageProfileRepo.save(profile);
     }
 
     /**

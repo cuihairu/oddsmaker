@@ -34,6 +34,11 @@ public interface GameEnvironmentRepo extends JpaRepository<GameEnvironmentEntity
     List<GameEnvironmentEntity> findByStatusAndDeletedAtIsNull(GameEnvironmentEntity.EnvironmentStatus status);
 
     /**
+     * 根据存储路由配置查找环境
+     */
+    List<GameEnvironmentEntity> findByStorageProfileIdAndDeletedAtIsNull(String storageProfileId);
+
+    /**
      * 统计游戏的环境数量
      */
     long countByGameIdAndDeletedAtIsNull(String gameId);

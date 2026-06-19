@@ -70,4 +70,34 @@ public class ApiController {
         long n = svc.deleteKeys(req.apiKeys);
         return ResponseEntity.ok(Map.of("deleted", n));
     }
+
+    @GetMapping("/storage-profiles")
+    public List<Models.StorageProfileResp> listStorageProfiles() {
+        return svc.listStorageProfiles();
+    }
+
+    @GetMapping("/storage-profiles/{profileId}")
+    public ResponseEntity<Models.StorageProfileResp> getStorageProfile(@PathVariable String profileId) {
+        var profile = svc.getStorageProfile(profileId);
+        if (profile == null) return ResponseEntity.notFound().build();
+        return ResponseEntity.ok(profile);
+    }
+
+    @PostMapping("/storage-profiles")
+    public Models.StorageProfileResp createStorageProfile(@RequestBody Models.CreateStorageProfileReq req) {
+        return svc.createStorageProfile(req);
+    }
+
+    @PutMapping("/storage-profiles/{profileId}")
+    public ResponseEntity<Models.StorageProfileResp> updateStorageProfile(@PathVariable String profileId,
+                                                                          @RequestBody Models.CreateStorageProfileReq req) {
+        try {
+            return ResponseEntity.ok(svc.updateStorageProfile(profileId, req));
+        } catch (IllegalArgumentException ex) {
+            if (ex.getMessage() != null && ex.getMessage().startsWith("Storage profile not found")) {
+                return ResponseEntity.notFound().build();
+            }
+            throw ex;
+        }
+    }
 }

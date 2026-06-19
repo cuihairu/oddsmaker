@@ -18,6 +18,7 @@ Oddsmaker 是一套面向单个游戏公司的实时分析与风控平台。
 - 单公司部署：一家公司部署一套 Oddsmaker，不做多个公司共用的 SaaS。
 - 多游戏管理：一套平台支持多个游戏。
 - 多环境隔离：每个游戏可以有 `dev`、`staging`、`prod` 等环境。
+- 存储路由解耦：环境表达发布阶段，物理数据路由由 `storage_profile` 决定。
 - 风控内建：风控不是外挂模块，而是接入、计算、告警、处置的主链路能力。
 
 ## Core Capabilities
@@ -110,10 +111,12 @@ flowchart TB
 ```text
 game_id      = 游戏标识，例如 game_demo
 environment  = dev | staging | prod
+storage_profile = shared-nonprod | shared-prod | dedicated-*
 event_id     = 单事件唯一 ID
 ```
 
-事件、分区、查询、实验和风控规则都应使用这组边界键。
+事件、分区、查询、实验和风控规则都应使用 `game_id + environment` 作为逻辑边界。
+`storage_profile` 只负责物理路由，不进入事件契约。
 
 ## Repository Layout
 
@@ -166,6 +169,7 @@ bash scripts/run_flink.sh
 
 - [总体文档入口](docs/README.md)
 - [系统架构](docs/reference/architecture.zh.md)
+- [环境与存储路由设计](docs/reference/environment-and-storage.zh.md)
 - [重设计方案](docs/redesign/README.zh.md)
 - [采集 API](docs/reference/api.zh.md)
 - [控制面](docs/reference/control.zh.md)

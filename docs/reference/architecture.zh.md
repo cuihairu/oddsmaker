@@ -79,9 +79,16 @@ flowchart LR
 - 公司：部署级配置，不进入事件分区键。
 - 游戏：核心业务对象，字段为 `game_id`。
 - 环境：`dev`、`staging`、`prod`，字段为 `environment`。
+- 存储路由：由 `storage_profile` 控制，决定 Kafka / ClickHouse / Redis / Archive 落点。
 - API Key：绑定 `game_id + environment`。
 - 权限：绑定全局、游戏或环境范围。
 - 风控策略：绑定 `game_id + environment`，可灰度发布。
+
+推荐默认拓扑：
+
+- `dev/staging` 共享非生产 profile
+- `prod` 使用生产 profile
+- 超大游戏可升级到 dedicated profile
 
 ## 数据模型
 

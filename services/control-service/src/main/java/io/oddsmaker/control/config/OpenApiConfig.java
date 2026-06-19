@@ -69,7 +69,8 @@ public class OpenApiConfig {
 
                 ### 🎮 Multi-Game Architecture
                 - **Game Management**: Complete game lifecycle management with multi-platform support
-                - **Environment Management**: Dev/Test/Prod environment isolation with configuration management
+                - **Environment Management**: logical dev/staging/prod lifecycle with per-environment policy control
+                - **Storage Profiles**: route environments onto shared, prod-isolated, or dedicated data backends
                 - **Policy Management**: Per-game and per-environment API keys, PII policies, and risk rules
 
                 ### 👥 User Management & Security

@@ -8,8 +8,8 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 /**
- * 游戏环境实体 - 开发/测试/生产环境隔离
- * 每个游戏可以有多个环境，实现完整的开发生命周期管理
+ * 游戏逻辑环境。
+ * Environment 只表达发布阶段；物理落盘与路由由 storage profile 决定。
  */
 @Entity
 @Table(name = "game_environments")
@@ -23,7 +23,7 @@ public class GameEnvironmentEntity {
     public String gameId;
 
     @Column(nullable = false, length = 50)
-    public String name; // development, testing, staging, production
+    public String name; // dev, qa, staging, prod, loadtest
 
     @Column(name = "display_name", length = 100)
     public String displayName;
@@ -45,19 +45,18 @@ public class GameEnvironmentEntity {
     @Column(nullable = false)
     public EnvironmentStatus status = EnvironmentStatus.ACTIVE;
 
+    @Column(name = "storage_profile_id", length = 64)
+    public String storageProfileId;
+
     // 环境配置
     @Column(name = "api_endpoint", length = 500)
     public String apiEndpoint; // 专用API端点
 
     @Column(name = "data_namespace", length = 100)
-    public String dataNamespace; // 数据命名空间，用于ClickHouse分区
+    public String dataNamespace; // 逻辑数据命名空间，物理后端由 storage profile 决定
 
     @Column(name = "kafka_topic_prefix", length = 50)
     public String kafkaTopicPrefix; // Kafka主题前缀
-
-    // 数据隔离配置
-    @Column(name = "isolated_storage")
-    public Boolean isolatedStorage = false; // 是否使用独立存储
 
     @Column(name = "data_retention_days")
     public Integer dataRetentionDays; // 继承自游戏配置，可覆盖
@@ -122,6 +121,10 @@ public class GameEnvironmentEntity {
     @JoinColumn(name = "game_id", insertable = false, updatable = false)
     public GameEntity game;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "storage_profile_id", insertable = false, updatable = false)
+    public StorageProfileEntity storageProfile;
+
     @OneToMany(mappedBy = "environment", fetch = FetchType.LAZY)
     public List<ApiKeyEntity> apiKeys;
 
@@ -129,7 +132,8 @@ public class GameEnvironmentEntity {
         DEVELOPMENT, // 开发环境
         TESTING,     // 测试环境
         STAGING,     // 预发环境
-        PRODUCTION   // 生产环境
+        PRODUCTION,  // 生产环境
+        LOADTEST     // 压测环境
     }
 
     public enum EnvironmentStatus {
@@ -147,6 +151,10 @@ public class GameEnvironmentEntity {
         return type == EnvironmentType.DEVELOPMENT;
     }
 
+    public boolean isNonProduction() {
+        return !isProduction();
+    }
+
     public boolean isActive() {
         return status == EnvironmentStatus.ACTIVE && deletedAt == null;
     }
@@ -156,14 +164,14 @@ public class GameEnvironmentEntity {
     }
 
     public String getDataPartition() {
-        // 生成ClickHouse分区标识
-        return String.format("%s_%s_%s",
-            gameId,
-            name,
-            dataNamespace != null ? dataNamespace : name);
+        return dataNamespace != null ? dataNamespace : String.format("%s_%s", gameId, name);
     }
 
     public boolean shouldSample() {
         return enableSampling && sampleRate != null && sampleRate < 1.0;
+    }
+
+    public boolean usesDedicatedStorage() {
+        return storageProfile != null && storageProfile.isDedicated();
     }
 }

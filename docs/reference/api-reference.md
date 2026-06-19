@@ -1,8 +1,8 @@
 # Oddsmaker Control Service API Reference
 
-Oddsmaker is a single-company, multi-game analytics and risk-control platform. The control service manages games, environments, API keys, tracking plans, PII policies, risk rules, users, role bindings, and audit logs.
+Oddsmaker is a single-company, multi-game analytics and risk-control platform. The control service manages games, environments, storage profiles, API keys, tracking plans, PII policies, risk rules, users, role bindings, and audit logs.
 
-Oddsmaker does not model `Organization` or `Tenant` as target business resources. The core boundary is `game_id + environment`.
+Oddsmaker does not model `Organization` or `Tenant` as target business resources. The core business boundary is `game_id + environment`, while physical routing is controlled by `storage_profile`.
 
 ## Authentication
 
@@ -34,6 +34,17 @@ Authorization: Bearer YOUR_TOKEN
 | PUT | `/api/games/{gameId}/environments/{environment}` | Update environment config |
 
 Supported environments: `dev`, `staging`, `prod`.
+
+An environment is a logical lifecycle stage, not a synonym for a dedicated database.
+
+### Storage Profiles
+
+| Method | Endpoint | Description |
+|---|---|---|
+| POST | `/api/storage-profiles` | Create a storage routing profile |
+| GET | `/api/storage-profiles` | List storage profiles |
+| GET | `/api/storage-profiles/{profileId}` | Get storage profile details |
+| PUT | `/api/storage-profiles/{profileId}` | Update routing backends or isolation strategy |
 
 ### API Keys
 

@@ -4,6 +4,14 @@
 
 不再设计 Organization/Tenant API。公司信息属于部署配置，不作为业务资源。
 
+环境设计采用：
+
+- `Game`：业务对象
+- `Environment`：逻辑发布阶段
+- `StorageProfile`：物理数据路由
+
+也就是说，`environment` 不直接等于“独立数据库”。
+
 ## 核心资源
 
 ### Game
@@ -48,6 +56,24 @@ PUT /api/games/{gameId}/environments/{environment}
 - PII 策略绑定。
 - 风控策略绑定。
 - 限流默认值。
+- `storageProfile` 绑定。
+
+### Storage Profile
+
+```http
+POST /api/storage-profiles
+GET /api/storage-profiles
+GET /api/storage-profiles/{profileId}
+PUT /api/storage-profiles/{profileId}
+```
+
+Storage Profile 负责决定：
+
+- Kafka cluster / topic namespace
+- ClickHouse backend
+- Redis backend
+- Archive bucket
+- isolation strategy: `shared | prod_isolated | dedicated`
 
 ### API Key
 
