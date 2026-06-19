@@ -159,7 +159,7 @@ class GameServiceTest {
         // Given
         GameDTO updateDTO = new GameDTO();
         updateDTO.name = "Updated Game";
-        updateDTO.genre = "strategy";
+        updateDTO.genre = GameEntity.GameGenre.STRATEGY;
 
         when(gameRepo.findById("game_test123")).thenReturn(Optional.of(testGame));
         when(gameRepo.save(any(GameEntity.class))).thenReturn(testGame);
