@@ -68,9 +68,9 @@ class RiskManagementServiceTest {
         testCase.caseNumber = "CASE-2024-001";
         testCase.targetType = "user";
         testCase.targetId = "user_123";
-        testCase.riskLevel = RiskRuleEntity.RiskLevel.HIGH;
+        testCase.riskLevel = RiskCaseEntity.RiskLevel.HIGH;
         testCase.riskScore = 80;
-        testCase.actionTaken = RiskRuleEntity.ActionType.BLOCK;
+        testCase.actionTaken = RiskCaseEntity.ActionType.BLOCK;
         testCase.executionStatus = RiskCaseEntity.ExecutionStatus.PENDING;
         testCase.createdAt = LocalDateTime.now();
     }
