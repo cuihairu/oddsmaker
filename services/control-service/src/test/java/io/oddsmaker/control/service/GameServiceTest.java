@@ -59,7 +59,7 @@ class GameServiceTest {
         testGameDTO = new GameDTO();
         testGameDTO.id = "game_test123";
         testGameDTO.name = "Test Game";
-        testGameDTO.genre = "RPG";
+        testGameDTO.genre = GameEntity.GameGenre.RPG;
     }
 
     @Test
