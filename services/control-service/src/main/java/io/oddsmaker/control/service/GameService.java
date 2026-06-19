@@ -1,6 +1,7 @@
 package io.oddsmaker.control.service;
 
 import io.oddsmaker.control.dto.GameDTO;
+import io.oddsmaker.control.dto.EnvironmentDTO;
 import io.oddsmaker.control.jpa.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,6 +16,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.Locale;
 import java.util.stream.Collectors;
 
 /**
@@ -151,6 +153,95 @@ public class GameService {
                 enrichWithStatistics(dto);
                 return dto;
             });
+    }
+
+    /**
+     * 列出游戏的逻辑环境。
+     */
+    @Transactional(readOnly = true)
+    public List<EnvironmentDTO> listEnvironments(String gameId) {
+        requireGame(gameId);
+        return gameEnvironmentRepo.findByGameIdAndDeletedAtIsNull(gameId).stream()
+            .map(EnvironmentDTO::new)
+            .collect(Collectors.toList());
+    }
+
+    /**
+     * 获取单个环境。
+     */
+    @Transactional(readOnly = true)
+    public Optional<EnvironmentDTO> getEnvironment(String gameId, String environmentName) {
+        requireGame(gameId);
+        return findEnvironment(gameId, environmentName).map(EnvironmentDTO::new);
+    }
+
+    /**
+     * 创建环境。
+     */
+    public EnvironmentDTO createEnvironment(String gameId, EnvironmentDTO dto) {
+        requireGame(gameId);
+        String environmentName = normalizeEnvironmentName(dto.name);
+        if (!gameEnvironmentRepo.findByGameIdAndNameAndDeletedAtIsNull(gameId, environmentName).isEmpty()) {
+            throw new IllegalArgumentException("Environment already exists: " + environmentName);
+        }
+
+        ensureDefaultStorageProfiles();
+
+        GameEnvironmentEntity entity = dto.toEntity();
+        entity.id = "env_" + gameId + "_" + environmentName;
+        entity.gameId = gameId;
+        entity.name = environmentName;
+        entity.displayName = entity.displayName != null ? entity.displayName : defaultDisplayName(environmentName);
+        entity.storageProfileId = entity.storageProfileId != null ? entity.storageProfileId : defaultStorageProfileId(entity.type);
+        validateStorageProfile(entity.storageProfileId);
+        entity.dataNamespace = entity.dataNamespace != null ? entity.dataNamespace : gameId + "_" + environmentName;
+        entity.kafkaTopicPrefix = entity.kafkaTopicPrefix != null ? entity.kafkaTopicPrefix : entity.dataNamespace;
+
+        return new EnvironmentDTO(gameEnvironmentRepo.save(entity));
+    }
+
+    /**
+     * 更新环境。
+     */
+    public EnvironmentDTO updateEnvironment(String gameId, String environmentName, EnvironmentDTO dto) {
+        GameEnvironmentEntity entity = findEnvironment(gameId, environmentName)
+            .orElseThrow(() -> new IllegalArgumentException("Environment not found: " + environmentName));
+        dto.updateEntity(entity);
+        if (entity.storageProfileId != null) {
+            validateStorageProfile(entity.storageProfileId);
+        }
+        return new EnvironmentDTO(gameEnvironmentRepo.save(entity));
+    }
+
+    /**
+     * 删除环境（软删除）。
+     */
+    public void deleteEnvironment(String gameId, String environmentName) {
+        logger.info("Deleting environment: {} for game: {}", environmentName, gameId);
+
+        requireGame(gameId);
+        GameEnvironmentEntity entity = findEnvironment(gameId, environmentName)
+            .orElseThrow(() -> new IllegalArgumentException("Environment not found: " + environmentName));
+
+        // 检查是否有 API Key 在使用该环境
+        List<ApiKeyEntity> apiKeys = apiKeyRepo.findByGameIdAndStatus(gameId, ApiKeyEntity.ApiKeyStatus.ACTIVE);
+        long keysUsingEnvironment = apiKeys.stream()
+            .filter(key -> key.environmentId.equals(entity.id))
+            .count();
+
+        if (keysUsingEnvironment > 0) {
+            throw new IllegalStateException(
+                "Cannot delete environment: " + environmentName + ". It is currently in use by " +
+                keysUsingEnvironment + " API key(s). Please delete or reassign the keys first."
+            );
+        }
+
+        // 软删除环境
+        entity.deletedAt = LocalDateTime.now();
+        entity.status = GameEnvironmentEntity.EnvironmentStatus.INACTIVE;
+        gameEnvironmentRepo.save(entity);
+
+        logger.info("Environment deleted successfully: {} for game: {}", environmentName, gameId);
     }
 
     /**
@@ -299,6 +390,47 @@ public class GameService {
             true,
             false
         ));
+    }
+
+    private GameEntity requireGame(String gameId) {
+        return gameRepo.findById(gameId)
+            .filter(game -> game.deletedAt == null)
+            .orElseThrow(() -> new IllegalArgumentException("Game not found: " + gameId));
+    }
+
+    private Optional<GameEnvironmentEntity> findEnvironment(String gameId, String environmentName) {
+        String normalized = normalizeEnvironmentName(environmentName);
+        return gameEnvironmentRepo.findByGameIdAndNameAndDeletedAtIsNull(gameId, normalized).stream().findFirst();
+    }
+
+    private String normalizeEnvironmentName(String environmentName) {
+        if (environmentName == null || environmentName.isBlank()) {
+            throw new IllegalArgumentException("Environment name is required");
+        }
+        return environmentName.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private String defaultDisplayName(String environmentName) {
+        return switch (environmentName) {
+            case "dev" -> "Development";
+            case "qa" -> "QA";
+            case "staging" -> "Staging";
+            case "prod" -> "Production";
+            case "loadtest" -> "Load Test";
+            default -> Character.toUpperCase(environmentName.charAt(0)) + environmentName.substring(1);
+        };
+    }
+
+    private String defaultStorageProfileId(GameEnvironmentEntity.EnvironmentType type) {
+        return type == GameEnvironmentEntity.EnvironmentType.PRODUCTION
+            ? SHARED_PROD_PROFILE_ID
+            : SHARED_NONPROD_PROFILE_ID;
+    }
+
+    private void validateStorageProfile(String storageProfileId) {
+        if (!storageProfileRepo.existsById(storageProfileId)) {
+            throw new IllegalArgumentException("Storage profile not found: " + storageProfileId);
+        }
     }
 
     private GameEnvironmentEntity newEnvironment(String gameId,

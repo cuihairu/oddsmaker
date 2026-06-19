@@ -19,7 +19,7 @@ public class ExperimentEntity {
     public String status;
     public String salt;
     @Lob
-    @Column(columnDefinition = "CLOB")
+    @Column(name = "config_json", columnDefinition = "TEXT")
     public String configJson;
     public Instant createdAt;
     public Instant updatedAt;

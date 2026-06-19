@@ -23,6 +23,9 @@ public class AdminTokenFilter extends OncePerRequestFilter {
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) throws ServletException {
         String path = request.getRequestURI();
+        if (path.startsWith("/api/config/")) {
+            return true;
+        }
         // Only protect /api/* ; allow static UI and health
         return !(path.startsWith("/api/"));
     }

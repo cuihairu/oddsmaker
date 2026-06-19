@@ -113,7 +113,7 @@
       Oddsmaker 的目标边界是 <span class="inline-code">单公司部署</span>、
       <span class="inline-code">多游戏</span>、
       <span class="inline-code">多环境</span>，公开管理接口应围绕
-      <span class="inline-code">gameId + environmentId</span> 展开。
+      <span class="inline-code">Game -&gt; Environment -&gt; Storage Profile</span> 展开。
     </p>
 
     <div class="grid">
@@ -121,6 +121,7 @@
         <h2>当前约束</h2>
         <ul>
           <li>控制面资源围绕 Game / Environment / API Key / Risk Rule 组织。</li>
+          <li>Environment 表达逻辑发布阶段，Storage Profile 表达物理数据路由。</li>
           <li>API Key 绑定到游戏和环境，而不是公司租户。</li>
           <li>风控策略、PII 策略、Tracking Plan 都应按游戏环境下发。</li>
         </ul>
@@ -129,28 +130,30 @@
       <section class="card">
         <h2>推荐接口</h2>
         <ul>
-          <li><code>POST /api/keys</code> 创建 API Key</li>
-          <li><code>GET /api/keys?gameId=&amp;environmentId=</code> 查询 API Key</li>
-          <li><code>GET /api/keys/{apiKey}</code> 获取策略明细</li>
-          <li><code>PUT /api/keys/{apiKey}/policy</code> 更新策略</li>
+          <li><code>POST /api/games</code> 创建游戏</li>
+          <li><code>GET /api/games/{gameId}/environments</code> 查询环境</li>
+          <li><code>GET /api/storage-profiles</code> 查询存储路由配置</li>
+          <li><code>POST /api/api-keys</code> 创建 API Key</li>
+          <li><code>GET /api/api-keys?gameId=&amp;environmentId=</code> 查询 API Key</li>
         </ul>
       </section>
 
       <section class="card">
         <h2>请求示例</h2>
         <pre>{
-  "gameId": "poker-mobile",
-  "environmentId": "prod",
-  "name": "client-prod-key"
+  "name": "Poker Mobile",
+  "displayName": "Poker Mobile",
+  "genre": "RPG",
+  "platforms": ["MOBILE"]
 }</pre>
       </section>
 
       <section class="card">
         <h2>后续工作</h2>
         <ul>
-          <li>正式控制台改为 Game / Environment / API Key / Risk Rule 结构。</li>
-          <li>实验与配置接口统一使用 <code>gameId + environmentId</code>。</li>
-          <li>控制面权限模型改成公司内按游戏和环境授权。</li>
+          <li>正式控制台改为 Game / Environment / Storage Profile / API Key / Risk Rule 结构。</li>
+          <li>实验与配置接口统一使用 <code>gameId + environmentId</code> 作为逻辑边界。</li>
+          <li>控制面权限模型继续收敛到公司内按游戏和环境授权。</li>
         </ul>
       </section>
     </div>

@@ -249,7 +249,7 @@ CREATE TABLE IF NOT EXISTS experiments (
     name VARCHAR(200) NOT NULL,
     status VARCHAR(20) NOT NULL DEFAULT 'draft',
     salt VARCHAR(128),
-    config_json CLOB,
+    config_json TEXT,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 

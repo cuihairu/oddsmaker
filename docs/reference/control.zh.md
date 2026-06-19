@@ -22,6 +22,8 @@ GET /api/games
 GET /api/games/{gameId}
 PUT /api/games/{gameId}
 DELETE /api/games/{gameId}
+POST /api/games/{gameId}/publish
+POST /api/games/{gameId}/unpublish
 ```
 
 示例：
@@ -42,11 +44,12 @@ DELETE /api/games/{gameId}
 ```http
 POST /api/games/{gameId}/environments
 GET /api/games/{gameId}/environments
-GET /api/games/{gameId}/environments/{environment}
-PUT /api/games/{gameId}/environments/{environment}
+GET /api/games/{gameId}/environments/{environmentName}
+PUT /api/games/{gameId}/environments/{environmentName}
+DELETE /api/games/{gameId}/environments/{environmentName}
 ```
 
-`environment` 取值：`dev`、`staging`、`prod`。
+推荐默认环境：`dev`、`staging`、`prod`。
 
 环境配置包括：
 
@@ -65,6 +68,7 @@ POST /api/storage-profiles
 GET /api/storage-profiles
 GET /api/storage-profiles/{profileId}
 PUT /api/storage-profiles/{profileId}
+DELETE /api/storage-profiles/{profileId}
 ```
 
 Storage Profile 负责决定：
@@ -79,12 +83,20 @@ Storage Profile 负责决定：
 
 ```http
 POST /api/api-keys
-GET /api/api-keys?gameId=&environment=
+GET /api/api-keys?gameId=&environmentId=
 GET /api/api-keys/{keyId}
 PUT /api/api-keys/{keyId}
 DELETE /api/api-keys/{keyId}
-POST /api/api-keys/{keyId}/rotate
-POST /api/api-keys/{keyId}/disable
+```
+
+兼容旧路由：
+
+```http
+POST /api/keys
+GET /api/keys?gameId=&environmentId=
+GET /api/keys/{keyId}
+PUT /api/keys/{keyId}/policy
+DELETE /api/keys/{keyId}
 ```
 
 示例：
@@ -92,7 +104,7 @@ POST /api/api-keys/{keyId}/disable
 ```json
 {
   "gameId": "game_demo",
-  "environment": "prod",
+  "environmentId": "prod",
   "name": "android-client",
   "keyType": "client",
   "rateLimit": {
@@ -111,11 +123,13 @@ Key 类型：
 ### Tracking Plan
 
 ```http
-POST /api/games/{gameId}/environments/{environment}/tracking-plans
-GET /api/games/{gameId}/environments/{environment}/tracking-plans/current
+POST /api/games/{gameId}/environments/{environmentName}/tracking-plans
+GET /api/games/{gameId}/environments/{environmentName}/tracking-plans/current
 POST /api/tracking-plans/{planId}/publish
 POST /api/tracking-plans/{planId}/rollback
 ```
+
+说明：Tracking Plan 相关接口目前仍属于规划中的目标形态，当前仓库优先落地 Game / Environment / Storage Profile / API Key。
 
 Tracking Plan 管理：
 

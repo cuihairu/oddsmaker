@@ -23,6 +23,8 @@ Authorization: Bearer YOUR_TOKEN
 | GET | `/api/games/{gameId}` | Get game details |
 | PUT | `/api/games/{gameId}` | Update a game |
 | DELETE | `/api/games/{gameId}` | Delete or archive a game |
+| POST | `/api/games/{gameId}/publish` | Move a game to live status |
+| POST | `/api/games/{gameId}/unpublish` | Move a live game to maintenance |
 
 ### Environments
 
@@ -30,10 +32,11 @@ Authorization: Bearer YOUR_TOKEN
 |---|---|---|
 | POST | `/api/games/{gameId}/environments` | Create an environment |
 | GET | `/api/games/{gameId}/environments` | List environments |
-| GET | `/api/games/{gameId}/environments/{environment}` | Get environment config |
-| PUT | `/api/games/{gameId}/environments/{environment}` | Update environment config |
+| GET | `/api/games/{gameId}/environments/{environmentName}` | Get environment config |
+| PUT | `/api/games/{gameId}/environments/{environmentName}` | Update environment config |
+| DELETE | `/api/games/{gameId}/environments/{environmentName}` | Delete an environment |
 
-Supported environments: `dev`, `staging`, `prod`.
+Recommended environments: `dev`, `staging`, `prod`.
 
 An environment is a logical lifecycle stage, not a synonym for a dedicated database.
 
@@ -45,18 +48,22 @@ An environment is a logical lifecycle stage, not a synonym for a dedicated datab
 | GET | `/api/storage-profiles` | List storage profiles |
 | GET | `/api/storage-profiles/{profileId}` | Get storage profile details |
 | PUT | `/api/storage-profiles/{profileId}` | Update routing backends or isolation strategy |
+| DELETE | `/api/storage-profiles/{profileId}` | Delete a storage profile |
 
 ### API Keys
 
 | Method | Endpoint | Description |
 |---|---|---|
 | POST | `/api/api-keys` | Create an API key bound to `game_id + environment` |
-| GET | `/api/api-keys?gameId=&environment=` | List API keys |
+| GET | `/api/api-keys?gameId=&environmentId=` | List API keys |
 | GET | `/api/api-keys/{keyId}` | Get API key details |
 | PUT | `/api/api-keys/{keyId}` | Update limits or policy bindings |
 | DELETE | `/api/api-keys/{keyId}` | Delete an API key |
-| POST | `/api/api-keys/{keyId}/rotate` | Rotate an API key |
-| POST | `/api/api-keys/{keyId}/disable` | Disable an API key |
+| POST | `/api/keys` | Legacy compatible create endpoint |
+| GET | `/api/keys?gameId=&environmentId=` | Legacy compatible query endpoint |
+| GET | `/api/keys/{keyId}` | Legacy compatible detail endpoint |
+| PUT | `/api/keys/{keyId}/policy` | Legacy compatible policy update endpoint |
+| DELETE | `/api/keys/{keyId}` | Legacy compatible delete endpoint |
 
 Key types:
 
@@ -68,8 +75,8 @@ Key types:
 
 | Method | Endpoint | Description |
 |---|---|---|
-| POST | `/api/games/{gameId}/environments/{environment}/tracking-plans` | Create a tracking plan draft |
-| GET | `/api/games/{gameId}/environments/{environment}/tracking-plans/current` | Get the active plan |
+| POST | `/api/games/{gameId}/environments/{environmentName}/tracking-plans` | Planned draft endpoint |
+| GET | `/api/games/{gameId}/environments/{environmentName}/tracking-plans/current` | Planned current plan endpoint |
 | POST | `/api/tracking-plans/{planId}/publish` | Publish a plan |
 | POST | `/api/tracking-plans/{planId}/rollback` | Roll back a plan |
 
@@ -86,7 +93,7 @@ Key types:
 | Method | Endpoint | Description |
 |---|---|---|
 | POST | `/api/risk-rules` | Create a risk rule |
-| GET | `/api/risk-rules?gameId=&environment=` | List risk rules |
+| GET | `/api/risk-rules?gameId=&environment=` | Planned list endpoint |
 | GET | `/api/risk-rules/{ruleId}` | Get risk rule details |
 | PUT | `/api/risk-rules/{ruleId}` | Update a rule |
 | DELETE | `/api/risk-rules/{ruleId}` | Delete a rule |
@@ -123,7 +130,7 @@ Roles:
 
 | Method | Endpoint | Description |
 |---|---|---|
-| GET | `/api/audit-logs?gameId=&environment=&actor=&action=&from=&to=` | Search audit logs |
+| GET | `/api/audit-logs?gameId=&environment=&actor=&action=&from=&to=` | Planned search endpoint |
 
 ## Response Format
 

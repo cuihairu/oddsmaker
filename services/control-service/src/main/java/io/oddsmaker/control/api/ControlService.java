@@ -150,6 +150,30 @@ public class ControlService {
         return toStorageProfile(entity);
     }
 
+    public boolean deleteStorageProfile(String profileId) {
+        StorageProfileEntity entity = storageProfileRepo.findById(profileId)
+            .filter(profile -> profile.deletedAt == null)
+            .orElse(null);
+        if (entity == null) {
+            return false;
+        }
+
+        // 检查是否有环境在使用该 profile
+        List<GameEnvironmentEntity> environments = envRepo.findByStorageProfileIdAndDeletedAtIsNull(profileId);
+        if (!environments.isEmpty()) {
+            throw new IllegalStateException(
+                "Cannot delete storage profile: " + profileId + ". It is currently in use by " +
+                environments.size() + " environment(s). Please reassign or delete the environments first."
+            );
+        }
+
+        // 软删除
+        entity.deletedAt = java.time.LocalDateTime.now();
+        entity.active = false;
+        storageProfileRepo.save(entity);
+        return true;
+    }
+
     private Models.ApiKeyResp toResp(ApiKeyEntity e) {
         Models.ApiKeyResp out = new Models.ApiKeyResp();
         out.apiKey = e.apiKey; out.secret = e.secret;
