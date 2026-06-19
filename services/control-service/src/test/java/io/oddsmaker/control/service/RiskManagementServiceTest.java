@@ -92,7 +92,7 @@ class RiskManagementServiceTest {
 
         // Then
         assertThat(actions).isNotEmpty();
-        assertThat(actions.get(0).getActionType()).isEqualTo(RiskRuleEntity.ActionType.BLOCK);
+        assertThat(actions.get(0).actionType).isEqualTo(RiskRuleEntity.ActionType.BLOCK);
     }
 
     @Test
