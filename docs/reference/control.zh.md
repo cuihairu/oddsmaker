@@ -10,7 +10,14 @@
 - `Environment`：逻辑发布阶段
 - `StorageProfile`：物理数据路由
 
-也就是说，`environment` 不直接等于“独立数据库”。
+也就是说，`environment` 不直接等于”独立数据库”。
+
+## 字段命名约定
+
+- `gameId` / `environmentId`：控制面 API 使用的内部标识符
+- `game_id` / `environment`：事件协议使用的逻辑名称（如 `prod`、`staging`）
+- API Key 绑定到 `gameId + environmentId`（内部 ID）
+- 事件上报使用 `game_id + environment`（逻辑名称）
 
 ## 核心资源
 
@@ -104,7 +111,7 @@ DELETE /api/keys/{keyId}
 ```json
 {
   "gameId": "game_demo",
-  "environmentId": "prod",
+  "environmentId": "env_game_demo_prod",
   "name": "android-client",
   "keyType": "client",
   "rateLimit": {
@@ -113,6 +120,8 @@ DELETE /api/keys/{keyId}
   }
 }
 ```
+
+> **注意**：`environmentId` 是环境的内部标识符（如 `env_game_demo_prod`），而非逻辑名称（如 `prod`）。创建环境时会自动生成内部 ID。
 
 Key 类型：
 
@@ -129,7 +138,35 @@ POST /api/tracking-plans/{planId}/publish
 POST /api/tracking-plans/{planId}/rollback
 ```
 
-说明：Tracking Plan 相关接口目前仍属于规划中的目标形态，当前仓库优先落地 Game / Environment / Storage Profile / API Key。
+说明：Tracking Plan 相关接口目前仍属于规划中的目标形态，当前仓库优先落地 Game / Environment / Storage Profile / API Key / Experiments。
+
+### Experiments
+
+```http
+POST /api/experiments
+GET /api/experiments?gameId=&environmentId=&environment=&status=
+GET /api/experiments/{id}
+PUT /api/experiments/{id}
+DELETE /api/experiments/{id}
+POST /api/experiments/{id}/publish
+POST /api/experiments/{id}/pause
+```
+
+**字段说明**：
+- `gameId`：游戏 ID（必填）
+- `environmentId`：环境内部 ID（与 `environment` 二选一）
+- `environment`：环境逻辑名称，如 `dev`/`staging`/`prod`（与 `environmentId` 二选一，兼容字段）
+- `name`：实验名称
+- `status`：实验状态：`draft`/`running`/`paused`
+- `salt`：分流盐值
+- `config`：实验配置（variants/targeting/metrics）
+
+**公开配置端点**（无需认证）：
+```http
+GET /api/config/{gameId}/{environment}
+```
+
+返回该游戏环境下所有运行中的实验配置，供 SDK 使用。
 
 Tracking Plan 管理：
 
@@ -166,7 +203,7 @@ PUT /api/pii-policies/{policyId}
 
 ```http
 POST /api/risk-rules
-GET /api/risk-rules?gameId=&environment=
+GET /api/risk-rules?gameId=&environmentId=
 GET /api/risk-rules/{ruleId}
 PUT /api/risk-rules/{ruleId}
 DELETE /api/risk-rules/{ruleId}
@@ -179,7 +216,7 @@ POST /api/risk-rules/{ruleId}/disable
 ```json
 {
   "gameId": "game_demo",
-  "environment": "prod",
+  "environmentId": "env_game_demo_prod",
   "ruleId": "payment_receipt_reuse",
   "riskType": "payment",
   "severity": "high",
@@ -221,7 +258,7 @@ DELETE /api/users/{userId}/role-bindings/{bindingId}
 ### Audit Log
 
 ```http
-GET /api/audit-logs?gameId=&environment=&actor=&action=&from=&to=
+GET /api/audit-logs?gameId=&environmentId=&actor=&action=&from=&to=
 ```
 
 必须审计：

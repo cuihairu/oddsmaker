@@ -3,7 +3,9 @@
 目标：提供可配置的实验（variants/权重/目标规则），SDK 侧一致性分流与曝光事件，ClickHouse 侧快速聚合曝光/转化指标。
 
 数据模型（控制面）
-- Experiment: { id, gameId, environment, name, status(draft|running|paused), salt, config }
+- Experiment: { id, gameId, environmentId, environment, name, status(draft|running|paused), salt, config }
+- `environmentId`：环境内部 ID（与 `environment` 二选一）
+- `environment`：环境逻辑名称，如 `dev`/`staging`/`prod`（与 `environmentId` 二选一，兼容字段）
 - config 示例：
 ```json
 {

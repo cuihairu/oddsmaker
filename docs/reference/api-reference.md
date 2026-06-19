@@ -80,6 +80,25 @@ Key types:
 | POST | `/api/tracking-plans/{planId}/publish` | Publish a plan |
 | POST | `/api/tracking-plans/{planId}/rollback` | Roll back a plan |
 
+### Experiments
+
+| Method | Endpoint | Description |
+|---|---|---|
+| POST | `/api/experiments` | Create an experiment |
+| GET | `/api/experiments?gameId=&environmentId=&environment=&status=` | List experiments |
+| GET | `/api/experiments/{id}` | Get experiment details |
+| PUT | `/api/experiments/{id}` | Update an experiment |
+| DELETE | `/api/experiments/{id}` | Delete an experiment |
+| POST | `/api/experiments/{id}/publish` | Start an experiment |
+| POST | `/api/experiments/{id}/pause` | Pause an experiment |
+
+**Public endpoint** (no authentication):
+| GET | `/api/config/{gameId}/{environment}` | Get running experiment configs for SDK |
+
+**Fields**:
+- `environmentId`: internal environment ID (alternative to `environment`)
+- `environment`: logical environment name like `dev`/`staging`/`prod` (alternative to `environmentId`)
+
 ### PII Policies
 
 | Method | Endpoint | Description |
@@ -93,7 +112,7 @@ Key types:
 | Method | Endpoint | Description |
 |---|---|---|
 | POST | `/api/risk-rules` | Create a risk rule |
-| GET | `/api/risk-rules?gameId=&environment=` | Planned list endpoint |
+| GET | `/api/risk-rules?gameId=&environmentId=` | Planned list endpoint |
 | GET | `/api/risk-rules/{ruleId}` | Get risk rule details |
 | PUT | `/api/risk-rules/{ruleId}` | Update a rule |
 | DELETE | `/api/risk-rules/{ruleId}` | Delete a rule |
@@ -130,7 +149,7 @@ Roles:
 
 | Method | Endpoint | Description |
 |---|---|---|
-| GET | `/api/audit-logs?gameId=&environment=&actor=&action=&from=&to=` | Planned search endpoint |
+| GET | `/api/audit-logs?gameId=&environmentId=&actor=&action=&from=&to=` | Planned search endpoint |
 
 ## Response Format
 
