@@ -32,8 +32,8 @@ features:
     details: Analyze experiment results with statistical significance, conversion rates, and SRM detection
   - icon:
       src: /icons/ml.svg
-    title: Machine Learning
-    details: ML model management with training, deployment, and A/B testing
+    title: Predictive Models
+    details: Churn prediction, fraud detection, LTV forecasting, and player segmentation
   - icon:
       src: /icons/security.svg
     title: Enterprise Security
@@ -82,8 +82,11 @@ Detect and prevent cheating, payment fraud, and other suspicious activities.
 ### A/B Test Analysis
 Analyze experiment results with conversion rates, statistical significance testing, and Sample Ratio Mismatch (SRM) detection. Track exposure events and measure uplift across variants.
 
-### Machine Learning
-Deploy and manage ML models for predictions and anomaly detection.
+### Predictive Models
+- **Churn Prediction** - Identify players likely to churn before they leave
+- **Fraud Detection** - Detect cheating and suspicious behavior patterns
+- **LTV Forecasting** - Predict player lifetime value for acquisition optimization
+- **Risk Scoring** - Real-time risk assessment for transactions and actions
 
 ### Enterprise Security
 MFA, SSO, RBAC, audit logging, and compliance features.
