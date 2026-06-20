@@ -62,6 +62,12 @@ export default withMermaid(defineConfig({
             { text: 'Risk API', link: '/reference/risk' },
             { text: 'ML Models API', link: '/reference/ml-models' },
           ]
+        },
+        {
+          text: 'Analysis',
+          items: [
+            { text: 'Gaming Scenarios', link: '/reference/gaming-scenarios' },
+          ]
         }
       ],
       '/operations/': [
