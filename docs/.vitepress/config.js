@@ -8,6 +8,51 @@ export default withMermaid(defineConfig({
   // Ignore dead links
   ignoreDeadLinks: true,
 
+  // Locales
+  locales: {
+    root: {
+      label: 'English',
+      lang: 'en',
+    },
+    zh: {
+      label: '中文',
+      lang: 'zh-CN',
+      title: 'Oddsmaker',
+      description: '游戏分析平台文档',
+      themeConfig: {
+        nav: [
+          { text: '首页', link: '/zh/' },
+          { text: 'API 文档', link: '/zh/reference/' },
+        ],
+        sidebar: {
+          '/zh/reference/': [
+            {
+              text: 'API 参考',
+              items: [
+                { text: '分析 API', link: '/zh/reference/analytics' },
+                { text: '游戏分析场景', link: '/zh/reference/gaming-scenarios' },
+              ]
+            }
+          ]
+        },
+        editLink: {
+          pattern: 'https://github.com/cuihairu/oddsmaker/edit/main/docs/:path',
+          text: '在 GitHub 上编辑此页面'
+        },
+        lastUpdated: {
+          text: '最后更新于'
+        },
+        docFooter: {
+          prev: '上一页',
+          next: '下一页'
+        },
+        outline: {
+          label: '页面导航'
+        }
+      }
+    }
+  },
+
   // Site metadata
   title: 'Oddsmaker',
   description: 'Gaming Analytics Platform Documentation',
@@ -20,6 +65,7 @@ export default withMermaid(defineConfig({
       { text: 'Guide', link: '/guide/' },
       { text: 'API Reference', link: '/reference/' },
       { text: 'Operations', link: '/operations/' },
+      { text: '中文', link: '/zh/' },
     ],
 
     // Sidebar
