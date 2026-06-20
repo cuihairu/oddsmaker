@@ -127,68 +127,58 @@
 
 ### 2.1 收入分析
 
-**当前状态：基础**
+**当前状态：✅ 已实现**
 
-| 功能 | 状态 | 建议 |
-|------|------|------|
-| ARPU/ARPPU | ❌ | 需要实现 |
-| 付费漏斗 | ⚠️ | 需要增强 |
-| 收入趋势 | ✅ | 已实现 |
-| 付费分布 | ⚠️ | 需要增强 |
-
-**建议实现：**
-```sql
--- ARPU 计算
-SELECT 
-  date,
-  SUM(revenue) / COUNT(DISTINCT user_id) AS arpu,
-  SUM(revenue) / COUNT(DISTINCT CASE WHEN revenue > 0 THEN user_id END) AS arppu
-FROM events
-WHERE event_type = 'business'
-GROUP BY date;
-```
+| 功能 | 状态 | API 端点 |
+|------|------|----------|
+| ARPU/ARPPU | ✅ | `/api/analytics/revenue/{gameId}/arpu` |
+| 收入趋势 | ✅ | `/api/analytics/revenue/{gameId}/overview` |
+| 按平台分布 | ✅ | `/api/analytics/revenue/{gameId}/by-platform` |
+| IAP/广告/订阅收入 | ✅ | 收入类型分类统计 |
 
 ### 2.2 广告分析
 
-**当前状态：基础**
+**当前状态：✅ 已实现**
 
-| 功能 | 状态 | 建议 |
-|------|------|------|
-| eCPM | ❌ | 需要实现 |
-| 填充率 | ❌ | 需要实现 |
-| 广告收入归因 | ❌ | 需要实现 |
-| 广告展示统计 | ✅ | 已实现 |
+| 功能 | 状态 | API 端点 |
+|------|------|----------|
+| eCPM | ✅ | `/api/analytics/ads/{gameId}/overview` |
+| 填充率 | ✅ | 按广告网络统计 |
+| 点击率 (CTR) | ✅ | 按广告格式统计 |
+| 广告网络对比 | ✅ | `/api/analytics/ads/{gameId}/by-network` |
 
 ### 2.3 会话分析
 
-**当前状态：基础**
+**当前状态：✅ 已实现**
 
-| 功能 | 状态 | 建议 |
-|------|------|------|
-| 会话时长分布 | ⚠️ | 需要增强 |
-| 会话深度 | ❌ | 需要实现 |
-| 页面停留时间 | ❌ | 需要实现 |
+| 功能 | 状态 | API 端点 |
+|------|------|----------|
+| 会话时长分布 | ✅ | P50/P95/P99 统计 |
+| 会话深度 | ✅ | 每会话事件数 |
+| 跳出率 | ✅ | `/api/analytics/sessions/{gameId}/overview` |
+| 会话质量评分 | ✅ | 高/中/低质量分布 |
 
 ### 2.4 性能监控
 
-**当前状态：缺失**
+**当前状态：✅ 已实现**
 
-| 功能 | 状态 | 建议 |
-|------|------|------|
-| 帧率监控 | ❌ | 需要实现 |
-| 卡顿检测 | ❌ | 需要实现 |
-| 崩溃分析 | ❌ | 需要实现 |
-| 启动时间 | ❌ | 需要实现 |
+| 功能 | 状态 | API 端点 |
+|------|------|----------|
+| 帧率监控 | ✅ | `/api/analytics/performance/{gameId}/overview` |
+| 卡顿检测 | ✅ | LAG 指标 |
+| 崩溃分析 | ✅ | `/api/analytics/performance/{gameId}/crashes` |
+| 内存监控 | ✅ | MEMORY 指标 |
 
 ### 2.5 社交分析
 
-**当前状态：缺失**
+**当前状态：✅ 已实现**
 
-| 功能 | 状态 | 建议 |
-|------|------|------|
-| 好友系统 | ❌ | 需要实现 |
-| 公会分析 | ❌ | 需要实现 |
-| 社交互动 | ❌ | 需要实现 |
+| 功能 | 状态 | API 端点 |
+|------|------|----------|
+| 好友系统 | ✅ | `/api/analytics/social/{gameId}/overview` |
+| 公会分析 | ✅ | 公会数量、规模 |
+| 病毒系数 | ✅ | 邀请转化率 |
+| 社交留存影响 | ✅ | `/api/analytics/social/{gameId}/retention-impact` |
 
 ---
 
