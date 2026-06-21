@@ -15,6 +15,7 @@ opts.debug = true
 Oddsmaker.shared.initSDK(opts)
 
 Oddsmaker.shared.setUserId("u1")
+Oddsmaker.shared.setUserProps(["channel": "organic"])
 _ = Oddsmaker.shared.track("level_start", props: ["level": 3])
 _ = Oddsmaker.shared.expose("paywall", variant: "B")
 _ = Oddsmaker.shared.revenue(amount: 9.99, currency: "USD", props: ["sku": "noads"])
@@ -33,13 +34,13 @@ let timer = Oddsmaker.shared.startExperimentsAutoRefresh(controlURL: URL(string:
 ```
 
 特性
-- 批量发送（默认 5s 或 50 条），NDJSON；可选 gzip（Compression）
+- 批量发送（默认 5s 或 50 条），`application/x-ndjson`
 - 离线容错：队列持久化到 Caches 目录（NDJSON 文件）
 - 会话：默认 30 分钟闲置切换 session_id
 - 鉴权：仅 `x-api-key`（客户端 SDK 不支持 HMAC，避免 secret 反编译泄漏）
 - 实验配置：内置缓存（UserDefaults，默认 TTL 5 分钟）与自动刷新辅助方法
 
 注意
-- 需要 iOS 13+（CryptoKit/Compression）
+- 需要 iOS 13+（CryptoKit）
 - 生产项目建议将队列持久化到 Application Support 并配合后台传输策略
 - 网关默认接受 `ts_client` 为毫秒整数或 ISO 字符串（已放宽 JSON Schema）

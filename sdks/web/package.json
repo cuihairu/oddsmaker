@@ -10,5 +10,8 @@
     "build": "tsc -p tsconfig.json",
     "clean": "rm -rf dist",
     "test:hash": "node tests/hash_test.js"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4"
   }
 }

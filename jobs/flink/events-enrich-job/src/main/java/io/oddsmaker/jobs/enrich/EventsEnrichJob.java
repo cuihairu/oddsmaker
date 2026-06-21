@@ -18,6 +18,7 @@ import org.apache.flink.connector.kafka.source.KafkaSource;
 import org.apache.flink.connector.kafka.source.enumerator.initializer.OffsetsInitializer;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.datastream.DataStreamSource;
+import org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.functions.KeyedProcessFunction;
 import org.apache.flink.util.Collector;
@@ -70,7 +71,7 @@ public class EventsEnrichJob {
         final OutputTag<String> DLQ = new OutputTag<>("dlq", Types.STRING);
 
         // 基础校验（必填字段）+ 填充 ts_server
-        DataStream<GenericRecord> validated = stream.process(new org.apache.flink.streaming.api.functions.ProcessFunction<GenericRecord, GenericRecord>() {
+        SingleOutputStreamOperator<GenericRecord> validated = stream.process(new org.apache.flink.streaming.api.functions.ProcessFunction<GenericRecord, GenericRecord>() {
             @Override
             public void processElement(GenericRecord r, Context ctx, Collector<GenericRecord> out) throws Exception {
                 if (r.get("event_id") == null || r.get("event_name") == null || r.get("game_id") == null || r.get("environment") == null || r.get("device_id") == null) {
@@ -131,7 +132,7 @@ public class EventsEnrichJob {
             return row;
         });
 
-        var sink = JdbcSink.sink(
+        var sink = JdbcSink.<EventRow>sink(
                 "INSERT INTO events (game_id, environment, ts_server, event_id, event_name, user_id, device_id, session_id, platform, app_version, country, props_json, revenue_amount, revenue_currency) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (ps, r) -> {
                     ps.setString(1, r.game_id);

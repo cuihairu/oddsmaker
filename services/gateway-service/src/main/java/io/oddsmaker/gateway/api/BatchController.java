@@ -3,6 +3,7 @@ package io.oddsmaker.gateway.api;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.oddsmaker.common.model.Event;
 import io.oddsmaker.gateway.config.JsonSchemaValidator;
 import io.oddsmaker.gateway.config.PiiPolicy;
@@ -22,6 +23,7 @@ import reactor.core.publisher.Mono;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.time.Instant;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -197,7 +199,8 @@ public class BatchController {
     }
 
     private Event readCompatEvent(JsonNode node) {
-        Event event = om.convertValue(node, Event.class);
+        JsonNode normalizedNode = normalizeTimestampFields(node);
+        Event event = om.convertValue(normalizedNode, Event.class);
         if (event.gameId == null) {
             if (node.hasNonNull("game_id")) {
                 event.gameId = node.get("game_id").asText();
@@ -219,7 +222,41 @@ public class BatchController {
         if (event.revenueCurrency == null && node.hasNonNull("revenue_currency")) {
             event.revenueCurrency = node.get("revenue_currency").asText();
         }
+        if (node.hasNonNull("ts_client")) {
+            Long tsClient = parseEpochMillis(node.get("ts_client"));
+            if (tsClient != null) {
+                event.tsClient = tsClient;
+            }
+        }
+        if (node.hasNonNull("ts_server")) {
+            Long tsServer = parseEpochMillis(node.get("ts_server"));
+            if (tsServer != null) {
+                event.tsServer = tsServer;
+            }
+        }
         return event;
+    }
+
+    private JsonNode normalizeTimestampFields(JsonNode node) {
+        if (!(node instanceof ObjectNode objectNode)) {
+            return node;
+        }
+        ObjectNode normalized = objectNode.deepCopy();
+        normalizeTimestampField(normalized, "ts_client");
+        normalizeTimestampField(normalized, "tsClient");
+        normalizeTimestampField(normalized, "ts_server");
+        normalizeTimestampField(normalized, "tsServer");
+        return normalized;
+    }
+
+    private void normalizeTimestampField(ObjectNode node, String fieldName) {
+        if (!node.hasNonNull(fieldName)) {
+            return;
+        }
+        Long epochMillis = parseEpochMillis(node.get(fieldName));
+        if (epochMillis != null) {
+            node.put(fieldName, epochMillis);
+        }
     }
 
     private void normalizeCompatFields(Event event) {
@@ -276,6 +313,28 @@ public class BatchController {
             case "development" -> "dev";
             default -> value;
         };
+    }
+
+    private Long parseEpochMillis(JsonNode node) {
+        if (node == null || node.isNull()) {
+            return null;
+        }
+        if (node.isNumber()) {
+            return node.asLong();
+        }
+        if (!node.isTextual()) {
+            return null;
+        }
+        String value = node.asText();
+        try {
+            return Long.parseLong(value);
+        } catch (NumberFormatException ignored) {
+        }
+        try {
+            return Instant.parse(value).toEpochMilli();
+        } catch (DateTimeParseException ignored) {
+            return null;
+        }
     }
 
     private String extractClientIp(org.springframework.http.server.reactive.ServerHttpRequest req) {

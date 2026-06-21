@@ -32,6 +32,8 @@ namespace Oddsmaker
     [Serializable]
     public class Event
     {
+        [NonSerialized]
+        public string raw_json;
         public string event_id;
         public string game_id;
         public string environment;
@@ -56,6 +58,7 @@ namespace Oddsmaker
         private Options _opts;
         private string _deviceId;
         private string _userId = null;
+        private readonly Dictionary<string, object> _userProps = new Dictionary<string, object>();
         private string _sessionId = null;
         private long _lastActiveMs = 0;
 
@@ -101,6 +104,12 @@ namespace Oddsmaker
             Instance._userId = string.IsNullOrEmpty(userId) ? null : userId;
         }
 
+        public static void SetUserProps(Dictionary<string, object> props)
+        {
+            if (Instance == null || props == null) return;
+            foreach (var kv in props) Instance._userProps[kv.Key] = kv.Value;
+        }
+
         public static string Track(string eventName, Dictionary<string, object> props = null)
         {
             if (Instance == null) return null;
@@ -144,14 +153,14 @@ namespace Oddsmaker
                 platform = "unity",
                 revenue_amount = revenueAmount,
                 revenue_currency = revenueCurrency,
-                props = props
+                props = MergeProps(props)
             };
             int est = EstimateSize(e);
             _queue.Add(e);
             _queueBytes += est;
             _lastActiveMs = now;
             if (_opts.debug) LogDebug($"queued {e.event_id} {e.event_name} bytes={est}");
-            if (_queueBytes >= _opts.maxQueueBytes) StartCoroutine(FlushOnce());
+            if (_queueBytes >= _opts.maxQueueBytes || _queue.Count >= _opts.maxBatch) StartCoroutine(FlushOnce());
             SaveQueue();
             return e.event_id;
         }
@@ -167,6 +176,17 @@ namespace Oddsmaker
                     yield return FlushOnce();
                 }
             }
+        }
+
+        private Dictionary<string, object> MergeProps(Dictionary<string, object> props)
+        {
+            if (_userProps.Count == 0) return props;
+            var merged = new Dictionary<string, object>(_userProps);
+            if (props != null)
+            {
+                foreach (var kv in props) merged[kv.Key] = kv.Value;
+            }
+            return merged;
         }
 
         private IEnumerator FlushOnce()
@@ -221,8 +241,13 @@ namespace Oddsmaker
             try
             {
                 if (!File.Exists(QueuePath)) return;
-                _ = File.ReadAllText(QueuePath);
-                File.WriteAllText(QueuePath, string.Empty);
+                foreach (var line in File.ReadAllLines(QueuePath))
+                {
+                    if (string.IsNullOrWhiteSpace(line)) continue;
+                    var restored = FromJson(line);
+                    if (restored != null) _queue.Add(restored);
+                }
+                RecalcQueueBytes();
             }
             catch { }
         }
@@ -259,6 +284,7 @@ namespace Oddsmaker
 
         private static string ToJson(Event e)
         {
+            if (!string.IsNullOrEmpty(e.raw_json)) return e.raw_json;
             var sb = new StringBuilder(256);
             sb.Append('{');
             JField(sb, "event_id", e.event_id);
@@ -279,6 +305,93 @@ namespace Oddsmaker
             if (sb[sb.Length - 1] == ',') sb.Length -= 1;
             sb.Append('}');
             return sb.ToString();
+        }
+
+        private static Event FromJson(string line)
+        {
+            try
+            {
+                var e = new Event
+                {
+                    raw_json = line,
+                    event_id = JsonString(line, "event_id"),
+                    game_id = JsonString(line, "game_id"),
+                    environment = JsonString(line, "environment"),
+                    event_type = JsonString(line, "event_type"),
+                    event_name = JsonString(line, "event_name"),
+                    user_id = JsonString(line, "user_id"),
+                    device_id = JsonString(line, "device_id"),
+                    session_id = JsonString(line, "session_id"),
+                    ts_client = JsonLong(line, "ts_client"),
+                    platform = JsonString(line, "platform"),
+                    app_version = JsonString(line, "app_version"),
+                    country = JsonString(line, "country"),
+                    revenue_currency = JsonString(line, "revenue_currency")
+                };
+                if (string.IsNullOrEmpty(e.event_id) ||
+                    string.IsNullOrEmpty(e.game_id) ||
+                    string.IsNullOrEmpty(e.environment) ||
+                    string.IsNullOrEmpty(e.event_name) ||
+                    string.IsNullOrEmpty(e.device_id) ||
+                    e.ts_client <= 0) return null;
+                if (string.IsNullOrEmpty(e.event_type)) e.event_type = InferEventType(e.event_name);
+                return e;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static string JsonString(string json, string key)
+        {
+            string marker = "\"" + key + "\"";
+            int i = json.IndexOf(marker, StringComparison.Ordinal);
+            if (i < 0) return null;
+            i = json.IndexOf(':', i + marker.Length);
+            if (i < 0) return null;
+            i++;
+            while (i < json.Length && char.IsWhiteSpace(json[i])) i++;
+            if (i >= json.Length || json[i] != '"') return null;
+            i++;
+            var sb = new StringBuilder();
+            bool esc = false;
+            for (; i < json.Length; i++)
+            {
+                char c = json[i];
+                if (esc)
+                {
+                    sb.Append(c);
+                    esc = false;
+                }
+                else if (c == '\\')
+                {
+                    esc = true;
+                }
+                else if (c == '"')
+                {
+                    return sb.ToString();
+                }
+                else
+                {
+                    sb.Append(c);
+                }
+            }
+            return null;
+        }
+
+        private static long JsonLong(string json, string key)
+        {
+            string marker = "\"" + key + "\"";
+            int i = json.IndexOf(marker, StringComparison.Ordinal);
+            if (i < 0) return 0;
+            i = json.IndexOf(':', i + marker.Length);
+            if (i < 0) return 0;
+            i++;
+            while (i < json.Length && char.IsWhiteSpace(json[i])) i++;
+            int start = i;
+            while (i < json.Length && (char.IsDigit(json[i]) || json[i] == '-')) i++;
+            return long.TryParse(json.Substring(start, i - start), out var value) ? value : 0;
         }
 
         private static void JField(StringBuilder sb, string k, string v)
@@ -358,7 +471,27 @@ namespace Oddsmaker
             }
         }
 
-        private static string JEscape(string s) => s.Replace("\\", "\\\\").Replace("\"", "\\\"");
+        private static string JEscape(string s)
+        {
+            if (s == null) return string.Empty;
+            var sb = new StringBuilder(s.Length + 8);
+            foreach (char c in s)
+            {
+                switch (c)
+                {
+                    case '\\': sb.Append("\\\\"); break;
+                    case '"': sb.Append("\\\""); break;
+                    case '\n': sb.Append("\\n"); break;
+                    case '\r': sb.Append("\\r"); break;
+                    case '\t': sb.Append("\\t"); break;
+                    default:
+                        if (c < ' ') sb.Append("\\u").Append(((int)c).ToString("x4"));
+                        else sb.Append(c);
+                        break;
+                }
+            }
+            return sb.ToString();
+        }
 
         private static bool TryGzip(ref byte[] body)
         {

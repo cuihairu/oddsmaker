@@ -13,6 +13,7 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.reactive.server.WebTestClient;
 
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
@@ -80,15 +81,15 @@ class RateLimitAndPolicyTest {
         verify(avroPublisher, atLeastOnce()).publish(cap.capture());
         Event sent = cap.getValue();
         // props only contains allowlisted keys
-        assert sent.props != null;
-        assert sent.props.containsKey("level");
-        assert sent.props.containsKey("email");
-        assert !sent.props.containsKey("foo");
+        assertNotNull(sent.props);
+        assertTrue(sent.props.containsKey("level"));
+        assertTrue(sent.props.containsKey("email"));
+        assertFalse(sent.props.containsKey("foo"));
         // email should be masked (***@domain)
         Object em = sent.props.get("email");
-        assert em instanceof String;
-        assert ((String) em).startsWith("***@");
+        assertInstanceOf(String.class, em);
+        assertTrue(((String) em).startsWith("***@"));
         // ip coarse /24
-        assert sent.clientIp != null && sent.clientIp.equals("1.2.3.0");
+        assertEquals("1.2.3.0", sent.clientIp);
     }
 }

@@ -704,12 +704,14 @@ public class MLModelService {
         stats.put("trainingCount", trainingCount);
         stats.put("averageTrainingDurationMs", avgDuration);
         stats.put("recentTrainings", recentTrainings.stream()
-            .map(t -> Map.of(
-                "id", t.id,
-                "status", t.trainingStatus,
-                "startedAt", t.startedAt,
-                "durationMs", t.durationMs != null ? t.durationMs : 0
-            ))
+            .map(t -> {
+                Map<String, Object> trainingStats = new HashMap<>();
+                trainingStats.put("id", t.id);
+                trainingStats.put("status", t.trainingStatus);
+                trainingStats.put("startedAt", t.startedAt);
+                trainingStats.put("durationMs", t.durationMs != null ? t.durationMs : 0);
+                return trainingStats;
+            })
             .collect(Collectors.toList()));
 
         // 预测统计

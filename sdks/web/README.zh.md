@@ -19,6 +19,7 @@ const pt = new Oddsmaker({
 
 pt.track('level_start', { level: 3 });
 pt.setUserId('u1');
+pt.setUserProps({ channel: 'organic' });
 pt.expose('paywall', 'B');
 pt.revenue(9.99, 'USD', { sku: 'noads' });
 await pt.flush();

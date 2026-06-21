@@ -13,7 +13,7 @@ public class DlqPublisher {
     @Value("${oddsmaker.kafka.bootstrap}")
     private String bootstrap;
 
-    @Value("${oddsmaker.kafka.dlqTopic:oddsmaker.deadletter}")
+    @Value("${oddsmaker.kafka.dlq-topic:oddsmaker.deadletter}")
     private String dlqTopic;
 
     private KafkaProducer<String, String> producer;

@@ -15,11 +15,9 @@ public class RequestIdFilter implements WebFilter {
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, WebFilterChain chain) {
-        ensureRequestId(exchange);
-        return chain.filter(exchange).then(Mono.fromRunnable(() -> {
-            String rid = (String) exchange.getAttributes().get(ATTR);
-            exchange.getResponse().getHeaders().set("x-request-id", rid);
-        }));
+        String rid = ensureRequestId(exchange);
+        exchange.getResponse().getHeaders().set("x-request-id", rid);
+        return chain.filter(exchange);
     }
 
     public static String ensureRequestId(ServerWebExchange exchange) {

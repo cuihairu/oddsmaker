@@ -14,29 +14,36 @@ oddsmaker:
   kafka:
     bootstrap: localhost:9092
     topic: oddsmaker.events_raw
-    registryUrl: http://localhost:8081/apis/registry/v2
-    dlqTopic: oddsmaker.deadletter
+    registry-url: http://localhost:8081/apis/registry/v2
+    dlq-topic: oddsmaker.deadletter
     producer:
-      lingerMs: 5
-      batchSize: 65536
+      linger-ms: 5
+      batch-size: 65536
   auth:
     # 示例: apiKey->secret，生产请使用数据库/控制面
     keys:
       pk_test_example: sk_test_secret
+      pk_test_rl: sk_test_secret
+      pk_test_pii: sk_test_secret
+      pk_iprl: sk_test_secret
+      pk_deny: sk_test_secret
+      pk_mask: sk_test_secret
+      pk_ipv6: sk_test_secret
+      pk_clamp: sk_test_secret
   ratelimit:
     rpm: 600          # per api key per minute
-    ipRpm: 300        # per client IP per minute
+    ip-rpm: 300        # per client IP per minute
   control:
     url: http://localhost:8085
   props:
     allowlist: []   # 示例: [level,stars,amount,currency,exp,variant]
   event:
-    maxBytes: 65536
+    max-bytes: 65536
   request:
-    maxBytes: 1048576
+    max-bytes: 1048576
   pii:
     email: mask      # mask|drop|allow
     phone: mask      # mask|drop|allow
     ip: coarse       # coarse|drop|allow  (coarse: IPv4 /24, IPv6 /48)
-    denyKeys: [password, pass, passwd, credit_card, ssn]
-    maskKeys: [email, phone, mobile]
+    deny-keys: [password, pass, passwd, credit_card, ssn]
+    mask-keys: [email, phone, mobile]

@@ -20,6 +20,7 @@ val sdk = Oddsmaker(
 )
 sdk.track("level_start", mapOf("level" to 1))
 sdk.setUserId("u1")
+sdk.setUserProps(mapOf("channel" to "organic"))
 sdk.expose("paywall", "B")
 sdk.revenue(9.99, "USD", mapOf("sku" to "noads"))
 sdk.flush()
@@ -32,5 +33,5 @@ sdk.flush()
 
 注意
 - 客户端 SDK 仅支持 `x-api-key` 鉴权；HMAC 仅用于 Server SDK（服务端到服务端，secret 不下发）。
-- 队列持久化为 NDJSON 字符串；为简化演示，重启后的反序列化可按需补充（当前只保留原始字符串避免崩溃）。
+- 队列持久化为 NDJSON 字符串；重启后会恢复未发送事件并保留 `props`。
 - 可按需接入 WorkManager/Connectivity 监听以优化离线重试。

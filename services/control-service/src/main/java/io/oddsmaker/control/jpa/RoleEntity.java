@@ -99,9 +99,6 @@ public class RoleEntity {
     )
     public List<PermissionEntity> permissions;
 
-    @ManyToMany(mappedBy = "roles")
-    public List<UserEntity> users;
-
     public enum RoleType {
         // 系统内置角色
         OPERATOR,              // 公司级运营管理员

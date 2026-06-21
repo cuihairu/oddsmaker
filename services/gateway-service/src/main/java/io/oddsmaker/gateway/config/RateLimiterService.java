@@ -16,7 +16,7 @@ public class RateLimiterService {
     private final Map<String, Window> bucketsIp = new ConcurrentHashMap<>();
 
     public RateLimiterService(@Value("${oddsmaker.ratelimit.rpm:600}") int rpmApi,
-                              @Value("${oddsmaker.ratelimit.ipRpm:300}") int rpmIp) {
+                              @Value("${oddsmaker.ratelimit.ip-rpm:300}") int rpmIp) {
         this.rpmApi = rpmApi; this.rpmIp = rpmIp;
     }
 

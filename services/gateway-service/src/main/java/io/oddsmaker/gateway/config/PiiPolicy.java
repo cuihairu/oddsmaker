@@ -36,8 +36,8 @@ public class PiiPolicy {
         this.emailMode = toMode(e);
         this.phoneMode = toMode(p);
         this.ipMode = toIpMode(ip);
-        List<String> dks = Binder.get(env).bind("oddsmaker.pii.denyKeys", List.class).orElse(Collections.emptyList());
-        List<String> mks = Binder.get(env).bind("oddsmaker.pii.maskKeys", List.class).orElse(Collections.emptyList());
+        List<String> dks = Binder.get(env).bind("oddsmaker.pii.deny-keys", List.class).orElse(Collections.emptyList());
+        List<String> mks = Binder.get(env).bind("oddsmaker.pii.mask-keys", List.class).orElse(Collections.emptyList());
         this.denyKeys = new HashSet<>(); for (Object o : dks) denyKeys.add(String.valueOf(o).toLowerCase(Locale.ROOT));
         this.maskKeys = new HashSet<>(); for (Object o : mks) maskKeys.add(String.valueOf(o).toLowerCase(Locale.ROOT));
     }
@@ -75,7 +75,11 @@ public class PiiPolicy {
             String lk = key == null ? "" : key.toLowerCase(Locale.ROOT);
             // direct key masking
             Set<String> mk = o != null && o.maskKeys != null ? o.maskKeys : maskKeys;
-            if (mk.contains(lk)) return maskAll(s);
+            if (mk.contains(lk)) {
+                if (EMAIL.matcher(s).find()) return maskEmail(s);
+                if (countDigits(s) >= 10) return maskPhone(s);
+                return maskAll(s);
+            }
             // email
             if (EMAIL.matcher(s).find()) {
                 Mode em = o != null && o.emailMode != null ? o.emailMode : emailMode;

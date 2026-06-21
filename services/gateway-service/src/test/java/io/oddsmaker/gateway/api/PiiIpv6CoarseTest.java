@@ -13,6 +13,7 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.reactive.server.WebTestClient;
 
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
@@ -53,8 +54,8 @@ class PiiIpv6CoarseTest {
 
         verify(avroPublisher, atLeastOnce()).publish(cap.capture());
         Event sent = cap.getValue();
-        assert sent.clientIp != null;
-        assert !sent.clientIp.equals(ipv6);
-        assert sent.clientIp.contains(":");
+        assertNotNull(sent.clientIp);
+        assertNotEquals(ipv6, sent.clientIp);
+        assertTrue(sent.clientIp.contains(":"));
     }
 }

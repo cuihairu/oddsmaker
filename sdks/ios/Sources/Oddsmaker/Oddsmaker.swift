@@ -1,6 +1,5 @@
 import Foundation
 import CryptoKit
-import Compression
 import UIKit
 
 public struct OddsmakerOptions {
@@ -30,6 +29,7 @@ public final class Oddsmaker {
     private var opts: OddsmakerOptions? = nil
     private var deviceId: String = ""
     private var userId: String? = nil
+    private var userProps: [String: Any] = [:]
     private var sessionId: String? = nil
     private var lastActive: TimeInterval = Date().timeIntervalSince1970
 
@@ -56,6 +56,11 @@ public final class Oddsmaker {
     }
 
     public func setUserId(_ id: String?) { self.userId = id }
+    public func setUserProps(_ props: [String: Any]) {
+        for (key, value) in props {
+            self.userProps[key] = value
+        }
+    }
 
     public func track(_ name: String, props: [String: Any]? = nil) -> String {
         guard let o = opts else { return "" }
@@ -98,35 +103,43 @@ public final class Oddsmaker {
         slice = Array(queue.prefix(n))
         queue.removeFirst(n)
         recalcQueueBytesNoLock()
-        persistQueue()
+        persistQueueNoLock()
         queueLock.unlock()
 
         let ndjson = slice.map { $0.toJsonLine() }.joined(separator: "\n")
-        guard let url = URL(string: "/v1/batch", relativeTo: o.endpoint) else { return }
+        guard let url = URL(string: "/v1/batch", relativeTo: o.endpoint) else {
+            queueLock.lock()
+            queue.insert(contentsOf: slice, at: 0)
+            recalcQueueBytesNoLock()
+            persistQueueNoLock()
+            queueLock.unlock()
+            return
+        }
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
         req.setValue(o.apiKey, forHTTPHeaderField: "x-api-key")
         req.setValue("application/x-ndjson", forHTTPHeaderField: "content-type")
 
-        let raw = Data(ndjson.utf8)
-        let body: Data
-        if let gz = Self.gzip(raw) {
-            body = gz
-            req.setValue("gzip", forHTTPHeaderField: "content-encoding")
-        } else {
-            body = raw
-        }
-        req.httpBody = body
+        req.httpBody = Data(ndjson.utf8)
 
         let sem = DispatchSemaphore(value: 0)
-        URLSession.shared.dataTask(with: req) { _, resp, _ in
+        var success = false
+        URLSession.shared.dataTask(with: req) { _, resp, err in
+            let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
+            success = err == nil && (200..<300).contains(code)
             if self.opts?.debug == true {
-                let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
                 print("[Oddsmaker] flush code=\(code) count=\(slice.count)")
             }
             sem.signal()
         }.resume()
         _ = sem.wait(timeout: .now() + 15)
+        if !success {
+            queueLock.lock()
+            queue.insert(contentsOf: slice, at: 0)
+            recalcQueueBytesNoLock()
+            persistQueueNoLock()
+            queueLock.unlock()
+        }
     }
 
     private func enqueue(_ event: Event, now: TimeInterval, maxQueueBytes: Int) {
@@ -135,11 +148,11 @@ public final class Oddsmaker {
         queue.append(event)
         queueBytes += est
         lastActive = now
-        let shouldFlush = queueBytes >= maxQueueBytes
+        let shouldFlush = queueBytes >= maxQueueBytes || queue.count >= (opts?.maxBatch ?? 50)
+        persistQueueNoLock()
         queueLock.unlock()
         if opts?.debug == true { print("[Oddsmaker] queued \(event.event_id) \(event.event_name)") }
         if shouldFlush { flush() }
-        persistQueue()
     }
 
     private func buildEvent(name: String,
@@ -148,7 +161,12 @@ public final class Oddsmaker {
                             revenueCurrency: String?,
                             options: OddsmakerOptions,
                             now: TimeInterval) -> Event {
-        var merged = props ?? [:]
+        var merged = userProps
+        if let props = props {
+            for (key, value) in props {
+                merged[key] = value
+            }
+        }
         if let amount = revenueAmount { merged["amount"] = amount }
         if let currency = revenueCurrency { merged["currency"] = currency }
         return Event(
@@ -180,7 +198,7 @@ public final class Oddsmaker {
     @objc private func appDidEnterBackground() { flush() }
     @objc private func appWillEnterForeground() { lastActive = Date().timeIntervalSince1970 }
 
-    private func persistQueue() {
+    private func persistQueueNoLock() {
         do {
             let s = queue.map { $0.toJsonLine() }.joined(separator: "\n")
             try s.write(to: queuePath, atomically: true, encoding: .utf8)
@@ -188,7 +206,15 @@ public final class Oddsmaker {
     }
 
     private func restoreQueue() {
-        do { _ = try String(contentsOf: queuePath) } catch {}
+        do {
+            let s = try String(contentsOf: queuePath)
+            let restored = s.split(separator: "\n")
+                .compactMap { Event.fromJsonLine(String($0)) }
+            queueLock.lock()
+            queue = restored
+            recalcQueueBytesNoLock()
+            queueLock.unlock()
+        } catch {}
     }
 
     private func recalcQueueBytesNoLock() {
@@ -223,40 +249,6 @@ public final class Oddsmaker {
                       String(hex.dropFirst(13).prefix(3)),
                       String(hex.dropFirst(16).prefix(4)),
                       String(hex.dropFirst(20).prefix(12)))
-    }
-
-    private static func gzip(_ data: Data) -> Data? {
-        var dst = Data()
-        data.withUnsafeBytes { (srcPtr: UnsafeRawBufferPointer) in
-            var stream = compression_stream()
-            var status = compression_stream_init(&stream, COMPRESSION_STREAM_ENCODE, COMPRESSION_ZLIB)
-            guard status != COMPRESSION_STATUS_ERROR else { return }
-            defer { compression_stream_destroy(&stream) }
-            let dstBufferSize: size_t = 64 * 1024
-            let dstBuffer = UnsafeMutablePointer<UInt8>.allocate(capacity: dstBufferSize)
-            defer { dstBuffer.deallocate() }
-
-            stream.src_ptr = srcPtr.bindMemory(to: UInt8.self).baseAddress!
-            stream.src_size = srcPtr.count
-            stream.dst_ptr = dstBuffer
-            stream.dst_size = dstBufferSize
-
-            while status == COMPRESSION_STATUS_OK {
-                status = compression_stream_process(&stream, Int32(0))
-                switch status {
-                case COMPRESSION_STATUS_OK, COMPRESSION_STATUS_END:
-                    dst.append(dstBuffer, count: dstBufferSize - stream.dst_size)
-                    stream.dst_ptr = dstBuffer
-                    stream.dst_size = dstBufferSize
-                default:
-                    return
-                }
-                if stream.src_size == 0 {
-                    status = compression_stream_process(&stream, Int32(COMPRESSION_STREAM_FINALIZE.rawValue))
-                }
-            }
-        }
-        return dst.isEmpty ? nil : dst
     }
 
     private static func inferEventType(_ eventName: String) -> String {
@@ -315,9 +307,67 @@ public final class Oddsmaker {
             return "{" + a.joined(separator: ",") + "}"
         }
 
+        static func fromJsonLine(_ line: String) -> Event? {
+            guard let data = line.data(using: .utf8),
+                  let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let eventId = obj["event_id"] as? String,
+                  let gameId = obj["game_id"] as? String,
+                  let environment = obj["environment"] as? String,
+                  let eventType = obj["event_type"] as? String,
+                  let eventName = obj["event_name"] as? String,
+                  let deviceId = obj["device_id"] as? String else {
+                return nil
+            }
+            let tsClient: Int64
+            if let n = obj["ts_client"] as? NSNumber {
+                tsClient = n.int64Value
+            } else if let s = obj["ts_client"] as? String, let n = Int64(s) {
+                tsClient = n
+            } else {
+                return nil
+            }
+            return Event(
+                event_id: eventId,
+                game_id: gameId,
+                environment: environment,
+                event_type: eventType,
+                event_name: eventName,
+                user_id: obj["user_id"] as? String,
+                device_id: deviceId,
+                session_id: obj["session_id"] as? String,
+                ts_client: tsClient,
+                platform: obj["platform"] as? String,
+                app_version: obj["app_version"] as? String,
+                country: obj["country"] as? String,
+                revenue_amount: (obj["revenue_amount"] as? NSNumber)?.doubleValue,
+                revenue_currency: obj["revenue_currency"] as? String,
+                props: obj["props"] as? [String: Any]
+            )
+        }
+
         private static func escape(_ s: String) -> String {
-            s.replacingOccurrences(of: "\\", with: "\\\\")
-                .replacingOccurrences(of: "\"", with: "\\\"")
+            var out = ""
+            for scalar in s.unicodeScalars {
+                switch scalar {
+                case "\\":
+                    out += "\\\\"
+                case "\"":
+                    out += "\\\""
+                case "\n":
+                    out += "\\n"
+                case "\r":
+                    out += "\\r"
+                case "\t":
+                    out += "\\t"
+                default:
+                    if scalar.value < 0x20 {
+                        out += String(format: "\\u%04x", scalar.value)
+                    } else {
+                        out.unicodeScalars.append(scalar)
+                    }
+                }
+            }
+            return out
         }
 
         private static func mapToJson(_ m: [String: Any], depth: Int = 0) -> String {
@@ -335,6 +385,7 @@ public final class Oddsmaker {
         private static func valueToJson(_ v: Any, depth: Int) -> String {
             if depth > 2 { return "null" }
             switch v {
+            case is NSNull: return "null"
             case let s as String: return "\"\(escape(s))\""
             case let b as Bool: return b ? "true" : "false"
             case let n as Int: return String(n)

@@ -38,13 +38,13 @@ public class AvroPublisher {
     @Value("${oddsmaker.kafka.topic.risk:oddsmaker-risk-events}")
     private String riskTopic;
 
-    @Value("${oddsmaker.kafka.registryUrl}")
+    @Value("${oddsmaker.kafka.registry-url}")
     private String registryUrl;
 
-    @Value("${oddsmaker.kafka.producer.lingerMs:5}")
+    @Value("${oddsmaker.kafka.producer.linger-ms:5}")
     private int lingerMs;
 
-    @Value("${oddsmaker.kafka.producer.batchSize:65536}")
+    @Value("${oddsmaker.kafka.producer.batch-size:65536}")
     private int batchSize;
 
     @Value("classpath:schemas/oddsmaker-event.avsc")

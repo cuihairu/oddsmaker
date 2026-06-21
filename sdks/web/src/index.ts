@@ -149,10 +149,15 @@ export class Oddsmaker {
       platform: 'web',
       props: this.mergeProps(props)
     };
+    return this.enqueueEvent(evt, ts);
+  }
+
+  private enqueueEvent(evt: Event, ts: number): string {
     this.queue.push(evt);
     this.lastActive = ts;
-    if (this.debug) console.debug('[oddsmaker] queued', evt.event_id, eventName);
-    if (this.queue.overLimit()) this.flush();
+    if (this.debug) console.debug('[oddsmaker] queued', evt.event_id, evt.event_name);
+    this.persistQueue();
+    if (this.queue.overLimit() || this.queue.size() >= this.maxBatch) this.flush();
     return evt.event_id;
   }
 
@@ -161,22 +166,31 @@ export class Oddsmaker {
   }
 
   revenue(amount: number, currency: string, props?: EventProps) {
-    const eventId = this.track('revenue', { ...(props || {}) });
-    const snapshot = this.queue.snapshot();
-    const last = snapshot[snapshot.length - 1];
-    if (last && last.event_id === eventId) {
-      last.revenue_amount = amount;
-      last.revenue_currency = currency;
-      last.props = this.mergeProps({ amount, currency, ...(props || {}) });
-    }
-    return eventId;
+    const ts = nowMs();
+    this.rollSession(ts);
+    const evt: Event = {
+      event_id: uuidv7(),
+      game_id: this.gameId,
+      environment: this.environment,
+      event_type: inferEventType('revenue'),
+      event_name: 'revenue',
+      user_id: this.userId ?? undefined,
+      device_id: this.deviceId,
+      session_id: this.sessionId ?? undefined,
+      ts_client: ts,
+      platform: 'web',
+      revenue_amount: amount,
+      revenue_currency: currency,
+      props: this.mergeProps({ ...(props || {}), amount, currency })
+    };
+    return this.enqueueEvent(evt, ts);
   }
 
   async flush(): Promise<void> {
     if (this.queue.size() === 0) return;
     const batch = this.queue.drain(this.maxBatch);
     await this.send(batch);
-    storageSet(this.queueKey(), JSON.stringify(this.queue.snapshot()));
+    this.persistQueue();
   }
 
   shutdown() {
@@ -200,6 +214,7 @@ export class Oddsmaker {
   }
 
   private queueKey() { return `oddsmaker_queue_${this.gameId}_${this.environment}_${this.deviceId}`; }
+  private persistQueue() { storageSet(this.queueKey(), JSON.stringify(this.queue.snapshot())); }
   private randomDeviceId() { return 'd_' + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2); }
 
   private async send(evts: Event[]) {
@@ -240,7 +255,7 @@ export class Oddsmaker {
       } catch (e) {
         if (attempt === 5) {
           this.queue.restore([...evts, ...this.queue.snapshot()]);
-          storageSet(this.queueKey(), JSON.stringify(this.queue.snapshot()));
+          this.persistQueue();
           if (this.debug) console.warn('[oddsmaker] flush failed, stored offline', e);
           return;
         }

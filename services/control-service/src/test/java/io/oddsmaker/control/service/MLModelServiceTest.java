@@ -374,7 +374,6 @@ class MLModelServiceTest {
         when(modelTrainingRepo.findById("train_test123")).thenReturn(Optional.of(testTraining));
         when(modelTrainingRepo.save(any(ModelTrainingEntity.class))).thenReturn(testTraining);
         when(mlModelRepo.findById("ml_test123")).thenReturn(Optional.of(testModel));
-        when(mlModelRepo.save(any(MLModelEntity.class))).thenReturn(testModel);
         doNothing().when(auditLogService).logUpdate(anyString(), anyString(), anyString(), anyString(), anyString(), any(), any());
 
         // When

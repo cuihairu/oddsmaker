@@ -20,6 +20,7 @@ dependencies {
   // implementation("com.networknt:json-schema-validator:1.0.91")
 
   testImplementation("org.springframework.boot:spring-boot-starter-test")
+  testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
 tasks.withType<JavaCompile> { options.release.set(21) }

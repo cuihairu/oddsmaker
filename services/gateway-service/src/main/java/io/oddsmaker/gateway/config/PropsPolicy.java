@@ -19,8 +19,8 @@ public class PropsPolicy {
         List<String> list = Binder.get(env).bind("oddsmaker.props.allowlist", List.class).orElse(Collections.emptyList());
         this.allowlist = new HashSet<>();
         for (Object o : list) this.allowlist.add(String.valueOf(o));
-        this.maxEventBytes = Binder.get(env).bind("oddsmaker.event.maxBytes", Integer.class).orElse(65536);
-        this.maxRequestBytes = Binder.get(env).bind("oddsmaker.request.maxBytes", Integer.class).orElse(1048576);
+        this.maxEventBytes = Binder.get(env).bind("oddsmaker.event.max-bytes", Integer.class).orElse(65536);
+        this.maxRequestBytes = Binder.get(env).bind("oddsmaker.request.max-bytes", Integer.class).orElse(1048576);
     }
 
     public Map<String, Object> filter(Map<String, Object> props) {

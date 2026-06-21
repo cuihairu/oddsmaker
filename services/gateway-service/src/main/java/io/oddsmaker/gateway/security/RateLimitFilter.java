@@ -34,6 +34,7 @@ public class RateLimitFilter implements WebFilter {
             exchange.getResponse().setStatusCode(HttpStatus.TOO_MANY_REQUESTS);
             exchange.getResponse().getHeaders().add(HttpHeaders.RETRY_AFTER, "60");
             String rid = RequestIdFilter.ensureRequestId(exchange);
+            exchange.getResponse().getHeaders().set("x-request-id", rid);
             String json = "{\"code\":\"too_many_requests\",\"message\":\"rate limited\",\"request_id\":\""+rid+"\"}";
             return exchange.getResponse().writeWith(Mono.just(exchange.getResponse().bufferFactory().wrap(json.getBytes(StandardCharsets.UTF_8))));
         }

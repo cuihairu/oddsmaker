@@ -120,7 +120,7 @@ services:
       CLICKHOUSE_PASSWORD: oddsmaker_dev_password
       ODDSMAKER_COMPANY_NAME: "Oddsmaker Dev"
       ODDSMAKER_DEPLOYMENT_ID: "dev-local"
-      ADMIN_TOKEN: "dev-admin-token-change-in-production"
+      ODDSMAKER_ADMIN_TOKEN: "dev-admin-token-change-in-production"
     depends_on:
       postgres:
         condition: service_healthy

@@ -15,7 +15,7 @@ public interface EventDefinitionRepo extends JpaRepository<EventDefinitionEntity
     /**
      * 查找追踪计划的所有事件定义
      */
-    List<EventDefinitionEntity> findByTrackingPlanIdAndDeletedAtIsNullOrderByDisplayOrderAsc(String trackingPlanId);
+    List<EventDefinitionEntity> findByTrackingPlanIdAndDeletedAtIsNullOrderByEventNameAsc(String trackingPlanId);
 
     /**
      * 根据事件名称查找

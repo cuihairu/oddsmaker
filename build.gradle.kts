@@ -17,4 +17,5 @@ allprojects {
 subprojects {
   apply(plugin = "java")
   tasks.withType<JavaCompile> { options.release.set(21) }
+  tasks.withType<Test> { useJUnitPlatform() }
 }

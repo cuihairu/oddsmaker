@@ -10,6 +10,8 @@ import java.util.TimerTask
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.zip.GZIPOutputStream
+import org.json.JSONArray
+import org.json.JSONObject
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -63,6 +65,7 @@ class Oddsmaker(private val ctx: Context, private val opts: Options) {
 
   private var deviceId: String
   private var userId: String? = null
+  private var userProps: Map<String, Any?> = emptyMap()
   private var sessionId: String? = null
   private var lastActive: Long = System.currentTimeMillis()
 
@@ -75,7 +78,7 @@ class Oddsmaker(private val ctx: Context, private val opts: Options) {
   }
 
   fun setUserId(uid: String?) { userId = uid }
-  fun setUserProps(props: Map<String, Any?>) { /* optional user-level props hook */ }
+  fun setUserProps(props: Map<String, Any?>) { userProps = userProps + props }
 
   fun track(eventName: String, props: Map<String, Any?>? = null): String {
     val now = System.currentTimeMillis()
@@ -91,7 +94,7 @@ class Oddsmaker(private val ctx: Context, private val opts: Options) {
       session_id = sessionId,
       ts_client = now,
       platform = "android",
-      props = props
+      props = mergeProps(props)
     )
     enqueue(evt, now)
     return evt.event_id
@@ -103,8 +106,9 @@ class Oddsmaker(private val ctx: Context, private val opts: Options) {
   fun revenue(amount: Number, currency: String, props: Map<String, Any?>? = null): String {
     val now = System.currentTimeMillis()
     rollSession(now)
-    val merged = linkedMapOf<String, Any?>("amount" to amount, "currency" to currency)
-    if (props != null) merged.putAll(props)
+    val merged = mergeProps(props).orEmpty().toMutableMap()
+    merged["amount"] = amount
+    merged["currency"] = currency
     val evt = Event(
       event_id = uuidv7(),
       game_id = opts.gameId,
@@ -149,13 +153,17 @@ class Oddsmaker(private val ctx: Context, private val opts: Options) {
   }
 
   private fun enqueue(evt: Event, now: Long) {
-    val est = evt.estimateSize()
-    queue.add(evt)
-    queueBytes += est
-    lastActive = now
+    val shouldFlush: Boolean
+    synchronized(this) {
+      val est = evt.estimateSize()
+      queue.add(evt)
+      queueBytes += est
+      lastActive = now
+      shouldFlush = queueBytes >= opts.maxQueueBytes || queue.size >= opts.maxBatch
+      persistQueue()
+    }
     if (opts.debug) Log.d("Oddsmaker", "queued ${evt.event_id} ${evt.event_name}")
-    if (queueBytes >= opts.maxQueueBytes) flush()
-    persistQueue()
+    if (shouldFlush) flush()
   }
 
   private fun rollSession(now: Long) {
@@ -170,10 +178,10 @@ class Oddsmaker(private val ctx: Context, private val opts: Options) {
       for (e in batch) append(Json.stringify(e)).append('\n')
     }
     var bodyBytes = ndjson.toByteArray(Charsets.UTF_8)
+    val mediaType = "application/x-ndjson".toMediaType()
     val reqBuilder = Request.Builder()
       .url(opts.endpoint.trimEnd('/') + "/v1/batch")
       .addHeader("x-api-key", opts.apiKey)
-      .addHeader("content-type", "application/x-ndjson")
 
     val gz = gzip(bodyBytes)
     if (gz != null) {
@@ -182,7 +190,7 @@ class Oddsmaker(private val ctx: Context, private val opts: Options) {
     }
 
     val req = reqBuilder.post(
-      RequestBody.create("application/octet-stream".toMediaType(), bodyBytes)
+      RequestBody.create(mediaType, bodyBytes)
     ).build()
     try {
       client.newCall(req).execute().use { resp ->
@@ -219,6 +227,32 @@ class Oddsmaker(private val ctx: Context, private val opts: Options) {
       if (sb.last() == ',') sb.setLength(sb.length - 1)
       sb.append('}')
       return sb.toString()
+    }
+
+    fun parseEvent(line: String): Event? {
+      return try {
+        val o = JSONObject(line)
+        val propsObj = o.optJSONObject("props")
+        Event(
+          event_id = o.getString("event_id"),
+          game_id = o.getString("game_id"),
+          environment = o.getString("environment"),
+          event_type = o.getString("event_type"),
+          event_name = o.getString("event_name"),
+          user_id = o.optStringOrNull("user_id"),
+          device_id = o.getString("device_id"),
+          session_id = o.optStringOrNull("session_id"),
+          ts_client = o.getLong("ts_client"),
+          platform = o.optStringOrNull("platform"),
+          app_version = o.optStringOrNull("app_version"),
+          country = o.optStringOrNull("country"),
+          revenue_amount = if (o.has("revenue_amount") && !o.isNull("revenue_amount")) o.getDouble("revenue_amount") else null,
+          revenue_currency = o.optStringOrNull("revenue_currency"),
+          props = propsObj?.toMap()
+        )
+      } catch (_: Throwable) {
+        null
+      }
     }
 
     private fun field(sb: StringBuilder, k: String, v: String) {
@@ -273,8 +307,51 @@ class Oddsmaker(private val ctx: Context, private val opts: Options) {
       return sb.toString()
     }
 
-    private fun escape(s: String): String =
-      s.replace("\\", "\\\\").replace("\"", "\\\"")
+    private fun escape(s: String): String {
+      val out = StringBuilder(s.length + 8)
+      for (ch in s) {
+        when (ch) {
+          '\\' -> out.append("\\\\")
+          '"' -> out.append("\\\"")
+          '\n' -> out.append("\\n")
+          '\r' -> out.append("\\r")
+          '\t' -> out.append("\\t")
+          else -> if (ch < ' ') {
+            out.append("\\u").append(ch.code.toString(16).padStart(4, '0'))
+          } else {
+            out.append(ch)
+          }
+        }
+      }
+      return out.toString()
+    }
+
+    private fun JSONObject.optStringOrNull(key: String): String? =
+      if (has(key) && !isNull(key)) optString(key) else null
+
+    private fun JSONObject.toMap(): Map<String, Any?> {
+      val out = LinkedHashMap<String, Any?>()
+      val keys = keys()
+      while (keys.hasNext()) {
+        val key = keys.next()
+        out[key] = get(key).toJsonValue()
+      }
+      return out
+    }
+
+    private fun JSONArray.toListValue(): List<Any?> {
+      val out = ArrayList<Any?>()
+      for (i in 0 until length()) out.add(get(i).toJsonValue())
+      return out
+    }
+
+    private fun Any?.toJsonValue(): Any? =
+      when (this) {
+        null, JSONObject.NULL -> null
+        is JSONObject -> toMap()
+        is JSONArray -> toListValue()
+        else -> this
+      }
   }
 
   private fun Event.estimateSize(): Int =
@@ -305,10 +382,14 @@ class Oddsmaker(private val ctx: Context, private val opts: Options) {
     try {
       val s = prefs.getString(queueKey(), null) ?: return
       val lines = s.split('\n').filter { it.isNotBlank() }
-      for (@Suppress("UNUSED_VARIABLE") line in lines) {
-        // Minimal skeleton: keep persisted string only to avoid crashes during demo startup.
-      }
+      for (line in lines) Json.parseEvent(line)?.let { queue.add(it) }
+      recalcQueueBytes()
     } catch (_: Throwable) {}
+  }
+
+  private fun mergeProps(props: Map<String, Any?>?): Map<String, Any?>? {
+    if (userProps.isEmpty()) return props
+    return userProps + (props ?: emptyMap())
   }
 
   private fun recalcQueueBytes() {

@@ -143,7 +143,7 @@ public class TrackingPlanService {
         trackingPlanRepo.save(entity);
 
         // 软删除相关事件定义
-        List<EventDefinitionEntity> eventDefs = eventDefinitionRepo.findByTrackingPlanIdAndDeletedAtIsNullOrderByDisplayOrderAsc(trackingPlanId);
+        List<EventDefinitionEntity> eventDefs = eventDefinitionRepo.findByTrackingPlanIdAndDeletedAtIsNullOrderByEventNameAsc(trackingPlanId);
         eventDefs.forEach(ed -> {
             ed.deletedAt = LocalDateTime.now();
             ed.status = EventDefinitionEntity.DefinitionStatus.DEPRECATED;
@@ -293,7 +293,7 @@ public class TrackingPlanService {
     @Transactional(readOnly = true)
     public List<EventDefinitionDTO> listEventDefinitions(String trackingPlanId) {
         requireTrackingPlan(trackingPlanId);
-        return eventDefinitionRepo.findByTrackingPlanIdAndDeletedAtIsNullOrderByDisplayOrderAsc(trackingPlanId).stream()
+        return eventDefinitionRepo.findByTrackingPlanIdAndDeletedAtIsNullOrderByEventNameAsc(trackingPlanId).stream()
             .map(EventDefinitionDTO::new)
             .collect(Collectors.toList());
     }

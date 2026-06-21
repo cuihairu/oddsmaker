@@ -8,7 +8,7 @@ spring:
   # 数据库配置
   datasource:
     # 开发环境：使用H2内存数据库
-    url: jdbc:h2:file:./var/controldb;DB_CLOSE_DELAY=-1;AUTO_SERVER=true
+    url: jdbc:h2:file:./var/controldb;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;AUTO_SERVER=true
     driverClassName: org.h2.Driver
     username: sa
     password:
@@ -37,6 +37,9 @@ spring:
   # 多环境配置支持
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:development}
+
+  flyway:
+    enabled: false
 
   # 安全配置
   security:
@@ -117,6 +120,9 @@ spring:
       idle-timeout: 600000
       max-lifetime: 1800000
 
+  flyway:
+    enabled: true
+
   jpa:
     hibernate:
       ddl-auto: validate               # 生产环境不自动修改表结构
@@ -143,7 +149,7 @@ spring:
       on-profile: test
 
   datasource:
-    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    url: jdbc:h2:mem:testdb;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
     driverClassName: org.h2.Driver
     username: sa
     password:
