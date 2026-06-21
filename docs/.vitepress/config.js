@@ -70,6 +70,7 @@ export default withMermaid(defineConfig({
                 { text: '环境与存储', link: '/zh/reference/environment-and-storage' },
                 { text: 'SDK 设计规范', link: '/zh/reference/sdk-design' },
                 { text: '维度数据同步', link: '/zh/reference/dimension-sync' },
+                { text: '后续推进规划', link: '/zh/reference/follow-up-plan' },
               ]
             },
             {

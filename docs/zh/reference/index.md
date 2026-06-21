@@ -11,6 +11,7 @@
 - [环境与存储](./environment-and-storage) - 环境与存储隔离设计
 - [SDK 设计规范](./sdk-design) - 跨端 SDK 设计规范
 - [维度数据同步](./dimension-sync) - 物品/关卡等维度表的多方案同步设计
+- [后续推进规划](./follow-up-plan) - 未完成项的设计与推进计划
 
 ## 分析
 
