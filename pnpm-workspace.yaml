@@ -2,8 +2,8 @@ packages:
   - '.'
   - 'sdks/web'
 
-onlyBuiltDependencies:
-  - esbuild
+allowBuilds:
+  esbuild: true
 
 overrides:
   vite: "^6.4.3"
