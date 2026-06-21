@@ -1,12 +1,13 @@
 # Flink 作业说明
 
-包含 6 个作业：
+包含 7 个作业：
 - events-enrich-job：校验/去重/富化（UA/GeoIP）→ ClickHouse events
 - sessions-job：30 分钟会话窗口 → ClickHouse sessions
 - retention-job：D0/D1/D7/D30 留存 → ClickHouse retention_daily
 - funnels-job：两步漏斗（level_start→level_complete，超时 24h 可配）→ ClickHouse funnels_2step
 - risk-job：实时风控检测 → Kafka `oddsmaker.risk_events` + ClickHouse risk_events
 - identity-merge-job：消费 `$identify` 事件归并 device_id/player_id 到 identity_id → ClickHouse identities
+- dimension-sync-job：消费维度事件（event_type=dimension）→ ClickHouse item_dim / level_dim
 
 ## identity-merge-job（身份归并）
 
@@ -36,6 +37,33 @@ WHERE user_id = 'u123';
 ```
 
 **v1 限制**：当前不做 `previous_user_id` 的跨 user 合并（需跨 key 读状态，后续版本用 broadcast state 实现）。游客转账号后，旧 device 的 identity 仍保留，新 identity 关联同一 device，分析侧可通过 `device_ids` 交集做二次归并。
+
+## dimension-sync-job（维度同步）
+
+消费 `oddsmaker.events_raw` 里的维度事件（`event_type=dimension`），把物品/关卡定义从游戏侧同步到 ClickHouse 维度表。设计详见 [维度数据同步](../reference/dimension-sync)。
+
+工作方式：
+- 从事件的 `props_json` 解析维度属性（`dim_type`、`resource_id`/`level_id`、`name`、`rarity` 等）。
+- 按 `dim_type` 分流：`item` → `item_dim`，`level` → `level_dim`。
+- ClickHouse 维度表用 `ReplacingMergeTree(version_ts)`，重复写入保留最新版本。
+
+前置：执行 `schema/sql/clickhouse/dimensions.sql` 创建 `item_dim` 和 `level_dim` 表。
+
+启动示例：
+
+```bash
+flink run -c io.oddsmaker.jobs.dimension.DimensionSyncJob jobs/flink/dimension-sync-job/build/libs/dimension-sync-job.jar \
+  -Dkafka.bootstrap=localhost:9092 \
+  -Dregistry.url=http://localhost:8081/apis/registry/v2 \
+  -Dclickhouse.url=jdbc:clickhouse://localhost:8123/default
+```
+
+验证：
+
+```sql
+SELECT resource_id, name, type, rarity FROM item_dim FINAL
+WHERE game_id = 'game_demo' AND environment = 'prod';
+```
 
 ## risk-job（实时风控）
 
