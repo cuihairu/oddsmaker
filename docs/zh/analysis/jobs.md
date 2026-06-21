@@ -1,11 +1,41 @@
 # Flink 作业说明
 
-包含 5 个作业：
+包含 6 个作业：
 - events-enrich-job：校验/去重/富化（UA/GeoIP）→ ClickHouse events
 - sessions-job：30 分钟会话窗口 → ClickHouse sessions
 - retention-job：D0/D1/D7/D30 留存 → ClickHouse retention_daily
 - funnels-job：两步漏斗（level_start→level_complete，超时 24h 可配）→ ClickHouse funnels_2step
 - risk-job：实时风控检测 → Kafka `oddsmaker.risk_events` + ClickHouse risk_events
+- identity-merge-job：消费 `$identify` 事件归并 device_id/player_id 到 identity_id → ClickHouse identities
+
+## identity-merge-job（身份归并）
+
+消费 `oddsmaker.events_raw` 里的 `$identify` 事件（`event_type=identity`），维护 ClickHouse `identities` 表，把同一用户的多个 `device_id` / `player_id` 归并到同一个 `identity_id`，保证留存/LTV 不重复计算。
+
+工作方式：
+- 按 `game_id + environment + user_id` 分组，维护 `ValueState<IdentityState>`（identity_id、device_ids 集合、player_ids 集合、first_seen/last_seen）。
+- 新 user_id → 生成新 identity_id；已存在 → 复用并追加 device_id/player_id。
+- 状态 TTL 90 天（用户长期不活跃后释放）。
+- 每次 identify 事件输出一行到 ClickHouse `identities`（ReplacingMergeTree by last_seen，自动合并）。
+
+启动示例：
+
+```bash
+flink run -c io.oddsmaker.jobs.identity.IdentityMergeJob jobs/flink/identity-merge-job/build/libs/identity-merge-job.jar \
+  -Dkafka.bootstrap=localhost:9092 \
+  -Dregistry.url=http://localhost:8081/apis/registry/v2 \
+  -Dclickhouse.url=jdbc:clickhouse://localhost:8123/default
+```
+
+验证：
+
+```sql
+SELECT identity_id, user_id, device_ids, player_id, first_seen, last_seen
+FROM identities
+WHERE user_id = 'u123';
+```
+
+**v1 限制**：当前不做 `previous_user_id` 的跨 user 合并（需跨 key 读状态，后续版本用 broadcast state 实现）。游客转账号后，旧 device 的 identity 仍保留，新 identity 关联同一 device，分析侧可通过 `device_ids` 交集做二次归并。
 
 ## risk-job（实时风控）
 

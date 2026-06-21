@@ -12,4 +12,5 @@ include(
   ,"jobs:flink:retention-job"
   ,"jobs:flink:funnels-job"
   ,"jobs:flink:risk-job"
+  ,"jobs:flink:identity-merge-job"
 )
