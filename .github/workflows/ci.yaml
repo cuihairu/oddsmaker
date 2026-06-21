@@ -1,4 +1,4 @@
-# Oddsmaker Control Service - CI/CD Pipeline
+# Oddsmaker - CI/CD Pipeline
 name: CI/CD Pipeline
 
 on:
@@ -17,7 +17,7 @@ env:
   JAVA_VERSION: '21'
 
 jobs:
-  # Job 1: Build and Test
+  # Job 1: Build and Test (Java services)
   build-and-test:
     name: Build and Test
     runs-on: ubuntu-latest
@@ -48,7 +48,24 @@ jobs:
           name: test-results
           path: '**/build/reports/tests/'
 
-  # Job 2: Build Docker Image (only on main)
+  # Job 2: Build and test Web SDK
+  build-web-sdk:
+    name: Build Web SDK
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdks/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci || npm i
+      - run: npm run build
+      - name: Run Web SDK consistency tests
+        run: npm run test:hash
+
+  # Job 3: Build Docker Image (only on main push)
   docker-build:
     name: Build Docker Image
     runs-on: ubuntu-latest

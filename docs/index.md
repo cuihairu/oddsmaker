@@ -46,9 +46,9 @@ features:
 # Clone the repository
 git clone https://github.com/cuihairu/oddsmaker.git
 
-# Start with Docker Compose
+# Start the local infrastructure
 cd oddsmaker
-docker-compose up -d
+docker-compose -f infra/docker-compose.yml up -d
 
 # Access the API
 curl http://localhost:8085/actuator/health
@@ -96,7 +96,6 @@ MFA, SSO, RBAC, audit logging, and compliance features.
 - [Getting Started](/guide/) - Quick start guide
 - [API Reference](/reference/) - Complete API documentation
 - [Operations](/operations/) - Deployment and operations guides
-- [Architecture](/guide/architecture) - System architecture overview
 
 ## Community
 

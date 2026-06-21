@@ -13,10 +13,10 @@
 scripts/run_flink.sh
 ```
 环境变量（可选覆盖）
-- KAFKA_BOOTSTRAP（默认 localhost:9092）
-- REGISTRY_URL（默认 http://localhost:8081/apis/registry/v2）
+- KAFKA_BOOTSTRAP（默认 `localhost:9092`）
+- REGISTRY_URL（默认 `http://localhost:8081/apis/registry/v2`）
 - KAFKA_TOPIC（默认 oddsmaker.events_raw）
-- CLICKHOUSE_URL（默认 jdbc:clickhouse://localhost:8123/default）
+- CLICKHOUSE_URL（默认 `jdbc:clickhouse://localhost:8123/default`）
 - KAFKA_DLQ（默认 oddsmaker.deadletter）
 - GEOIP_MMDB（GeoLite mmdb 路径，可空）
 

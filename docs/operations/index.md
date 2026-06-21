@@ -16,8 +16,6 @@ This guide covers:
 
 ## Quick Links
 
-- [Deployment Guide](/operations/deployment) - Deploy to production
-- [Monitoring Setup](/operations/monitoring) - Set up Prometheus and Grafana
 - [Incident Response](/operations/incident-response) - Handle incidents
 - [Troubleshooting](/operations/troubleshooting) - Debug issues
 
@@ -26,8 +24,8 @@ This guide covers:
 ### Docker Compose (Development)
 
 ```bash
-# Start all services
-docker-compose up -d
+# Start local infrastructure
+docker-compose -f infra/docker-compose.yml up -d
 
 # View logs
 docker-compose logs -f

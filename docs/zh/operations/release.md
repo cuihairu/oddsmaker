@@ -15,11 +15,11 @@ bash scripts/e2e.sh
 bash scripts/superset-import.sh
 ```
 3) 查看
-- 网关健康：http://localhost:8080/actuator/health
-- 控制面 UI：http://localhost:8085/（x-admin-token: admin）
-- ClickHouse：http://localhost:8123（直接执行 SQL）
-- Superset：http://localhost:8088（admin/admin）
-- Grafana：http://localhost:3000（admin/admin）
+- 网关健康：`http://localhost:8080/actuator/health`
+- 控制面 UI：`http://localhost:8085/`（`x-admin-token: admin`）
+- ClickHouse：`http://localhost:8123`（直接执行 SQL）
+- Superset：`http://localhost:8088`（`admin/admin`）
+- Grafana：`http://localhost:3000`（`admin/admin`）
 
 压测（可选）
 ```bash
@@ -66,10 +66,10 @@ helm upgrade --install oddsmaker ./infra/helm/oddsmaker -n oddsmaker --create-na
   - 客户端批量：50–100；网关限流：rpm/ipRpm 按项目配置
 
 参考文档
-- [ops.zh.md](ops.zh.md)（运维与容量）
-- [deploy.k8s.zh.md](deploy.k8s.zh.md)（K8s 部署）
-- [perf-tuning.zh.md](perf-tuning.zh.md)（性能调优）
-- [../getting-started/e2e.zh.md](../getting-started/e2e.zh.md)（端到端脚本）
+- [ops.md](./ops)（运维与容量）
+- [deploy.k8s.md](./deploy.k8s)（K8s 部署）
+- [perf-tuning.md](./perf-tuning)（性能调优）
+- [../getting-started/e2e.md](../getting-started/e2e)（端到端脚本）
 
 GitHub Release
 - 打 tag（自动触发发布）：

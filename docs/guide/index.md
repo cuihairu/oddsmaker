@@ -17,7 +17,8 @@ Oddsmaker provides:
 
 Before getting started, ensure you have:
 
-- Java 17+
+- Java 21
+- Gradle 8.10+ or 9.x installed locally
 - Docker and Docker Compose
 - PostgreSQL 16+
 - Redis 7+
@@ -32,8 +33,8 @@ Before getting started, ensure you have:
 git clone https://github.com/cuihairu/oddsmaker.git
 cd oddsmaker
 
-# Start all services
-docker-compose up -d
+# Start local infrastructure
+docker-compose -f infra/docker-compose.yml up -d
 
 # Verify services are running
 docker-compose ps
@@ -46,13 +47,13 @@ curl http://localhost:8085/actuator/health
 
 ```bash
 # Start dependencies
-docker-compose up -d postgres redis kafka
+docker-compose -f infra/docker-compose.yml up -d kafka clickhouse apicurio
 
 # Build the project
-./gradlew :services:control-service:bootJar
+gradle :services:control-service:bootJar
 
 # Run the application
-./gradlew :services:control-service:bootRun
+gradle :services:control-service:bootRun
 ```
 
 ## First Steps
@@ -121,9 +122,8 @@ curl -X POST http://localhost:8085/v1/batch \
 
 ## Next Steps
 
-- [Architecture Overview](/guide/architecture) - Understand the system architecture
 - [API Reference](/reference/) - Explore the complete API
-- [Deployment Guide](/operations/deployment) - Deploy to production
+- [Operations](/operations/) - Deployment and operations guides
 
 ## Getting Help
 

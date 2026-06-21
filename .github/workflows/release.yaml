@@ -57,20 +57,39 @@ jobs:
           distribution: 'temurin'
           cache: gradle
 
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
-
       - name: Run tests
-        run: ./gradlew :services:control-service:test --no-daemon
+        uses: gradle/gradle-build-action@v2
+        with:
+          gradle-version: '8.7'
+          arguments: |
+            --no-daemon
+            :services:control-service:test
 
       - name: Build application
-        run: ./gradlew :services:control-service:bootJar --no-daemon
+        uses: gradle/gradle-build-action@v2
+        with:
+          gradle-version: '8.7'
+          arguments: |
+            --no-daemon
+            :services:control-service:bootJar
+
+      - name: Build Superset bundle asset
+        run: |
+          cd bi/superset
+          ./build_bundle.sh || true
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: control-service-jar
           path: services/control-service/build/libs/*.jar
+
+      - name: Upload Superset bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: superset-bundle
+          path: bi/superset/playtics_dashboard_bundle.zip
+          if-no-files-found: ignore
 
   # Job 3: Build and Push Docker Image
   docker:
@@ -177,12 +196,32 @@ jobs:
           name: control-service-jar
           path: release/
 
+      - name: Download Superset bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: superset-bundle
+          path: release/
+        continue-on-error: true
+
+      - name: Pick release notes file
+        id: pick
+        run: |
+          VER="${GITHUB_REF_NAME}"
+          if [ -f "docs/release-notes/${VER}.md" ]; then
+            echo "body=docs/release-notes/${VER}.md" >> $GITHUB_OUTPUT
+          else
+            echo "body=CHANGELOG.md" >> $GITHUB_OUTPUT
+          fi
+
       - name: Create release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: |
             release/*.jar
-          generate_release_notes: true
+            release/playtics_dashboard_bundle.zip
+          body_path: ${{ steps.pick.outputs.body }}
+          name: ${{ github.ref_name }}
+          tag_name: ${{ github.ref_name }}
           draft: false
           prerelease: false
         env:

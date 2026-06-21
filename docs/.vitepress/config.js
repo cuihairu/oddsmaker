@@ -5,9 +5,6 @@ export default withMermaid(defineConfig({
   // Base path for GitHub Pages
   base: '/oddsmaker/',
 
-  // Ignore dead links
-  ignoreDeadLinks: true,
-
   // Locales
   locales: {
     root: {
@@ -23,14 +20,80 @@ export default withMermaid(defineConfig({
         nav: [
           { text: '首页', link: '/zh/' },
           { text: 'API 文档', link: '/zh/reference/' },
+          { text: '运维', link: '/zh/operations/deploy.k8s' },
+          { text: '重设计', link: '/zh/redesign/' },
         ],
         sidebar: {
           '/zh/reference/': [
             {
               text: 'API 参考',
               items: [
+                { text: '概览', link: '/zh/reference/' },
+                { text: '系统架构', link: '/zh/reference/architecture' },
+                { text: '采集 API', link: '/zh/reference/api' },
+                { text: 'API 参考', link: '/zh/reference/api-reference' },
+                { text: '控制面', link: '/zh/reference/control' },
+                { text: '环境与存储', link: '/zh/reference/environment-and-storage' },
+                { text: 'SDK 设计规范', link: '/zh/reference/sdk-design' },
+              ]
+            },
+            {
+              text: '分析',
+              items: [
                 { text: '分析 API', link: '/zh/reference/analytics' },
                 { text: '游戏分析场景', link: '/zh/reference/gaming-scenarios' },
+              ]
+            },
+            {
+              text: '分析专题',
+              items: [
+                { text: 'Flink 作业', link: '/zh/analysis/jobs' },
+                { text: '实验平台', link: '/zh/analysis/experiments' },
+                { text: '产品路线图', link: '/zh/analysis/roadmap' },
+              ]
+            }
+          ],
+          '/zh/operations/': [
+            {
+              text: '运维',
+              items: [
+                { text: 'K8s 部署', link: '/zh/operations/deploy.k8s' },
+                { text: '可观测', link: '/zh/operations/observability' },
+                { text: '运维手册', link: '/zh/operations/ops' },
+                { text: '性能压测', link: '/zh/operations/perf' },
+                { text: '性能调优', link: '/zh/operations/perf-tuning' },
+                { text: 'Release 指南', link: '/zh/operations/release' },
+              ]
+            }
+          ],
+          '/zh/redesign/': [
+            {
+              text: '重设计',
+              items: [
+                { text: '概览', link: '/zh/redesign/' },
+                { text: '01 - 评估', link: '/zh/redesign/01-assessment' },
+                { text: '02 - 设计问题', link: '/zh/redesign/02-design-issues' },
+                { text: '03 - 开源参考', link: '/zh/redesign/03-open-source-reference' },
+                { text: '04 - 重设计', link: '/zh/redesign/04-redesign' },
+                { text: '05 - 路线图', link: '/zh/redesign/05-roadmap' },
+              ]
+            }
+          ],
+          '/zh/getting-started/': [
+            {
+              text: '入门',
+              items: [
+                { text: '端到端验证', link: '/zh/getting-started/e2e' },
+                { text: '开发者指南', link: '/zh/getting-started/developer' },
+                { text: '贡献指南', link: '/zh/getting-started/contributing' },
+              ]
+            }
+          ],
+          '/zh/': [
+            {
+              text: '首页',
+              items: [
+                { text: '中文首页', link: '/zh/' },
               ]
             }
           ]
@@ -65,7 +128,6 @@ export default withMermaid(defineConfig({
       { text: 'Guide', link: '/guide/' },
       { text: 'API Reference', link: '/reference/' },
       { text: 'Operations', link: '/operations/' },
-      { text: '中文', link: '/zh/' },
     ],
 
     // Sidebar
@@ -75,24 +137,6 @@ export default withMermaid(defineConfig({
           text: 'Getting Started',
           items: [
             { text: 'Introduction', link: '/guide/' },
-            { text: 'Quick Start', link: '/guide/getting-started' },
-            { text: 'Architecture', link: '/guide/architecture' },
-          ]
-        },
-        {
-          text: 'Core Concepts',
-          items: [
-            { text: 'Games & Environments', link: '/guide/games-environments' },
-            { text: 'API Keys', link: '/guide/api-keys' },
-            { text: 'Experiments', link: '/guide/experiments' },
-          ]
-        },
-        {
-          text: 'Advanced',
-          items: [
-            { text: 'Risk Management', link: '/guide/risk-management' },
-            { text: 'Machine Learning', link: '/guide/machine-learning' },
-            { text: 'Integrations', link: '/guide/integrations' },
           ]
         }
       ],
@@ -122,8 +166,6 @@ export default withMermaid(defineConfig({
           text: 'Operations',
           items: [
             { text: 'Overview', link: '/operations/' },
-            { text: 'Deployment', link: '/operations/deployment' },
-            { text: 'Monitoring', link: '/operations/monitoring' },
             { text: 'Incident Response', link: '/operations/incident-response' },
             { text: 'Troubleshooting', link: '/operations/troubleshooting' },
           ]

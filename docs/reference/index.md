@@ -96,31 +96,21 @@ X-RateLimit-Reset: 1700000060
 
 - [Games API](/reference/games) - Game management
 - [Environments API](/reference/environments) - Environment management
-- [API Keys API](/reference/api-keys) - API key management
+- [Authentication](/reference/authentication) - API key and request authentication
 
 ### Analytics APIs
 
 - [Experiments API](/reference/experiments) - A/B testing
-- [Events API](/reference/events) - Event tracking
-- [Reports API](/reference/reports) - Report generation
+- [Analytics API](/reference/analytics) - Analytics and reporting
 
 ### Risk Management APIs
 
-- [Risk Rules API](/reference/risk-rules) - Risk rule management
-- [Risk Cases API](/reference/risk-cases) - Risk case management
-- [Block Lists API](/reference/block-lists) - Block list management
+- [Risk API](/reference/risk) - Risk management
 
 ### Advanced APIs
 
 - [ML Models API](/reference/ml-models) - Machine learning models
-- [Integrations API](/reference/integrations) - External integrations
-- [Developer API](/reference/developer) - SDK and developer tools
-
-### System APIs
-
-- [Health API](/reference/health) - Health checks
-- [Metrics API](/reference/metrics) - Prometheus metrics
-- [Admin API](/reference/admin) - Administration
+- [Gaming Scenarios](/reference/gaming-scenarios) - Gameplay analytics scenarios
 
 ## SDKs
 
