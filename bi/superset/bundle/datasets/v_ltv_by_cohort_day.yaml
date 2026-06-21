@@ -1,0 +1,35 @@
+database_uuid: 9d3f2d6d-1c4f-4f2e-8d55-5a7b9c0c1a01
+description: Cohort LTV by registration day and age
+owners: []
+schema: default
+table_name: v_ltv_by_cohort_day
+uuid: 7c8e9fa0-1234-4bcd-9e8f-0a1b2c3d4e5f
+columns:
+  - column_name: game_id
+    is_dttm: false
+    type: LowCardinality(String)
+  - column_name: environment
+    is_dttm: false
+    type: LowCardinality(String)
+  - column_name: cohort_date
+    is_dttm: true
+    type: Date
+  - column_name: age_day
+    is_dttm: false
+    type: Int32
+  - column_name: revenue
+    is_dttm: false
+    type: Decimal(18,4)
+  - column_name: payers
+    is_dttm: false
+    type: UInt64
+  - column_name: orders
+    is_dttm: false
+    type: UInt64
+metrics:
+  - metric_name: sum_revenue
+    expression: sum(revenue)
+    metric_type: numeric
+  - metric_name: sum_payers
+    expression: sum(payers)
+    metric_type: numeric

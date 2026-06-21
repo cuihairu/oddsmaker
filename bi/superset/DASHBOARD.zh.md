@@ -63,4 +63,8 @@
 
 六、可选优化
 - 在 `events` 上创建更多 MV（如 revenue_by_day、ua_family 分布），并在 Superset 中建立对应图表
-- 按 `project_id` 建多个仪表盘，或在每个图表增加 `project_id` 过滤器
+- LTV（Cohort 生命周期价值）：执行 `schema/sql/clickhouse/ltv.sql` 后，基于 `v_ltv_by_cohort_day` 建图：
+  - Dataset: `v_ltv_by_cohort_day`
+  - X 轴: `cohort_date`；Metrics: `sumIf(revenue, age_day <= 6)` 作为 D7 LTV，`sumIf(revenue, age_day <= 29)` 作为 D30 LTV
+  - 也可用 `v_ad_revenue_by_day` 做 IAP + 广告收入统一分析
+- 按 `game_id` 建多个仪表盘，或在每个图表增加 `game_id` / `environment` 过滤器

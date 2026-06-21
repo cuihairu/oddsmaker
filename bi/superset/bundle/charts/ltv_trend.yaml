@@ -1,0 +1,18 @@
+slice_name: LTV by Cohort (D7/D30 cumulative)
+viz_type: echarts_timeseries_line
+description: Cumulative revenue per cohort over time (D7/D30 windows)
+params:
+  datasource: 7c8e9fa0-1234-4bcd-9e8f-0a1b2c3d4e5f
+  viz_type: echarts_timeseries_line
+  x_axis: cohort_date
+  time_grain_sqla: P1D
+  metrics:
+    - label: ltv_d7_revenue
+      expressionType: SQL
+      sqlExpression: sumIf(revenue, age_day <= 6)
+    - label: ltv_d30_revenue
+      expressionType: SQL
+      sqlExpression: sumIf(revenue, age_day <= 29)
+  groupby: []
+  time_range: Last 180 days
+uuid: a1b2c3d4-e5f6-4789-abcd-ef0123456789
