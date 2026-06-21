@@ -11,4 +11,5 @@ include(
   "jobs:flink:sessions-job"
   ,"jobs:flink:retention-job"
   ,"jobs:flink:funnels-job"
+  ,"jobs:flink:risk-job"
 )
