@@ -23,7 +23,8 @@ services:
     image: clickhouse/clickhouse-server:24.8
     ports: ["8123:8123", "9000:9000"]
     volumes:
-      - ./../schema/sql/clickhouse/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+      - ./../schema/sql/clickhouse/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./../schema/sql/clickhouse/analytics.sql:/docker-entrypoint-initdb.d/02-analytics.sql:ro
 
   apicurio:
     image: quay.io/apicurio/apicurio-registry-mem:2.6.5.Final
