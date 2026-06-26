@@ -5,15 +5,14 @@ import java.util.Map;
 /**
  * Oddsmaker v1 event model.
  *
- * Note: game_id and environment are routing fields used by Gateway to determine
- * the target Kafka topic and database. They are NOT stored in ClickHouse as they
- * are implicit from the database/table name (e.g., game_demo_prod.events).
+ * Note: game_id and environment are routing fields and are also persisted as
+ * isolation dimensions in ClickHouse tables.
  */
 public class Event {
     // Core identifiers
     public String eventId;
-    public String gameId;           // Routing field (NOT stored in ClickHouse)
-    public String environment;       // Routing field (NOT stored in ClickHouse)
+    public String gameId;            // Routing and ClickHouse isolation field
+    public String environment;       // Routing and ClickHouse isolation field
 
     // Event classification
     public String eventType;         // session, user, business, resource, progression, design, error, ad, risk
@@ -44,6 +43,8 @@ public class Event {
     public String matchId;           // Match/session identifier (for matchmaking games)
     public String levelId;           // Level/stage identifier
     public String gameMode;          // pvp, pve, ranked, casual
+    public String difficulty;        // Level or content difficulty
+    public String progressionPath;   // Optional progression path/chapter
 
     // Revenue fields
     public String orderId;           // Order/transaction identifier
@@ -53,8 +54,11 @@ public class Event {
     public String receiptHash;       // Payment receipt hash for fraud detection
 
     // Resource flow fields
+    public String virtualCurrency;   // Legacy virtual currency identifier
+    public Double virtualAmount;     // Legacy virtual currency amount
+    public String itemId;            // Item identifier for item grant/consume events
     public String resourceId;        // Resource identifier
-    public Long resourceAmount;      // Resource amount
+    public Double resourceAmount;    // Resource amount
     public String flowType;          // source or sink
     public String operationId;       // Operation identifier (for linking related resource changes)
     public String operationType;     // Operation type (e.g., daily_reward, purchase_item)
@@ -64,6 +68,11 @@ public class Event {
     public String adPlacement;       // Ad placement identifier
     public String adFormat;          // rewarded, interstitial, banner
     public String adImpressionId;    // Ad impression identifier
+
+    // Risk and diagnostics
+    public String riskContext;
+    public String deviceFingerprint;
+    public String clientIntegrity;
 
     // Experiment fields
     public Map<String, String> experiments;  // Active experiments and variants

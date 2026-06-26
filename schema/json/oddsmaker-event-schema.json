@@ -2,7 +2,7 @@
   "$id": "schema/json/oddsmaker-event-schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Oddsmaker Game Event v1",
-  "description": "Canonical analytics and risk-control event schema. Note: game_id and environment are routing fields used by Gateway to determine the target database; they are not stored in ClickHouse as they are implicit from the database/table name.",
+  "description": "Canonical analytics and risk-control event schema. game_id and environment are routing fields and ClickHouse isolation dimensions.",
   "type": "object",
   "required": ["event_id", "game_id", "environment", "event_name", "device_id", "ts_client"],
   "properties": {
@@ -16,13 +16,13 @@
       "type": "string",
       "minLength": 1,
       "maxLength": 64,
-      "description": "Game identifier for routing (NOT stored in ClickHouse, implicit from database name)"
+      "description": "Game identifier for routing and ClickHouse isolation"
     },
     "environment": {
       "type": "string",
       "minLength": 1,
       "maxLength": 32,
-      "description": "Environment (dev/staging/prod) for routing (NOT stored in ClickHouse, implicit from database name)"
+      "description": "Environment (dev/staging/prod) for routing and ClickHouse isolation"
     },
     "event_type": {
       "type": ["string", "null"],
@@ -131,6 +131,16 @@
       "maxLength": 32,
       "description": "Game mode (pvp, pve, ranked, casual)"
     },
+    "difficulty": {
+      "type": ["string", "null"],
+      "maxLength": 32,
+      "description": "Level or content difficulty"
+    },
+    "progression_path": {
+      "type": ["string", "null"],
+      "maxLength": 128,
+      "description": "Optional progression path/chapter"
+    },
     "order_id": {
       "type": ["string", "null"],
       "maxLength": 64,
@@ -155,13 +165,27 @@
       "maxLength": 64,
       "description": "Payment receipt hash for fraud detection"
     },
+    "virtual_currency": {
+      "type": ["string", "null"],
+      "maxLength": 32,
+      "description": "Legacy virtual currency identifier"
+    },
+    "virtual_amount": {
+      "type": ["number", "null"],
+      "description": "Legacy virtual currency amount"
+    },
+    "item_id": {
+      "type": ["string", "null"],
+      "maxLength": 64,
+      "description": "Item identifier"
+    },
     "resource_id": {
       "type": ["string", "null"],
       "maxLength": 64,
       "description": "Resource identifier (for resource flow events)"
     },
     "resource_amount": {
-      "type": ["integer", "null"],
+      "type": ["number", "null"],
       "description": "Resource amount (for resource flow events)"
     },
     "flow_type": {
@@ -198,6 +222,21 @@
       "type": ["string", "null"],
       "maxLength": 64,
       "description": "Ad impression identifier"
+    },
+    "risk_context": {
+      "type": ["string", "null"],
+      "maxLength": 256,
+      "description": "Serialized risk context"
+    },
+    "device_fingerprint": {
+      "type": ["string", "null"],
+      "maxLength": 256,
+      "description": "Device fingerprint for risk control"
+    },
+    "client_integrity": {
+      "type": ["string", "null"],
+      "maxLength": 512,
+      "description": "Client integrity signal"
     },
     "experiments": {
       "type": ["object", "null"],

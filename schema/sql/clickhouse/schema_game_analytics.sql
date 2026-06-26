@@ -10,12 +10,12 @@ SELECT
   ts_server,
   if(player_id != '', player_id, if(user_id != '', user_id, device_id)) AS uid,
   event_name,
-  coalesce(nullIf(level_id, ''), props['level_id']) AS level_id,
-  coalesce(nullIf(game_mode, ''), props['game_mode']) AS game_mode,
-  toUInt32OrZero(props['attempt']) AS attempt,
-  toUInt32OrZero(props['duration_sec']) AS duration_sec,
-  toInt64OrZero(props['score']) AS score,
-  props['fail_reason'] AS fail_reason
+  coalesce(nullIf(level_id, ''), nullIf(JSONExtractString(props_json, 'level_id'), '')) AS level_id,
+  coalesce(nullIf(game_mode, ''), nullIf(JSONExtractString(props_json, 'game_mode'), '')) AS game_mode,
+  toUInt32(ifNull(JSONExtract(props_json, 'attempt', 'Nullable(UInt64)'), 0)) AS attempt,
+  toUInt32(ifNull(JSONExtract(props_json, 'duration_sec', 'Nullable(UInt64)'), 0)) AS duration_sec,
+  ifNull(JSONExtract(props_json, 'score', 'Nullable(Int64)'), 0) AS score,
+  JSONExtractString(props_json, 'fail_reason') AS fail_reason
 FROM events
 WHERE event_name IN ('level_start', 'level_fail', 'level_complete');
 
@@ -45,12 +45,12 @@ SELECT
   ts_server,
   if(player_id != '', player_id, if(user_id != '', user_id, device_id)) AS uid,
   event_name,
-  coalesce(nullIf(props['currency_code'], ''), nullIf(virtual_currency, ''), nullIf(resource_id, '')) AS currency_code,
-  if(virtual_amount != 0, toFloat64(virtual_amount), if(resource_amount != 0, toFloat64(resource_amount), toFloat64OrZero(props['amount']))) AS amount,
-  props['source'] AS source,
-  props['sink'] AS sink,
-  props['reason'] AS reason,
-  toFloat64OrZero(props['balance_after']) AS balance_after
+  coalesce(nullIf(resource_id, ''), nullIf(virtual_currency, ''), nullIf(JSONExtractString(props_json, 'currency_code'), '')) AS currency_code,
+  if(resource_amount != 0, toFloat64(resource_amount), if(virtual_amount != 0, toFloat64(virtual_amount), ifNull(JSONExtract(props_json, 'amount', 'Nullable(Float64)'), 0))) AS amount,
+  JSONExtractString(props_json, 'source') AS source,
+  JSONExtractString(props_json, 'sink') AS sink,
+  JSONExtractString(props_json, 'reason') AS reason,
+  ifNull(JSONExtract(props_json, 'balance_after', 'Nullable(Float64)'), 0) AS balance_after
 FROM events
 WHERE event_name IN ('currency_source', 'currency_sink');
 
@@ -76,13 +76,13 @@ SELECT
   if(player_id != '', player_id, if(user_id != '', user_id, device_id)) AS uid,
   event_name,
   revenue_amount,
-  coalesce(nullIf(toString(revenue_currency), ''), props['currency']) AS revenue_currency,
-  coalesce(nullIf(order_id, ''), props['order_id']) AS order_id,
-  coalesce(nullIf(product_id, ''), props['product_id']) AS product_id,
-  props['store'] AS store,
-  coalesce(nullIf(ad_placement, ''), props['placement_id']) AS placement_id,
-  coalesce(nullIf(ad_network, ''), props['network']) AS network,
-  coalesce(nullIf(ad_format, ''), props['ad_format']) AS ad_format
+  coalesce(nullIf(toString(revenue_currency), ''), nullIf(JSONExtractString(props_json, 'currency'), '')) AS revenue_currency,
+  coalesce(nullIf(order_id, ''), nullIf(JSONExtractString(props_json, 'order_id'), '')) AS order_id,
+  coalesce(nullIf(product_id, ''), nullIf(JSONExtractString(props_json, 'product_id'), '')) AS product_id,
+  JSONExtractString(props_json, 'store') AS store,
+  coalesce(nullIf(ad_placement, ''), nullIf(JSONExtractString(props_json, 'placement_id'), '')) AS placement_id,
+  coalesce(nullIf(ad_network, ''), nullIf(JSONExtractString(props_json, 'network'), '')) AS network,
+  coalesce(nullIf(ad_format, ''), nullIf(JSONExtractString(props_json, 'ad_format'), '')) AS ad_format
 FROM events
 WHERE event_name IN ('revenue', 'iap_order', 'webshop_order', 'ad_impression');
 
@@ -109,7 +109,7 @@ SELECT
   countIf(event_name = 'crash') AS crashes,
   uniqExactIf(if(player_id != '', player_id, if(user_id != '', user_id, device_id)), event_name = 'crash') AS crashed_users,
   countIf(event_name = 'fps_drop') AS fps_drop_events,
-  avgIf(toFloat64OrZero(props['fps']), event_name = 'fps_drop') AS avg_reported_fps_on_drop,
+  avgIf(ifNull(JSONExtract(props_json, 'fps', 'Nullable(Float64)'), 0), event_name = 'fps_drop') AS avg_reported_fps_on_drop,
   countIf(event_name = 'network_timeout') AS network_timeouts,
   round(1 - crashed_users / nullIf(active_users, 0), 4) AS crash_free_user_rate
 FROM events

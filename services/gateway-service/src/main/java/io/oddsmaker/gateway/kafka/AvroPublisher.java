@@ -22,10 +22,6 @@ import java.util.concurrent.Future;
 
 /**
  * Avro event publisher with database-per-game routing support.
- *
- * Note: game_id and environment are used for routing to determine the target Kafka topic
- * and eventually the ClickHouse database. They are NOT stored as fields in ClickHouse
- * since they are implicit from the database/table name.
  */
 @Component
 public class AvroPublisher {
@@ -106,7 +102,6 @@ public class AvroPublisher {
     private GenericRecord buildGenericRecord(Event e) {
         GenericRecord gr = new GenericData.Record(schema);
         gr.put("event_id", e.eventId);
-        // Routing fields (used for topic partitioning and database routing, NOT stored in ClickHouse)
         gr.put("game_id", e.gameId);
         gr.put("environment", e.environment);
         // Event classification
@@ -134,6 +129,8 @@ public class AvroPublisher {
         gr.put("match_id", e.matchId);
         gr.put("level_id", e.levelId);
         gr.put("game_mode", e.gameMode);
+        gr.put("difficulty", e.difficulty);
+        gr.put("progression_path", e.progressionPath);
         // Revenue fields
         gr.put("order_id", e.orderId);
         gr.put("product_id", e.productId);
@@ -141,6 +138,9 @@ public class AvroPublisher {
         gr.put("revenue_currency", e.revenueCurrency);
         gr.put("receipt_hash", e.receiptHash);
         // Resource flow fields
+        gr.put("virtual_currency", e.virtualCurrency);
+        gr.put("virtual_amount", e.virtualAmount);
+        gr.put("item_id", e.itemId);
         gr.put("resource_id", e.resourceId);
         gr.put("resource_amount", e.resourceAmount);
         gr.put("flow_type", e.flowType);
@@ -151,6 +151,10 @@ public class AvroPublisher {
         gr.put("ad_placement", e.adPlacement);
         gr.put("ad_format", e.adFormat);
         gr.put("ad_impression_id", e.adImpressionId);
+        // Risk and diagnostics
+        gr.put("risk_context", e.riskContext);
+        gr.put("device_fingerprint", e.deviceFingerprint);
+        gr.put("client_integrity", e.clientIntegrity);
         // Experiment fields
         gr.put("experiments", e.experiments);
         // Additional properties as JSON

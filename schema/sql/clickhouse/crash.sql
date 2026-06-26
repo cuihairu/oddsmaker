@@ -1,6 +1,6 @@
 -- Crash/Error 聚合视图（P4.3）
 -- 基于 events 表 event_type='error' 的事件做影响面统计和趋势分析。
--- 堆栈哈希分组用 props['crash_hash']（由 SDK 或 Gateway 计算），缺失时回退到 event_name。
+-- 堆栈哈希分组用 props_json.crash_hash（由 SDK 或 Gateway 计算），缺失时回退到 event_name。
 
 -- 按日/版本/平台的崩溃影响面
 CREATE OR REPLACE VIEW v_crash_by_day AS
@@ -20,13 +20,13 @@ WHERE event_type = 'error'
 GROUP BY game_id, environment, event_date, app_version, platform, country, event_name;
 
 -- 按堆栈哈希分组的 Top Crashes（用于崩溃分组排行）
--- crash_hash 来自 SDK（props['crash_hash']）；缺失时用 event_name 作为分组键
+-- crash_hash 来自 SDK（props_json.crash_hash）；缺失时用 event_name 作为分组键
 CREATE OR REPLACE VIEW v_crash_top_groups AS
 SELECT
   game_id,
   environment,
-  coalesce(nullIf(props['crash_hash'], ''), event_name) AS crash_group,
-  any(props['crash_message']) AS sample_message,
+  coalesce(nullIf(JSONExtractString(props_json, 'crash_hash'), ''), event_name) AS crash_group,
+  any(JSONExtractString(props_json, 'crash_message')) AS sample_message,
   count() AS occurrences,
   uniqExact(device_id) AS affected_devices,
   min(event_date) AS first_seen,

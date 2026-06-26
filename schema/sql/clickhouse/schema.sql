@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS events
   level_id String DEFAULT '',
   game_mode LowCardinality(String) DEFAULT '',
   difficulty LowCardinality(String) DEFAULT '',
+  progression_path String DEFAULT '',
 
   order_id String DEFAULT '',
   product_id String DEFAULT '',
@@ -40,9 +41,11 @@ CREATE TABLE IF NOT EXISTS events
   receipt_hash String DEFAULT '',
 
   virtual_currency LowCardinality(String) DEFAULT '',
-  virtual_amount Int64 DEFAULT 0,
+  virtual_amount Decimal(18,4) DEFAULT 0,
   flow_type LowCardinality(String) DEFAULT '',
   item_id String DEFAULT '',
+  operation_id String DEFAULT '',
+  operation_type LowCardinality(String) DEFAULT '',
 
   resource_id String DEFAULT '',
   resource_amount Decimal(18,4) DEFAULT 0,
@@ -52,10 +55,10 @@ CREATE TABLE IF NOT EXISTS events
   ad_format LowCardinality(String) DEFAULT '',
   ad_impression_id String DEFAULT '',
 
-  experiments Map(String, String),
-  attribution Map(String, String),
-  risk_context Map(String, String),
-  props Map(String, String)
+  experiments Map(String, String) DEFAULT map(),
+  attribution Map(String, String) DEFAULT map(),
+  risk_context Map(String, String) DEFAULT map(),
+  props_json String DEFAULT '{}'
 )
 ENGINE = MergeTree
 PARTITION BY (game_id, environment, toYYYYMM(event_date))
@@ -154,8 +157,8 @@ SELECT
   game_id,
   environment,
   event_date,
-  ifNull(props['ua_family'], '') AS ua_family,
-  ifNull(props['os_family'], '') AS os_family,
+  JSONExtractString(props_json, 'ua_family') AS ua_family,
+  JSONExtractString(props_json, 'os_family') AS os_family,
   countState() AS c
 FROM events
 GROUP BY game_id, environment, event_date, ua_family, os_family;

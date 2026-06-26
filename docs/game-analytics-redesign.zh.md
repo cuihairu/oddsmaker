@@ -56,7 +56,8 @@
 策略上推荐采用“预置核心事件 + 自定义扩展字段”：
 
 - 核心字段固定，保证跨游戏可对比。
-- 业务字段走 `props` 扩展对象，避免表结构爆炸。
+- 业务字段在链路内统一编码到 `props_json`，避免表结构爆炸。
+- 金额和资源数量字段使用 Decimal/Double 语义，避免道具、虚拟币和广告收入的小数精度丢失。
 - 重点对象单独建宽表或物化视图，如 `level_progress`, `economy_flows`, `monetization_daily`。
 
 字典草案见 [game-event-dictionary.zh.md](game-event-dictionary.zh.md)。

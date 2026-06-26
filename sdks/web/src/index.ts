@@ -47,11 +47,16 @@ type Event = {
   match_id?: string | null;
   level_id?: string | null;
   game_mode?: string | null;
+  difficulty?: string | null;
+  progression_path?: string | null;
   order_id?: string | null;
   product_id?: string | null;
   revenue_amount?: number | null;
   revenue_currency?: string | null;
   receipt_hash?: string | null;
+  virtual_currency?: string | null;
+  virtual_amount?: number | null;
+  item_id?: string | null;
   resource_id?: string | null;
   resource_amount?: number | null;
   flow_type?: string | null;
@@ -61,6 +66,9 @@ type Event = {
   ad_placement?: string | null;
   ad_format?: string | null;
   ad_impression_id?: string | null;
+  risk_context?: string | null;
+  device_fingerprint?: string | null;
+  client_integrity?: string | null;
   experiments?: Record<string, string> | null;
   props?: EventProps | null;
 };
@@ -257,26 +265,48 @@ export class Oddsmaker {
 
   currencySource(currency: string, amount: number, props?: EventProps) {
     const currencyCode = currency.toUpperCase();
-    return this.track('currency_source', this.withCoreProps(props, {
+    return this.queueEvent('currency_source', this.withCoreProps(props, {
       currency_code: currencyCode,
       amount
-    }));
+    }), {
+      resource_id: currencyCode,
+      resource_amount: amount,
+      virtual_currency: currencyCode,
+      virtual_amount: amount,
+      flow_type: 'source'
+    });
   }
 
   currencySink(currency: string, amount: number, props?: EventProps) {
     const currencyCode = currency.toUpperCase();
-    return this.track('currency_sink', this.withCoreProps(props, {
+    return this.queueEvent('currency_sink', this.withCoreProps(props, {
       currency_code: currencyCode,
       amount
-    }));
+    }), {
+      resource_id: currencyCode,
+      resource_amount: amount,
+      virtual_currency: currencyCode,
+      virtual_amount: amount,
+      flow_type: 'sink'
+    });
   }
 
   itemGrant(itemId: string, quantity = 1, props?: EventProps) {
-    return this.track('item_grant', this.withCoreProps(props, { item_id: itemId, quantity }));
+    return this.queueEvent('item_grant', this.withCoreProps(props, { item_id: itemId, quantity }), {
+      item_id: itemId,
+      resource_id: itemId,
+      resource_amount: quantity,
+      flow_type: 'source'
+    });
   }
 
   itemConsume(itemId: string, quantity = 1, props?: EventProps) {
-    return this.track('item_consume', this.withCoreProps(props, { item_id: itemId, quantity }));
+    return this.queueEvent('item_consume', this.withCoreProps(props, { item_id: itemId, quantity }), {
+      item_id: itemId,
+      resource_id: itemId,
+      resource_amount: quantity,
+      flow_type: 'sink'
+    });
   }
 
   iapOrder(orderId: string, amount: number, currency: string, props?: RevenueProps) {
