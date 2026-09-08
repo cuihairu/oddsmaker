@@ -29,6 +29,21 @@ public class AccessGuard {
         check(gameId, null, permissionId);
     }
 
+    /** 非抛出版：判断当前用户是否对游戏具备权限（跨游戏结果过滤用） */
+    public boolean canAccessGame(String gameId, String permissionId) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !auth.isAuthenticated()) {
+            return false;
+        }
+        for (GrantedAuthority authority : auth.getAuthorities()) {
+            String name = authority.getAuthority();
+            if ("ROLE_ADMIN".equals(name) || "ROLE_INTERNAL".equals(name)) {
+                return true;
+            }
+        }
+        return permissionService.hasGamePermission(auth.getName(), gameId, permissionId);
+    }
+
     public void requireEnvironmentPermission(String gameId, String environment, String permissionId) {
         check(gameId, environment, permissionId);
     }

@@ -22,6 +22,11 @@ public interface GameRepo extends JpaRepository<GameEntity, String> {
     Page<GameEntity> findByDeletedAtIsNull(Pageable pageable);
 
     /**
+     * 查找所有未删除游戏（全量，跨游戏玩家档案用）
+     */
+    List<GameEntity> findByDeletedAtIsNull();
+
+    /**
      * 查找已上线的游戏
      */
     List<GameEntity> findByStatusAndDeletedAtIsNull(GameEntity.GameStatus status);
