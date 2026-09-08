@@ -1,6 +1,7 @@
 # Changelog
 
 ## v0.2.0 (unreleased)
+- 兑换码系统（P4）：UNIQUE 一次性码批量生成（Crockford Base32 去混淆字符集）/ SHARED 通用码（指定或生成，总量限次）；防刷三层（每玩家限领计数、批次总量、有效期与状态）+ UNIQUE 条件更新原子核销 + (batch, player, seq) 唯一约束幂等兜底；兑换返回奖励快照凭据；游戏服 redeem/history API（跨游戏码统一按 invalid_code 处理防探测）；运营端批次 CRUD/停用/码导出 + Flyway V0.8.2 三表
 - 运营邮件系统（P4）：全服（惰性展开）与个人（精确收件人匹配）邮件；附件 JSON 校验（type/id 必填）；领取凭据固化附件快照且幂等（唯一约束 + 并发兜底）；sweep 每 5 分钟将到期已发送邮件标记 EXPIRED；游戏服经 inbox/claim API 拉取与代领
 - 公告系统（P4）：全生命周期管理——创建（草稿/定时）、立即发布、改期、手动下线、软删除；sweep 每分钟扫描驱动 SCHEDULED→PUBLISHED 与 autoOfflineAt 到点下线；游戏服经 `GET /api/announcements/active` 拉取展示窗口内公告（环境匹配或全环境）；状态机约束（OFFLINE 不可复活、PUBLISHED 不可直接删）；增删改与自动迁移全量审计
 - 留存分析补齐 Rolling 口径：RetentionPolicy 抽取纯逻辑（可配 N-Day `retention.ndays`、Rolling `retention.rolling.ndays`）；Rolling 语义为第 N 天及以后任意一天活跃，最后活跃日跨越阈值时补记；新增 `retention_rolling` CH 表
