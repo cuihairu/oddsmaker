@@ -15,6 +15,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyMap;
@@ -48,6 +49,7 @@ class RiskEventConsumerTest {
     @Mock private AuditLogService auditLogService;
     @Mock private io.oddsmaker.control.jpa.RiskCaseRepo riskCaseRepo;
     @Mock private ReviewQueueService reviewQueueService;
+    @Mock private RiskActionRecorder riskActionRecorder;
 
     private RiskEventConsumer consumer;
     private final ObjectMapper om = new ObjectMapper();
@@ -62,6 +64,7 @@ class RiskEventConsumerTest {
         ReflectionTestUtils.setField(consumer, "auditLogService", auditLogService);
         ReflectionTestUtils.setField(consumer, "riskCaseRepo", riskCaseRepo);
         ReflectionTestUtils.setField(consumer, "reviewQueueService", reviewQueueService);
+        ReflectionTestUtils.setField(consumer, "riskActionRecorder", riskActionRecorder);
     }
 
     /** 构造对齐 RiskJob.toJson 输出契约（snake_case）的风控事件 JSON */
@@ -227,9 +230,29 @@ class RiskEventConsumerTest {
     }
 
     @Test
+    @DisplayName("处置动作归档：BLOCK → risk_actions(block/blocked)，REVIEW → 携带 riskCaseId")
+    void actions_archivedToClickHouse() {
+        when(riskCaseRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        consumer.onRiskEvent(riskEventJson("BLOCK", "HIGH", "DEVICE", "dev_abc", "rr_threshold"));
+        org.mockito.ArgumentCaptor<RiskEventDto> blockEvent =
+            org.mockito.ArgumentCaptor.forClass(RiskEventDto.class);
+        verify(riskActionRecorder).record(blockEvent.capture(), eq("block"), eq("blocked"), isNull());
+        assertEquals("re_001", blockEvent.getValue().riskEventId);
+
+        consumer.onRiskEvent(riskEventJson("REVIEW", "CRITICAL", "PLAYER", "user_7", "rr_receipt"));
+        org.mockito.ArgumentCaptor<RiskEventDto> reviewEvent =
+            org.mockito.ArgumentCaptor.forClass(RiskEventDto.class);
+        org.mockito.ArgumentCaptor<String> caseId = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(riskActionRecorder).record(reviewEvent.capture(), eq("review"), eq("queued"), caseId.capture());
+        assertEquals("re_001", reviewEvent.getValue().riskEventId);
+        assertNotNull(caseId.getValue());
+        assertTrue(caseId.getValue().startsWith("rc_"));
+    }
+
+    @Test
     @DisplayName("JSON 契约对齐 RiskJob.toJson（snake_case 全字段正确反序列化）")
-    void jsonContract_alignedWithRiskJob() throws Exception {
-        RiskEventDto dto = om.readValue(
+    void jsonContract_alignedWithRiskJob() throws Exception {        RiskEventDto dto = om.readValue(
             riskEventJson("BLOCK", "HIGH", "DEVICE", "dev_abc", "rr_threshold"),
             RiskEventDto.class);
 

@@ -5,7 +5,9 @@ server:
 oddsmaker:
   kafka:
     bootstrap: localhost:9092
-    topic: oddsmaker.events_raw
+    topic:
+      events: oddsmaker.events_raw
+      risk: oddsmaker.risk_events
     dlq-topic: oddsmaker.deadletter
   auth:
     keys:

@@ -28,10 +28,10 @@ public class AvroPublisher {
     @Value("${oddsmaker.kafka.bootstrap}")
     private String bootstrap;
 
-    @Value("${oddsmaker.kafka.topic.events:oddsmaker-events}")
+    @Value("${oddsmaker.kafka.topic.events:oddsmaker.events_raw}")
     private String eventsTopic;
 
-    @Value("${oddsmaker.kafka.topic.risk:oddsmaker-risk-events}")
+    @Value("${oddsmaker.kafka.topic.risk:oddsmaker.risk_events}")
     private String riskTopic;
 
     @Value("${oddsmaker.kafka.registry-url}")

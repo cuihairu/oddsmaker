@@ -340,8 +340,15 @@ public class BatchController {
         return readCompatEvent(node);
     }
 
+    /**
+     * v1 事件契约已废弃的多租户路由字段：入口处剔除。
+     * tenant_id/org_id 不参与映射（单公司部署无租户语义），仅携带这两个字段的事件
+     * 会因缺少 game_id 被拒绝为 invalid_schema。
+     */
+    private static final Set<String> DEPRECATED_ROUTING_FIELDS = Set.of("tenant_id", "org_id");
+
     private Event readCompatEvent(JsonNode node) {
-        JsonNode normalizedNode = normalizeTimestampFields(node);
+        JsonNode normalizedNode = normalizeCompatNode(node);
         Event event = om.convertValue(normalizedNode, Event.class);
         if (event.gameId == null) {
             if (node.hasNonNull("game_id")) {
@@ -385,7 +392,7 @@ public class BatchController {
         return event;
     }
 
-    private JsonNode normalizeTimestampFields(JsonNode node) {
+    private JsonNode normalizeCompatNode(JsonNode node) {
         if (!(node instanceof ObjectNode objectNode)) {
             return node;
         }
@@ -394,6 +401,7 @@ public class BatchController {
         normalizeTimestampField(normalized, "tsClient");
         normalizeTimestampField(normalized, "ts_server");
         normalizeTimestampField(normalized, "tsServer");
+        normalized.remove(DEPRECATED_ROUTING_FIELDS);
         return normalized;
     }
 

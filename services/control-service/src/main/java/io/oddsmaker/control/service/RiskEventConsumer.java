@@ -51,6 +51,9 @@ public class RiskEventConsumer {
     @Autowired
     private ReviewQueueService reviewQueueService;
 
+    @Autowired
+    private RiskActionRecorder riskActionRecorder;
+
     /** 身份关联扩散封禁开关（默认关：共享设备可能关联大量玩家，灰度后再开）。 */
     @Value("${oddsmaker.risk.identity-extend:false}")
     private boolean identityExtend;
@@ -78,9 +81,11 @@ public class RiskEventConsumer {
                 case "BLOCK":
                     handleBlock(event);
                     notifyGameServer(event, outcome("block", "blocked"));
+                    riskActionRecorder.record(event, "block", "blocked", null);
                     break;
                 case "WEBHOOK":
                     handleWebhook(event);
+                    riskActionRecorder.record(event, "webhook", "notified", null);
                     break;
                 case "REVIEW":
                     handleReview(event);
@@ -88,17 +93,21 @@ public class RiskEventConsumer {
                 case "THROTTLE":
                     handleAuditOnly(event);
                     notifyGameServer(event, outcome("throttle", "throttled"));
+                    riskActionRecorder.record(event, "throttle", "throttled", null);
                     break;
                 case "MARK":
                     handleAuditOnly(event);
                     notifyGameServer(event, outcome("mark", "marked"));
+                    riskActionRecorder.record(event, "mark", "marked", null);
                     break;
                 case "ALERT":
                     handleAuditOnly(event);
+                    riskActionRecorder.record(event, "alert", "logged", null);
                     break;
                 default:
                     logger.warn("Unknown risk action: {}, logging as SECURITY_ALERT", event.action);
                     handleAuditOnly(event);
+                    riskActionRecorder.record(event, event.action.toLowerCase(), "logged", null);
                     break;
             }
         } catch (Exception e) {
@@ -162,6 +171,7 @@ public class RiskEventConsumer {
             "risk_automation", "fraud");
         handleAuditOnly(event);
         notifyGameServer(event, outcome("review", "queued"));
+        riskActionRecorder.record(event, "review", "queued", riskCase.id);
     }
 
     private RiskCaseEntity.RiskLevel parseRiskLevel(String severity) {

@@ -253,3 +253,26 @@ CREATE TABLE IF NOT EXISTS risk_scores
 ENGINE = ReplacingMergeTree(updated_at)
 PARTITION BY (game_id, environment, toYYYYMM(updated_at))
 ORDER BY (game_id, environment, subject_type, subject_id);
+
+-- 风控处置动作归档：Control Service 处置（block/review/mark/throttle/alert/webhook）后写入，
+-- 与 risk_events（Flink 实时命中）通过 risk_event_id 关联，供风控大屏按处置状态统计。
+CREATE TABLE IF NOT EXISTS risk_actions
+(
+  game_id LowCardinality(String),
+  environment LowCardinality(String),
+  ts DateTime64(3),
+  risk_event_id String,
+  risk_case_id String DEFAULT '',
+  rule_id String DEFAULT '',
+  subject_type LowCardinality(String) DEFAULT '',
+  subject_id String DEFAULT '',
+  severity LowCardinality(String) DEFAULT '',
+  action LowCardinality(String),
+  state LowCardinality(String),
+  source LowCardinality(String) DEFAULT 'system',
+  reason String DEFAULT '',
+  detail Map(String, String) DEFAULT map()
+)
+ENGINE = MergeTree
+PARTITION BY (game_id, environment, toYYYYMM(ts))
+ORDER BY (game_id, environment, action, ts, subject_id);

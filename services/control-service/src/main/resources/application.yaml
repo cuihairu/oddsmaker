@@ -91,6 +91,12 @@ oddsmaker:
       require-special-chars: true
       require-numbers: true
 
+  # ClickHouse（风控处置归档 + 大屏指标查询；留空时相关功能降级为不可用）
+  clickhouse:
+    url: ${CLICKHOUSE_URL:}
+    user: ${CLICKHOUSE_USER:default}
+    password: ${CLICKHOUSE_PASSWORD:}
+
 # 监控和健康检查
 management:
   endpoints:

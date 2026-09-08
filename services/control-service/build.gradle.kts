@@ -17,6 +17,9 @@ dependencies {
   // Kafka
   implementation("org.springframework.kafka:spring-kafka")
 
+  // ClickHouse（风控处置归档 risk_actions + 风控大屏指标查询）
+  implementation("com.clickhouse:clickhouse-jdbc:0.6.5")
+
   // JWT authentication
   implementation("io.jsonwebtoken:jjwt-api:0.12.6")
   implementation("io.jsonwebtoken:jjwt-impl:0.12.6")
