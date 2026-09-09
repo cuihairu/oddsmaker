@@ -11,6 +11,7 @@ import io.oddsmaker.gateway.config.JsonSchemaValidator;
 import io.oddsmaker.gateway.config.PiiPolicy;
 import io.oddsmaker.gateway.config.PolicyService;
 import io.oddsmaker.gateway.config.PropsPolicy;
+import io.oddsmaker.gateway.crash.CrashFingerprinter;
 import io.oddsmaker.gateway.kafka.AvroPublisher;
 import io.oddsmaker.gateway.kafka.DlqPublisher;
 import org.springframework.http.MediaType;
@@ -170,6 +171,9 @@ public class BatchController {
                     resp.accepted.add(event.eventId);
                     continue;
                 }
+                // 崩溃指纹：error 类型事件注入 crash_hash/crash_message（SDK 已提供则保留），
+                // 供 ClickHouse v_crash_top_groups 聚合分组；在 PII 清洗后计算保证指纹一致
+                CrashFingerprinter.enrich(event);
                 validEvents.add(event);
             }
 

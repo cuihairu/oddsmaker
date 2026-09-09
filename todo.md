@@ -55,6 +55,16 @@
 - [x] 财报导出：按日/月 ARPU/ARPPU/付费率/DAU/新增/收入/订单指标报表与 CSV 导出（`/api/finance-metrics`，UTF-8 BOM + 导出审计）
 - [x] 报表前端页：留存/付费漏斗/在线/财务四个看板页（零依赖 SVG 折线图 + 漏斗/分组可视化，CH 未配置统一降级提示）
 
+## P6 实验、Crash 和智能化
+
+- [x] 实验平台补齐 SRM：卡方检验（实际分桶 vs 配置权重，正则化不完全 gamma 精确 p 值 + 下溢 clamp），`/api/experiments/{id}/results` 输出总体与分指标 SRM（阈值 0.001）
+- [x] Crash/Error 链路：Gateway CrashFingerprinter 对 error 事件注入 crash_hash（堆栈前 8 帧规范化：去地址/行号/路径漂移，SHA-256 前 16 hex）+ crash_message；符号化引擎（symbol_mappings.mapping_rules 正则规则，V0.8.5）；Crash 聚合 API `/api/crash-metrics`（Top 分组/趋势/版本崩溃率/符号化）+ 前端 Crash 监控页
+- [x] pLTV 预测：D7→D30 乘数法（成熟 cohort 拟合乘数外推未成熟 cohort），`/api/ltv-metrics/{gameId}/pltv`
+- [x] 流失预测：v_user_features_30d 特征 → ChurnScorer 启发式打分（不活跃主因子 + 会话衰减 + 付费缓冲，可解释 reasons）→ 归档 predictions（type=churn，TTL 30 天），`/api/prediction-metrics/{gameId}/churn[/refresh]`
+- [x] 风险评分模型：risk_events 30 天严重度加权聚合 → RiskScorer 模型分归档 predictions（type=risk_model），与规则分（risk_scores）互补
+- [x] Remote Config / LiveOps 联动：游戏级键值配置 CRUD + 环境覆盖解析（环境特定 key 覆盖全环境）+ 聚合版本增量拉取（304），V0.8.6 remote_configs 表
+- [x] 测试覆盖率：引入 JaCoCo（test 后自动生成 XML/HTML/CSV 报告），P5/P6 新代码指令覆盖率 98.3%（control）/96.7%（gateway CrashFingerprinter，剩余为不可达防御分支）
+
 ## 暂停项
 
 - [ ] 不继续实现 Organization/Tenant 相关新功能

@@ -42,6 +42,10 @@ public class SymbolMappingEntity {
     @Column(name = "file_checksum", length = 64)
     public String fileChecksum;
 
+    /** 符号化规则 JSON 数组 [{pattern, replacement}]（正则），混淆堆栈按序替换 */
+    @Column(name = "mapping_rules", columnDefinition = "TEXT")
+    public String mappingRules;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     public MappingStatus status = MappingStatus.ACTIVE;

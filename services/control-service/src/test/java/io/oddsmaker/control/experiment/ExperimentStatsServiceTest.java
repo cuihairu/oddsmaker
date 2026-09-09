@@ -165,6 +165,74 @@ class ExperimentStatsServiceTest {
         assertEquals(0.0228, ExperimentStatsService.twoTailedNormalP(2.28), 1e-3);
     }
 
+    @Test
+    @DisplayName("SRM：均衡样本不检出")
+    void srm_balancedSampleNotDetected() {
+        ExperimentStatsService.SrmResult r = stats.srm(
+            Map.of("control", 50_100L, "treatment", 49_900L),
+            Map.of("control", 1, "treatment", 1));
+        assertEquals(1, r.degreesOfFreedom);
+        assertEquals(100_000L, r.totalSamples);
+        assertTrue(r.pValue > 0.001);
+        assertFalse(r.detected);
+    }
+
+    @Test
+    @DisplayName("SRM：样本比例失衡检出（60/40 vs 期望 50/50）")
+    void srm_skewedSampleDetected() {
+        ExperimentStatsService.SrmResult r = stats.srm(
+            Map.of("control", 30_000L, "treatment", 20_000L),
+            Map.of("control", 1, "treatment", 1));
+        // 卡方 = (5000²/25000)×2 = 2000，p 值下溢 clamp 后仍 < 0.001
+        assertEquals(2000.0, r.chiSquare, 1e-3);
+        assertTrue(r.pValue < 1e-10);
+        assertTrue(r.pValue > 0);
+        assertTrue(r.detected);
+    }
+
+    @Test
+    @DisplayName("SRM：非均衡权重（70/30）被正确识别")
+    void srm_weightedVariantsRespected() {
+        assertFalse(stats.srm(Map.of("a", 7_000L, "b", 3_000L), Map.of("a", 7, "b", 3)).detected);
+        assertTrue(stats.srm(Map.of("a", 5_000L, "b", 5_000L), Map.of("a", 7, "b", 3)).detected);
+    }
+
+    @Test
+    @DisplayName("SRM：单变体/零样本/非法权重返回中性结果")
+    void srm_degenerateInputsReturnNeutralResult() {
+        assertFalse(stats.srm(Map.of("a", 100L), Map.of("a", 1)).detected);
+        ExperimentStatsService.SrmResult empty = stats.srm(Map.of(), Map.of("a", 1));
+        assertFalse(empty.detected);
+        assertEquals(0.0, empty.chiSquare);
+        assertFalse(stats.srm(Map.of("a", 1L, "b", 1L), Map.of("a", 0, "b", -1)).detected);
+    }
+
+    @Test
+    @DisplayName("卡方生存函数与已知分位值一致")
+    void chiSquareSurvival_matchesKnownValues() {
+        assertEquals(0.05, ExperimentStatsService.chiSquareSurvival(3.8415, 1), 1e-3);
+        assertEquals(0.05, ExperimentStatsService.chiSquareSurvival(5.9915, 2), 1e-3);
+        assertEquals(0.0099, ExperimentStatsService.chiSquareSurvival(13.2767, 4), 1e-3);
+        assertEquals(1.0, ExperimentStatsService.chiSquareSurvival(0, 3), 1e-12);
+    }
+
+    @Test
+    @DisplayName("logGamma 与已知值一致（含 x<0.5 反射分支）")
+    void logGamma_matchesKnownValues() {
+        assertEquals(Math.log(Math.sqrt(Math.PI)), ExperimentStatsService.logGamma(0.5), 1e-9);
+        assertEquals(0.0, ExperimentStatsService.logGamma(1.0), 1e-9);
+        assertEquals(Math.log(24.0), ExperimentStatsService.logGamma(5.0), 1e-9);
+        // 0 < x < 0.5 走反射公式分支：Γ(0.25) ≈ 3.6256099
+        assertEquals(1.2880225, ExperimentStatsService.logGamma(0.25), 1e-6);
+    }
+
+    @Test
+    @DisplayName("compare：control 不在 arms 中返回空列表")
+    void compareUnknownControlReturnsEmpty() {
+        var arms = Map.of("a", arm("a", 100, 10));
+        assertTrue(stats.compare("m", "missing", arms).isEmpty());
+    }
+
     private static ExperimentMetricSnapshotEntity snapshot(String metric, String variant,
                                                            long window, long count, long sum, long successes) {
         ExperimentMetricSnapshotEntity e = new ExperimentMetricSnapshotEntity();

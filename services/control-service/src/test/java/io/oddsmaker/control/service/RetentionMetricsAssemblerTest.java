@@ -87,6 +87,9 @@ class RetentionMetricsAssemblerTest {
     void asDate_handlesDateAndTimestamp() {
         assertEquals("2026-09-01", RetentionMetricsAssembler.asDate(Date.valueOf("2026-09-01")));
         assertEquals("2026-09-01", RetentionMetricsAssembler.asDate(java.sql.Timestamp.valueOf("2026-09-01 10:00:00")));
+        assertEquals("2026-09-01", RetentionMetricsAssembler.asDate(java.time.LocalDate.of(2026, 9, 1)));
+        assertEquals("2026-09-01", RetentionMetricsAssembler.asDate(java.time.LocalDateTime.of(2026, 9, 1, 10, 0)));
+        assertEquals("fallback", RetentionMetricsAssembler.asDate("fallback"));
         assertEquals("", RetentionMetricsAssembler.asDate(null));
     }
 }

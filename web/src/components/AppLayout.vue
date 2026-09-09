@@ -17,6 +17,7 @@ const navigation = [
   { name: '付费漏斗', href: '/analytics/payment-funnel', icon: 'funnel' },
   { name: '在线监控', href: '/analytics/online', icon: 'bolt' },
   { name: '财务报表', href: '/analytics/finance', icon: 'dollar' },
+  { name: 'Crash 监控', href: '/analytics/crash', icon: 'bug' },
   { name: '监控', href: '/monitoring', icon: 'chart' },
 ]
 
@@ -38,6 +39,7 @@ const iconPaths = {
   funnel: 'M3 4h18l-7 8v5l-4 3v-8L3 4z',
   bolt: 'M13 10V3L4 14h7v7l9-11h-7z',
   dollar: 'M12 2v20m5-17H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6',
+  bug: 'M12 14l9-5m-9 5l-6 3m6-3v6m0-6L3 9m9 5l6 3M8 3v2m8-2v2M5 8h14a7 7 0 11-14 0z',
 }
 
 function toggleSidebar() {

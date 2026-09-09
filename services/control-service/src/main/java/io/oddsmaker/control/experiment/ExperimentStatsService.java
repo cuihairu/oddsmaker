@@ -60,8 +60,18 @@ public class ExperimentStatsService {
         public boolean lowPowerHint;  // 样本量不足提示
     }
 
+    /** SRM（Sample Ratio Mismatch）卡方检验结果 */
+    public static class SrmResult {
+        public double chiSquare;
+        public int degreesOfFreedom;
+        public long totalSamples;
+        public double pValue;
+        public boolean detected;      // p < 0.001（业界惯例低阈值防误报）
+    }
+
     private static final double Z_95 = 1.959964;  // 97.5 分位
     private static final double ALPHA = 0.05;
+    private static final double SRM_ALPHA = 0.001;
 
     /**
      * 对一个指标执行多变体对比：其余变体逐个与 control 比较。
@@ -139,6 +149,113 @@ public class ExperimentStatsService {
         }
         finalize(c);
         return c;
+    }
+
+    /**
+     * SRM 卡方检验：实际分桶样本量 vs 配置权重期望比例。
+     * H0 = 分桶符合预期；p 值过小说明样本比例失衡（作弊污染/分流故障/数据丢失），
+     * 此时应先排查再解读业务指标。
+     *
+     * @param observedCounts 变体 → 实际样本数
+     * @param expectedWeights 变体 → 期望权重（正数，无需归一）
+     */
+    public SrmResult srm(Map<String, Long> observedCounts, Map<String, Integer> expectedWeights) {
+        SrmResult r = new SrmResult();
+        r.totalSamples = observedCounts.values().stream().mapToLong(Long::longValue).sum();
+        double weightSum = 0;
+        for (Integer w : expectedWeights.values()) {
+            if (w == null || w <= 0) {
+                return r;  // 权重非法：返回 p=0(detected=false) 的空结果
+            }
+            weightSum += w;
+        }
+        if (r.totalSamples <= 0 || observedCounts.size() < 2 || weightSum <= 0) {
+            return r;
+        }
+        double chi2 = 0;
+        for (Map.Entry<String, Long> entry : observedCounts.entrySet()) {
+            Integer weight = expectedWeights.getOrDefault(entry.getKey(), 0);
+            double expected = r.totalSamples * weight / weightSum;
+            if (expected <= 0) {
+                continue;  // 配置外变体（旧数据）不参与
+            }
+            double diff = entry.getValue() - expected;
+            chi2 += diff * diff / expected;
+        }
+        r.chiSquare = chi2;
+        r.degreesOfFreedom = observedCounts.size() - 1;
+        r.pValue = chiSquareSurvival(chi2, r.degreesOfFreedom);
+        r.detected = r.pValue > 0 && r.pValue < SRM_ALPHA;
+        return r;
+    }
+
+    /** 卡方分布生存函数 P(X > x)，df 为自由度：正则化不完全 gamma Q(df/2, x/2)；
+     *  极端偏离时 Q 下溢为 0，clamp 到 1e-300 保证 detected 判定生效 */
+    static double chiSquareSurvival(double x, int df) {
+        if (x <= 0) {
+            return 1.0;
+        }
+        return Math.max(upperGammaQ(df / 2.0, x / 2.0), 1e-300);
+    }
+
+    /** 正则化不完全 gamma 函数 Q(a,x)（Numerical Recipes 连分式/级数实现） */
+    private static double upperGammaQ(double a, double x) {
+        if (x < a + 1.0) {
+            // 级数计算 P(a,x)，再取补
+            double ap = a;
+            double sum = 1.0 / a;
+            double del = sum;
+            for (int i = 0; i < 200; i++) {
+                ap++;
+                del *= x / ap;
+                sum += del;
+                if (Math.abs(del) < Math.abs(sum) * 1e-14) {
+                    break;
+                }
+            }
+            return 1.0 - sum * Math.exp(-x + a * Math.log(x) - logGamma(a));
+        }
+        // 连分式直接计算 Q(a,x)
+        double b = x + 1.0 - a;
+        double c = 1e300;
+        double d = 1.0 / b;
+        double h = d;
+        for (int i = 1; i <= 200; i++) {
+            double an = -i * (i - a);
+            b += 2.0;
+            d = an * d + b;
+            if (Math.abs(d) < 1e-300) {
+                d = 1e-300;
+            }
+            c = b + an / c;
+            if (Math.abs(c) < 1e-300) {
+                c = 1e-300;
+            }
+            d = 1.0 / d;
+            double del = d * c;
+            h *= del;
+            if (Math.abs(del - 1.0) < 1e-14) {
+                break;
+            }
+        }
+        return Math.exp(-x + a * Math.log(x) - logGamma(a)) * h;
+    }
+
+    /** gamma 函数对数（Lanczos 近似） */
+    static double logGamma(double x) {
+        double[] g = {676.5203681218851, -1259.1392167224028, 771.32342877765313,
+            -176.61502916214059, 12.507343278686905, -0.13857109526572012,
+            9.9843695780195716e-6, 1.5056327351493116e-7};
+        if (x < 0.5) {
+            return Math.log(Math.PI / Math.sin(Math.PI * x)) - logGamma(1 - x);
+        }
+        x -= 1;
+        double a = 0.99999999999980993;
+        double t = x + 7.5;
+        for (int i = 0; i < g.length; i++) {
+            a += g[i] / (x + i + 1);
+        }
+        return 0.5 * Math.log(2 * Math.PI) + (x + 0.5) * Math.log(t) - t + Math.log(a);
     }
 
     private Comparison base(String metric, ArmStat control, ArmStat treatment, String testType) {

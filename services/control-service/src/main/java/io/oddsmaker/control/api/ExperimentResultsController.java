@@ -120,6 +120,12 @@ public class ExperimentResultsController {
         Map<String, Map<String, ExperimentStatsService.ArmStat>> byMetric =
             ExperimentStatsService.aggregate(snapshots);
 
+        Map<String, Integer> expectedWeights = new HashMap<>();
+        for (ExperimentSplitter.Variant v : variants) {
+            expectedWeights.put(v.name, v.weight);
+        }
+        Map<String, Long> maxCountsPerVariant = new HashMap<>();
+
         List<Map<String, Object>> metricResults = new ArrayList<>();
         byMetric.forEach((metric, arms) -> {
             List<ExperimentStatsService.Comparison> comparisons =
@@ -128,6 +134,7 @@ public class ExperimentResultsController {
             out.put("metric", metric);
             out.put("control", controlVariant);
             List<Map<String, Object>> armOut = new ArrayList<>();
+            Map<String, Long> armCounts = new HashMap<>();
             arms.forEach((variant, stat) -> {
                 Map<String, Object> a = new HashMap<>();
                 a.put("variant", variant);
@@ -135,9 +142,12 @@ public class ExperimentResultsController {
                 a.put("mean", stat.mean());
                 a.put("rate", stat.rate());
                 armOut.add(a);
+                armCounts.put(variant, stat.count);
+                maxCountsPerVariant.merge(variant, stat.count, Math::max);
             });
             out.put("arms", armOut);
             out.put("comparisons", comparisons);
+            out.put("srm", statsService.srm(armCounts, expectedWeights));
             metricResults.add(out);
         });
 
@@ -145,6 +155,7 @@ public class ExperimentResultsController {
         response.put("experimentId", id);
         response.put("status", experiment.status);
         response.put("control", control);
+        response.put("srm", statsService.srm(maxCountsPerVariant, expectedWeights));
         response.put("metrics", metricResults);
         return ResponseEntity.ok(response);
     }
