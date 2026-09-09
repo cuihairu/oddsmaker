@@ -47,6 +47,14 @@
 - [x] 玩家数据查询：按 playerId 跨游戏基本数据（identity）/充值记录（订单幂等上报）/登录日志
 - [x] 玩家数据导出工具：按 (gameId, playerId) 打包导出（档案/充值/登录/兑换四分区，json 单文件或 csv 分区 zip），sweep 异步生成 + 到期清理 + 全量审计
 
+## P5 报表与数据看板增强
+
+- [x] 留存趋势报表：按天/周/月 cohort 新增用户次留/7留/30留趋势（`/api/retention-metrics`，retention_daily 数据源，D30 仅成熟 cohort 计入汇总）
+- [x] 付费漏斗分析：注册→首充→二充→月留存转化漏斗 + cohort 明细（`/api/payment-metrics`，events + v_user_first_seen）
+- [x] 实时在线监控增强：近 N 分钟独立主体在线数，按平台/版本/渠道（attribution.channel 回退 platform）聚合 + 分钟趋势（`/api/online-metrics`）
+- [x] 财报导出：按日/月 ARPU/ARPPU/付费率/DAU/新增/收入/订单指标报表与 CSV 导出（`/api/finance-metrics`，UTF-8 BOM + 导出审计）
+- [x] 报表前端页：留存/付费漏斗/在线/财务四个看板页（零依赖 SVG 折线图 + 漏斗/分组可视化，CH 未配置统一降级提示）
+
 ## 暂停项
 
 - [ ] 不继续实现 Organization/Tenant 相关新功能

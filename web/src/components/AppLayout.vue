@@ -13,6 +13,10 @@ const navigation = [
   { name: 'API密钥', href: '/api-keys', icon: 'key' },
   { name: '实验管理', href: '/experiments', icon: 'flask' },
   { name: '风控规则', href: '/risk-rules', icon: 'shield' },
+  { name: '留存趋势', href: '/analytics/retention', icon: 'trend' },
+  { name: '付费漏斗', href: '/analytics/payment-funnel', icon: 'funnel' },
+  { name: '在线监控', href: '/analytics/online', icon: 'bolt' },
+  { name: '财务报表', href: '/analytics/finance', icon: 'dollar' },
   { name: '监控', href: '/monitoring', icon: 'chart' },
 ]
 
@@ -30,6 +34,10 @@ const iconPaths = {
   chart: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z',
   users: 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z',
   document: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z',
+  trend: 'M3 17l6-6 4 4 8-8M14 7h7v7',
+  funnel: 'M3 4h18l-7 8v5l-4 3v-8L3 4z',
+  bolt: 'M13 10V3L4 14h7v7l9-11h-7z',
+  dollar: 'M12 2v20m5-17H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6',
 }
 
 function toggleSidebar() {

@@ -65,6 +65,30 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: '/analytics/retention',
+      name: 'retention',
+      component: () => import('@/views/RetentionView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/analytics/payment-funnel',
+      name: 'payment-funnel',
+      component: () => import('@/views/PaymentFunnelView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/analytics/online',
+      name: 'online-monitor',
+      component: () => import('@/views/OnlineView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/analytics/finance',
+      name: 'finance',
+      component: () => import('@/views/FinanceView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
       path: '/:pathMatch(.*)*',
       name: 'not-found',
       component: () => import('@/views/NotFoundView.vue')
