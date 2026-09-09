@@ -97,6 +97,11 @@ oddsmaker:
     user: ${CLICKHOUSE_USER:default}
     password: ${CLICKHOUSE_PASSWORD:}
 
+  # 玩家数据导出（P4）：文件落盘目录与保留时长（到期 cleanup 删除）
+  player-export:
+    storage-dir: ${ODDSMAKER_PLAYER_EXPORT_DIR:data/player-exports}
+    retention-hours: ${ODDSMAKER_PLAYER_EXPORT_RETENTION_HOURS:72}
+
 # 监控和健康检查
 management:
   endpoints:
