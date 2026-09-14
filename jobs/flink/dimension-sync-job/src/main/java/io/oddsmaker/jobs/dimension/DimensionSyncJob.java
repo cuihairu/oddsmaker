@@ -113,34 +113,101 @@ public class DimensionSyncJob {
         env.execute("oddsmaker-dimension-sync");
     }
 
-    private static DimRecord parseProps(String gameId, String environment, String json) {
+    public static DimRecord parseProps(String gameId, String environment, String json) {
         try {
             com.fasterxml.jackson.databind.JsonNode node = new com.fasterxml.jackson.databind.ObjectMapper().readTree(json);
             String dimType = node.path("dim_type").asText(node.path("dimension_type").asText("item"));
-            String id = node.path("resource_id").asText(node.path("level_id").asText(node.path("id").asText("")));
-            if (id.isEmpty()) return null;
+            String id = firstNonEmpty(node, "resource_id", "item_code", "level_id", "id");
+            if (id == null || id.isEmpty()) return null;
             long versionTs = node.path("version_ts").asLong(0);
             Timestamp ts = versionTs > 0 ? new Timestamp(versionTs) : new Timestamp(System.currentTimeMillis());
             DimRecord rec = new DimRecord();
             rec.gameId = gameId;
-            rec.environment = environment;
-            rec.dimType = dimType;
+            rec.environment = normalizeEnv(environment);
+            rec.dimType = normalizeDimType(dimType);
             rec.id = id;
             rec.versionTs = ts;
             com.fasterxml.jackson.databind.JsonNode attrs = node.path("attributes");
             if (attrs.isObject() && attrs.size() > 0) {
-                attrs.fields().forEachRemaining(e -> rec.attributes.put(e.getKey(), e.getValue().asText("")));
+                attrs.fields().forEachRemaining(e -> putAttribute(rec.attributes, e.getKey(), e.getValue().asText("")));
             } else {
                 node.fields().forEachRemaining(e -> {
                     String k = e.getKey();
-                    if (!java.util.Set.of("dim_type", "dimension_type", "resource_id", "level_id", "id", "version_ts", "op", "$identify").contains(k)) {
-                        rec.attributes.put(k, e.getValue().asText(""));
+                    if (!java.util.Set.of("dim_type", "dimension_type", "resource_id", "item_code", "level_id", "id", "version_ts", "op", "$identify").contains(k)) {
+                        putAttribute(rec.attributes, k, e.getValue().asText(""));
                     }
                 });
             }
             return rec;
         } catch (Exception e) {
             return null;
+        }
+    }
+
+    /**
+     * 解析 Debezium CDC envelope（PostgreSQL items/levels 等维度表变更）。
+     * gameId/environment/dimType 传空时回退 payload.source 中的值；op=d 取 before 并标记 isCurrent=false。
+     */
+    public static DimRecord parseDebezium(String json, String gameId, String environment, String dimType) {
+        try {
+            com.fasterxml.jackson.databind.JsonNode payload =
+                new com.fasterxml.jackson.databind.ObjectMapper().readTree(json).path("payload");
+            if (!payload.isObject()) return null;
+            String op = payload.path("op").asText("");
+            com.fasterxml.jackson.databind.JsonNode data =
+                "d".equals(op) ? payload.path("before") : payload.path("after");
+            if (!data.isObject()) return null;
+            com.fasterxml.jackson.databind.JsonNode source = payload.path("source");
+            String gid = gameId != null && !gameId.isEmpty() ? gameId : source.path("game_id").asText("");
+            String env = environment != null && !environment.isEmpty() ? environment : source.path("environment").asText("");
+            String dt = dimType != null && !dimType.isEmpty() ? dimType : normalizeDimType(source.path("table").asText(""));
+            String id = firstNonEmpty(data, "item_code", "resource_id", "level_id", "id");
+            if (gid.isEmpty() || env.isEmpty() || dt.isEmpty() || id == null || id.isEmpty()) return null;
+            DimRecord rec = new DimRecord();
+            rec.gameId = gid;
+            rec.environment = normalizeEnv(env);
+            rec.dimType = dt;
+            rec.id = id;
+            rec.versionTs = new Timestamp(payload.path("ts_ms").asLong(System.currentTimeMillis()));
+            rec.isCurrent = !"d".equals(op);
+            data.fields().forEachRemaining(e -> putAttribute(rec.attributes, e.getKey(), e.getValue().asText("")));
+            return rec;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** 环境名归一化：production → prod，其余原样。 */
+    private static String normalizeEnv(String env) {
+        return "production".equals(env) ? "prod" : env;
+    }
+
+    /** 维度类型/表名归一化：resource/items → item，levels → level，其余原样。 */
+    private static String normalizeDimType(String t) {
+        if (t == null) return "item";
+        return switch (t) {
+            case "resource", "items" -> "item";
+            case "levels" -> "level";
+            default -> t;
+        };
+    }
+
+    /** 依次取第一个非空文本字段。 */
+    private static String firstNonEmpty(com.fasterxml.jackson.databind.JsonNode node, String... keys) {
+        for (String k : keys) {
+            String v = node.path(k).asText("");
+            if (!v.isEmpty()) return v;
+        }
+        return null;
+    }
+
+    /** 属性键归一化：display_name/level_name → name，quality → rarity，level_difficulty → difficulty。 */
+    private static void putAttribute(java.util.Map<String, String> attrs, String key, String value) {
+        switch (key) {
+            case "display_name", "level_name" -> attrs.put("name", value);
+            case "quality" -> attrs.put("rarity", value);
+            case "level_difficulty" -> attrs.put("difficulty", value);
+            default -> attrs.put(key, value);
         }
     }
 
@@ -158,6 +225,7 @@ public class DimensionSyncJob {
         public String dimType = "item";
         public String id;
         public Timestamp versionTs;
+        public boolean isCurrent = true;
         public java.util.Map<String, String> attributes = new java.util.HashMap<>();
     }
 }

@@ -8,19 +8,21 @@ class EventsEnrichJobTest {
 
     @Test
     void fieldReturnsNullForMissingField() {
-        // 创建一个模拟的GenericRecord
-        var record = new org.apache.avro.generic.GenericData.Record(
-            org.apache.avro.Schema.createRecord("TestRecord", null, null, false)
-        );
-        
+        // 创建一个带合法字段的模拟 GenericRecord（schema 未设 fields 时 Avro 拒绝实例化）
+        var schema = org.apache.avro.Schema.createRecord("TestRecord", null, null, false);
+        schema.setFields(java.util.List.of(
+            new org.apache.avro.Schema.Field("game_id",
+                org.apache.avro.Schema.create(org.apache.avro.Schema.Type.STRING))));
+        var record = new org.apache.avro.generic.GenericData.Record(schema);
+
         Object result = EventsEnrichJob.field(record, "nonexistent");
         assertNull(result);
     }
 
     @Test
-    void strReturnsEmptyStringForNull() {
+    void strReturnsNullForNull() {
         String result = EventsEnrichJob.str(null);
-        assertEquals("", result);
+        assertNull(result);
     }
 
     @Test
@@ -67,19 +69,17 @@ class EventsEnrichJobTest {
 
     @Test
     void toDlqJsonReturnsValidJson() {
-        var record = new org.apache.avro.generic.GenericData.Record(
-            org.apache.avro.Schema.createRecord("TestRecord", null, null, false)
-        );
+        // DLQ 最小载荷只含 event_id + reason（与 Gateway DlqPublisher 结构一致）
+        var schema = org.apache.avro.Schema.createRecord("TestRecord", null, null, false);
+        schema.setFields(java.util.List.of(
+            new org.apache.avro.Schema.Field("event_id",
+                org.apache.avro.Schema.create(org.apache.avro.Schema.Type.STRING))));
+        var record = new org.apache.avro.generic.GenericData.Record(schema);
         record.put("event_id", "test_event_123");
-        record.put("game_id", "game_demo");
-        record.put("environment", "prod");
-        
+
         String json = EventsEnrichJob.toDlqJson(record, "invalid_schema");
-        
+
         assertNotNull(json);
-        assertTrue(json.contains("test_event_123"));
-        assertTrue(json.contains("game_demo"));
-        assertTrue(json.contains("prod"));
-        assertTrue(json.contains("invalid_schema"));
+        assertEquals("{\"event_id\":\"test_event_123\",\"reason\":\"invalid_schema\"}", json);
     }
 }

@@ -10,6 +10,8 @@ dependencies {
   implementation("io.apicurio:apicurio-registry-serdes-avro-serde:2.6.5.Final")
   implementation("com.clickhouse:clickhouse-jdbc:0.6.5")
   implementation("com.fasterxml.jackson.core:jackson-databind:2.17.2")
+  testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
 }
 
 tasks.withType<JavaCompile> { options.release.set(21) }
+tasks.named<Test>("test") { useJUnitPlatform() }

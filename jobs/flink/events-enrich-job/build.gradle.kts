@@ -13,6 +13,8 @@ dependencies {
   implementation("com.maxmind.geoip2:geoip2:4.2.0")
   implementation("nl.basjes.parse.useragent:yauaa:7.24.0")
   implementation("com.fasterxml.jackson.core:jackson-databind:2.17.2")
+  testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
 }
 
 tasks.withType<JavaCompile> { options.release.set(21) }
+tasks.named<Test>("test") { useJUnitPlatform() }

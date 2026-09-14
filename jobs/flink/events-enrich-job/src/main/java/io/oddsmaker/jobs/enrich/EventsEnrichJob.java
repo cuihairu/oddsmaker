@@ -241,18 +241,24 @@ public class EventsEnrichJob {
         env.execute("oddsmaker-events-enrich");
     }
 
-    private static String str(Object v) { return v == null ? null : v.toString(); }
+    static String str(Object v) { return v == null ? null : v.toString(); }
     private static String nz(String s) { return s == null ? "" : s; }
-    private static Object field(GenericRecord record, String name) {
+    static Object field(GenericRecord record, String name) {
         if (record == null || record.getSchema() == null || record.getSchema().getField(name) == null) {
             return null;
         }
         return record.get(name);
     }
-    private static Long longOrNull(Object value) {
+    static Long longOrNull(Object value) {
         if (value == null) return null;
         if (value instanceof Number n) return n.longValue();
         try { return Long.parseLong(value.toString()); } catch (Exception e) { return null; }
+    }
+
+    static Double doubleOrNull(Object value) {
+        if (value == null) return null;
+        if (value instanceof Number n) return n.doubleValue();
+        try { return Double.parseDouble(value.toString()); } catch (Exception e) { return null; }
     }
     private static BigDecimal decimalOrZero(Object value) {
         if (value == null) return BigDecimal.ZERO;
@@ -341,7 +347,7 @@ public class EventsEnrichJob {
         }
     }
 
-    private static String toDlqJson(GenericRecord r, String reason) {
+    static String toDlqJson(GenericRecord r, String reason) {
         try {
             Object eventId = field(r, "event_id");
             String id = eventId == null ? "" : eventId.toString();

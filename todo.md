@@ -63,7 +63,7 @@
 - [x] 流失预测：v_user_features_30d 特征 → ChurnScorer 启发式打分（不活跃主因子 + 会话衰减 + 付费缓冲，可解释 reasons）→ 归档 predictions（type=churn，TTL 30 天），`/api/prediction-metrics/{gameId}/churn[/refresh]`
 - [x] 风险评分模型：risk_events 30 天严重度加权聚合 → RiskScorer 模型分归档 predictions（type=risk_model），与规则分（risk_scores）互补
 - [x] Remote Config / LiveOps 联动：游戏级键值配置 CRUD + 环境覆盖解析（环境特定 key 覆盖全环境）+ 聚合版本增量拉取（304），V0.8.6 remote_configs 表
-- [x] 测试覆盖率：引入 JaCoCo（test 后自动生成 XML/HTML/CSV 报告），P5/P6 新代码指令覆盖率 98.3%（control）/96.7%（gateway CrashFingerprinter，剩余为不可达防御分支）
+- [x] 测试覆盖率：引入 JaCoCo（test 后自动生成 XML/HTML/CSV 报告），P5/P6 新代码指令覆盖率 98.3%（control）/96.7%（gateway CrashFingerprinter，剩余为不可达防御分支）；gateway config/kafka 组件包补齐（89.4%/76.3%，剩余为需真实 broker 的初始化分支）
 
 ## 暂停项
 
