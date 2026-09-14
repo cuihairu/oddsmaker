@@ -124,7 +124,7 @@ FROM events
 GROUP BY game_id, environment, event_date;
 
 CREATE OR REPLACE VIEW v_dau_trend AS
-SELECT game_id, environment, event_date, uniqExactMerge(dau) AS dau
+SELECT game_id, environment, event_date, uniqMerge(dau) AS dau
 FROM mv_dau
 GROUP BY game_id, environment, event_date;
 
