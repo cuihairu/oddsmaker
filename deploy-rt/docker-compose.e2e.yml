@@ -200,6 +200,46 @@ services:
       start_period: 30s
     networks: [e2e]
 
+  sessions-job:
+    image: eclipse-temurin:21-jre
+    container_name: e2e-sessions
+    working_dir: /app
+    command: ["java", "-XX:MaxRAMPercentage=70.0",
+              # Flink 1.19 在 Java 17+ 官方要求的模块开放（local executor 无启动脚本代劳）
+              "--add-opens=java.base/java.lang=ALL-UNNAMED",
+              "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
+              "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+              "--add-opens=java.base/java.io=ALL-UNNAMED",
+              "--add-opens=java.base/java.net=ALL-UNNAMED",
+              "--add-opens=java.base/java.nio=ALL-UNNAMED",
+              "--add-opens=java.base/java.util=ALL-UNNAMED",
+              "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
+              "--add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED",
+              "-Dkafka.bootstrap=kafka:9092",
+              "-Dregistry.url=http://apicurio:8080/apis/registry/v2",
+              "-Dkafka.topic=oddsmaker.events_raw",
+              "-Dclickhouse.url=jdbc:clickhouse://clickhouse:8123/default",
+              "-Dclickhouse.user=oddsmaker",
+              "-Dclickhouse.pass=oddsmaker",
+              # e2e 参数：session 窗口 1min、watermark 容差 0，让窗口在秒级验证内 fire
+              # （生产默认 gap=30min、乱序容忍=10min，见 SessionsJob）
+              "-Dsession.gap.minutes=1",
+              "-Dwatermark.ooo.minutes=0",
+              "-jar", "/jars/sessions-job-0.1.0-all.jar"]
+    volumes:
+      - ./jars:/jars:ro
+    depends_on:
+      kafka: { condition: service_healthy }
+      apicurio: { condition: service_healthy }
+      clickhouse: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'sessions-job-0.1.0-all.jar' >/dev/null"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks: [e2e]
+
 volumes:
   e2e_pg_data:
   e2e_ch_data:

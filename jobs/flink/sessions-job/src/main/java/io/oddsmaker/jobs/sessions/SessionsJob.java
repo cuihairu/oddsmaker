@@ -33,12 +33,19 @@ public class SessionsJob {
         String registry = System.getProperty("registry.url", "http://localhost:8081/apis/registry/v2");
         String topic = System.getProperty("kafka.topic", "oddsmaker.events_raw"); // 可切换到 events_enriched
         long gapMinutes = Long.getLong("session.gap.minutes", 30L);
+        // event-time session 窗口只在 watermark 越过 窗口末+gap 后 fire；
+        // 容差越小，无后续事件时落库等待越短。e2e 用 0，生产默认 10 分钟乱序容忍
+        long oooMinutes = Long.getLong("watermark.ooo.minutes", 10L);
 
         String chUrl = System.getProperty("clickhouse.url", "jdbc:clickhouse://localhost:8123/default");
         String chUser = System.getProperty("clickhouse.user", "default");
         String chPass = System.getProperty("clickhouse.pass", "");
 
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // local executor 默认并行度=CPU 核数，而 events_raw 只有 1 个分区：
+        // 多余的空 source subtask 会把全局 watermark 卡死，session 窗口永不 fire。
+        // 显式置 1；集群模式提交时用 flink run -p 覆盖
+        env.setParallelism(1);
 
         KafkaSource<RawEvent> source = KafkaSource.<RawEvent>builder()
                 .setBootstrapServers(bootstrap)
@@ -48,7 +55,7 @@ public class SessionsJob {
                 .setDeserializer(new ApicurioAvroFlinkDeserializer(registry))
                 .build();
 
-        var wm = WatermarkStrategy.<EventLite>forBoundedOutOfOrderness(Duration.ofMinutes(10))
+        var wm = WatermarkStrategy.<EventLite>forBoundedOutOfOrderness(Duration.ofMinutes(oooMinutes))
                 .withTimestampAssigner((SerializableTimestampAssigner<EventLite>) (element, recordTimestamp) -> element.eventTimeMs);
 
         DataStream<EventLite> events = env.fromSource(source, WatermarkStrategy.noWatermarks(), "events-raw")
@@ -56,7 +63,12 @@ public class SessionsJob {
                 .assignTimestampsAndWatermarks(wm);
 
         events
-                .keyBy(e -> Tuple3.of(e.gameId, e.environment, e.userOrDeviceId()))
+                // Tuple3 泛型在 lambda 中被擦除，需显式提供 key 类型信息
+                .keyBy(e -> Tuple3.of(e.gameId, e.environment, e.userOrDeviceId()),
+                        org.apache.flink.api.common.typeinfo.Types.TUPLE(
+                                org.apache.flink.api.common.typeinfo.Types.STRING,
+                                org.apache.flink.api.common.typeinfo.Types.STRING,
+                                org.apache.flink.api.common.typeinfo.Types.STRING))
                 .window(EventTimeSessionWindows.withGap(Time.minutes(gapMinutes)))
                 .process(new BuildSession())
                 .addSink(JdbcSink.sink(

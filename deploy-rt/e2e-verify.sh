@@ -115,6 +115,35 @@ done
 DLQ_N=$(dlq_count)
 [ "${DLQ_N:-0}" -eq "${DLQ_BASE:-0}" ] && ok "no new deadletter after flink verification" || bad "deadletter grew to $DLQ_N"
 
+section "9. Flink sessions 聚合落库（events_raw → session window → ClickHouse）"
+# session 窗口（e2e gap=1min、watermark 容差=0）只在后续事件把 watermark 推过 窗口末+gap 后 fire：
+# 先发同 device 两条（批1），等 gap+缓冲，再发一条（批2）推进 watermark，前一个窗口才落库
+SESSIONS_OK=0
+for attempt in 1 2; do
+  DID="verify_sess_$(date +%s)_$attempt"
+  TS=$(date +%s000)
+  B1=$(printf '{"event_id":"verify_ses_a_%s","event_type":"progression","event_name":"level_start","game_id":"e2e_game","environment":"dev","device_id":"%s","ts_client":%s}\n{"event_id":"verify_ses_b_%s","event_type":"progression","event_name":"level_end","game_id":"e2e_game","environment":"dev","device_id":"%s","ts_client":%s}' "$attempt" "$DID" "$TS" "$attempt" "$DID" "$((TS+2000))")
+  R1=$(printf '%s' "$B1" | curl -sS -X POST "$GW/v1/batch" -H "x-api-key: $API_KEY" -H "content-type: application/x-ndjson" --data-binary @- 2>&1)
+  echo "$R1" | grep -q "accepted" || { bad "sessions batch1 not accepted: $R1"; continue; }
+  # 等窗口末（批1 末事件 + gap 60s）过去
+  sleep 66
+  B2=$(printf '{"event_id":"verify_ses_c_%s","event_type":"progression","event_name":"level_start","game_id":"e2e_game","environment":"dev","device_id":"%s","ts_client":%s}' "$attempt" "$DID" "$(date +%s000)")
+  R2=$(printf '%s' "$B2" | curl -sS -X POST "$GW/v1/batch" -H "x-api-key: $API_KEY" -H "content-type: application/x-ndjson" --data-binary @- 2>&1)
+  echo "$R2" | grep -q "accepted" || { bad "sessions batch2 not accepted: $R2"; continue; }
+  for i in $(seq 1 10); do
+    SEVTS=$($CH "http://localhost:18123/?query=select+events+from+sessions+where+device_id='$DID'+limit+1" 2>/dev/null)
+    [ "${SEVTS:-0}" -ge 1 ] && break
+    sleep 2
+  done
+  if [ "${SEVTS:-0}" -ge 1 ]; then
+    echo "  session landed: device=$DID events=$SEVTS"
+    SESSIONS_OK=1
+    break
+  fi
+  echo "  attempt $attempt: session not landed, retrying"
+done
+[ "$SESSIONS_OK" -eq 1 ] && ok "session window fired and landed in ClickHouse" || bad "no session landed in ClickHouse"
+
 echo
 echo "===== RESULT: $PASS passed, $FAIL failed ====="
 exit $FAIL

@@ -16,10 +16,11 @@ dependencies {
   implementation("com.maxmind.geoip2:geoip2:4.2.0")
   implementation("nl.basjes.parse.useragent:yauaa:7.24.0")
   implementation("com.fasterxml.jackson.core:jackson-databind:2.17.2")
-  // local executor 运行日志：yauaa 直依赖 log4j2 API；slf4j(flink) 桥接到 log4j2
+  // local executor 运行日志：yauaa 直依赖 log4j2 API；slf4j-api 依赖树中已被拉到 2.x，
+  // 必须用 slf4j2 的 provider（1.7 binding 会被静默忽略成 NOP 日志）
   implementation("org.apache.logging.log4j:log4j-api:2.23.1")
   runtimeOnly("org.apache.logging.log4j:log4j-core:2.23.1")
-  runtimeOnly("org.apache.logging.log4j:log4j-slf4j-impl:2.23.1")
+  runtimeOnly("org.apache.logging.log4j:log4j-slf4j2-impl:2.23.1")
   testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
 }
 
