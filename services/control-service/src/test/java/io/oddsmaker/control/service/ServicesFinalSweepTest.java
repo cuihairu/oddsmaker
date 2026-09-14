@@ -411,10 +411,10 @@ class ServicesFinalSweepTest {
     @DisplayName("审计：findById 命中返回实体")
     void auditLogFindByIdPresent() {
         AuditLogEntity entity = new AuditLogEntity();
-        entity.id = 9L;
-        lenient().when(auditLogRepo.findById(9L)).thenReturn(Optional.of(entity));
+        entity.id = "9";
+        lenient().when(auditLogRepo.findById("9")).thenReturn(Optional.of(entity));
 
-        assertSame(entity, auditLogService.findById(9L));
+        assertSame(entity, auditLogService.findById("9"));
     }
 
     @Test

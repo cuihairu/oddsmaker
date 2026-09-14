@@ -376,7 +376,7 @@ public class AuditLogService {
     /**
      * 根据ID查找审计日志
      */
-    public AuditLogEntity findById(Long id) {
+    public AuditLogEntity findById(String id) {
         return auditLogRepo.findById(id)
             .orElseThrow(() -> new IllegalArgumentException("Audit log not found: " + id));
     }

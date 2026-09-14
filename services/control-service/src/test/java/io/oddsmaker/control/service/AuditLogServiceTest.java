@@ -78,8 +78,8 @@ class AuditLogServiceTest {
     @Test
     @DisplayName("findById：不存在抛异常")
     void findById() {
-        when(auditLogRepo.findById(1L)).thenReturn(Optional.empty());
+        when(auditLogRepo.findById("1")).thenReturn(Optional.empty());
         org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
-            () -> service.findById(1L));
+            () -> service.findById("1"));
     }
 }

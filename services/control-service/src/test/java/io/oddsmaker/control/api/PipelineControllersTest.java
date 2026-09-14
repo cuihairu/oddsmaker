@@ -381,7 +381,7 @@ class PipelineControllersTest {
         assertEquals(200, auditLogController.getSensitiveLogs(0, 50).getStatusCode().value());
         assertEquals(200, auditLogController.searchLogs("q", 0, 50).getStatusCode().value());
         assertEquals(200, auditLogController.getAuditStatistics(7).getStatusCode().value());
-        assertEquals(404, auditLogController.getAuditLog(1L).getStatusCode().value());
+        assertEquals(404, auditLogController.getAuditLog("1").getStatusCode().value());
         assertEquals(200, auditLogController.cleanupOldLogs(90).getStatusCode().value());
     }
 }

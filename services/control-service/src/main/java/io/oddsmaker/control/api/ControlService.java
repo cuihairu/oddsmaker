@@ -103,16 +103,22 @@ public class ControlService {
     /**
      * 返回 Gateway 校验事件所需的最小凭据视图。
      * 密钥仅能由受服务间认证保护的内部端点读取。
+     * 注意：这里不能用 readOnly 事务——只读模式下 findById 会返回未初始化的
+     * HibernateProxy，直接读公共字段得到 null，导致 gameId 校验误判。
      */
-    @Transactional(readOnly = true)
+    @Transactional
     public Models.InternalApiKeyResp getActiveKeyForGateway(String apiKey) {
-        return keyRepo.findById(apiKey)
+        ApiKeyEntity key = keyRepo.findById(apiKey)
             .filter(ApiKeyEntity::isActive)
-            .flatMap(key -> envRepo.findById(key.environmentId)
-                .filter(environment -> environment.deletedAt == null)
-                .filter(environment -> Objects.equals(environment.gameId, key.gameId))
-                .map(environment -> toInternalDetail(key, environment)))
             .orElse(null);
+        if (key == null) return null;
+
+        GameEnvironmentEntity env = envRepo.findById(key.environmentId)
+            .map(e -> (GameEnvironmentEntity) org.hibernate.Hibernate.unproxy(e))
+            .filter(e -> e.deletedAt == null)
+            .filter(e -> Objects.equals(e.gameId, key.gameId))
+            .orElse(null);
+        return env == null ? null : toInternalDetail(key, env);
     }
 
     public List<Models.KeyDetailResp> listKeys() {

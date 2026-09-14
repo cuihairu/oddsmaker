@@ -223,7 +223,7 @@ public class AuditLogController {
      */
     @GetMapping("/{logId}")
     @PreAuthorize("hasRole('ADMIN') or hasRole('MANAGER')")
-    public ResponseEntity<AuditLogEntity> getAuditLog(@PathVariable Long logId) {
+    public ResponseEntity<AuditLogEntity> getAuditLog(@PathVariable String logId) {
         return auditLogRepo.findById(logId)
             .map(ResponseEntity::ok)
             .orElse(ResponseEntity.notFound().build());

@@ -137,7 +137,16 @@ public class PiiPolicy {
                         return InetAddress.getByAddress(b).getHostAddress();
                     } else {
                         String[] parts = ip.split("\\.");
-                        if (parts.length == 4) return parts[0]+"."+parts[1]+"."+parts[2]+".0";
+                        // 显式校验每段 0-255：部分 JDK 对越界段（如 999.999.999.999）
+                        // 不抛 UnknownHostException，会漏过非法 IP 直接做掩码
+                        if (parts.length == 4) {
+                            for (String part : parts) {
+                                int v;
+                                try { v = Integer.parseInt(part); } catch (NumberFormatException e) { return null; }
+                                if (v < 0 || v > 255) return null;
+                            }
+                            return parts[0]+"."+parts[1]+"."+parts[2]+".0";
+                        }
                         return ip;
                     }
                 } catch (Exception e) { return null; }

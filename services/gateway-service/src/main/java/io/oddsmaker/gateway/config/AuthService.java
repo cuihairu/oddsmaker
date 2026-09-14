@@ -2,10 +2,9 @@ package io.oddsmaker.gateway.config;
 
 import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.core.env.Environment;
-import org.springframework.http.MediaType;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
-import org.springframework.web.reactive.function.client.WebClient;
-import reactor.core.publisher.Mono;
 
 import java.time.Instant;
 import java.util.List;
@@ -20,9 +19,13 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 @Component
 public class AuthService {
+    private static final Logger logger = LoggerFactory.getLogger(AuthService.class);
+
     private final Map<String, String> localSecrets;
-    private final WebClient client;
+    private final java.net.http.HttpClient client;
+    private final String controlUrl;
     private final String internalToken;
+    private final com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
     private final ConcurrentHashMap<String, CacheEntry> cache = new ConcurrentHashMap<>();
 
     static class CacheEntry {
@@ -78,9 +81,11 @@ public class AuthService {
 
     public AuthService(Environment env) {
         this.localSecrets = Binder.get(env).bind("oddsmaker.auth.keys", Map.class).orElse(Map.of());
-        String controlUrl = Binder.get(env).bind("oddsmaker.control.url", String.class).orElse(null);
+        this.controlUrl = Binder.get(env).bind("oddsmaker.control.url", String.class).orElse(null);
         this.internalToken = Binder.get(env).bind("oddsmaker.control.internal-token", String.class).orElse("");
-        this.client = controlUrl == null ? null : WebClient.builder().baseUrl(controlUrl).build();
+        this.client = java.net.http.HttpClient.newBuilder()
+            .connectTimeout(java.time.Duration.ofSeconds(2))
+            .build();
     }
 
     public ApiKeyContext getContext(String apiKey) {
@@ -114,20 +119,32 @@ public class AuthService {
         return local;
     }
 
+    /**
+     * 从 Control 拉取 key 上下文。HmacFilter 跑在 reactor 事件循环上，
+     * WebClient.block() 会被 reactor 禁止（"blocking not supported in thread reactor-http"），
+     * 因此这里用 JDK 同步客户端：60s 缓存之下，3s 上限的一次同步调用可接受。
+     */
     private ApiKeyContext fetchRemoteContext(String apiKey) {
-        if (client == null || internalToken == null || internalToken.isBlank()) {
+        if (controlUrl == null || controlUrl.isBlank() || internalToken == null || internalToken.isBlank()) {
             return null;
         }
         try {
-            return client.get()
-                .uri("/internal/api-keys/{apiKey}", apiKey)
+            java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()
+                .uri(java.net.URI.create(controlUrl + "/internal/api-keys/" + apiKey))
                 .header("x-internal-token", internalToken)
-                .accept(MediaType.APPLICATION_JSON)
-                .retrieve()
-                .bodyToMono(ApiKeyContext.class)
-                .onErrorResume(error -> Mono.empty())
-                .block();
-        } catch (Exception ignored) {
+                .header("Accept", "application/json")
+                .timeout(java.time.Duration.ofSeconds(3))
+                .GET()
+                .build();
+            java.net.http.HttpResponse<String> response =
+                client.send(request, java.net.http.HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() != 200) {
+                logger.warn("Remote key lookup failed for {}: HTTP {}", apiKey, response.statusCode());
+                return null;
+            }
+            return mapper.readValue(response.body(), ApiKeyContext.class);
+        } catch (Exception e) {
+            logger.warn("Remote key lookup error for {}: {}", apiKey, e.toString());
             return null;
         }
     }
