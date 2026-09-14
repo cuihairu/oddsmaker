@@ -101,13 +101,11 @@ services:
       - e2e_ctrl_data:/app/data
     ports: ["8085:8085", "8086:8086"]
     environment:
-      # 双配置文件（application.yaml=H2 / application.yml=PG）打架，这里全部显式覆盖
+      # 配置已合并为单一 application.yaml（PG 默认）；以下显式声明部署值，与容器内地址对齐
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/oddsmaker
-      SPRING_DATASOURCE_DRIVER_CLASS_NAME: org.postgresql.Driver
       SPRING_DATASOURCE_USERNAME: oddsmaker
       SPRING_DATASOURCE_PASSWORD: oddsmaker
       SPRING_JPA_HIBERNATE_DDL_AUTO: none
-      SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT: org.hibernate.dialect.PostgreSQLDialect
       SPRING_FLYWAY_ENABLED: "true"
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092

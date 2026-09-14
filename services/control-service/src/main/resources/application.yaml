@@ -5,43 +5,35 @@ spring:
   application:
     name: control-service
 
-  # 数据库配置
+  # 数据库配置：PostgreSQL 为默认（与 deploy-rt 编排一致）。
+  # 历史上本目录曾同时存在 application.yaml（H2）与 application.yml（PG），
+  # 不同键的覆盖关系不确定、全靠环境变量压制；现已合并为这一个文件。
   datasource:
-    # 开发环境：使用H2内存数据库
-    url: jdbc:h2:file:./var/controldb;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;AUTO_SERVER=true
-    driverClassName: org.h2.Driver
-    username: sa
-    password:
-
-    # 生产环境配置示例（通过环境变量覆盖）
-    # url: jdbc:postgresql://localhost:5432/oddsmaker_control
-    # driverClassName: org.postgresql.Driver
-    # username: ${DB_USERNAME:oddsmaker_user}
-    # password: ${DB_PASSWORD:oddsmaker_password}
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:oddsmaker}
+    driver-class-name: org.postgresql.Driver
+    username: ${DB_USERNAME:oddsmaker}
+    password: ${DB_PASSWORD:oddsmaker}
 
   jpa:
+    # Schema 唯一真源是 Flyway 迁移；ddl-auto=update 会掩盖迁移缺列
+    # （funnel_steps 后续迁移补 NOT NULL 列即实锤），故关闭。
     hibernate:
-      ddl-auto: update  # 开发环境自动更新表结构
-      # ddl-auto: validate  # 生产环境建议使用validate
+      ddl-auto: none
     open-in-view: false
     properties:
       hibernate:
         jdbc:
           time_zone: UTC
-        dialect: org.hibernate.dialect.H2Dialect  # 开发环境
-        # dialect: org.hibernate.dialect.PostgreSQLDialect  # 生产环境
+        # dialect 不显式指定：由 Hibernate 按连接自动检测（显式指定触发 HHH90000025 弃用警告）
         format_sql: true
-        show_sql: false  # 设为true可在开发时查看SQL
+        show_sql: false
     show-sql: false
 
-  # 多环境配置支持
-  profiles:
-    active: ${SPRING_PROFILES_ACTIVE:development}
-
   flyway:
-    enabled: false
+    enabled: true
+    locations: classpath:db/migration
 
-  # 安全配置
+  # 安全配置（Spring Boot 默认用户，供 actuator 等基础认证兜底）
   security:
     user:
       name: admin
@@ -119,9 +111,9 @@ management:
 # 日志配置
 logging:
   level:
-    io.oddsmaker: DEBUG                      # 开发环境详细日志
-    org.springframework.security: DEBUG
-    org.hibernate.SQL: DEBUG
+    io.oddsmaker: INFO
+    org.springframework.security: INFO
+    org.hibernate.SQL: WARN
   pattern:
     console: "%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
     file: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
@@ -135,7 +127,7 @@ spring:
 
   datasource:
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:oddsmaker_control}
-    driverClassName: org.postgresql.Driver
+    driver-class-name: org.postgresql.Driver
     username: ${DB_USERNAME:oddsmaker_user}
     password: ${DB_PASSWORD}
     hikari:
@@ -145,15 +137,11 @@ spring:
       idle-timeout: 600000
       max-lifetime: 1800000
 
-  flyway:
-    enabled: true
-
   jpa:
     hibernate:
       ddl-auto: validate               # 生产环境不自动修改表结构
     properties:
       hibernate:
-        dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: false
         show_sql: false
     show-sql: false
@@ -167,7 +155,7 @@ logging:
     name: /var/log/oddsmaker/control-service.log
 
 ---
-# 测试环境配置
+# 测试环境配置（H2 内存库，配合 SPRING_PROFILES_ACTIVE=test 使用；H2 为 runtimeOnly 依赖）
 spring:
   config:
     activate:
@@ -175,16 +163,18 @@ spring:
 
   datasource:
     url: jdbc:h2:mem:testdb;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
-    driverClassName: org.h2.Driver
+    driver-class-name: org.h2.Driver
     username: sa
     password:
+
+  flyway:
+    enabled: false
 
   jpa:
     hibernate:
       ddl-auto: create-drop            # 测试环境每次重新创建表
     properties:
       hibernate:
-        dialect: org.hibernate.dialect.H2Dialect
         format_sql: true
         show_sql: true
 
