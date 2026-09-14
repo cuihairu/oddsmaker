@@ -61,7 +61,7 @@ public class ModelTrainingEntity {
     @Column(name = "training_epochs", columnDefinition = "INTEGER")
     public Integer trainingEpochs;  // 训练轮数
 
-    @Column(name = "current_epoch", columnDefinition = "INTEGER DEFAULT 0")
+    @Column(name = "current_epoch", columnDefinition = "INTEGER")
     public Integer currentEpoch = 0;  // 当前轮数
 
     @Column(name = "batch_size", columnDefinition = "INTEGER")
@@ -70,13 +70,13 @@ public class ModelTrainingEntity {
     @Column(name = "learning_rate", columnDefinition = "DECIMAL(10,8)")
     public Double learningRate;  // 学习率
 
-    @Column(name = "training_samples", columnDefinition = "BIGINT DEFAULT 0")
+    @Column(name = "training_samples", columnDefinition = "BIGINT")
     public Long trainingSamples = 0L;  // 训练样本数
 
-    @Column(name = "validation_samples", columnDefinition = "BIGINT DEFAULT 0")
+    @Column(name = "validation_samples", columnDefinition = "BIGINT")
     public Long validationSamples = 0L;  // 验证样本数
 
-    @Column(name = "test_samples", columnDefinition = "BIGINT DEFAULT 0")
+    @Column(name = "test_samples", columnDefinition = "BIGINT")
     public Long testSamples = 0L;  // 测试样本数
 
     @Column(name = "training_metrics", columnDefinition = "TEXT")
@@ -127,7 +127,7 @@ public class ModelTrainingEntity {
     @Column(name = "error_stack_trace", columnDefinition = "TEXT")
     public String errorStackTrace;  // 错误堆栈
 
-    @Column(name = "progress_percent", columnDefinition = "INTEGER DEFAULT 0")
+    @Column(name = "progress_percent", columnDefinition = "INTEGER")
     public Integer progressPercent = 0;  // 进度百分比
 
     @Column(name = "eta_minutes", columnDefinition = "INTEGER")

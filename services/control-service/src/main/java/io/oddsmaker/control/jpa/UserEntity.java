@@ -80,12 +80,6 @@ public class UserEntity {
     public Long loginCount = 0L;
 
     /**
-     * 时区
-     */
-    @Column(length = 50)
-    public String timezone;
-
-    /**
      * 语言
      */
     @Column(length = 10)

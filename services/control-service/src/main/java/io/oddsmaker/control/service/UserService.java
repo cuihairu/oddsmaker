@@ -106,8 +106,8 @@ public class UserService {
         if (updates.avatar != null) {
             user.avatar = updates.avatar;
         }
-        if (updates.timezone != null) {
-            user.timezone = updates.timezone;
+        if (updates.timeZone != null) {
+            user.timeZone = updates.timeZone;
         }
         if (updates.language != null) {
             user.language = updates.language;

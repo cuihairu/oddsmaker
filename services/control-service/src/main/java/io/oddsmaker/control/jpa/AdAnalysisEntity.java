@@ -62,38 +62,38 @@ public class AdAnalysisEntity {
     public String adPlacement;
 
     // 展示指标
-    @Column(name = "impressions", columnDefinition = "BIGINT DEFAULT 0")
+    @Column(name = "impressions", columnDefinition = "BIGINT")
     public Long impressions = 0L;
 
-    @Column(name = "clicks", columnDefinition = "BIGINT DEFAULT 0")
+    @Column(name = "clicks", columnDefinition = "BIGINT")
     public Long clicks = 0L;
 
-    @Column(name = "rewards", columnDefinition = "BIGINT DEFAULT 0")
+    @Column(name = "rewards", columnDefinition = "BIGINT")
     public Long rewards = 0L;
 
     // 收入指标
-    @Column(name = "revenue", columnDefinition = "DECIMAL(18,4) DEFAULT 0")
+    @Column(name = "revenue", columnDefinition = "DECIMAL(18,4)")
     public Double revenue = 0.0;
 
-    @Column(name = "ecpm", columnDefinition = "DECIMAL(18,4) DEFAULT 0")
+    @Column(name = "ecpm", columnDefinition = "DECIMAL(18,4)")
     public Double ecpm = 0.0;
 
     // 填充率
-    @Column(name = "requests", columnDefinition = "BIGINT DEFAULT 0")
+    @Column(name = "requests", columnDefinition = "BIGINT")
     public Long requests = 0L;
 
-    @Column(name = "fills", columnDefinition = "BIGINT DEFAULT 0")
+    @Column(name = "fills", columnDefinition = "BIGINT")
     public Long fills = 0L;
 
-    @Column(name = "fill_rate", columnDefinition = "DECIMAL(5,4) DEFAULT 0")
+    @Column(name = "fill_rate", columnDefinition = "DECIMAL(5,4)")
     public Double fillRate = 0.0;
 
     // 点击率
-    @Column(name = "ctr", columnDefinition = "DECIMAL(5,4) DEFAULT 0")
+    @Column(name = "ctr", columnDefinition = "DECIMAL(5,4)")
     public Double ctr = 0.0;
 
     // 用户指标
-    @Column(name = "unique_users", columnDefinition = "BIGINT DEFAULT 0")
+    @Column(name = "unique_users", columnDefinition = "BIGINT")
     public Long uniqueUsers = 0L;
 
     @Column(name = "platform", length = 30)

@@ -51,7 +51,7 @@ public class MFAConfigEntity {
     @Enumerated(EnumType.STRING)
     public MFAStatus mfaStatus = MFAStatus.DISABLED;
 
-    @Column(name = "is_primary", columnDefinition = "BOOLEAN DEFAULT false")
+    @Column(name = "is_primary", columnDefinition = "BOOLEAN")
     public Boolean isPrimary = false;  // 是否为主要方法
 
     @Column(name = "secret_key", length = 100)
@@ -72,7 +72,7 @@ public class MFAConfigEntity {
     @Column(name = "device_name", length = 100)
     public String deviceName;  // 设备名称
 
-    @Column(name = "verification_attempts", columnDefinition = "INTEGER DEFAULT 0")
+    @Column(name = "verification_attempts", columnDefinition = "INTEGER")
     public Integer verificationAttempts = 0;  // 验证尝试次数
 
     @Column(name = "last_verified_at")

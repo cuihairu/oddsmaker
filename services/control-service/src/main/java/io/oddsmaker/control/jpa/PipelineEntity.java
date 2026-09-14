@@ -59,7 +59,7 @@ public class PipelineEntity {
     @Column(name = "description", length = 500)
     public String description;  // 描述
 
-    @Column(name = "version", columnDefinition = "INTEGER DEFAULT 1")
+    @Column(name = "version", columnDefinition = "INTEGER")
     public Integer version = 1;  // 管道版本
 
     @Column(name = "source_config", columnDefinition = "TEXT")
@@ -86,16 +86,16 @@ public class PipelineEntity {
     @Column(name = "partition_config", columnDefinition = "TEXT")
     public String partitionConfig;  // JSON格式的分区配置
 
-    @Column(name = "priority", columnDefinition = "INTEGER DEFAULT 5")
+    @Column(name = "priority", columnDefinition = "INTEGER")
     public Integer priority = 5;  // 优先级（1-10）
 
-    @Column(name = "max_retries", columnDefinition = "INTEGER DEFAULT 3")
+    @Column(name = "max_retries", columnDefinition = "INTEGER")
     public Integer maxRetries = 3;  // 最大重试次数
 
-    @Column(name = "timeout_seconds", columnDefinition = "INTEGER DEFAULT 3600")
+    @Column(name = "timeout_seconds", columnDefinition = "INTEGER")
     public Integer timeoutSeconds = 3600;  // 超时时间（秒）
 
-    @Column(name = "enabled", columnDefinition = "BOOLEAN DEFAULT true")
+    @Column(name = "enabled", columnDefinition = "BOOLEAN")
     public Boolean enabled = true;  // 是否启用
 
     @Column(name = "last_run_at")
@@ -107,13 +107,13 @@ public class PipelineEntity {
     @Column(name = "last_failure_at")
     public LocalDateTime lastFailureAt;  // 最后失败时间
 
-    @Column(name = "run_count", columnDefinition = "INTEGER DEFAULT 0")
+    @Column(name = "run_count", columnDefinition = "INTEGER")
     public Integer runCount = 0;  // 运行次数
 
-    @Column(name = "success_count", columnDefinition = "INTEGER DEFAULT 0")
+    @Column(name = "success_count", columnDefinition = "INTEGER")
     public Integer successCount = 0;  // 成功次数
 
-    @Column(name = "failure_count", columnDefinition = "INTEGER DEFAULT 0")
+    @Column(name = "failure_count", columnDefinition = "INTEGER")
     public Integer failureCount = 0;  // 失败次数
 
     @Column(name = "last_error", columnDefinition = "TEXT")

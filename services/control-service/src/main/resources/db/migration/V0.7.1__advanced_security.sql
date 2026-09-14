@@ -197,13 +197,3 @@ CREATE INDEX idx_security_policies_deleted_at ON security_policies(deleted_at);
 CREATE INDEX idx_security_policies_active ON security_policies(policy_type, policy_scope, enabled) WHERE enabled = true AND deleted_at IS NULL;
 
 -- Insert example MFA configs
-INSERT INTO mfa_configs (id, user_id, mfa_method, mfa_status, is_primary, enrolled_at) VALUES
-('mfa_1', 'user_1', 'TOTP', 'ENABLED', true, NOW() - INTERVAL '30 days'),
-('mfa_2', 'user_1', 'SMS', 'ENABLED', false, NOW() - INTERVAL '15 days'),
-('mfa_3', 'user_2', 'TOTP', 'ENABLED', true, NOW() - INTERVAL '7 days');
-
--- Insert example security policies
-INSERT INTO security_policies (id, policy_type, policy_scope, policy_name, enabled, priority, mfa_required, min_password_length, password_expiry_days) VALUES
-('sp_1', 'PASSWORD', 'GLOBAL', 'Global Password Policy', true, 100, false, 8, 90),
-('sp_2', 'SESSION', 'GLOBAL', 'Global Session Policy', true, 100, false, 30, 480),
-('sp_3', 'MFA', 'GLOBAL', 'Global MFA Policy', true, 100, false, 0, 0);

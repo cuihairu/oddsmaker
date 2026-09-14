@@ -78,7 +78,7 @@ public class HealthMetricEntity {
     @Column(name = "critical_threshold", columnDefinition = "DECIMAL(20,4)")
     public Double criticalThreshold;  // 严重阈值
 
-    @Column(name = "is_anomaly", columnDefinition = "BOOLEAN DEFAULT false")
+    @Column(name = "is_anomaly", columnDefinition = "BOOLEAN")
     public Boolean isAnomaly = false;  // 是否为异常值
 
     @Column(name = "tags", columnDefinition = "TEXT")

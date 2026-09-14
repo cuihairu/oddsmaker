@@ -59,46 +59,46 @@ public class TelemetryConfigEntity {
     @Column(name = "description", length = 500)
     public String description;  // 描述
 
-    @Column(name = "is_default", columnDefinition = "BOOLEAN DEFAULT false")
+    @Column(name = "is_default", columnDefinition = "BOOLEAN")
     public Boolean isDefault = false;  // 是否为默认配置
 
-    @Column(name = "priority", columnDefinition = "INTEGER DEFAULT 100")
+    @Column(name = "priority", columnDefinition = "INTEGER")
     public Integer priority = 100;  // 优先级（数字越小优先级越高）
 
     // 事件交付配置
     @Column(name = "delivery_mode", length = 30)
     public String deliveryMode;  // 交付模式：REALTIME, BATCH, HYBRID
 
-    @Column(name = "batch_size", columnDefinition = "INTEGER DEFAULT 500")
+    @Column(name = "batch_size", columnDefinition = "INTEGER")
     public Integer batchSize = 500;  // 批量大小
 
-    @Column(name = "batch_interval_ms", columnDefinition = "INTEGER DEFAULT 3000")
+    @Column(name = "batch_interval_ms", columnDefinition = "INTEGER")
     public Integer batchIntervalMs = 3000;  // 批量间隔（毫秒）
 
-    @Column(name = "max_queue_size", columnDefinition = "INTEGER DEFAULT 10000")
+    @Column(name = "max_queue_size", columnDefinition = "INTEGER")
     public Integer maxQueueSize = 10000;  // 最大队列大小
 
-    @Column(name = "flush_on_background", columnDefinition = "BOOLEAN DEFAULT true")
+    @Column(name = "flush_on_background", columnDefinition = "BOOLEAN")
     public Boolean flushOnBackground = true;  // 后台时刷新
 
-    @Column(name = "flush_on_app_close", columnDefinition = "BOOLEAN DEFAULT true")
+    @Column(name = "flush_on_app_close", columnDefinition = "BOOLEAN")
     public Boolean flushOnAppClose = true;  // 应用关闭时刷新
 
     // 压缩配置
-    @Column(name = "enable_compression", columnDefinition = "BOOLEAN DEFAULT true")
+    @Column(name = "enable_compression", columnDefinition = "BOOLEAN")
     public Boolean enableCompression = true;  // 启用压缩
 
     @Column(name = "compression_algorithm", length = 30)
     public String compressionAlgorithm = "GZIP";  // 压缩算法
 
-    @Column(name = "compression_level", columnDefinition = "INTEGER DEFAULT 6")
+    @Column(name = "compression_level", columnDefinition = "INTEGER")
     public Integer compressionLevel = 6;  // 压缩级别
 
-    @Column(name = "compression_threshold_bytes", columnDefinition = "INTEGER DEFAULT 1024")
+    @Column(name = "compression_threshold_bytes", columnDefinition = "INTEGER")
     public Integer compressionThresholdBytes = 1024;  // 压缩阈值
 
     // 加密配置
-    @Column(name = "enable_encryption", columnDefinition = "BOOLEAN DEFAULT false")
+    @Column(name = "enable_encryption", columnDefinition = "BOOLEAN")
     public Boolean enableEncryption = false;  // 启用加密
 
     @Column(name = "encryption_algorithm", length = 50)
@@ -108,58 +108,58 @@ public class TelemetryConfigEntity {
     public String encryptionKeyId;  // 加密密钥ID
 
     // 重试配置
-    @Column(name = "max_retries", columnDefinition = "INTEGER DEFAULT 3")
+    @Column(name = "max_retries", columnDefinition = "INTEGER")
     public Integer maxRetries = 3;  // 最大重试次数
 
-    @Column(name = "retry_interval_ms", columnDefinition = "INTEGER DEFAULT 1000")
+    @Column(name = "retry_interval_ms", columnDefinition = "INTEGER")
     public Integer retryIntervalMs = 1000;  // 重试间隔（毫秒）
 
-    @Column(name = "retry_backoff_multiplier", columnDefinition = "DECIMAL(5,2) DEFAULT 2.0")
+    @Column(name = "retry_backoff_multiplier", columnDefinition = "DECIMAL(5,2)")
     public Double retryBackoffMultiplier = 2.0;  // 重试退避乘数
 
-    @Column(name = "max_retry_interval_ms", columnDefinition = "INTEGER DEFAULT 30000")
+    @Column(name = "max_retry_interval_ms", columnDefinition = "INTEGER")
     public Integer maxRetryIntervalMs = 30000;  // 最大重试间隔
 
     @Column(name = "retry_on_status_codes", length = 100)
     public String retryOnStatusCodes;  // 重试的状态码列表
 
     // 离线配置
-    @Column(name = "enable_offline_storage", columnDefinition = "BOOLEAN DEFAULT true")
+    @Column(name = "enable_offline_storage", columnDefinition = "BOOLEAN")
     public Boolean enableOfflineStorage = true;  // 启用离线存储
 
-    @Column(name = "offline_storage_max_mb", columnDefinition = "INTEGER DEFAULT 50")
+    @Column(name = "offline_storage_max_mb", columnDefinition = "INTEGER")
     public Integer offlineStorageMaxMb = 50;  // 离线存储最大大小（MB）
 
-    @Column(name = "offline_storage_ttl_hours", columnDefinition = "INTEGER DEFAULT 72")
+    @Column(name = "offline_storage_ttl_hours", columnDefinition = "INTEGER")
     public Integer offlineStorageTtlHours = 72;  // 离线存储TTL（小时）
 
-    @Column(name = "offline_batch_size", columnDefinition = "INTEGER DEFAULT 100")
+    @Column(name = "offline_batch_size", columnDefinition = "INTEGER")
     public Integer offlineBatchSize = 100;  // 离线批量大小
 
     // 监控配置
-    @Column(name = "enable_telemetry", columnDefinition = "BOOLEAN DEFAULT true")
+    @Column(name = "enable_telemetry", columnDefinition = "BOOLEAN")
     public Boolean enableTelemetry = true;  // 启用SDK遥测
 
-    @Column(name = "telemetry_interval_ms", columnDefinition = "INTEGER DEFAULT 60000")
+    @Column(name = "telemetry_interval_ms", columnDefinition = "INTEGER")
     public Integer telemetryIntervalMs = 60000;  // 遥测间隔（毫秒）
 
-    @Column(name = "report_errors", columnDefinition = "BOOLEAN DEFAULT true")
+    @Column(name = "report_errors", columnDefinition = "BOOLEAN")
     public Boolean reportErrors = true;  // 报告错误
 
-    @Column(name = "report_performance", columnDefinition = "BOOLEAN DEFAULT true")
+    @Column(name = "report_performance", columnDefinition = "BOOLEAN")
     public Boolean reportPerformance = true;  // 报告性能指标
 
-    @Column(name = "sample_rate", columnDefinition = "DECIMAL(5,4) DEFAULT 1.0")
+    @Column(name = "sample_rate", columnDefinition = "DECIMAL(5,4)")
     public Double sampleRate = 1.0;  // 采样率
 
     // 超时配置
-    @Column(name = "connection_timeout_ms", columnDefinition = "INTEGER DEFAULT 10000")
+    @Column(name = "connection_timeout_ms", columnDefinition = "INTEGER")
     public Integer connectionTimeoutMs = 10000;  // 连接超时
 
-    @Column(name = "read_timeout_ms", columnDefinition = "INTEGER DEFAULT 30000")
+    @Column(name = "read_timeout_ms", columnDefinition = "INTEGER")
     public Integer readTimeoutMs = 30000;  // 读取超时
 
-    @Column(name = "write_timeout_ms", columnDefinition = "INTEGER DEFAULT 30000")
+    @Column(name = "write_timeout_ms", columnDefinition = "INTEGER")
     public Integer writeTimeoutMs = 30000;  // 写入超时
 
     // 自定义配置

@@ -36,10 +36,10 @@ public class RateLimitUsageEntity {
     @Column(name = "window_end", nullable = false)
     public LocalDateTime windowEnd;  // 窗口结束时间
 
-    @Column(name = "request_count", columnDefinition = "INTEGER DEFAULT 0")
+    @Column(name = "request_count", columnDefinition = "INTEGER")
     public Integer requestCount = 0;  // 请求计数
 
-    @Column(name = "blocked_count", columnDefinition = "INTEGER DEFAULT 0")
+    @Column(name = "blocked_count", columnDefinition = "INTEGER")
     public Integer blockedCount = 0;  // 被阻塞的请求计数
 
     @Column(name = "last_request_at")

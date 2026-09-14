@@ -72,20 +72,20 @@ public class RateLimitEntity {
     @Enumerated(EnumType.STRING)
     public WindowType windowType = WindowType.MINUTE;
 
-    @Column(name = "window_size", columnDefinition = "INTEGER DEFAULT 1")
+    @Column(name = "window_size", columnDefinition = "INTEGER")
     public Integer windowSize = 1;  // 窗口大小（多个窗口）
 
     @Column(name = "algorithm", nullable = false)
     @Enumerated(EnumType.STRING)
     public Algorithm algorithm = Algorithm.SLIDING_WINDOW;
 
-    @Column(name = "burst", columnDefinition = "INTEGER DEFAULT 0")
+    @Column(name = "burst", columnDefinition = "INTEGER")
     public Integer burst = 0;  // 突发流量允许量
 
-    @Column(name = "priority", columnDefinition = "INTEGER DEFAULT 0")
+    @Column(name = "priority", columnDefinition = "INTEGER")
     public Integer priority = 0;  // 优先级（数字越大优先级越高）
 
-    @Column(name = "enabled", columnDefinition = "BOOLEAN DEFAULT true")
+    @Column(name = "enabled", columnDefinition = "BOOLEAN")
     public Boolean enabled = true;
 
     @Column(name = "description", length = 500)

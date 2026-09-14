@@ -71,13 +71,13 @@ public class HealthCheckEntity {
     @Column(name = "threshold_config", columnDefinition = "TEXT")
     public String thresholdConfig;  // JSON格式的阈值配置
 
-    @Column(name = "warning_threshold_ms", columnDefinition = "INTEGER DEFAULT 1000")
+    @Column(name = "warning_threshold_ms", columnDefinition = "INTEGER")
     public Integer warningThresholdMs = 1000;  // 警告阈值（毫秒）
 
-    @Column(name = "critical_threshold_ms", columnDefinition = "INTEGER DEFAULT 5000")
+    @Column(name = "critical_threshold_ms", columnDefinition = "INTEGER")
     public Integer criticalThresholdMs = 5000;  // 严重阈值（毫秒）
 
-    @Column(name = "consecutive_failures", columnDefinition = "INTEGER DEFAULT 0")
+    @Column(name = "consecutive_failures", columnDefinition = "INTEGER")
     public Integer consecutiveFailures = 0;  // 连续失败次数
 
     @Column(name = "last_healthy_at")
@@ -86,16 +86,16 @@ public class HealthCheckEntity {
     @Column(name = "last_unhealthy_at")
     public LocalDateTime lastUnhealthyAt;  // 最后不健康时间
 
-    @Column(name = "total_checks", columnDefinition = "INTEGER DEFAULT 0")
+    @Column(name = "total_checks", columnDefinition = "INTEGER")
     public Integer totalChecks = 0;  // 总检查次数
 
-    @Column(name = "failed_checks", columnDefinition = "INTEGER DEFAULT 0")
+    @Column(name = "failed_checks", columnDefinition = "INTEGER")
     public Integer failedChecks = 0;  // 失败检查次数
 
-    @Column(name = "enabled", columnDefinition = "BOOLEAN DEFAULT true")
+    @Column(name = "enabled", columnDefinition = "BOOLEAN")
     public Boolean enabled = true;
 
-    @Column(name = "check_interval_seconds", columnDefinition = "INTEGER DEFAULT 60")
+    @Column(name = "check_interval_seconds", columnDefinition = "INTEGER")
     public Integer checkIntervalSeconds = 60;  // 检查间隔（秒）
 
     @Column(name = "last_checked_at")

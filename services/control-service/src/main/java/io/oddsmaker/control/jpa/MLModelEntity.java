@@ -57,7 +57,7 @@ public class MLModelEntity {
     @Enumerated(EnumType.STRING)
     public ModelStatus modelStatus = ModelStatus.DRAFT;  // 模型状态
 
-    @Column(name = "version", columnDefinition = "INTEGER DEFAULT 1")
+    @Column(name = "version", columnDefinition = "INTEGER")
     public Integer version = 1;  // 版本号
 
     @Column(name = "description", length = 500)
@@ -117,13 +117,13 @@ public class MLModelEntity {
     @Column(name = "baseline_model_id", length = 32)
     public String baselineModelId;  // 基线模型ID
 
-    @Column(name = "is_ab_test", columnDefinition = "BOOLEAN DEFAULT false")
+    @Column(name = "is_ab_test", columnDefinition = "BOOLEAN")
     public Boolean isAbTest = false;  // 是否为A/B测试模型
 
     @Column(name = "ab_test_config", columnDefinition = "TEXT")
     public String abTestConfig;  // JSON格式的A/B测试配置
 
-    @Column(name = "traffic_split", columnDefinition = "INTEGER DEFAULT 0")
+    @Column(name = "traffic_split", columnDefinition = "INTEGER")
     public Integer trafficSplit = 0;  // 流量分配（百分比）
 
     @Column(name = "deployment_config", columnDefinition = "TEXT")
@@ -132,7 +132,7 @@ public class MLModelEntity {
     @Column(name = "serving_endpoint", length = 500)
     public String servingEndpoint;  // 服务端点
 
-    @Column(name = "canaryDeployment", columnDefinition = "BOOLEAN DEFAULT false")
+    @Column(name = "canaryDeployment", columnDefinition = "BOOLEAN")
     public Boolean canaryDeployment = false;  // 金丝雀部署
 
     @Column(name = "monitoring_config", columnDefinition = "TEXT")
@@ -150,7 +150,7 @@ public class MLModelEntity {
     @Column(name = "last_prediction_at")
     public LocalDateTime lastPredictionAt;  // 最后预测时间
 
-    @Column(name = "prediction_count", columnDefinition = "BIGINT DEFAULT 0")
+    @Column(name = "prediction_count", columnDefinition = "BIGINT")
     public Long predictionCount = 0L;  // 预测次数
 
     @Column(name = "created_by", nullable = false, length = 64)

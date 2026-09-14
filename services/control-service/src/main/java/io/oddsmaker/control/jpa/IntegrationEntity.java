@@ -116,22 +116,22 @@ public class IntegrationEntity {
     @Column(name = "last_error", columnDefinition = "TEXT")
     public String lastError;
 
-    @Column(name = "retry_count", columnDefinition = "INTEGER DEFAULT 0")
+    @Column(name = "retry_count", columnDefinition = "INTEGER")
     public Integer retryCount = 0;
 
-    @Column(name = "max_retries", columnDefinition = "INTEGER DEFAULT 3")
+    @Column(name = "max_retries", columnDefinition = "INTEGER")
     public Integer maxRetries = 3;
 
-    @Column(name = "timeout_seconds", columnDefinition = "INTEGER DEFAULT 30")
+    @Column(name = "timeout_seconds", columnDefinition = "INTEGER")
     public Integer timeoutSeconds = 30;
 
-    @Column(name = "enabled", columnDefinition = "BOOLEAN DEFAULT true")
+    @Column(name = "enabled", columnDefinition = "BOOLEAN")
     public Boolean enabled = true;
 
-    @Column(name = "priority", columnDefinition = "INTEGER DEFAULT 0")
+    @Column(name = "priority", columnDefinition = "INTEGER")
     public Integer priority = 0;  // 优先级，数字越大优先级越高
 
-    @Column(name = "version", columnDefinition = "INTEGER DEFAULT 1")
+    @Column(name = "version", columnDefinition = "INTEGER")
     public Integer version = 1;
 
     @Column(name = "created_at", nullable = false)

@@ -14,8 +14,17 @@ import java.time.LocalDateTime;
 public class AuditLogEntity {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    public Long id;
+    public String id;
+
+    /**
+     * 主键生成：迁移定义为 VARCHAR(32)，H2/PG 均无自增，落库前生成 32 位 hex
+     */
+    @jakarta.persistence.PrePersist
+    void generateId() {
+        if (id == null || id.isBlank()) {
+            id = java.util.UUID.randomUUID().toString().replace("-", "");
+        }
+    }
 
     /**
      * 操作用户ID

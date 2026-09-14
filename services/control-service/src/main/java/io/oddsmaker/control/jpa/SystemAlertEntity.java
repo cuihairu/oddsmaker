@@ -122,19 +122,19 @@ public class SystemAlertEntity {
     @Column(name = "resolution_comment", columnDefinition = "TEXT")
     public String resolutionComment;  // 解决备注
 
-    @Column(name = "escalation_level", columnDefinition = "INTEGER DEFAULT 0")
+    @Column(name = "escalation_level", columnDefinition = "INTEGER")
     public Integer escalationLevel = 0;  // 升级级别
 
     @Column(name = "escalated_at")
     public LocalDateTime escalatedAt;  // 升级时间
 
-    @Column(name = "notification_sent", columnDefinition = "BOOLEAN DEFAULT false")
+    @Column(name = "notification_sent", columnDefinition = "BOOLEAN")
     public Boolean notificationSent = false;  // 是否已发送通知
 
     @Column(name = "snoozed_until")
     public LocalDateTime snoozedUntil;  // 暂时忽略直到
 
-    @Column(name = "occurrence_count", columnDefinition = "INTEGER DEFAULT 1")
+    @Column(name = "occurrence_count", columnDefinition = "INTEGER")
     public Integer occurrenceCount = 1;  // 发生次数
 
     @Column(name = "first_occurred_at")

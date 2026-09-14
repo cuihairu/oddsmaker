@@ -50,7 +50,7 @@ public class SSOConfigEntity {
     @Enumerated(EnumType.STRING)
     public SSOStatus ssoStatus = SSOStatus.DISABLED;
 
-    @Column(name = "is_default", columnDefinition = "BOOLEAN DEFAULT false")
+    @Column(name = "is_default", columnDefinition = "BOOLEAN")
     public Boolean isDefault = false;  // 是否为默认SSO
 
     // SAML配置
@@ -125,19 +125,19 @@ public class SSOConfigEntity {
     @Column(name = "allowed_domains", columnDefinition = "TEXT")
     public String allowedDomains;  // JSON格式的允许域名列表
 
-    @Column(name = "auto_provision", columnDefinition = "BOOLEAN DEFAULT false")
+    @Column(name = "auto_provision", columnDefinition = "BOOLEAN")
     public Boolean autoProvision = false;  // 自动创建用户
 
     @Column(name = "auto_provision_role", length = 100)
     public String autoProvisionRole;  // 自动创建用户的默认角色
 
-    @Column(name = "force_authn", columnDefinition = "BOOLEAN DEFAULT false")
+    @Column(name = "force_authn", columnDefinition = "BOOLEAN")
     public Boolean forceAuthn = false;  // 强制重新认证
 
-    @Column(name = "sign_requests", columnDefinition = "BOOLEAN DEFAULT true")
+    @Column(name = "sign_requests", columnDefinition = "BOOLEAN")
     public Boolean signRequests = true;  // 签名请求
 
-    @Column(name = "encrypt_assertions", columnDefinition = "BOOLEAN DEFAULT true")
+    @Column(name = "encrypt_assertions", columnDefinition = "BOOLEAN")
     public Boolean encryptAssertions = true;  // 加密断言
 
     @Column(name = "last_tested_at")

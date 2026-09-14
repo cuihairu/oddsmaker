@@ -14,7 +14,7 @@ import java.util.List;
  * 审计日志数据访问接口
  */
 @Repository
-public interface AuditLogRepo extends JpaRepository<AuditLogEntity, Long> {
+public interface AuditLogRepo extends JpaRepository<AuditLogEntity, String> {
 
     /**
      * 根据用户ID查找审计日志

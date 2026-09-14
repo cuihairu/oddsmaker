@@ -36,44 +36,44 @@ public class SessionAnalysisEntity {
     public LocalDate analysisDate;
 
     // 会话指标
-    @Column(name = "total_sessions", columnDefinition = "BIGINT DEFAULT 0")
+    @Column(name = "total_sessions", columnDefinition = "BIGINT")
     public Long totalSessions = 0L;
 
-    @Column(name = "unique_users", columnDefinition = "BIGINT DEFAULT 0")
+    @Column(name = "unique_users", columnDefinition = "BIGINT")
     public Long uniqueUsers = 0L;
 
     // 时长指标
-    @Column(name = "avg_session_duration", columnDefinition = "BIGINT DEFAULT 0")
+    @Column(name = "avg_session_duration", columnDefinition = "BIGINT")
     public Long avgSessionDuration = 0L;  // 毫秒
 
-    @Column(name = "median_session_duration", columnDefinition = "BIGINT DEFAULT 0")
+    @Column(name = "median_session_duration", columnDefinition = "BIGINT")
     public Long medianSessionDuration = 0L;
 
-    @Column(name = "p95_session_duration", columnDefinition = "BIGINT DEFAULT 0")
+    @Column(name = "p95_session_duration", columnDefinition = "BIGINT")
     public Long p95SessionDuration = 0L;
 
     // 深度指标
-    @Column(name = "avg_events_per_session", columnDefinition = "DECIMAL(10,2) DEFAULT 0")
+    @Column(name = "avg_events_per_session", columnDefinition = "DECIMAL(10,2)")
     public Double avgEventsPerSession = 0.0;
 
-    @Column(name = "avg_pages_per_session", columnDefinition = "DECIMAL(10,2) DEFAULT 0")
+    @Column(name = "avg_pages_per_session", columnDefinition = "DECIMAL(10,2)")
     public Double avgPagesPerSession = 0.0;
 
     // 跳出率
-    @Column(name = "bounce_sessions", columnDefinition = "BIGINT DEFAULT 0")
+    @Column(name = "bounce_sessions", columnDefinition = "BIGINT")
     public Long bounceSessions = 0L;
 
-    @Column(name = "bounce_rate", columnDefinition = "DECIMAL(5,4) DEFAULT 0")
+    @Column(name = "bounce_rate", columnDefinition = "DECIMAL(5,4)")
     public Double bounceRate = 0.0;
 
     // 会话质量分布
-    @Column(name = "high_quality_sessions", columnDefinition = "BIGINT DEFAULT 0")
+    @Column(name = "high_quality_sessions", columnDefinition = "BIGINT")
     public Long highQualitySessions = 0L;
 
-    @Column(name = "medium_quality_sessions", columnDefinition = "BIGINT DEFAULT 0")
+    @Column(name = "medium_quality_sessions", columnDefinition = "BIGINT")
     public Long mediumQualitySessions = 0L;
 
-    @Column(name = "low_quality_sessions", columnDefinition = "BIGINT DEFAULT 0")
+    @Column(name = "low_quality_sessions", columnDefinition = "BIGINT")
     public Long lowQualitySessions = 0L;
 
     // 维度

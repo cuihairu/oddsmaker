@@ -23,7 +23,7 @@ CREATE TABLE rate_limits (
     created_by VARCHAR(64),
     deleted_at TIMESTAMP,
     FOREIGN KEY (game_id) REFERENCES games(id),
-    FOREIGN KEY (api_key_id) REFERENCES api_keys(id)
+    FOREIGN KEY (api_key_id) REFERENCES api_keys(api_key)
 );
 
 -- Indexes for efficient lookups

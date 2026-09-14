@@ -116,7 +116,7 @@ public interface UserRepo extends JpaRepository<UserEntity, String> {
     /**
      * 根据时区查找用户
      */
-    List<UserEntity> findByTimezoneAndDeletedAtIsNull(String timezone);
+    List<UserEntity> findByTimeZoneAndDeletedAtIsNull(String timezone);
 
     /**
      * 根据语言查找用户

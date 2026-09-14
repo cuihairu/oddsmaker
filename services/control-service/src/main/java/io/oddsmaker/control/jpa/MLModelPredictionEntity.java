@@ -92,16 +92,16 @@ public class MLModelPredictionEntity {
     @Column(name = "latency_ms", columnDefinition = "INTEGER")
     public Integer latencyMs;  // 预测延迟（毫秒）
 
-    @Column(name = "is_ab_test", columnDefinition = "BOOLEAN DEFAULT false")
+    @Column(name = "is_ab_test", columnDefinition = "BOOLEAN")
     public Boolean isAbTest = false;  // 是否为A/B测试
 
     @Column(name = "ab_test_group", length = 20)
     public String abTestGroup;  // A/B测试组（control/treatment）
 
-    @Column(name = "is_canary", columnDefinition = "BOOLEAN DEFAULT false")
+    @Column(name = "is_canary", columnDefinition = "BOOLEAN")
     public Boolean isCanary = false;  // 是否为金丝雀请求
 
-    @Column(name = "cache_hit", columnDefinition = "BOOLEAN DEFAULT false")
+    @Column(name = "cache_hit", columnDefinition = "BOOLEAN")
     public Boolean cacheHit = false;  // 是否缓存命中
 
     @Column(name = "feedback_type")

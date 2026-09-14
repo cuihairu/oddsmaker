@@ -136,9 +136,6 @@ public class FunnelAnalysisEntity {
     @JoinColumn(name = "game_id", insertable = false, updatable = false)
     public GameEntity game;
 
-    @OneToMany(mappedBy = "funnelAnalysis", fetch = FetchType.LAZY)
-    public List<FunnelStepEntity> steps;
-
     public enum FunnelType {
         SEQUENTIAL,      // 顺序漏斗：按固定顺序完成
         ANY_ORDER,       // 任意顺序：可以任意顺序完成

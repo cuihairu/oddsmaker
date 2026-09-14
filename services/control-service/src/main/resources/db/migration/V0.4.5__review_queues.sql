@@ -63,8 +63,3 @@ CREATE INDEX idx_review_queues_pending_priority ON review_queues(game_id, priori
 -- Index for SLA monitoring
 CREATE INDEX idx_review_queues_sla_breach ON review_queues(sla_due_at, review_status) WHERE review_status NOT IN ('COMPLETED', 'CANCELLED');
 
--- Insert example review queue items
-INSERT INTO review_queues (id, risk_case_id, game_id, case_number, target_type, target_id, risk_level, priority, review_status, queue_type) VALUES
-('rq_example_1', 'rc_example_1', 'DEFAULT', 'CASE_20260619_001', 'user_id', 'user_suspicious_001', 'HIGH', 70, 'PENDING', 'high_priority'),
-('rq_example_2', 'rc_example_2', 'DEFAULT', 'CASE_20260619_002', 'device_id', 'device_cheat_001', 'MEDIUM', 50, 'ASSIGNED', 'default'),
-('rq_example_3', 'rc_example_3', 'DEFAULT', 'CASE_20260619_003', 'player_id', 'player_abuse_001', 'LOW', 30, 'PENDING', 'default');

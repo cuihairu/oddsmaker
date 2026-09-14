@@ -120,10 +120,10 @@ public class DataQualityRuleEntity {
     @Column(name = "action_on_failure", length = 50)
     public String actionOnFailure;  // 失败时的操作：stop, warn, log, skip
 
-    @Column(name = "sample_size", columnDefinition = "INTEGER DEFAULT 10000")
+    @Column(name = "sample_size", columnDefinition = "INTEGER")
     public Integer sampleSize = 10000;  // 抽样大小
 
-    @Column(name = "enabled", columnDefinition = "BOOLEAN DEFAULT true")
+    @Column(name = "enabled", columnDefinition = "BOOLEAN")
     public Boolean enabled = true;  // 是否启用
 
     @Column(name = "last_evaluated_at")
@@ -132,13 +132,13 @@ public class DataQualityRuleEntity {
     @Column(name = "last_evaluation_result", columnDefinition = "TEXT")
     public String lastEvaluationResult;  // JSON格式的最后评估结果
 
-    @Column(name = "last_violation_count", columnDefinition = "INTEGER DEFAULT 0")
+    @Column(name = "last_violation_count", columnDefinition = "INTEGER")
     public Integer lastViolationCount = 0;  // 最后违规数量
 
-    @Column(name = "total_evaluations", columnDefinition = "INTEGER DEFAULT 0")
+    @Column(name = "total_evaluations", columnDefinition = "INTEGER")
     public Integer totalEvaluations = 0;  // 总评估次数
 
-    @Column(name = "total_violations", columnDefinition = "INTEGER DEFAULT 0")
+    @Column(name = "total_violations", columnDefinition = "INTEGER")
     public Integer totalViolations = 0;  // 总违规次数
 
     @Column(name = "tags", columnDefinition = "TEXT")

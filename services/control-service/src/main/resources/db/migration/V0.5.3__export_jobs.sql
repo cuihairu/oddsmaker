@@ -57,7 +57,3 @@ CREATE INDEX idx_export_jobs_processing ON export_jobs(export_status) WHERE expo
 CREATE INDEX idx_export_jobs_completed ON export_jobs(export_status) WHERE export_status = 'COMPLETED';
 
 -- Insert example export jobs
-INSERT INTO export_jobs (id, game_id, user_id, export_type, export_format, file_name, export_status, total_rows, file_size_bytes) VALUES
-('ex_1', 'DEFAULT', 'user_1', 'events', 'csv', 'events_default_20250619.csv', 'COMPLETED', 50000, 5242880),
-('ex_2', 'DEFAULT', 'user_1', 'users', 'excel', 'users_default_20250619.xlsx', 'COMPLETED', 1000, 2097152),
-('ex_3', 'DEFAULT', 'user_2', 'risk_cases', 'json', 'risk_cases_default_20250619.json', 'PENDING', NULL, NULL);

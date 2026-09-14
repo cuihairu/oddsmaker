@@ -53,19 +53,19 @@ public class SystemConfigEntity {
     @Column(name = "category", length = 100)
     public String category;  // 配置分类
 
-    @Column(name = "is_sensitive", columnDefinition = "BOOLEAN DEFAULT false")
+    @Column(name = "is_sensitive", columnDefinition = "BOOLEAN")
     public Boolean isSensitive = false;  // 是否为敏感信息
 
-    @Column(name = "is_encrypted", columnDefinition = "BOOLEAN DEFAULT false")
+    @Column(name = "is_encrypted", columnDefinition = "BOOLEAN")
     public Boolean isEncrypted = false;  // 是否加密存储
 
-    @Column(name = "is_public", columnDefinition = "BOOLEAN DEFAULT false")
+    @Column(name = "is_public", columnDefinition = "BOOLEAN")
     public Boolean isPublic = false;  // 是否可公开访问
 
-    @Column(name = "is_readonly", columnDefinition = "BOOLEAN DEFAULT false")
+    @Column(name = "is_readonly", columnDefinition = "BOOLEAN")
     public Boolean isReadonly = false;  // 是否只读
 
-    @Column(name = "requires_restart", columnDefinition = "BOOLEAN DEFAULT false")
+    @Column(name = "requires_restart", columnDefinition = "BOOLEAN")
     public Boolean requiresRestart = false;  // 是否需要重启生效
 
     @Column(name = "validation_regex", length = 500)
@@ -80,7 +80,7 @@ public class SystemConfigEntity {
     @Column(name = "allowed_values", columnDefinition = "TEXT")
     public String allowedValues;  // JSON格式的允许值列表
 
-    @Column(name = "version", columnDefinition = "INTEGER DEFAULT 1")
+    @Column(name = "version", columnDefinition = "INTEGER")
     public Integer version = 1;  // 配置版本
 
     @Column(name = "last_modified_by", length = 64)

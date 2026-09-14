@@ -98,13 +98,13 @@ public class MaintenanceWindowEntity {
     @Column(name = "estimated_duration_minutes")
     public Integer estimatedDurationMinutes;  // 预计持续时长（分钟）
 
-    @Column(name = "progress_percent", columnDefinition = "INTEGER DEFAULT 0")
+    @Column(name = "progress_percent", columnDefinition = "INTEGER")
     public Integer progressPercent = 0;  // 进度百分比
 
     @Column(name = "affected_services", columnDefinition = "TEXT")
     public String affectedServices;  // JSON格式的受影响服务列表
 
-    @Column(name = "notification_sent", columnDefinition = "BOOLEAN DEFAULT false")
+    @Column(name = "notification_sent", columnDefinition = "BOOLEAN")
     public Boolean notificationSent = false;  // 是否已发送通知
 
     @Column(name = "notification_sent_at")

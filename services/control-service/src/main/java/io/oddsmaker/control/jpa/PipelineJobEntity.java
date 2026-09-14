@@ -65,13 +65,13 @@ public class PipelineJobEntity {
     @Column(name = "quality_metrics", columnDefinition = "TEXT")
     public String qualityMetrics;  // JSON格式的质量指标
 
-    @Column(name = "processed_rows", columnDefinition = "BIGINT DEFAULT 0")
+    @Column(name = "processed_rows", columnDefinition = "BIGINT")
     public Long processedRows = 0L;  // 处理行数
 
-    @Column(name = "error_rows", columnDefinition = "BIGINT DEFAULT 0")
+    @Column(name = "error_rows", columnDefinition = "BIGINT")
     public Long errorRows = 0L;  // 错误行数
 
-    @Column(name = "skipped_rows", columnDefinition = "BIGINT DEFAULT 0")
+    @Column(name = "skipped_rows", columnDefinition = "BIGINT")
     public Long skippedRows = 0L;  // 跳过行数
 
     @Column(name = "data_source_size_bytes", columnDefinition = "BIGINT")
@@ -92,10 +92,10 @@ public class PipelineJobEntity {
     @Column(name = "queue_time_ms", columnDefinition = "BIGINT")
     public Long queueTimeMs;  // 排队等待时长
 
-    @Column(name = "retry_count", columnDefinition = "INTEGER DEFAULT 0")
+    @Column(name = "retry_count", columnDefinition = "INTEGER")
     public Integer retryCount = 0;  // 重试次数
 
-    @Column(name = "max_retries", columnDefinition = "INTEGER DEFAULT 3")
+    @Column(name = "max_retries", columnDefinition = "INTEGER")
     public Integer maxRetries = 3;  // 最大重试次数
 
     @Column(name = "error_message", columnDefinition = "TEXT")

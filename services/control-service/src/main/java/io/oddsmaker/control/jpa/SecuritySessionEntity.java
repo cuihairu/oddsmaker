@@ -53,7 +53,7 @@ public class SecuritySessionEntity {
     @Enumerated(EnumType.STRING)
     public AuthMethod authMethod = AuthMethod.PASSWORD;
 
-    @Column(name = "mfa_verified", columnDefinition = "BOOLEAN DEFAULT false")
+    @Column(name = "mfa_verified", columnDefinition = "BOOLEAN")
     public Boolean mfaVerified = false;  // MFA是否已验证
 
     @Column(name = "mfa_method")
@@ -99,16 +99,16 @@ public class SecuritySessionEntity {
     @Column(name = "expires_at", nullable = false)
     public LocalDateTime expiresAt;  // 过期时间
 
-    @Column(name = "max_renewal_times", columnDefinition = "INTEGER DEFAULT 0")
+    @Column(name = "max_renewal_times", columnDefinition = "INTEGER")
     public Integer maxRenewalTimes = 0;  // 最大续期次数
 
-    @Column(name = "renewal_count", columnDefinition = "INTEGER DEFAULT 0")
+    @Column(name = "renewal_count", columnDefinition = "INTEGER")
     public Integer renewalCount = 0;  // 续期次数
 
     @Column(name = "concurrent_session_id", length = 32)
     public String concurrentSessionId;  // 并发会话ID（同一用户的同一设备）
 
-    @Column(name = "is_current", columnDefinition = "BOOLEAN DEFAULT false")
+    @Column(name = "is_current", columnDefinition = "BOOLEAN")
     public Boolean isCurrent = false;  // 是否为当前会话
 
     @Column(name = "terminated_by", length = 64)

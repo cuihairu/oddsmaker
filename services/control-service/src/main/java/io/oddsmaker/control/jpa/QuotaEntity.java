@@ -45,28 +45,28 @@ public class QuotaEntity {
     @Column(name = "quota_limit", nullable = false)
     public Long quotaLimit;  // 配额限制
 
-    @Column(name = "current_usage", columnDefinition = "BIGINT DEFAULT 0")
+    @Column(name = "current_usage", columnDefinition = "BIGINT")
     public Long currentUsage = 0L;  // 当前使用量
 
     @Column(name = "usage_percent", columnDefinition = "DECIMAL(5,2)")
     public Double usagePercent;  // 使用百分比（缓存）
 
-    @Column(name = "warning_threshold", columnDefinition = "DECIMAL(5,2) DEFAULT 80.0")
+    @Column(name = "warning_threshold", columnDefinition = "DECIMAL(5,2)")
     public Double warningThreshold = 80.0;  // 警告阈值（百分比）
 
-    @Column(name = "alert_threshold", columnDefinition = "DECIMAL(5,2) DEFAULT 95.0")
+    @Column(name = "alert_threshold", columnDefinition = "DECIMAL(5,2)")
     public Double alertThreshold = 95.0;  // 告警阈值（百分比）
 
-    @Column(name = "warning_sent", columnDefinition = "BOOLEAN DEFAULT false")
+    @Column(name = "warning_sent", columnDefinition = "BOOLEAN")
     public Boolean warningSent = false;  // 是否已发送警告
 
-    @Column(name = "alert_sent", columnDefinition = "BOOLEAN DEFAULT false")
+    @Column(name = "alert_sent", columnDefinition = "BOOLEAN")
     public Boolean alertSent = false;  // 是否已发送告警
 
-    @Column(name = "hard_limit", columnDefinition = "BOOLEAN DEFAULT false")
+    @Column(name = "hard_limit", columnDefinition = "BOOLEAN")
     public Boolean hardLimit = false;  // 是否为硬限制（超出后拒绝请求）
 
-    @Column(name = "grace_period_days", columnDefinition = "INTEGER DEFAULT 0")
+    @Column(name = "grace_period_days", columnDefinition = "INTEGER")
     public Integer gracePeriodDays = 0;  // 宽限期（天）
 
     @Column(name = "reset_at")

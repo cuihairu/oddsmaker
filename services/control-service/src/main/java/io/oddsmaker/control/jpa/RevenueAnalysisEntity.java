@@ -41,40 +41,40 @@ public class RevenueAnalysisEntity {
     public RevenueType revenueType;
 
     // 收入指标
-    @Column(name = "total_revenue", columnDefinition = "DECIMAL(18,4) DEFAULT 0")
+    @Column(name = "total_revenue", columnDefinition = "DECIMAL(18,4)")
     public Double totalRevenue = 0.0;
 
-    @Column(name = "iap_revenue", columnDefinition = "DECIMAL(18,4) DEFAULT 0")
+    @Column(name = "iap_revenue", columnDefinition = "DECIMAL(18,4)")
     public Double iapRevenue = 0.0;
 
-    @Column(name = "ad_revenue", columnDefinition = "DECIMAL(18,4) DEFAULT 0")
+    @Column(name = "ad_revenue", columnDefinition = "DECIMAL(18,4)")
     public Double adRevenue = 0.0;
 
-    @Column(name = "subscription_revenue", columnDefinition = "DECIMAL(18,4) DEFAULT 0")
+    @Column(name = "subscription_revenue", columnDefinition = "DECIMAL(18,4)")
     public Double subscriptionRevenue = 0.0;
 
     // 用户指标
-    @Column(name = "total_users", columnDefinition = "BIGINT DEFAULT 0")
+    @Column(name = "total_users", columnDefinition = "BIGINT")
     public Long totalUsers = 0L;
 
-    @Column(name = "paying_users", columnDefinition = "BIGINT DEFAULT 0")
+    @Column(name = "paying_users", columnDefinition = "BIGINT")
     public Long payingUsers = 0L;
 
-    @Column(name = "new_paying_users", columnDefinition = "BIGINT DEFAULT 0")
+    @Column(name = "new_paying_users", columnDefinition = "BIGINT")
     public Long newPayingUsers = 0L;
 
     // ARPU/ARPPU
-    @Column(name = "arpu", columnDefinition = "DECIMAL(18,4) DEFAULT 0")
+    @Column(name = "arpu", columnDefinition = "DECIMAL(18,4)")
     public Double arpu = 0.0;
 
-    @Column(name = "arppu", columnDefinition = "DECIMAL(18,4) DEFAULT 0")
+    @Column(name = "arppu", columnDefinition = "DECIMAL(18,4)")
     public Double arppu = 0.0;
 
     // 交易指标
-    @Column(name = "total_transactions", columnDefinition = "BIGINT DEFAULT 0")
+    @Column(name = "total_transactions", columnDefinition = "BIGINT")
     public Long totalTransactions = 0L;
 
-    @Column(name = "avg_transaction_value", columnDefinition = "DECIMAL(18,4) DEFAULT 0")
+    @Column(name = "avg_transaction_value", columnDefinition = "DECIMAL(18,4)")
     public Double avgTransactionValue = 0.0;
 
     // 维度

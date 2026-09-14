@@ -82,7 +82,7 @@ public class IntegrationLogEntity {
     @Column(name = "error_stack_trace", columnDefinition = "TEXT")
     public String errorStackTrace;
 
-    @Column(name = "retry_attempt", columnDefinition = "INTEGER DEFAULT 0")
+    @Column(name = "retry_attempt", columnDefinition = "INTEGER")
     public Integer retryAttempt = 0;
 
     @Column(name = "duration_ms", columnDefinition = "BIGINT")

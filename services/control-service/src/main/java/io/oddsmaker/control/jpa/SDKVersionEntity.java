@@ -122,10 +122,10 @@ public class SDKVersionEntity {
     @Column(name = "released_by", length = 64)
     public String releasedBy;  // 发布人
 
-    @Column(name = "total_downloads", columnDefinition = "BIGINT DEFAULT 0")
+    @Column(name = "total_downloads", columnDefinition = "BIGINT")
     public Long totalDownloads = 0L;  // 总下载次数
 
-    @Column(name = "active_installations", columnDefinition = "BIGINT DEFAULT 0")
+    @Column(name = "active_installations", columnDefinition = "BIGINT")
     public Long activeInstallations = 0L;  // 活跃安装数
 
     @Column(name = "created_by", nullable = false, length = 64)

@@ -96,16 +96,18 @@ CREATE INDEX idx_risk_cases_target ON risk_cases(target_type, target_id);
 CREATE INDEX idx_risk_cases_risk_level ON risk_cases(risk_level);
 CREATE INDEX idx_risk_cases_status ON risk_cases(execution_status);
 CREATE INDEX idx_risk_cases_review ON risk_cases(review_status);
-CREATE INDEX idx_risk_cases_created_at ON risk_cases(createdAt DESC);
+CREATE INDEX idx_risk_cases_created_at ON risk_cases(created_at DESC);
 CREATE UNIQUE INDEX idx_risk_cases_number ON risk_cases(case_number);
 
 -- Index for pending execution
 CREATE INDEX idx_risk_cases_pending ON risk_cases(execution_status) WHERE execution_status = 'PENDING';
 
 -- Index for active blocks
-CREATE INDEX idx_risk_cases_active_blocks ON risk_cases(action_type, execution_status, unblocked_at) WHERE action_type = 'BLOCK' AND execution_status = 'EXECUTED' AND (unblocked_at IS NULL OR unblocked_at < executed_at);
+CREATE INDEX idx_risk_cases_active_blocks ON risk_cases(action_taken, execution_status, unblocked_at) WHERE action_taken = 'BLOCK' AND execution_status = 'EXECUTED' AND (unblocked_at IS NULL OR unblocked_at < executed_at);
 
 -- Insert default risk rules for common scenarios
+-- PG 严格外键：先种 DEFAULT 游戏行（H2 开发库中为手工数据，从未纳入迁移）
+INSERT INTO games (id, name, status) VALUES ('DEFAULT', 'Platform Default', 'PUBLISHED') ON CONFLICT (id) DO NOTHING;
 INSERT INTO risk_rules (id, game_id, name, display_name, description, category, rule_type, risk_level, risk_score, action_type, priority, status, rule_conditions, trigger_threshold, time_window_minutes) VALUES
 -- High frequency events (script behavior)
 ('rule_high_freq_events', 'DEFAULT', 'high_frequency_events', 'High Frequency Events', 'Detect abnormally high event frequency from single source', 'BEHAVIOR', 'FREQUENCY', 'HIGH', 75, 'BLOCK', 100, 'ACTIVE', '{"event_count": ">1000", "time_window": "1minute"}', 10, 1),

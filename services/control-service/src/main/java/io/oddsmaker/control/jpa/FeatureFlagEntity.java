@@ -63,10 +63,10 @@ public class FeatureFlagEntity {
     @Column(name = "tags", columnDefinition = "TEXT")
     public String tags;  // JSON格式的标签
 
-    @Column(name = "default_value", columnDefinition = "BOOLEAN DEFAULT false")
+    @Column(name = "default_value", columnDefinition = "BOOLEAN")
     public Boolean defaultValue = false;  // 默认值
 
-    @Column(name = "percentage_value", columnDefinition = "INTEGER DEFAULT 0")
+    @Column(name = "percentage_value", columnDefinition = "INTEGER")
     public Integer percentageValue = 0;  // 百分比值（0-100）
 
     @Column(name = "whitelist_users", columnDefinition = "TEXT")
@@ -96,7 +96,7 @@ public class FeatureFlagEntity {
     @Column(name = "rollout_steps", columnDefinition = "TEXT")
     public String rolloutSteps;  // JSON格式的上线步骤
 
-    @Column(name = "current_step", columnDefinition = "INTEGER DEFAULT 0")
+    @Column(name = "current_step", columnDefinition = "INTEGER")
     public Integer currentStep = 0;  // 当前步骤
 
     @Column(name = "scheduled_enable_at")

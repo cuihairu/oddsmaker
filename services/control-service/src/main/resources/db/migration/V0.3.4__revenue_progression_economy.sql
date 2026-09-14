@@ -113,4 +113,4 @@ CREATE TABLE virtual_economies (
 CREATE INDEX idx_virtual_econ_game_id ON virtual_economies(game_id);
 CREATE INDEX idx_virtual_econ_currency ON virtual_economies(currency_id);
 CREATE UNIQUE INDEX idx_virtual_econ_name ON virtual_economies(game_id, name) WHERE deleted_at IS NULL;
-CREATE UNIQUE INDEX idx_virtual_econ_currency ON virtual_economies(game_id, currency_id) WHERE deleted_at IS NULL;
+CREATE UNIQUE INDEX idx_virtual_econ_currency_uq ON virtual_economies(game_id, currency_id) WHERE deleted_at IS NULL;

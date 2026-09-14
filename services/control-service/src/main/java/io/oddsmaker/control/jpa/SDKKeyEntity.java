@@ -96,28 +96,28 @@ public class SDKKeyEntity {
     @Column(name = "allowed_ips", columnDefinition = "TEXT")
     public String allowedIps;  // JSON格式的允许IP列表
 
-    @Column(name = "rate_limit_rpm", columnDefinition = "INTEGER DEFAULT 1000")
+    @Column(name = "rate_limit_rpm", columnDefinition = "INTEGER")
     public Integer rateLimitRpm = 1000;  // 每分钟请求数限制
 
-    @Column(name = "rate_limit_rps", columnDefinition = "INTEGER DEFAULT 100")
+    @Column(name = "rate_limit_rps", columnDefinition = "INTEGER")
     public Integer rateLimitRps = 100;  // 每秒请求数限制
 
-    @Column(name = "batch_size_limit", columnDefinition = "INTEGER DEFAULT 500")
+    @Column(name = "batch_size_limit", columnDefinition = "INTEGER")
     public Integer batchSizeLimit = 500;  // 批量大小限制
 
-    @Column(name = "batch_interval_ms", columnDefinition = "INTEGER DEFAULT 3000")
+    @Column(name = "batch_interval_ms", columnDefinition = "INTEGER")
     public Integer batchIntervalMs = 3000;  // 批量间隔（毫秒）
 
-    @Column(name = "max_event_size_bytes", columnDefinition = "INTEGER DEFAULT 65536")
+    @Column(name = "max_event_size_bytes", columnDefinition = "INTEGER")
     public Integer maxEventSizeBytes = 65536;  // 单事件最大大小
 
-    @Column(name = "max_batch_size_bytes", columnDefinition = "INTEGER DEFAULT 1048576")
+    @Column(name = "max_batch_size_bytes", columnDefinition = "INTEGER")
     public Integer maxBatchSizeBytes = 1048576;  // 批量最大大小
 
-    @Column(name = "enable_compression", columnDefinition = "BOOLEAN DEFAULT true")
+    @Column(name = "enable_compression", columnDefinition = "BOOLEAN")
     public Boolean enableCompression = true;  // 启用压缩
 
-    @Column(name = "enable_encryption", columnDefinition = "BOOLEAN DEFAULT false")
+    @Column(name = "enable_encryption", columnDefinition = "BOOLEAN")
     public Boolean enableEncryption = false;  // 启用加密
 
     @Column(name = "retry_policy", columnDefinition = "TEXT")
@@ -135,13 +135,13 @@ public class SDKKeyEntity {
     @Column(name = "custom_config", columnDefinition = "TEXT")
     public String customConfig;  // JSON格式的自定义配置
 
-    @Column(name = "total_events_sent", columnDefinition = "BIGINT DEFAULT 0")
+    @Column(name = "total_events_sent", columnDefinition = "BIGINT")
     public Long totalEventsSent = 0L;  // 总发送事件数
 
-    @Column(name = "total_batches_sent", columnDefinition = "BIGINT DEFAULT 0")
+    @Column(name = "total_batches_sent", columnDefinition = "BIGINT")
     public Long totalBatchesSent = 0L;  // 总发送批次数
 
-    @Column(name = "total_errors", columnDefinition = "BIGINT DEFAULT 0")
+    @Column(name = "total_errors", columnDefinition = "BIGINT")
     public Long totalErrors = 0L;  // 总错误数
 
     @Column(name = "last_event_at")

@@ -46,56 +46,56 @@ public class SocialAnalyticsEntity {
     public SocialEventType socialEventType;
 
     // 好友系统指标
-    @Column(name = "total_friendships", columnDefinition = "BIGINT DEFAULT 0")
+    @Column(name = "total_friendships", columnDefinition = "BIGINT")
     public Long totalFriendships = 0L;
 
-    @Column(name = "new_friendships", columnDefinition = "BIGINT DEFAULT 0")
+    @Column(name = "new_friendships", columnDefinition = "BIGINT")
     public Long newFriendships = 0L;
 
-    @Column(name = "avg_friends_per_user", columnDefinition = "DECIMAL(10,2) DEFAULT 0")
+    @Column(name = "avg_friends_per_user", columnDefinition = "DECIMAL(10,2)")
     public Double avgFriendsPerUser = 0.0;
 
     // 公会指标
-    @Column(name = "total_guilds", columnDefinition = "BIGINT DEFAULT 0")
+    @Column(name = "total_guilds", columnDefinition = "BIGINT")
     public Long totalGuilds = 0L;
 
-    @Column(name = "new_guilds", columnDefinition = "BIGINT DEFAULT 0")
+    @Column(name = "new_guilds", columnDefinition = "BIGINT")
     public Long newGuilds = 0L;
 
-    @Column(name = "avg_guild_size", columnDefinition = "DECIMAL(10,2) DEFAULT 0")
+    @Column(name = "avg_guild_size", columnDefinition = "DECIMAL(10,2)")
     public Double avgGuildSize = 0.0;
 
-    @Column(name = "guild_members", columnDefinition = "BIGINT DEFAULT 0")
+    @Column(name = "guild_members", columnDefinition = "BIGINT")
     public Long guildMembers = 0L;
 
     // 社交互动
-    @Column(name = "chat_messages", columnDefinition = "BIGINT DEFAULT 0")
+    @Column(name = "chat_messages", columnDefinition = "BIGINT")
     public Long chatMessages = 0L;
 
-    @Column(name = "gifts_sent", columnDefinition = "BIGINT DEFAULT 0")
+    @Column(name = "gifts_sent", columnDefinition = "BIGINT")
     public Long giftsSent = 0L;
 
-    @Column(name = "invites_sent", columnDefinition = "BIGINT DEFAULT 0")
+    @Column(name = "invites_sent", columnDefinition = "BIGINT")
     public Long invitesSent = 0L;
 
-    @Column(name = "invites_accepted", columnDefinition = "BIGINT DEFAULT 0")
+    @Column(name = "invites_accepted", columnDefinition = "BIGINT")
     public Long invitesAccepted = 0L;
 
     // 病毒系数
-    @Column(name = "viral_coefficient", columnDefinition = "DECIMAL(5,4) DEFAULT 0")
+    @Column(name = "viral_coefficient", columnDefinition = "DECIMAL(5,4)")
     public Double viralCoefficient = 0.0;
 
     // 社交对留存的影响
-    @Column(name = "social_users_retention_d1", columnDefinition = "DECIMAL(5,4) DEFAULT 0")
+    @Column(name = "social_users_retention_d1", columnDefinition = "DECIMAL(5,4)")
     public Double socialUsersRetentionD1 = 0.0;
 
-    @Column(name = "social_users_retention_d7", columnDefinition = "DECIMAL(5,4) DEFAULT 0")
+    @Column(name = "social_users_retention_d7", columnDefinition = "DECIMAL(5,4)")
     public Double socialUsersRetentionD7 = 0.0;
 
-    @Column(name = "non_social_users_retention_d1", columnDefinition = "DECIMAL(5,4) DEFAULT 0")
+    @Column(name = "non_social_users_retention_d1", columnDefinition = "DECIMAL(5,4)")
     public Double nonSocialUsersRetentionD1 = 0.0;
 
-    @Column(name = "non_social_users_retention_d7", columnDefinition = "DECIMAL(5,4) DEFAULT 0")
+    @Column(name = "non_social_users_retention_d7", columnDefinition = "DECIMAL(5,4)")
     public Double nonSocialUsersRetentionD7 = 0.0;
 
     // 维度
