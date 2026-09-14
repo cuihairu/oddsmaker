@@ -102,6 +102,9 @@ SELECT
 FROM v_funnel_daily_summary;
 
 -- 漏斗步骤对比视图
+-- 注意：这里不能用 INNER JOIN ... AND f2.step > f1.step（跨表列比较），
+-- ClickHouse 24.8 默认拒绝该写法（INVALID_JOIN_ON_EXPRESSION），initdb 会在此中断；
+-- 等价改写为 CROSS JOIN + WHERE
 CREATE OR REPLACE VIEW v_funnel_step_comparison AS
 SELECT
   f1.game_id,
@@ -116,9 +119,10 @@ SELECT
   f2.total_users AS step_b_users,
   if(f1.total_users > 0, (f2.total_users / f1.total_users) * 100, 0) AS conversion_rate
 FROM v_funnel_daily_summary f1
-JOIN v_funnel_daily_summary f2 ON f1.game_id = f2.game_id 
-  AND f1.environment = f2.environment 
-  AND f1.funnel_id = f2.funnel_id 
+CROSS JOIN v_funnel_daily_summary f2
+WHERE f1.game_id = f2.game_id
+  AND f1.environment = f2.environment
+  AND f1.funnel_id = f2.funnel_id
   AND f1.event_date = f2.event_date
   AND f2.step > f1.step;
 
@@ -147,26 +151,22 @@ SELECT
 FROM v_funnel_daily_summary;
 
 -- 漏斗完成率视图
+-- 原写法在 JOIN ON 里用相关子查询（f3.game_id = f1.game_id 外层列引用），
+-- ClickHouse 24.8 不支持（UNSUPPORTED_METHOD），initdb 同样会在此中断；
+-- 等价改写为窗口函数算 max(step) 再聚合
 CREATE OR REPLACE VIEW v_funnel_completion AS
 SELECT
-  f1.game_id,
-  f1.environment,
-  f1.funnel_id,
-  f1.event_date,
-  f1.total_users AS started_users,
-  f2.total_users AS completed_users,
-  if(f1.total_users > 0, (f2.total_users / f1.total_users) * 100, 0) AS completion_rate
-FROM v_funnel_daily_summary f1
-JOIN v_funnel_daily_summary f2 ON f1.game_id = f2.game_id 
-  AND f1.environment = f2.environment 
-  AND f1.funnel_id = f2.funnel_id 
-  AND f1.event_date = f2.event_date
-  AND f1.step = 1
-  AND f2.step = (
-    SELECT MAX(step) 
-    FROM v_funnel_daily_summary f3 
-    WHERE f3.game_id = f1.game_id 
-      AND f3.environment = f1.environment 
-      AND f3.funnel_id = f1.funnel_id 
-      AND f3.event_date = f1.event_date
-  );
+  game_id,
+  environment,
+  funnel_id,
+  event_date,
+  sumIf(total_users, step = 1) AS started_users,
+  sumIf(total_users, step = max_step) AS completed_users,
+  if(started_users > 0, (completed_users / started_users) * 100, 0) AS completion_rate
+FROM (
+  SELECT
+    game_id, environment, funnel_id, event_date, step, total_users,
+    max(step) OVER (PARTITION BY game_id, environment, funnel_id, event_date) AS max_step
+  FROM v_funnel_daily_summary
+)
+GROUP BY game_id, environment, funnel_id, event_date;

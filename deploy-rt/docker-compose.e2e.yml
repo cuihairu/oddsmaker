@@ -240,6 +240,196 @@ services:
       start_period: 30s
     networks: [e2e]
 
+  # —— 以下四个 job 与 sessions-job 同模板：local executor 需 9 个 --add-opens；
+  #    都以 latest 起点订阅 events_raw，验证时先起 job 再发事件 ———
+
+  retention-job:
+    image: eclipse-temurin:21-jre
+    container_name: e2e-retention
+    working_dir: /app
+    command: ["java", "-XX:MaxRAMPercentage=70.0",
+              "--add-opens=java.base/java.lang=ALL-UNNAMED",
+              "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
+              "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+              "--add-opens=java.base/java.io=ALL-UNNAMED",
+              "--add-opens=java.base/java.net=ALL-UNNAMED",
+              "--add-opens=java.base/java.nio=ALL-UNNAMED",
+              "--add-opens=java.base/java.util=ALL-UNNAMED",
+              "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
+              "--add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED",
+              "-Dkafka.bootstrap=kafka:9092",
+              "-Dregistry.url=http://apicurio:8080/apis/registry/v2",
+              "-Dkafka.topic=oddsmaker.events_raw",
+              "-Dclickhouse.url=jdbc:clickhouse://clickhouse:8123/default",
+              "-Dclickhouse.user=oddsmaker",
+              "-Dclickhouse.pass=oddsmaker",
+              "-jar", "/jars/retention-job-0.1.0-all.jar"]
+    volumes:
+      - ./jars:/jars:ro
+    depends_on:
+      kafka: { condition: service_healthy }
+      apicurio: { condition: service_healthy }
+      clickhouse: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'retention-job-0.1.0-all.jar' >/dev/null"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks: [e2e]
+
+  funnels-job:
+    image: eclipse-temurin:21-jre
+    container_name: e2e-funnels
+    working_dir: /app
+    command: ["java", "-XX:MaxRAMPercentage=70.0",
+              "--add-opens=java.base/java.lang=ALL-UNNAMED",
+              "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
+              "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+              "--add-opens=java.base/java.io=ALL-UNNAMED",
+              "--add-opens=java.base/java.net=ALL-UNNAMED",
+              "--add-opens=java.base/java.nio=ALL-UNNAMED",
+              "--add-opens=java.base/java.util=ALL-UNNAMED",
+              "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
+              "--add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED",
+              "-Dkafka.bootstrap=kafka:9092",
+              "-Dregistry.url=http://apicurio:8080/apis/registry/v2",
+              "-Dkafka.topic=oddsmaker.events_raw",
+              "-Dclickhouse.url=jdbc:clickhouse://clickhouse:8123/default",
+              "-Dclickhouse.user=oddsmaker",
+              "-Dclickhouse.pass=oddsmaker",
+              "-jar", "/jars/funnels-job-0.1.0-all.jar"]
+    volumes:
+      - ./jars:/jars:ro
+    depends_on:
+      kafka: { condition: service_healthy }
+      apicurio: { condition: service_healthy }
+      clickhouse: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'funnels-job-0.1.0-all.jar' >/dev/null"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks: [e2e]
+
+  # 同一个 funnels fatJar 的第二个 main：从 control PG 加载漏斗配置（funnel_analyses/funnel_steps）
+  configurable-funnels-job:
+    image: eclipse-temurin:21-jre
+    container_name: e2e-configurable-funnels
+    working_dir: /app
+    command: ["java", "-XX:MaxRAMPercentage=70.0",
+              "--add-opens=java.base/java.lang=ALL-UNNAMED",
+              "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
+              "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+              "--add-opens=java.base/java.io=ALL-UNNAMED",
+              "--add-opens=java.base/java.net=ALL-UNNAMED",
+              "--add-opens=java.base/java.nio=ALL-UNNAMED",
+              "--add-opens=java.base/java.util=ALL-UNNAMED",
+              "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
+              "--add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED",
+              "-Dkafka.bootstrap=kafka:9092",
+              "-Dregistry.url=http://apicurio:8080/apis/registry/v2",
+              "-Dkafka.topic=oddsmaker.events_raw",
+              "-Dclickhouse.url=jdbc:clickhouse://clickhouse:8123/default",
+              "-Dclickhouse.user=oddsmaker",
+              "-Dclickhouse.pass=oddsmaker",
+              "-Dcontrol.db.url=jdbc:postgresql://postgres:5432/oddsmaker",
+              "-Dcontrol.db.user=oddsmaker",
+              "-Dcontrol.db.pass=oddsmaker",
+              "-cp", "/jars/funnels-job-0.1.0-all.jar",
+              "io.oddsmaker.jobs.funnels.ConfigurableFunnelsJob"]
+    volumes:
+      - ./jars:/jars:ro
+    depends_on:
+      kafka: { condition: service_healthy }
+      apicurio: { condition: service_healthy }
+      clickhouse: { condition: service_healthy }
+      postgres: { condition: service_healthy }
+    healthcheck:
+      # 与 funnels-job 用同一个 jar，pgrep 区分 -cp 后的主类名
+      test: ["CMD-SHELL", "pgrep -f 'ConfigurableFunnelsJob' >/dev/null"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks: [e2e]
+
+  identity-merge-job:
+    image: eclipse-temurin:21-jre
+    container_name: e2e-identity
+    working_dir: /app
+    command: ["java", "-XX:MaxRAMPercentage=70.0",
+              "--add-opens=java.base/java.lang=ALL-UNNAMED",
+              "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
+              "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+              "--add-opens=java.base/java.io=ALL-UNNAMED",
+              "--add-opens=java.base/java.net=ALL-UNNAMED",
+              "--add-opens=java.base/java.nio=ALL-UNNAMED",
+              "--add-opens=java.base/java.util=ALL-UNNAMED",
+              "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
+              "--add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED",
+              "-Dkafka.bootstrap=kafka:9092",
+              "-Dregistry.url=http://apicurio:8080/apis/registry/v2",
+              "-Dkafka.topic=oddsmaker.events_raw",
+              "-Dclickhouse.url=jdbc:clickhouse://clickhouse:8123/default",
+              "-Dclickhouse.user=oddsmaker",
+              "-Dclickhouse.pass=oddsmaker",
+              "-Didentity.topic=oddsmaker.identity_events",
+              "-jar", "/jars/identity-merge-job-0.1.0-all.jar"]
+    volumes:
+      - ./jars:/jars:ro
+    depends_on:
+      kafka: { condition: service_healthy }
+      apicurio: { condition: service_healthy }
+      clickhouse: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'identity-merge-job-0.1.0-all.jar' >/dev/null"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks: [e2e]
+
+  risk-job:
+    image: eclipse-temurin:21-jre
+    container_name: e2e-risk
+    working_dir: /app
+    command: ["java", "-XX:MaxRAMPercentage=70.0",
+              "--add-opens=java.base/java.lang=ALL-UNNAMED",
+              "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
+              "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+              "--add-opens=java.base/java.io=ALL-UNNAMED",
+              "--add-opens=java.base/java.net=ALL-UNNAMED",
+              "--add-opens=java.base/java.nio=ALL-UNNAMED",
+              "--add-opens=java.base/java.util=ALL-UNNAMED",
+              "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
+              "--add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED",
+              "-Dkafka.bootstrap=kafka:9092",
+              "-Dregistry.url=http://apicurio:8080/apis/registry/v2",
+              "-Dkafka.topic=oddsmaker.events_raw",
+              "-Dclickhouse.url=jdbc:clickhouse://clickhouse:8123/default",
+              "-Dclickhouse.user=oddsmaker",
+              "-Dclickhouse.pass=oddsmaker",
+              # 规则从 control 拉取（RuleFetcher 后台刷新，拉取失败走内置默认规则）
+              "-Dcontrol.url=http://control:8085",
+              "-Dcontrol.gameId=e2e_game",
+              "-Drisk.topic=oddsmaker.risk_events",
+              "-jar", "/jars/risk-job-0.1.0-all.jar"]
+    volumes:
+      - ./jars:/jars:ro
+    depends_on:
+      kafka: { condition: service_healthy }
+      apicurio: { condition: service_healthy }
+      clickhouse: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'risk-job-0.1.0-all.jar' >/dev/null"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks: [e2e]
+
 volumes:
   e2e_pg_data:
   e2e_ch_data:

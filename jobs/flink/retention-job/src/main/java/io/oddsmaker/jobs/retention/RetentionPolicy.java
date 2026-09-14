@@ -10,7 +10,7 @@ import java.util.List;
  * - Rolling 留存：首日之后第 N 天及以后任意一天活跃即算（无界口径），
  *   当用户最后一次活跃日推过 N 阈值时补记，后续不重复计数。
  */
-public final class RetentionPolicy {
+public final class RetentionPolicy implements java.io.Serializable {
 
     private final int[] nDays;
     private final int[] rollingDays;

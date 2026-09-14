@@ -28,7 +28,8 @@ echo "  deadletter baseline: ${DLQ_BASE:-0}"
 
 section "1. 服务健康"
 $COMPOSE ps --format '{{.Name}} {{.Status}}' | sort
-for svc in postgres redis kafka clickhouse apicurio control gateway enrich; do
+# configurable-funnels 不在此列：无漏斗配置时按设计直接退出（第 15 节铺配置后重启再验）
+for svc in postgres redis kafka clickhouse apicurio control gateway enrich sessions retention funnels identity risk; do
   st=$($COMPOSE ps --format '{{.Name}} {{.Status}}' | grep "^e2e-$svc " | grep -c "(healthy)")
   [ "$st" -ge 1 ] && ok "$svc healthy" || bad "$svc not healthy"
 done
@@ -143,6 +144,165 @@ for attempt in 1 2; do
   echo "  attempt $attempt: session not landed, retrying"
 done
 [ "$SESSIONS_OK" -eq 1 ] && ok "session window fired and landed in ClickHouse" || bad "no session landed in ClickHouse"
+
+echo
+echo "== 10. CH schema 幂等重放（initdb 只在空卷跑，缺失表在此自愈）=="
+# 只重放幂等且覆盖全部 Flink job 目标表的三个文件；
+# 目录里 ltv/crash/queries* 等含裸 DDL，重放会报表已存在，不纳入
+# 脚本 cd 在 deploy-rt 下，schema 在仓库根的上一级
+for f in ../schema/sql/clickhouse/schema.sql ../schema/sql/clickhouse/analytics.sql ../schema/sql/clickhouse/configurable-funnels-schema.sql; do
+  if $COMPOSE exec -T clickhouse clickhouse-client --multiquery < "$f" >/dev/null 2>&1; then
+    ok "replay $(basename "$f")"
+  else
+    bad "replay $(basename "$f") failed"
+  fi
+done
+
+section "11. Flink retention 落库（events_raw → 首事件即 emit d=0 → retention_daily）"
+# retention_daily 无 device 维度，用 d=0 用户数基线增长判定（表存在且本次事件真实落库）
+RET_BASE=$($CH "http://localhost:18123/?query=select+sum(users)+from+retention_daily+where+d=0" 2>/dev/null)
+RET_BASE=${RET_BASE:-0}
+RET_OK=0
+for attempt in 1 2; do
+  DID="verify_ret_$(date +%s)_$attempt"
+  TS=$(date +%s000)
+  BODY=$(printf '{"event_id":"verify_ret_a_%s","event_type":"progression","event_name":"level_start","game_id":"e2e_game","environment":"dev","device_id":"%s","ts_client":%s}' "$attempt" "$DID" "$TS")
+  R=$(printf '%s' "$BODY" | curl -sS -X POST "$GW/v1/batch" -H "x-api-key: $API_KEY" -H "content-type: application/x-ndjson" --data-binary @- 2>&1)
+  echo "$R" | grep -q "accepted" || { bad "retention batch not accepted: $R"; continue; }
+  for i in $(seq 1 15); do
+    RET=$($CH "http://localhost:18123/?query=select+sum(users)+from+retention_daily+where+d=0" 2>/dev/null)
+    [ "${RET:-0}" -gt "$RET_BASE" ] && break
+    sleep 2
+  done
+  if [ "${RET:-0}" -gt "$RET_BASE" ]; then
+    echo "  retention landed: d=0 users ${RET_BASE} -> ${RET}"
+    RET_OK=1
+    break
+  fi
+done
+[ "$RET_OK" -eq 1 ] && ok "retention d=0 row landed in ClickHouse" || bad "no retention row in ClickHouse"
+
+section "12. Flink funnels 落库（level_start → started=1；level_complete → completed=1）"
+# funnels_2step 同样无 device 维度，started/completed 双基线增长判定
+FUN_BASE_S=$($CH "http://localhost:18123/?query=select+sum(started)+from+funnels_2step+where+event_date=today()" 2>/dev/null)
+FUN_BASE_C=$($CH "http://localhost:18123/?query=select+sum(completed)+from+funnels_2step+where+event_date=today()" 2>/dev/null)
+FUN_BASE_S=${FUN_BASE_S:-0}; FUN_BASE_C=${FUN_BASE_C:-0}
+DID="verify_fun_$(date +%s)"
+TS=$(date +%s000)
+FBODY=$(printf '{"event_id":"verify_fun_a_%s","event_type":"progression","event_name":"level_start","game_id":"e2e_game","environment":"dev","device_id":"%s","ts_client":%s}\n{"event_id":"verify_fun_b_%s","event_type":"progression","event_name":"level_complete","game_id":"e2e_game","environment":"dev","device_id":"%s","ts_client":%s}' "$DID" "$DID" "$TS" "$DID" "$DID" "$((TS+2000))")
+R=$(printf '%s' "$FBODY" | curl -sS -X POST "$GW/v1/batch" -H "x-api-key: $API_KEY" -H "content-type: application/x-ndjson" --data-binary @- 2>&1)
+echo "$R" | grep -q "accepted" || bad "funnels batch not accepted: $R"
+STARTED=0; COMPLETED=0
+for i in $(seq 1 15); do
+  STARTED=$($CH "http://localhost:18123/?query=select+sum(started)+from+funnels_2step+where+event_date=today()" 2>/dev/null)
+  COMPLETED=$($CH "http://localhost:18123/?query=select+sum(completed)+from+funnels_2step+where+event_date=today()" 2>/dev/null)
+  [ "${STARTED:-0}" -gt "$FUN_BASE_S" ] && [ "${COMPLETED:-0}" -gt "$FUN_BASE_C" ] && break
+  sleep 2
+done
+if [ "${STARTED:-0}" -gt "$FUN_BASE_S" ] && [ "${COMPLETED:-0}" -gt "$FUN_BASE_C" ]; then
+  echo "  funnel landed: started ${FUN_BASE_S} -> ${STARTED}, completed ${FUN_BASE_C} -> ${COMPLETED}"
+  ok "funnel started+completed rows landed"
+else
+  bad "funnel rows missing (started=${STARTED:-0}/${FUN_BASE_S} completed=${COMPLETED:-0}/${FUN_BASE_C})"
+fi
+
+section "13. Flink identity-merge 落库（identity 事件 → CH identities + Kafka identity_events）"
+IDT_OK=0
+UID_E2E="verify_user_$(date +%s)"
+TS=$(date +%s000)
+IBODY=$(printf '{"event_id":"verify_idt_a_%s","event_type":"identity","event_name":"signup","game_id":"e2e_game","environment":"dev","device_id":"verify_idt_d","user_id":"%s","ts_client":%s}' "$UID_E2E" "$UID_E2E" "$TS")
+R=$(printf '%s' "$IBODY" | curl -sS -X POST "$GW/v1/batch" -H "x-api-key: $API_KEY" -H "content-type: application/x-ndjson" --data-binary @- 2>&1)
+echo "$R" | grep -q "accepted" || bad "identity batch not accepted: $R"
+for i in $(seq 1 15); do
+  IDT=$($CH "http://localhost:18123/?query=select+identity_id+from+identities+where+user_id='$UID_E2E'+limit+1" 2>/dev/null)
+  [ -n "$IDT" ] && break
+  sleep 2
+done
+if [ -n "$IDT" ]; then
+  echo "  identity landed: $IDT"
+  ok "identity row landed in ClickHouse"
+  IDT_OK=1
+else
+  bad "no identity row in ClickHouse"
+fi
+IDT_TOPIC=$($COMPOSE exec -T kafka /opt/kafka/bin/kafka-get-offsets.sh --bootstrap-server localhost:9092 --topic oddsmaker.identity_events 2>/dev/null | awk -F: '{s+=$3} END {print s+0}')
+echo "  identity_events offsets: ${IDT_TOPIC:-0}"
+[ "${IDT_TOPIC:-0}" -ge 1 ] && ok "identity_events topic has messages" || bad "identity_events topic empty"
+
+section "14. Flink risk 落库（THRESHOLD 规则：resource_amount 超阈值立即触发）"
+RISK_BASE=$($COMPOSE exec -T kafka /opt/kafka/bin/kafka-get-offsets.sh --bootstrap-server localhost:9092 --topic oddsmaker.risk_events 2>/dev/null | awk -F: '{s+=$3} END {print s+0}')
+EVT_ID="verify_risk_$(date +%s)"
+TS=$(date +%s000)
+RBODY=$(printf '{"event_id":"%s","event_type":"economy","event_name":"resource_flow","game_id":"e2e_game","environment":"dev","device_id":"verify_risk_d","user_id":"verify_risk_u","resource_id":"gold","resource_amount":999999,"flow_type":"source","ts_client":%s}' "$EVT_ID" "$TS")
+R=$(printf '%s' "$RBODY" | curl -sS -X POST "$GW/v1/batch" -H "x-api-key: $API_KEY" -H "content-type: application/x-ndjson" --data-binary @- 2>&1)
+echo "$R" | grep -q "accepted" || bad "risk batch not accepted: $R"
+RISK_HIT=0
+for i in $(seq 1 15); do
+  RH=$($CH "http://localhost:18123/?query=select+rule_id,risk_type,severity+from+risk_events+where+source_event_id='$EVT_ID'+limit+1+FORMAT+TSV" 2>/dev/null)
+  [ -n "$RH" ] && break
+  sleep 2
+done
+if [ -n "$RH" ]; then
+  echo "  risk event landed: $RH"
+  ok "risk event landed in ClickHouse"
+  RISK_HIT=1
+else
+  bad "no risk event in ClickHouse"
+fi
+RISK_N=$($COMPOSE exec -T kafka /opt/kafka/bin/kafka-get-offsets.sh --bootstrap-server localhost:9092 --topic oddsmaker.risk_events 2>/dev/null | awk -F: '{s+=$3} END {print s+0}')
+echo "  risk_events offsets: ${RISK_N:-0} (baseline ${RISK_BASE:-0})"
+[ "${RISK_N:-0}" -gt "${RISK_BASE:-0}" ] && ok "risk_events topic grew" || bad "risk_events topic did not grow"
+
+section "15. Flink configurable funnels（control PG 配置 → 加载 → funnels_configurable 落库）"
+# 幂等铺配置：control 真实迁移（V0.3.3）建的 funnel_analyses / funnel_steps 表。
+# job 启动时一次性加载，所以插完配置要 force-recreate 该容器
+CFG_SEED=$($COMPOSE exec -T postgres psql -U oddsmaker -d oddsmaker -v ON_ERROR_STOP=1 <<'SQL'
+DELETE FROM funnel_steps WHERE funnel_analysis_id = 'e2e_funnel_cfg';
+DELETE FROM funnel_analyses WHERE id = 'e2e_funnel_cfg';
+INSERT INTO funnel_analyses (id, game_id, name, display_name, funnel_type, window_type, window_size, total_steps, status, enable_auto_calc, max_completion_time)
+VALUES ('e2e_funnel_cfg', 'e2e_game', 'e2e-configurable-funnel', 'E2E Configurable Funnel', 'SEQUENTIAL', 'fixed', 7, 2, 'ACTIVE', FALSE, 86400);
+INSERT INTO funnel_steps (id, funnel_analysis_id, funnel_id, step_order, name, event_name, display_name, status)
+VALUES ('e2e_fs1', 'e2e_funnel_cfg', 'e2e_funnel_cfg', 1, 'Level Start', 'level_start', 'Level Start', 'ACTIVE'),
+       ('e2e_fs2', 'e2e_funnel_cfg', 'e2e_funnel_cfg', 2, 'Level Complete', 'level_complete', 'Level Complete', 'ACTIVE');
+SQL
+) 2>&1
+if [ $? -eq 0 ]; then
+  echo "  config seeded: $(echo "$CFG_SEED" | tail -1)"
+  ok "funnel config seeded in control PG"
+else
+  bad "funnel config seeding failed: $CFG_SEED"
+fi
+
+$COMPOSE up -d --force-recreate configurable-funnels-job >/dev/null 2>&1
+CFG_READY=0
+for i in $(seq 1 30); do
+  st=$($COMPOSE ps --format '{{.Name}} {{.Status}}' | grep '^e2e-configurable-funnels ' | grep -c '(healthy)')
+  [ "$st" -ge 1 ] && { CFG_READY=1; break; }
+  sleep 2
+done
+[ "$CFG_READY" -eq 1 ] && ok "configurable-funnels job healthy after reload" || bad "configurable-funnels job not healthy"
+
+CFG_BASE=$($CH "http://localhost:18123/?query=select+sum(users)+from+funnels_configurable+where+funnel_id='e2e_funnel_cfg'+and+step=1" 2>/dev/null)
+CFG_BASE=${CFG_BASE:-0}
+CFD="verify_cfg_$(date +%s)"
+TS=$(date +%s000)
+CBODY=$(printf '{"event_id":"verify_cfg_a_%s","event_type":"progression","event_name":"level_start","game_id":"e2e_game","environment":"dev","device_id":"%s","ts_client":%s}\n{"event_id":"verify_cfg_b_%s","event_type":"progression","event_name":"level_complete","game_id":"e2e_game","environment":"dev","device_id":"%s","ts_client":%s}' "$CFD" "$CFD" "$TS" "$CFD" "$CFD" "$((TS+2000))")
+R=$(printf '%s' "$CBODY" | curl -sS -X POST "$GW/v1/batch" -H "x-api-key: $API_KEY" -H "content-type: application/x-ndjson" --data-binary @- 2>&1)
+echo "$R" | grep -q "accepted" || bad "configurable batch not accepted: $R"
+CFG_STEP1=0; CFG_STEP2=0
+for i in $(seq 1 15); do
+  CFG_STEP1=$($CH "http://localhost:18123/?query=select+sum(users)+from+funnels_configurable+where+funnel_id='e2e_funnel_cfg'+and+step=1" 2>/dev/null)
+  CFG_STEP2=$($CH "http://localhost:18123/?query=select+sum(users)+from+funnels_configurable+where+funnel_id='e2e_funnel_cfg'+and+step=2" 2>/dev/null)
+  [ "${CFG_STEP1:-0}" -gt "$CFG_BASE" ] && [ "${CFG_STEP2:-0}" -ge 1 ] && break
+  sleep 2
+done
+if [ "${CFG_STEP1:-0}" -gt "$CFG_BASE" ] && [ "${CFG_STEP2:-0}" -ge 1 ]; then
+  echo "  configurable funnel landed: step1 ${CFG_BASE} -> ${CFG_STEP1}, step2=${CFG_STEP2}"
+  ok "configurable funnel rows landed in ClickHouse"
+else
+  bad "configurable funnel rows missing (step1=${CFG_STEP1:-0}/${CFG_BASE} step2=${CFG_STEP2:-0})"
+  docker logs e2e-configurable-funnels 2>&1 | grep -E "Loaded|No funnel|ERROR|Exception" | head -3
+fi
 
 echo
 echo "===== RESULT: $PASS passed, $FAIL failed ====="

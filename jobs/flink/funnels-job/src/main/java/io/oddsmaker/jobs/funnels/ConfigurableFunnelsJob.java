@@ -56,7 +56,11 @@ public class ConfigurableFunnelsJob {
         System.out.println("Loaded " + funnelConfigs.size() + " funnel configurations");
         
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
-        
+        // local executor 默认并行度=CPU 核数，而 events_raw 只有 1 个分区：
+        // 多余的空 source subtask 会把全局 watermark 卡死。
+        // 显式置 1；集群模式提交时用 flink run -p 覆盖
+        env.setParallelism(1);
+
         KafkaSource<RawEvent> source = KafkaSource.<RawEvent>builder()
                 .setBootstrapServers(bootstrap)
                 .setTopics(topic)
@@ -129,29 +133,41 @@ public class ConfigurableFunnelsJob {
      */
     private static List<FunnelConfig> loadFunnelConfigs(String dbUrl, String dbUser, String dbPass) {
         List<FunnelConfig> configs = new ArrayList<>();
-        
+
+        // fatJar 合并依赖时 META-INF/services 可能被同名文件覆盖，DriverManager SPI
+        // 注册不到 PG 驱动（"No suitable driver"），显式加载兜底
+        try {
+            Class.forName("org.postgresql.Driver");
+        } catch (ClassNotFoundException e) {
+            System.err.println("PostgreSQL JDBC driver not on classpath: " + e.getMessage());
+            return configs;
+        }
+
         try (Connection conn = DriverManager.getConnection(dbUrl, dbUser, dbPass)) {
-            // 查询启用的漏斗配置
-            String sql = "SELECT f.id, f.game_id, f.name, f.type, f.user_key, f.time_window_sec " +
-                        "FROM funnel_configs f " +
-                        "WHERE f.enabled = true AND f.deleted_at IS NULL";
-            
+            // 查询启用的漏斗配置——适配 control 真实迁移（V0.3.3）建的表：
+            // funnel_analyses（status/deleted_at 表达启用态，funnel_type 是类型，max_completion_time 是总窗口秒数）。
+            // 原来硬编码的 funnel_configs(user_key/time_window_sec/enabled) 在 control 里不存在
+            String sql = "SELECT f.id, f.game_id, f.name, f.funnel_type, f.max_completion_time " +
+                        "FROM funnel_analyses f " +
+                        "WHERE f.status = 'ACTIVE' AND f.deleted_at IS NULL";
+
             try (PreparedStatement ps = conn.prepareStatement(sql)) {
                 ResultSet rs = ps.executeQuery();
-                
+
                 while (rs.next()) {
                     FunnelConfig config = new FunnelConfig();
                     config.id = rs.getString("id");
                     config.gameId = rs.getString("game_id");
                     config.name = rs.getString("name");
-                    config.type = rs.getString("type");
-                    config.userKey = rs.getString("user_key");
-                    config.timeWindowSec = rs.getLong("time_window_sec");
+                    config.type = rs.getString("funnel_type");
+                    config.userKey = "";
+                    long maxCompletion = rs.getLong("max_completion_time");
+                    config.timeWindowSec = rs.wasNull() || maxCompletion <= 0 ? 24 * 3600 : maxCompletion;
                     config.enabled = true;
-                    
+
                     // 加载漏斗步骤
                     config.steps = loadFunnelSteps(conn, config.id);
-                    
+
                     configs.add(config);
                 }
             }
@@ -169,25 +185,27 @@ public class ConfigurableFunnelsJob {
     private static List<FunnelStep> loadFunnelSteps(Connection conn, String funnelId) throws Exception {
         List<FunnelStep> steps = new ArrayList<>();
         
-        String sql = "SELECT id, step_order, name, event_name, event_filter, time_window_sec, optional " +
+        // funnel_steps 同样适配 control 真实迁移：funnel_analysis_id 外键、
+        // time_from_previous（步间窗口秒数）、is_optional
+        String sql = "SELECT id, step_order, name, event_name, event_filter, time_from_previous, is_optional " +
                     "FROM funnel_steps " +
-                    "WHERE funnel_id = ? " +
+                    "WHERE funnel_analysis_id = ? AND deleted_at IS NULL " +
                     "ORDER BY step_order ASC";
-        
+
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, funnelId);
             ResultSet rs = ps.executeQuery();
-            
+
             while (rs.next()) {
                 FunnelStep step = new FunnelStep();
-                step.id = rs.getLong("id");
+                step.id = rs.getString("id");
                 step.stepOrder = rs.getInt("step_order");
                 step.name = rs.getString("name");
                 step.eventName = rs.getString("event_name");
                 step.eventFilter = rs.getString("event_filter");
-                step.timeWindowSec = rs.getLong("time_window_sec");
-                step.optional = rs.getBoolean("optional");
-                
+                step.timeWindowSec = rs.getLong("time_from_previous");
+                step.optional = rs.getBoolean("is_optional");
+
                 steps.add(step);
             }
         }
@@ -207,7 +225,8 @@ public class ConfigurableFunnelsJob {
     /**
      * 漏斗配置
      */
-    static class FunnelConfig {
+    // 闭包捕获 config 进算子，必须可序列化
+    static class FunnelConfig implements java.io.Serializable {
         String id;
         String gameId;
         String name;
@@ -221,8 +240,8 @@ public class ConfigurableFunnelsJob {
     /**
      * 漏斗步骤
      */
-    static class FunnelStep {
-        long id;
+    static class FunnelStep implements java.io.Serializable {
+        String id; // control 迁移里 funnel_steps.id 是 VARCHAR(32)，getLong 会抛转换异常
         int stepOrder;
         String name;
         String eventName;
@@ -232,17 +251,18 @@ public class ConfigurableFunnelsJob {
     }
     
     /**
-     * 漏斗结果行
+     * 漏斗结果行。
+     * public class + public fields：包私有类会被 Flink 退化成 Kryo 泛型序列化
      */
-    static class FunnelRow {
-        String gameId;
-        String environment;
-        String funnelId;
-        long eventDateEpochDay;
-        int step;
-        String stepName;
-        long users;
-        double conversionRate;
+    public static class FunnelRow {
+        public String gameId;
+        public String environment;
+        public String funnelId;
+        public long eventDateEpochDay;
+        public int step;
+        public String stepName;
+        public long users;
+        public double conversionRate;
     }
     
     /**

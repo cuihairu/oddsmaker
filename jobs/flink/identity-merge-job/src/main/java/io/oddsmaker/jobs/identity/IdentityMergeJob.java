@@ -39,6 +39,10 @@ public class IdentityMergeJob {
         String chPass = System.getProperty("clickhouse.pass", "");
 
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // local executor 默认并行度=CPU 核数，而 events_raw 只有 1 个分区：
+        // 多余的空 source subtask 会把全局 watermark 卡死。
+        // 显式置 1；集群模式提交时用 flink run -p 覆盖
+        env.setParallelism(1);
 
         KafkaSource<RawEvent> source = KafkaSource.<RawEvent>builder()
                 .setBootstrapServers(bootstrap)
@@ -65,7 +69,8 @@ public class IdentityMergeJob {
                     return t != null && "identity".equals(t.toString())
                             || (n != null && "$identify".equals(n.toString()));
                 })
-                .returns(Types.GENERIC(RawEvent.class))
+                // RawEvent 是合法 POJO，用 POJO 类型信息而非 GENERIC（后者走 Kryo 泛型序列化）
+                .returns(Types.POJO(RawEvent.class))
                 .keyBy(r -> nz(str(r.game_id)) + "|" + nz(str(r.environment)) + "|" + nz(str(r.user_id)))
                 .process(new IdentityMergeFunction())
                 .name("identity-merge");
@@ -73,7 +78,8 @@ public class IdentityMergeJob {
         var sink = JdbcSink.<IdentityRecord>sink(
                 "INSERT INTO identities " +
                         "(game_id, environment, identity_id, user_id, player_id, character_ids, device_ids, first_seen, last_seen, risk_score) " +
-                        "VALUES (?, ?, ?, ?, ?, split('||', ?), split('||', ?), ?, ?, 0)",
+                        // ClickHouse 没有 split 函数（只有 splitByString），实测 24.8 报 UNKNOWN_FUNCTION
+                        "VALUES (?, ?, ?, ?, ?, splitByString('||', ?), splitByString('||', ?), ?, ?, 0)",
                 (ps, r) -> {
                     ps.setString(1, r.gameId);
                     ps.setString(2, r.environment);

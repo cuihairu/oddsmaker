@@ -40,6 +40,10 @@ public class RetentionJob {
             RetentionPolicy.parseDays(System.getProperty("retention.rolling.ndays", "1,3,7,14,30")));
 
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // local executor 默认并行度=CPU 核数，而 events_raw 只有 1 个分区：
+        // 多余的空 source subtask 会把全局 watermark 卡死。
+        // 显式置 1；集群模式提交时用 flink run -p 覆盖
+        env.setParallelism(1);
 
         KafkaSource<RawEvent> source = KafkaSource.<RawEvent>builder()
                 .setBootstrapServers(bootstrap)
@@ -70,7 +74,7 @@ public class RetentionJob {
                         (ps, row) -> {
                             ps.setString(1, row.gameId);
                             ps.setString(2, row.environment);
-                            ps.setDate(3, new java.sql.Date(row.cohortDate.toEpochDay()*24*3600*1000));
+                            ps.setDate(3, new java.sql.Date(row.cohortEpochDay * 86400000L));
                             ps.setInt(4, row.d);
                             ps.setLong(5, 1L);
                         },
@@ -87,7 +91,7 @@ public class RetentionJob {
                         (ps, row) -> {
                             ps.setString(1, row.gameId);
                             ps.setString(2, row.environment);
-                            ps.setDate(3, new java.sql.Date(row.cohortDate.toEpochDay()*24*3600*1000));
+                            ps.setDate(3, new java.sql.Date(row.cohortEpochDay * 86400000L));
                             ps.setInt(4, row.d);
                             ps.setLong(5, 1L);
                         },
@@ -106,9 +110,15 @@ public class RetentionJob {
         return String.valueOf(r.device_id);
     }
 
-    /** rolling=0 为 N-Day 输出；rolling>0 表示 rolling 留存的 N */
-    static class RetentionEmit {
-        String gameId; String environment; LocalDate cohortDate; int d; int rolling;
+    /**
+     * rolling=0 为 N-Day 输出；rolling>0 表示 rolling 留存的 N。
+     * public class + public fields：Flink 只把 public 无参构造 + public 字段的类识别为 POJO，
+     * 包私有类会退化成 Kryo 泛型序列化。
+     * cohort 用 long epochDay 而非 LocalDate：LocalDate 字段走 Kryo 反射需要
+     * --add-opens java.base/java.time，裸 JVM 直接炸（InaccessibleObjectException）
+     */
+    public static class RetentionEmit {
+        public String gameId; public String environment; public long cohortEpochDay; public int d; public int rolling;
     }
 
     static class RetentionProcess extends KeyedProcessFunction<String, RawEvent, RetentionEmit> {
@@ -144,7 +154,7 @@ public class RetentionJob {
                 state.put("first", epochDay);
                 state.put("last", epochDay);
                 RetentionEmit r0 = new RetentionEmit();
-                r0.gameId = gameId; r0.environment = environment; r0.cohortDate = day; r0.d = 0; r0.rolling = 0;
+                r0.gameId = gameId; r0.environment = environment; r0.cohortEpochDay = day.toEpochDay(); r0.d = 0; r0.rolling = 0;
                 out.collect(r0);
                 return;
             }
@@ -157,7 +167,7 @@ public class RetentionJob {
                 state.put("seen_d_" + n, 1L);
                 RetentionEmit r = new RetentionEmit();
                 r.gameId = gameId; r.environment = environment;
-                r.cohortDate = LocalDate.ofEpochDay(first); r.d = n; r.rolling = 0;
+                r.cohortEpochDay = first; r.d = n; r.rolling = 0;
                 out.collect(r);
             }
 
@@ -169,7 +179,7 @@ public class RetentionJob {
                         state.put("seen_r_" + rn, 1L);
                         RetentionEmit r = new RetentionEmit();
                         r.gameId = gameId; r.environment = environment;
-                        r.cohortDate = LocalDate.ofEpochDay(first); r.d = rn; r.rolling = rn;
+                        r.cohortEpochDay = first; r.d = rn; r.rolling = rn;
                         out.collect(r);
                     }
                 }

@@ -35,6 +35,10 @@ public class FunnelsJob {
         long timeoutMs = Long.getLong("funnel.timeout.ms", 24L*3600_000L);
 
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        // local executor 默认并行度=CPU 核数，而 events_raw 只有 1 个分区：
+        // 多余的空 source subtask 会把全局 watermark 卡死。
+        // 显式置 1；集群模式提交时用 flink run -p 覆盖
+        env.setParallelism(1);
 
         KafkaSource<RawEvent> source = KafkaSource.<RawEvent>builder()
                 .setBootstrapServers(bootstrap)
@@ -89,7 +93,8 @@ public class FunnelsJob {
         return String.valueOf(r.device_id);
     }
 
-    static class FunnelRow { String gameId; String environment; long eventDateEpochDay; long started; long completed; }
+    /** public class + public fields：包私有类会被 Flink 退化成 Kryo 泛型序列化 */
+    public static class FunnelRow { public String gameId; public String environment; public long eventDateEpochDay; public long started; public long completed; }
 
     static class FunnelProcess extends KeyedProcessFunction<String, RawEvent, FunnelRow> {
         private final String step1; private final String step2; private final long timeoutMs;
