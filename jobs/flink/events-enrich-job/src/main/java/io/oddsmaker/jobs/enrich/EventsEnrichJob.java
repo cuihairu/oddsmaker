@@ -1,9 +1,7 @@
 package io.oddsmaker.jobs.enrich;
 
-import org.apache.avro.generic.GenericRecord;
 import org.apache.flink.api.common.eventtime.SerializableTimestampAssigner;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
-import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.common.state.StateTtlConfig;
 import org.apache.flink.api.common.state.ValueState;
 import org.apache.flink.api.common.state.ValueStateDescriptor;
@@ -17,7 +15,6 @@ import org.apache.flink.connector.kafka.sink.KafkaSink;
 import org.apache.flink.connector.kafka.source.KafkaSource;
 import org.apache.flink.connector.kafka.source.enumerator.initializer.OffsetsInitializer;
 import org.apache.flink.streaming.api.datastream.DataStream;
-import org.apache.flink.streaming.api.datastream.DataStreamSource;
 import org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.functions.KeyedProcessFunction;
@@ -49,7 +46,7 @@ public class EventsEnrichJob {
 
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
-        KafkaSource<GenericRecord> source = KafkaSource.<GenericRecord>builder()
+        KafkaSource<RawEvent> source = KafkaSource.<RawEvent>builder()
                 .setBootstrapServers(bootstrap)
                 .setTopics(topic)
                 .setGroupId("oddsmaker-events-enrich")
@@ -57,97 +54,96 @@ public class EventsEnrichJob {
                 .setDeserializer(new ApicurioAvroFlinkDeserializer(registry))
                 .build();
 
-        var wm = WatermarkStrategy.<GenericRecord>forBoundedOutOfOrderness(Duration.ofMinutes(5))
-                .withTimestampAssigner((SerializableTimestampAssigner<GenericRecord>) (element, recordTimestamp) -> {
-                    Long tsServer = longOrNull(field(element, "ts_server"));
-                    Long tsClient = longOrNull(field(element, "ts_client"));
+        var wm = WatermarkStrategy.<RawEvent>forBoundedOutOfOrderness(Duration.ofMinutes(5))
+                .withTimestampAssigner((SerializableTimestampAssigner<RawEvent>) (element, recordTimestamp) -> {
+                    Long tsServer = element.ts_server;
+                    Long tsClient = element.ts_client;
                     long micros = tsServer != null ? tsServer : (tsClient != null ? tsClient : System.currentTimeMillis() * 1000L);
                     return micros / 1000L; // to ms
                 });
 
-        DataStream<GenericRecord> stream = env.fromSource(source, wm, "events-raw");
+        DataStream<RawEvent> stream = env.fromSource(source, wm, "events-raw");
 
         // DLQ 侧输出
         final OutputTag<String> DLQ = new OutputTag<>("dlq", Types.STRING);
 
         // 基础校验（必填字段）+ 填充 ts_server
-        SingleOutputStreamOperator<GenericRecord> validated = stream.process(new org.apache.flink.streaming.api.functions.ProcessFunction<GenericRecord, GenericRecord>() {
+        SingleOutputStreamOperator<RawEvent> validated = stream.process(new org.apache.flink.streaming.api.functions.ProcessFunction<RawEvent, RawEvent>() {
             @Override
-            public void processElement(GenericRecord r, Context ctx, Collector<GenericRecord> out) throws Exception {
-                if (field(r, "event_id") == null || field(r, "event_name") == null || field(r, "game_id") == null || field(r, "environment") == null || field(r, "device_id") == null) {
-                    ctx.output(DLQ, toDlqJson(r, "invalid_schema"));
+            public void processElement(RawEvent r, Context ctx, Collector<RawEvent> out) {
+                if (r.event_id == null || r.event_name == null || r.game_id == null || r.environment == null || r.device_id == null) {
+                    ctx.output(DLQ, RawEvent.toDlqJson(r, "invalid_schema"));
                     return;
                 }
-                if (field(r, "ts_server") == null) {
-                    r.put("ts_server", System.currentTimeMillis() * 1000L); // micros
+                if (r.ts_server == null) {
+                    r.ts_server = System.currentTimeMillis() * 1000L; // micros
                 }
                 out.collect(r);
             }
         });
 
         // 去重（按 event_id，7 天 TTL）
-        DataStream<GenericRecord> deduped = validated
-                .keyBy(r -> String.valueOf(field(r, "event_id")))
+        DataStream<RawEvent> deduped = validated
+                .keyBy(r -> r.event_id)
                 .process(new DedupFunction(DLQ));
 
         // Optional enrichers
         String mmdbPath = System.getProperty("geoip.mmdb", "");
         final Enrichers enrichers = Enrichers.create(mmdbPath);
 
-        var mapped = deduped.map((MapFunction<GenericRecord, EventRow>) record -> {
+        var mapped = deduped.map((org.apache.flink.api.common.functions.MapFunction<RawEvent, EventRow>) record -> {
             EventRow row = new EventRow();
-            row.game_id = str(field(record, "game_id"));
-            row.environment = str(field(record, "environment"));
-            row.ts_server = toTimestamp(field(record, "ts_server"));
+            row.game_id = record.game_id;
+            row.environment = record.environment;
+            row.ts_server = toTimestamp(record.ts_server);
             if (row.ts_server == null) row.ts_server = new Timestamp(System.currentTimeMillis());
-            row.ts_client = toTimestamp(field(record, "ts_client"));
+            row.ts_client = toTimestamp(record.ts_client);
             if (row.ts_client == null) row.ts_client = row.ts_server;
-            row.event_id = str(field(record, "event_id"));
-            row.event_type = nz(str(field(record, "event_type")));
-            row.event_name = str(field(record, "event_name"));
-            row.user_id = nz(str(field(record, "user_id")));
-            row.device_id = str(field(record, "device_id"));
-            row.player_id = nz(str(field(record, "player_id")));
-            row.character_id = nz(str(field(record, "character_id")));
-            row.session_id = nz(str(field(record, "session_id")));
-            row.platform = nz(str(field(record, "platform")));
-            row.app_version = nz(str(field(record, "app_version")));
-            row.sdk_version = nz(str(field(record, "sdk_version")));
-            String currentCountry = nz(str(field(record, "country")));
-            String clientIp = nz(str(field(record, "client_ip")));
-            String userAgent = nz(str(field(record, "user_agent")));
+            row.event_id = record.event_id;
+            row.event_type = nz(record.event_type);
+            row.event_name = record.event_name;
+            row.user_id = nz(record.user_id);
+            row.device_id = record.device_id;
+            row.player_id = nz(record.player_id);
+            row.character_id = nz(record.character_id);
+            row.session_id = nz(record.session_id);
+            row.platform = nz(record.platform);
+            row.app_version = nz(record.app_version);
+            row.sdk_version = nz(record.sdk_version);
+            String currentCountry = nz(record.country);
+            String clientIp = nz(record.client_ip);
+            String userAgent = nz(record.user_agent);
             row.user_agent = userAgent;
-            row.server_id = nz(str(field(record, "server_id")));
-            row.guild_id = nz(str(field(record, "guild_id")));
-            row.match_id = nz(str(field(record, "match_id")));
-            row.level_id = nz(str(field(record, "level_id")));
-            row.game_mode = nz(str(field(record, "game_mode")));
-            row.difficulty = nz(str(field(record, "difficulty")));
-            row.progression_path = nz(str(field(record, "progression_path")));
-            row.order_id = nz(str(field(record, "order_id")));
-            row.product_id = nz(str(field(record, "product_id")));
-            row.receipt_hash = nz(str(field(record, "receipt_hash")));
-            row.virtual_currency = nz(str(field(record, "virtual_currency")));
-            row.virtual_amount = decimalOrZero(field(record, "virtual_amount"));
-            row.item_id = nz(str(field(record, "item_id")));
-            row.operation_id = nz(str(field(record, "operation_id")));
-            row.operation_type = nz(str(field(record, "operation_type")));
-            row.resource_id = nz(str(field(record, "resource_id")));
-            row.resource_amount = decimalOrZero(field(record, "resource_amount"));
-            row.flow_type = nz(str(field(record, "flow_type")));
-            row.ad_network = nz(str(field(record, "ad_network")));
-            row.ad_placement = nz(str(field(record, "ad_placement")));
-            row.ad_format = nz(str(field(record, "ad_format")));
-            row.ad_impression_id = nz(str(field(record, "ad_impression_id")));
+            row.server_id = nz(record.server_id);
+            row.guild_id = nz(record.guild_id);
+            row.match_id = nz(record.match_id);
+            row.level_id = nz(record.level_id);
+            row.game_mode = nz(record.game_mode);
+            row.difficulty = nz(record.difficulty);
+            row.progression_path = nz(record.progression_path);
+            row.order_id = nz(record.order_id);
+            row.product_id = nz(record.product_id);
+            row.receipt_hash = nz(record.receipt_hash);
+            row.virtual_currency = nz(record.virtual_currency);
+            row.virtual_amount = decimalOrZero(record.virtual_amount);
+            row.item_id = nz(record.item_id);
+            row.operation_id = nz(record.operation_id);
+            row.operation_type = nz(record.operation_type);
+            row.resource_id = nz(record.resource_id);
+            row.resource_amount = decimalOrZero(record.resource_amount);
+            row.flow_type = nz(record.flow_type);
+            row.ad_network = nz(record.ad_network);
+            row.ad_placement = nz(record.ad_placement);
+            row.ad_format = nz(record.ad_format);
+            row.ad_impression_id = nz(record.ad_impression_id);
             // Enrich country if empty and IP present
-            if ((currentCountry == null || currentCountry.isEmpty()) && !clientIp.isEmpty()) {
+            if (currentCountry.isEmpty() && !clientIp.isEmpty()) {
                 String c = enrichers.countryByIp(clientIp);
                 if (c != null) currentCountry = c;
             }
             row.country = nz(currentCountry);
             // Merge UA parsed info into props_json
-            Object pj = field(record, "props_json");
-            String baseProps = pj == null ? "{}" : pj.toString();
+            String baseProps = record.props_json == null ? "{}" : record.props_json;
             String uaFamily = enrichers.uaFamily(userAgent);
             String osFamily = enrichers.osFamily(userAgent);
             String deviceClass = enrichers.deviceClass(userAgent);
@@ -156,10 +152,10 @@ public class EventsEnrichJob {
             if (osFamily != null && !osFamily.isEmpty()) merged = mergeProps(merged, "os_family", osFamily);
             if (deviceClass != null && !deviceClass.isEmpty()) merged = mergeProps(merged, "device_class", deviceClass);
             row.props_json = merged;
-            row.revenue_amount = decimalOrZero(field(record, "revenue_amount"));
-            row.revenue_currency = nz(str(field(record, "revenue_currency")));
+            row.revenue_amount = decimalOrZero(record.revenue_amount);
+            row.revenue_currency = nz(record.revenue_currency);
             return row;
-        });
+        }).returns(EventRow.class);
 
         var sink = JdbcSink.<EventRow>sink(
                 "INSERT INTO events (" +
@@ -241,35 +237,16 @@ public class EventsEnrichJob {
         env.execute("oddsmaker-events-enrich");
     }
 
-    static String str(Object v) { return v == null ? null : v.toString(); }
     private static String nz(String s) { return s == null ? "" : s; }
-    static Object field(GenericRecord record, String name) {
-        if (record == null || record.getSchema() == null || record.getSchema().getField(name) == null) {
-            return null;
-        }
-        return record.get(name);
-    }
-    static Long longOrNull(Object value) {
-        if (value == null) return null;
-        if (value instanceof Number n) return n.longValue();
-        try { return Long.parseLong(value.toString()); } catch (Exception e) { return null; }
-    }
 
-    static Double doubleOrNull(Object value) {
-        if (value == null) return null;
-        if (value instanceof Number n) return n.doubleValue();
-        try { return Double.parseDouble(value.toString()); } catch (Exception e) { return null; }
-    }
     private static BigDecimal decimalOrZero(Object value) {
         if (value == null) return BigDecimal.ZERO;
         if (value instanceof BigDecimal bd) return bd;
         if (value instanceof Number n) return BigDecimal.valueOf(n.doubleValue());
         try { return new BigDecimal(value.toString()); } catch (Exception e) { return BigDecimal.ZERO; }
     }
-    private static Timestamp toTimestamp(Object micros) {
-        if (micros == null) return null;
-        if (micros instanceof Long) return new Timestamp(((Long) micros) / 1000L);
-        try { return new Timestamp(Long.parseLong(micros.toString()) / 1000L); } catch (Exception e) { return null; }
+    private static Timestamp toTimestamp(Long micros) {
+        return micros == null ? null : new Timestamp(micros / 1000L);
     }
 
     public static class EventRow {
@@ -318,7 +295,7 @@ public class EventsEnrichJob {
     }
 
     // 去重函数：按 event_id 维度，7天 TTL；重复事件输出到 DLQ 侧输出
-    public static class DedupFunction extends KeyedProcessFunction<String, GenericRecord, GenericRecord> {
+    public static class DedupFunction extends KeyedProcessFunction<String, RawEvent, RawEvent> {
         private final OutputTag<String> dlq;
         private transient ValueState<Long> seenTs;
 
@@ -336,10 +313,10 @@ public class EventsEnrichJob {
         }
 
         @Override
-        public void processElement(GenericRecord value, Context ctx, Collector<GenericRecord> out) throws Exception {
+        public void processElement(RawEvent value, Context ctx, Collector<RawEvent> out) throws Exception {
             Long seen = seenTs.value();
             if (seen != null) {
-                ctx.output(dlq, toDlqJson(value, "duplicate"));
+                ctx.output(dlq, RawEvent.toDlqJson(value, "duplicate"));
                 return;
             }
             seenTs.update(System.currentTimeMillis());
@@ -347,37 +324,38 @@ public class EventsEnrichJob {
         }
     }
 
-    static String toDlqJson(GenericRecord r, String reason) {
-        try {
-            Object eventId = field(r, "event_id");
-            String id = eventId == null ? "" : eventId.toString();
-            return "{\"event_id\":\"" + id + "\",\"reason\":\"" + reason + "\"}";
-        } catch (Exception e) { return "{\"event_id\":\"\",\"reason\":\""+reason+"\"}"; }
-    }
-
     // Enricher holder
-    static class Enrichers {
-        private final DatabaseReader geoip;
-        private final UserAgentAnalyzer uaa;
+    // 持有的重对象不可序列化：闭包随 map lambda 分发时只带配置，
+    // 真正的 reader/analyzer 在算子端首次使用时懒初始化
+    static class Enrichers implements java.io.Serializable {
+        private final String mmdbPath;
+        private transient DatabaseReader geoip;
+        private transient UserAgentAnalyzer uaa;
+        private transient boolean initialized;
 
-        private Enrichers(DatabaseReader geoip, UserAgentAnalyzer uaa) {
-            this.geoip = geoip; this.uaa = uaa;
+        private Enrichers(String mmdbPath) {
+            this.mmdbPath = mmdbPath;
         }
 
         static Enrichers create(String mmdbPath) {
-            DatabaseReader dr = null; UserAgentAnalyzer uaa = null;
+            return new Enrichers(mmdbPath);
+        }
+
+        private void ensureInit() {
+            if (initialized) return;
             try {
                 if (mmdbPath != null && !mmdbPath.isBlank() && new File(mmdbPath).exists()) {
-                    dr = new DatabaseReader.Builder(new File(mmdbPath)).build();
+                    geoip = new DatabaseReader.Builder(new File(mmdbPath)).build();
                 }
-            } catch (IOException e) { dr = null; }
+            } catch (IOException e) { geoip = null; }
             try {
                 uaa = UserAgentAnalyzer.newBuilder().hideMatcherLoadStats().withCache(10000).build();
             } catch (Exception e) { uaa = null; }
-            return new Enrichers(dr, uaa);
+            initialized = true;
         }
 
         String countryByIp(String ip) {
+            ensureInit();
             if (geoip == null) return null;
             try {
                 InetAddress addr = InetAddress.getByName(ip);
@@ -392,6 +370,7 @@ public class EventsEnrichJob {
         }
 
         String uaFamily(String ua) {
+            ensureInit();
             if (uaa == null || ua == null || ua.isEmpty()) return null;
             try {
                 UserAgent parsed = uaa.parse(ua);
@@ -400,6 +379,7 @@ public class EventsEnrichJob {
         }
 
         String osFamily(String ua) {
+            ensureInit();
             if (uaa == null || ua == null || ua.isEmpty()) return null;
             try {
                 UserAgent parsed = uaa.parse(ua);
@@ -408,6 +388,7 @@ public class EventsEnrichJob {
         }
 
         String deviceClass(String ua) {
+            ensureInit();
             if (uaa == null || ua == null || ua.isEmpty()) return null;
             try {
                 UserAgent parsed = uaa.parse(ua);

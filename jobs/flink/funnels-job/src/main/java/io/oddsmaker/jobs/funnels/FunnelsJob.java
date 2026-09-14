@@ -1,7 +1,7 @@
 package io.oddsmaker.jobs.funnels;
 
 import io.oddsmaker.jobs.enrich.ApicurioAvroFlinkDeserializer;
-import org.apache.avro.generic.GenericRecord;
+import io.oddsmaker.jobs.enrich.RawEvent;
 import org.apache.flink.api.common.eventtime.SerializableTimestampAssigner;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.api.common.state.MapState;
@@ -36,7 +36,7 @@ public class FunnelsJob {
 
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
-        KafkaSource<GenericRecord> source = KafkaSource.<GenericRecord>builder()
+        KafkaSource<RawEvent> source = KafkaSource.<RawEvent>builder()
                 .setBootstrapServers(bootstrap)
                 .setTopics(topic)
                 .setGroupId("oddsmaker-funnels")
@@ -44,24 +44,24 @@ public class FunnelsJob {
                 .setDeserializer(new ApicurioAvroFlinkDeserializer(registry))
                 .build();
 
-        var wm = WatermarkStrategy.<GenericRecord>forBoundedOutOfOrderness(Duration.ofMinutes(10))
-                .withTimestampAssigner((SerializableTimestampAssigner<GenericRecord>) (element, recordTimestamp) -> {
-                    Long tsServer = (Long) element.get("ts_server");
-                    Long tsClient = (Long) element.get("ts_client");
+        var wm = WatermarkStrategy.<RawEvent>forBoundedOutOfOrderness(Duration.ofMinutes(10))
+                .withTimestampAssigner((SerializableTimestampAssigner<RawEvent>) (element, recordTimestamp) -> {
+                    Long tsServer = element.ts_server;
+                    Long tsClient = element.ts_client;
                     long micros = tsServer != null ? tsServer : (tsClient != null ? tsClient : System.currentTimeMillis() * 1000L);
                     return micros / 1000L;
                 });
 
-        DataStream<GenericRecord> stream = env.fromSource(source, wm, "events-raw");
+        DataStream<RawEvent> stream = env.fromSource(source, wm, "events-raw");
 
         stream
                 .filter(r -> {
-                    Object n = r.get("event_name");
+                    Object n = r.event_name;
                     if (n == null) return false;
                     String ev = n.toString();
                     return ev.equals(step1) || ev.equals(step2);
                 })
-                .keyBy(r -> (r.get("game_id")+"|"+r.get("environment")+"|"+ uidOf(r)))
+                .keyBy(r -> (r.game_id+"|"+r.environment+"|"+ uidOf(r)))
                 .process(new FunnelProcess(step1, step2, timeoutMs))
                 .addSink(JdbcSink.sink(
                         "INSERT INTO funnels_2step (game_id, environment, event_date, step1, step2, started, completed) VALUES (?,?,?,?,?,?,?)",
@@ -83,15 +83,15 @@ public class FunnelsJob {
         env.execute("oddsmaker-funnels-2step");
     }
 
-    static String uidOf(GenericRecord r) {
-        Object u = r.get("user_id");
+    static String uidOf(RawEvent r) {
+        Object u = r.user_id;
         if (u != null && !u.toString().isEmpty()) return u.toString();
-        return String.valueOf(r.get("device_id"));
+        return String.valueOf(r.device_id);
     }
 
     static class FunnelRow { String gameId; String environment; long eventDateEpochDay; long started; long completed; }
 
-    static class FunnelProcess extends KeyedProcessFunction<String, GenericRecord, FunnelRow> {
+    static class FunnelProcess extends KeyedProcessFunction<String, RawEvent, FunnelRow> {
         private final String step1; private final String step2; private final long timeoutMs;
         private transient MapState<String, Long> state; // keys: last_step1_ts, started_day_<day>, completed_day_<day>
 
@@ -106,10 +106,10 @@ public class FunnelsJob {
         }
 
         @Override
-        public void processElement(GenericRecord value, Context ctx, Collector<FunnelRow> out) throws Exception {
-            String gameId = value.get("game_id").toString();
-            String environment = value.get("environment").toString();
-            String ev = value.get("event_name").toString();
+        public void processElement(RawEvent value, Context ctx, Collector<FunnelRow> out) throws Exception {
+            String gameId = value.game_id.toString();
+            String environment = value.environment.toString();
+            String ev = value.event_name.toString();
             long ts = tsMs(value);
             long day = ts / 86_400_000L;
             if (ev.equals(step1)) {
@@ -131,9 +131,9 @@ public class FunnelsJob {
             }
         }
 
-        private long tsMs(GenericRecord r) {
-            Long tsServer = (Long) r.get("ts_server");
-            Long tsClient = (Long) r.get("ts_client");
+        private long tsMs(RawEvent r) {
+            Long tsServer = r.ts_server;
+            Long tsClient = r.ts_client;
             long micros = tsServer != null ? tsServer : (tsClient != null ? tsClient : System.currentTimeMillis() * 1000L);
             return micros / 1000L;
         }

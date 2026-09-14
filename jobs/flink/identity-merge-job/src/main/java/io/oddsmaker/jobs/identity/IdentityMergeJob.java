@@ -1,7 +1,7 @@
 package io.oddsmaker.jobs.identity;
 
 import io.oddsmaker.jobs.enrich.ApicurioAvroFlinkDeserializer;
-import org.apache.avro.generic.GenericRecord;
+import io.oddsmaker.jobs.enrich.RawEvent;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.api.common.state.StateTtlConfig;
 import org.apache.flink.api.common.state.ValueState;
@@ -40,7 +40,7 @@ public class IdentityMergeJob {
 
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
-        KafkaSource<GenericRecord> source = KafkaSource.<GenericRecord>builder()
+        KafkaSource<RawEvent> source = KafkaSource.<RawEvent>builder()
                 .setBootstrapServers(bootstrap)
                 .setTopics(topic)
                 .setGroupId("oddsmaker-identity-merge")
@@ -48,25 +48,25 @@ public class IdentityMergeJob {
                 .setDeserializer(new ApicurioAvroFlinkDeserializer(registry))
                 .build();
 
-        WatermarkStrategy<GenericRecord> wm = WatermarkStrategy.<GenericRecord>forBoundedOutOfOrderness(Duration.ofMinutes(5))
+        WatermarkStrategy<RawEvent> wm = WatermarkStrategy.<RawEvent>forBoundedOutOfOrderness(Duration.ofMinutes(5))
                 .withTimestampAssigner((r, ts) -> {
-                    Long s = (Long) r.get("ts_server");
-                    Long c = (Long) r.get("ts_client");
+                    Long s = r.ts_server;
+                    Long c = r.ts_client;
                     long micros = s != null ? s : (c != null ? c : System.currentTimeMillis() * 1000L);
                     return micros / 1000L;
                 });
 
-        DataStream<GenericRecord> raw = env.fromSource(source, wm, "events-raw");
+        DataStream<RawEvent> raw = env.fromSource(source, wm, "events-raw");
 
         DataStream<IdentityRecord> identities = raw
-                .filter((org.apache.flink.api.common.functions.FilterFunction<GenericRecord>) r -> {
-                    Object t = r.get("event_type");
-                    Object n = r.get("event_name");
+                .filter((org.apache.flink.api.common.functions.FilterFunction<RawEvent>) r -> {
+                    Object t = r.event_type;
+                    Object n = r.event_name;
                     return t != null && "identity".equals(t.toString())
                             || (n != null && "$identify".equals(n.toString()));
                 })
-                .returns(Types.GENERIC(GenericRecord.class))
-                .keyBy(r -> nz(str(r.get("game_id"))) + "|" + nz(str(r.get("environment"))) + "|" + nz(str(r.get("user_id"))))
+                .returns(Types.GENERIC(RawEvent.class))
+                .keyBy(r -> nz(str(r.game_id)) + "|" + nz(str(r.environment)) + "|" + nz(str(r.user_id)))
                 .process(new IdentityMergeFunction())
                 .name("identity-merge");
 
@@ -136,7 +136,7 @@ public class IdentityMergeJob {
         public Timestamp lastSeen;
     }
 
-    public static class IdentityMergeFunction extends KeyedProcessFunction<String, GenericRecord, IdentityRecord> {
+    public static class IdentityMergeFunction extends KeyedProcessFunction<String, RawEvent, IdentityRecord> {
         private transient ValueState<IdentityState> state;
 
         @Override
@@ -151,15 +151,15 @@ public class IdentityMergeJob {
         }
 
         @Override
-        public void processElement(GenericRecord record, Context ctx, Collector<IdentityRecord> out) throws Exception {
-            String gameId = str(record.get("game_id"));
-            String environment = str(record.get("environment"));
-            String userId = nz(str(record.get("user_id")));
-            String deviceId = str(record.get("device_id"));
+        public void processElement(RawEvent record, Context ctx, Collector<IdentityRecord> out) throws Exception {
+            String gameId = str(record.game_id);
+            String environment = str(record.environment);
+            String userId = nz(str(record.user_id));
+            String deviceId = str(record.device_id);
             if (gameId == null || environment == null || userId.isEmpty() || deviceId == null) return;
 
             String playerId = extractPlayerId(record);
-            String characterId = str(record.get("character_id"));  // Avro 顶层可空字段，修复 character_ids 恒空 bug
+            String characterId = str(record.character_id);  // Avro 顶层可空字段，修复 character_ids 恒空 bug
             Timestamp ts = extractTs(record);
 
             IdentityState s = state.value();
@@ -234,19 +234,17 @@ public class IdentityMergeJob {
 
     private static String nz(String s) { return s == null ? "" : s; }
 
-    private static Timestamp extractTs(GenericRecord r) {
-        Long tsServer = (Long) r.get("ts_server");
-        Long tsClient = (Long) r.get("ts_client");
+    private static Timestamp extractTs(RawEvent r) {
+        Long tsServer = r.ts_server;
+        Long tsClient = r.ts_client;
         long micros = tsServer != null ? tsServer : (tsClient != null ? tsClient : System.currentTimeMillis() * 1000L);
         return new Timestamp(micros / 1000L);
     }
 
-    private static String extractPlayerId(GenericRecord r) {
-        Object pid = r.get("player_id");
-        if (pid != null && !pid.toString().isEmpty()) return pid.toString();
-        Object pj = r.get("props_json");
-        if (pj != null) {
-            String json = pj.toString();
+    private static String extractPlayerId(RawEvent r) {
+        if (r.player_id != null && !r.player_id.isEmpty()) return r.player_id;
+        String json = r.props_json;
+        if (json != null) {
             int idx = json.indexOf("\"player_id\"");
             if (idx >= 0) {
                 int colon = json.indexOf(':', idx);
@@ -254,11 +252,6 @@ public class IdentityMergeJob {
                 int q2 = json.indexOf('"', q1 + 1);
                 if (q1 > 0 && q2 > q1) return json.substring(q1 + 1, q2);
             }
-        }
-        Object pm = r.get("props");
-        if (pm instanceof java.util.Map) {
-            Object v = ((java.util.Map<?, ?>) pm).get("player_id");
-            if (v != null && !v.toString().isEmpty()) return v.toString();
         }
         return null;
     }

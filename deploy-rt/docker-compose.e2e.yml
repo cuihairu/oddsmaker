@@ -59,6 +59,10 @@ services:
   clickhouse:
     image: clickhouse/clickhouse-server:24.8
     container_name: e2e-clickhouse
+    environment:
+      CLICKHOUSE_USER: oddsmaker
+      CLICKHOUSE_PASSWORD: oddsmaker
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
     ports: ["18123:8123", "19000:9000"]
     volumes:
       - ../schema/sql/clickhouse/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
@@ -108,8 +112,8 @@ services:
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       CLICKHOUSE_URL: jdbc:clickhouse://clickhouse:8123/default
-      CLICKHOUSE_USER: default
-      CLICKHOUSE_PASSWORD: ""
+      CLICKHOUSE_USER: oddsmaker
+      CLICKHOUSE_PASSWORD: oddsmaker
       SPRING_DATA_REDIS_HOST: redis
       SPRING_REDIS_HOST: redis
       ODDSMAKER_ADMIN_TOKEN: e2e-admin-token
@@ -155,6 +159,45 @@ services:
       timeout: 5s
       retries: 20
       start_period: 60s
+    networks: [e2e]
+
+  events-enrich-job:
+    image: eclipse-temurin:21-jre
+    container_name: e2e-enrich
+    working_dir: /app
+    command: ["java", "-XX:MaxRAMPercentage=70.0",
+              # Flink 1.19 在 Java 17+ 官方要求的模块开放（local executor 无启动脚本代劳）
+              "--add-opens=java.base/java.lang=ALL-UNNAMED",
+              "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
+              "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+              "--add-opens=java.base/java.io=ALL-UNNAMED",
+              "--add-opens=java.base/java.net=ALL-UNNAMED",
+              "--add-opens=java.base/java.nio=ALL-UNNAMED",
+              "--add-opens=java.base/java.util=ALL-UNNAMED",
+              "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
+              "--add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED",
+              "-Dkafka.bootstrap=kafka:9092",
+              "-Dregistry.url=http://apicurio:8080/apis/registry/v2",
+              "-Dkafka.topic=oddsmaker.events_raw",
+              "-Dkafka.dlq=oddsmaker.deadletter",
+              "-Dclickhouse.url=jdbc:clickhouse://clickhouse:8123/default",
+              "-Dclickhouse.user=oddsmaker",
+              "-Dclickhouse.pass=oddsmaker",
+              "-jar", "/jars/events-enrich-job-0.1.0-all.jar"]
+    volumes:
+      - ./jars:/jars:ro
+    depends_on:
+      kafka: { condition: service_healthy }
+      apicurio: { condition: service_healthy }
+      clickhouse: { condition: service_healthy }
+    # local executor 无 REST/指标口，healthcheck 退化为 JVM 进程存活；
+    # env.execute 抛异常时 JVM 退出、容器转 unhealthy，可被发现
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'events-enrich-job-0.1.0-all.jar' >/dev/null"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
     networks: [e2e]
 
 volumes:

@@ -1,7 +1,7 @@
 package io.oddsmaker.jobs.dimension;
 
 import io.oddsmaker.jobs.enrich.ApicurioAvroFlinkDeserializer;
-import org.apache.avro.generic.GenericRecord;
+import io.oddsmaker.jobs.enrich.RawEvent;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.api.common.functions.FlatMapFunction;
 import org.apache.flink.api.common.typeinfo.Types;
@@ -31,7 +31,7 @@ public class DimensionSyncJob {
 
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
-        KafkaSource<GenericRecord> source = KafkaSource.<GenericRecord>builder()
+        KafkaSource<RawEvent> source = KafkaSource.<RawEvent>builder()
                 .setBootstrapServers(bootstrap)
                 .setTopics(topic)
                 .setGroupId("oddsmaker-dimension-sync")
@@ -39,28 +39,23 @@ public class DimensionSyncJob {
                 .setDeserializer(new ApicurioAvroFlinkDeserializer(registry))
                 .build();
 
-        WatermarkStrategy<GenericRecord> wm = WatermarkStrategy.<GenericRecord>forBoundedOutOfOrderness(Duration.ofMinutes(5))
+        WatermarkStrategy<RawEvent> wm = WatermarkStrategy.<RawEvent>forBoundedOutOfOrderness(Duration.ofMinutes(5))
                 .withTimestampAssigner((r, ts) -> {
-                    Long s = (Long) r.get("ts_server");
-                    Long c = (Long) r.get("ts_client");
+                    Long s = r.ts_server;
+                    Long c = r.ts_client;
                     long micros = s != null ? s : (c != null ? c : System.currentTimeMillis() * 1000L);
                     return micros / 1000L;
                 });
 
-        DataStream<GenericRecord> raw = env.fromSource(source, wm, "events-raw");
+        DataStream<RawEvent> raw = env.fromSource(source, wm, "events-raw");
 
         SingleOutputStreamOperator<DimRecord> allDims = raw
-                .flatMap((FlatMapFunction<GenericRecord, DimRecord>) (r, out) -> {
-                    String eventType = str(r.get("event_type"));
-                    if (!"dimension".equals(eventType)) return;
-                    String gameId = str(r.get("game_id"));
-                    String environment = str(r.get("environment"));
+                .flatMap((FlatMapFunction<RawEvent, DimRecord>) (r, out) -> {
+                    if (!"dimension".equals(r.event_type)) return;
+                    String gameId = r.game_id;
+                    String environment = r.environment;
                     if (gameId == null || environment == null) return;
-                    String propsJson = str(r.get("props_json"));
-                    if (propsJson == null || propsJson.isEmpty()) {
-                        Object pm = r.get("props");
-                        if (pm instanceof java.util.Map) propsJson = mapToJson((java.util.Map<?, ?>) pm);
-                    }
+                    String propsJson = r.props_json;
                     if (propsJson == null || propsJson.isEmpty()) return;
                     DimRecord rec = parseProps(gameId, environment, propsJson);
                     if (rec != null) out.collect(rec);
@@ -209,14 +204,6 @@ public class DimensionSyncJob {
             case "level_difficulty" -> attrs.put("difficulty", value);
             default -> attrs.put(key, value);
         }
-    }
-
-    private static String str(Object v) { return v == null ? null : v.toString(); }
-
-    private static String mapToJson(java.util.Map<?, ?> m) {
-        try {
-            return new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(m);
-        } catch (Exception e) { return ""; }
     }
 
     public static final class DimRecord {

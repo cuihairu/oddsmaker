@@ -1,7 +1,7 @@
 package io.oddsmaker.jobs.risk;
 
 import io.oddsmaker.jobs.enrich.ApicurioAvroFlinkDeserializer;
-import org.apache.avro.generic.GenericRecord;
+import io.oddsmaker.jobs.enrich.RawEvent;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.api.common.functions.FlatMapFunction;
 import org.apache.flink.api.common.typeinfo.Types;
@@ -48,7 +48,7 @@ public class RiskJob {
 
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
-        KafkaSource<GenericRecord> source = KafkaSource.<GenericRecord>builder()
+        KafkaSource<RawEvent> source = KafkaSource.<RawEvent>builder()
                 .setBootstrapServers(bootstrap)
                 .setTopics(sourceTopic)
                 .setGroupId("oddsmaker-risk-job")
@@ -56,26 +56,26 @@ public class RiskJob {
                 .setDeserializer(new ApicurioAvroFlinkDeserializer(registry))
                 .build();
 
-        WatermarkStrategy<GenericRecord> wm = WatermarkStrategy.<GenericRecord>forBoundedOutOfOrderness(Duration.ofMinutes(2))
+        WatermarkStrategy<RawEvent> wm = WatermarkStrategy.<RawEvent>forBoundedOutOfOrderness(Duration.ofMinutes(2))
                 .withTimestampAssigner((r, ts) -> {
-                    Long s = (Long) r.get("ts_server");
-                    Long c = (Long) r.get("ts_client");
+                    Long s = r.ts_server;
+                    Long c = r.ts_client;
                     long micros = s != null ? s : (c != null ? c : System.currentTimeMillis() * 1000L);
                     return micros / 1000L;
                 });
 
-        DataStream<GenericRecord> raw = env.fromSource(source, wm, "events-raw");
+        DataStream<RawEvent> raw = env.fromSource(source, wm, "events-raw");
 
-        DataStream<RiskInput> inputs = raw.flatMap((FlatMapFunction<GenericRecord, RiskInput>) (r, out) -> {
-            String gameId = str(r.get("game_id"));
-            String environmentName = str(r.get("environment"));
-            String eventId = str(r.get("event_id"));
-            String eventName = str(r.get("event_name"));
-            String userId = nz(str(r.get("user_id")));
-            String deviceId = str(r.get("device_id"));
+        DataStream<RiskInput> inputs = raw.flatMap((FlatMapFunction<RawEvent, RiskInput>) (r, out) -> {
+            String gameId = str(r.game_id);
+            String environmentName = str(r.environment);
+            String eventId = str(r.event_id);
+            String eventName = str(r.event_name);
+            String userId = nz(str(r.user_id));
+            String deviceId = str(r.device_id);
             if (gameId == null || environmentName == null || eventId == null || deviceId == null) return;
-            String eventType = nz(str(r.get("event_type")));
-            BigDecimal amount = parseAmount(r.get("resource_amount"));
+            String eventType = nz(str(r.event_type));
+            BigDecimal amount = parseAmount(r.resource_amount);
             RiskInput in = new RiskInput();
             in.gameId = gameId;
             in.environment = environmentName;
@@ -84,16 +84,17 @@ public class RiskJob {
             in.eventType = eventType;
             in.userId = userId;
             in.deviceId = deviceId;
-            in.clientIp = nz(str(r.get("client_ip")));
+            in.clientIp = nz(str(r.client_ip));
             in.ts = new Timestamp(System.currentTimeMillis());
-            Long tsServer = (Long) r.get("ts_server");
+            Long tsServer = r.ts_server;
             if (tsServer != null) in.ts = new Timestamp(tsServer / 1000L);
             in.amount = amount;
-            in.flowType = nz(str(r.get("flow_type")));
-            in.receiptKey = firstNonBlank(str(r.get("receipt_hash")), str(r.get("order_id")));
-            in.revenueAmount = parseAmount(r.get("revenue_amount"));
-            String adFormat = nz(str(r.get("ad_format")));
-            String gameEventType = nz(str(r.get("game_event_type")));
+            in.flowType = nz(r.flow_type);
+            in.receiptKey = firstNonBlank(r.receipt_hash, r.order_id);
+            in.revenueAmount = parseAmount(r.revenue_amount);
+            String adFormat = nz(r.ad_format);
+            // schema 无 game_event_type 字段（原 GenericRecord 取值恒 null）
+            String gameEventType = "";
             in.adReward = "rewarded".equalsIgnoreCase(adFormat)
                     || "ad_reward".equalsIgnoreCase(gameEventType)
                     || (eventName != null && eventName.contains("ad_reward"));

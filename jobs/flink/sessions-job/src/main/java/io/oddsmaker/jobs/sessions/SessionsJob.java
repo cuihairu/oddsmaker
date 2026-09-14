@@ -1,7 +1,7 @@
 package io.oddsmaker.jobs.sessions;
 
 import io.oddsmaker.jobs.enrich.ApicurioAvroFlinkDeserializer; // reuse deserializer
-import org.apache.avro.generic.GenericRecord;
+import io.oddsmaker.jobs.enrich.RawEvent;
 import org.apache.flink.api.common.eventtime.SerializableTimestampAssigner;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.api.common.functions.MapFunction;
@@ -40,7 +40,7 @@ public class SessionsJob {
 
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
-        KafkaSource<GenericRecord> source = KafkaSource.<GenericRecord>builder()
+        KafkaSource<RawEvent> source = KafkaSource.<RawEvent>builder()
                 .setBootstrapServers(bootstrap)
                 .setTopics(topic)
                 .setGroupId("oddsmaker-sessions")
@@ -52,7 +52,7 @@ public class SessionsJob {
                 .withTimestampAssigner((SerializableTimestampAssigner<EventLite>) (element, recordTimestamp) -> element.eventTimeMs);
 
         DataStream<EventLite> events = env.fromSource(source, WatermarkStrategy.noWatermarks(), "events-raw")
-                .map((MapFunction<GenericRecord, EventLite>) SessionsJob::toLite)
+                .map((MapFunction<RawEvent, EventLite>) SessionsJob::toLite)
                 .assignTimestampsAndWatermarks(wm);
 
         events
@@ -85,15 +85,15 @@ public class SessionsJob {
         env.execute("oddsmaker-sessions");
     }
 
-    static EventLite toLite(GenericRecord r) {
+    static EventLite toLite(RawEvent r) {
         EventLite e = new EventLite();
-        e.gameId = str(r.get("game_id"));
-        e.environment = str(r.get("environment"));
-        e.userId = str(r.get("user_id"));
-        e.deviceId = str(r.get("device_id"));
-        e.country = nz(str(r.get("country")));
-        Long tsServerMicros = (Long) r.get("ts_server");
-        Long tsClientMicros = (Long) r.get("ts_client");
+        e.gameId = str(r.game_id);
+        e.environment = str(r.environment);
+        e.userId = str(r.user_id);
+        e.deviceId = str(r.device_id);
+        e.country = nz(str(r.country));
+        Long tsServerMicros = r.ts_server;
+        Long tsClientMicros = r.ts_client;
         long micros = tsServerMicros != null ? tsServerMicros : (tsClientMicros != null ? tsClientMicros : System.currentTimeMillis() * 1000L);
         e.eventTimeMs = micros / 1000L;
         return e;

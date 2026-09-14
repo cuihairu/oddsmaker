@@ -4,34 +4,32 @@ import io.apicurio.registry.serde.avro.AvroKafkaDeserializer;
 import org.apache.avro.generic.GenericRecord;
 import org.apache.flink.api.common.serialization.DeserializationSchema;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
-import org.apache.flink.api.connector.source.SourceSplit;
 import org.apache.flink.connector.kafka.source.reader.deserializer.KafkaRecordDeserializationSchema;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.flink.util.Collector;
 
-import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 
-public class ApicurioAvroFlinkDeserializer implements KafkaRecordDeserializationSchema<GenericRecord> {
+public class ApicurioAvroFlinkDeserializer implements KafkaRecordDeserializationSchema<RawEvent> {
     private final String registryUrl;
-    private transient AvroKafkaDeserializer deser;
+    private transient AvroKafkaDeserializer<GenericRecord> deser;
 
     public ApicurioAvroFlinkDeserializer(String registryUrl) {
         this.registryUrl = registryUrl;
     }
 
     @Override
-    public void deserialize(ConsumerRecord<byte[], byte[]> record, Collector<GenericRecord> out) throws IOException {
+    public void deserialize(ConsumerRecord<byte[], byte[]> record, Collector<RawEvent> out) throws java.io.IOException {
         if (deser == null) init();
         Object obj = deser.deserialize(record.topic(), record.headers(), record.value());
-        if (obj instanceof GenericRecord) {
-            out.collect((GenericRecord) obj);
+        if (obj instanceof GenericRecord r) {
+            out.collect(RawEvent.from(r));
         }
     }
 
     private void init() {
-        deser = new AvroKafkaDeserializer();
+        deser = new AvroKafkaDeserializer<>();
         Map<String, Object> cfg = new HashMap<>();
         cfg.put("apicurio.registry.url", registryUrl);
         cfg.put("apicurio.registry.find-latest", true);
@@ -40,7 +38,7 @@ public class ApicurioAvroFlinkDeserializer implements KafkaRecordDeserialization
     }
 
     @Override
-    public TypeInformation<GenericRecord> getProducedType() {
-        return TypeInformation.of(GenericRecord.class);
+    public TypeInformation<RawEvent> getProducedType() {
+        return TypeInformation.of(RawEvent.class);
     }
 }

@@ -1,7 +1,7 @@
 package io.oddsmaker.jobs.retention;
 
 import io.oddsmaker.jobs.enrich.ApicurioAvroFlinkDeserializer;
-import org.apache.avro.generic.GenericRecord;
+import io.oddsmaker.jobs.enrich.RawEvent;
 import org.apache.flink.api.common.eventtime.SerializableTimestampAssigner;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.api.common.state.MapState;
@@ -41,7 +41,7 @@ public class RetentionJob {
 
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
-        KafkaSource<GenericRecord> source = KafkaSource.<GenericRecord>builder()
+        KafkaSource<RawEvent> source = KafkaSource.<RawEvent>builder()
                 .setBootstrapServers(bootstrap)
                 .setTopics(topic)
                 .setGroupId("oddsmaker-retention")
@@ -49,18 +49,18 @@ public class RetentionJob {
                 .setDeserializer(new ApicurioAvroFlinkDeserializer(registry))
                 .build();
 
-        var wm = WatermarkStrategy.<GenericRecord>forBoundedOutOfOrderness(Duration.ofMinutes(10))
-                .withTimestampAssigner((SerializableTimestampAssigner<GenericRecord>) (element, recordTimestamp) -> {
-                    Long tsServer = (Long) element.get("ts_server");
-                    Long tsClient = (Long) element.get("ts_client");
+        var wm = WatermarkStrategy.<RawEvent>forBoundedOutOfOrderness(Duration.ofMinutes(10))
+                .withTimestampAssigner((SerializableTimestampAssigner<RawEvent>) (element, recordTimestamp) -> {
+                    Long tsServer = element.ts_server;
+                    Long tsClient = element.ts_client;
                     long micros = tsServer != null ? tsServer : (tsClient != null ? tsClient : System.currentTimeMillis() * 1000L);
                     return micros / 1000L;
                 });
 
-        DataStream<GenericRecord> stream = env.fromSource(source, wm, "events-raw");
+        DataStream<RawEvent> stream = env.fromSource(source, wm, "events-raw");
 
         DataStream<RetentionEmit> emissions = stream
-                .keyBy(r -> (r.get("game_id")+"|"+r.get("environment")+"|"+ uidOf(r)))
+                .keyBy(r -> (r.game_id+"|"+r.environment+"|"+ uidOf(r)))
                 .process(new RetentionProcess(policy));
 
         // N-Day 留存：恰好第 N 天活跃
@@ -100,10 +100,10 @@ public class RetentionJob {
         env.execute("oddsmaker-retention");
     }
 
-    static String uidOf(GenericRecord r) {
-        Object u = r.get("user_id");
+    static String uidOf(RawEvent r) {
+        Object u = r.user_id;
         if (u != null && !u.toString().isEmpty()) return u.toString();
-        return String.valueOf(r.get("device_id"));
+        return String.valueOf(r.device_id);
     }
 
     /** rolling=0 为 N-Day 输出；rolling>0 表示 rolling 留存的 N */
@@ -111,7 +111,7 @@ public class RetentionJob {
         String gameId; String environment; LocalDate cohortDate; int d; int rolling;
     }
 
-    static class RetentionProcess extends KeyedProcessFunction<String, GenericRecord, RetentionEmit> {
+    static class RetentionProcess extends KeyedProcessFunction<String, RawEvent, RetentionEmit> {
         private final RetentionPolicy policy;
         private transient MapState<String, Long> state; // keys: first, last, seen_d_<n>, seen_r_<n>
 
@@ -132,9 +132,9 @@ public class RetentionJob {
         }
 
         @Override
-        public void processElement(GenericRecord value, Context ctx, Collector<RetentionEmit> out) throws Exception {
-            String gameId = value.get("game_id").toString();
-            String environment = value.get("environment").toString();
+        public void processElement(RawEvent value, Context ctx, Collector<RetentionEmit> out) throws Exception {
+            String gameId = value.game_id.toString();
+            String environment = value.environment.toString();
             long ms = tsMs(value);
             LocalDate day = LocalDate.ofEpochDay(ms / 86_400_000L);
 
@@ -176,9 +176,9 @@ public class RetentionJob {
             }
         }
 
-        private long tsMs(GenericRecord r) {
-            Long tsServer = (Long) r.get("ts_server");
-            Long tsClient = (Long) r.get("ts_client");
+        private long tsMs(RawEvent r) {
+            Long tsServer = r.ts_server;
+            Long tsClient = r.ts_client;
             long micros = tsServer != null ? tsServer : (tsClient != null ? tsClient : System.currentTimeMillis() * 1000L);
             return micros / 1000L;
         }
