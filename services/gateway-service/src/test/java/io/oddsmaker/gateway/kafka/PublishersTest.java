@@ -58,7 +58,6 @@ class PublishersTest {
         ReflectionTestUtils.setField(avroPublisher, "schema", schema);
         ReflectionTestUtils.setField(avroPublisher, "producer", producer);
         ReflectionTestUtils.setField(avroPublisher, "eventsTopic", "oddsmaker.events_raw");
-        ReflectionTestUtils.setField(avroPublisher, "riskTopic", "oddsmaker.risk_events");
         when(producer.send(any(ProducerRecord.class))).thenReturn(future);
 
         dlqPublisher = new DlqPublisher();
@@ -146,22 +145,24 @@ class PublishersTest {
     }
 
     @Test
-    @DisplayName("Avro 发布：risk 类型与名称含 risk 走风控主题；null props/序列化异常回退空 JSON")
+    @DisplayName("Avro 发布：所有埋点（含 risk 类）统一走 events_raw，不改道风控主题；null props/序列化异常回退空 JSON")
     void avroTopicRoutingAndPropsFallback() throws Exception {
+        // event_type=risk 也必须进 events_raw：RiskJob 只订阅它；
+        // risk_events 是 Flink 风控命中的 JSON 契约（control 消费），进 Avro 埋点即契约破坏
         Event risk = fullEvent();
         risk.eventType = "risk";
         avroPublisher.publish(risk);
         verify(producer).send(org.mockito.ArgumentMatchers.argThat(r ->
-            "oddsmaker.risk_events".equals(r.topic())));
+            "oddsmaker.events_raw".equals(r.topic())));
         clearInvocations(producer);
 
-        // 名称包含 risk 也走风控主题
+        // 名称包含 risk 的埋点同样不改道
         Event named = fullEvent();
         named.eventType = "business";
         named.eventName = "user_risk_signal";
         avroPublisher.publish(named);
         verify(producer).send(org.mockito.ArgumentMatchers.argThat(r ->
-            "oddsmaker.risk_events".equals(r.topic()) && "user_risk_signal".equals(
+            "oddsmaker.events_raw".equals(r.topic()) && "user_risk_signal".equals(
                 ((org.apache.avro.generic.GenericRecord) r.value()).get("event_name"))));
         clearInvocations(producer);
 

@@ -7,7 +7,6 @@ oddsmaker:
     bootstrap: localhost:9092
     topic:
       events: oddsmaker.events_raw
-      risk: oddsmaker.risk_events
     dlq-topic: oddsmaker.deadletter
   auth:
     keys:

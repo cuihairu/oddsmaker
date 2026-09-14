@@ -31,9 +31,6 @@ public class AvroPublisher {
     @Value("${oddsmaker.kafka.topic.events:oddsmaker.events_raw}")
     private String eventsTopic;
 
-    @Value("${oddsmaker.kafka.topic.risk:oddsmaker.risk_events}")
-    private String riskTopic;
-
     @Value("${oddsmaker.kafka.registry-url}")
     private String registryUrl;
 
@@ -75,22 +72,20 @@ public class AvroPublisher {
     }
 
     /**
-     * Publish event to appropriate topic based on event type.
+     * Publish event to events_raw.
      * Key format: "game_id|environment" for routing partitioning.
+     *
+     * 契约（勿改道）：所有客户端埋点——含 event_type=risk——统一进 events_raw。
+     * 之前 risk 类埋点被改道到 oddsmaker.risk_events，造成双重断裂：
+     * 1) RiskJob 只订阅 events_raw，风控引擎收不到这批埋点；
+     * 2) risk_events 的读者 control RiskEventConsumer 按 Flink 风控命中的 JSON
+     *    契约解析，Avro 埋点进来每条报反序列化错误并被丢弃。
+     * oddsmaker.risk_events 归 Flink RiskJob 单一生产者（JSON 风控命中事件）。
      */
     public Future<RecordMetadata> publish(Event e) {
-        String topic = selectTopic(e);
         GenericRecord gr = buildGenericRecord(e);
         String routingKey = buildRoutingKey(e);
-        return producer.send(new ProducerRecord<>(topic, routingKey, gr));
-    }
-
-    private String selectTopic(Event e) {
-        // Risk events go to dedicated topic for faster processing
-        if ("risk".equals(e.eventType) || (e.eventName != null && e.eventName.toLowerCase().contains("risk"))) {
-            return riskTopic;
-        }
-        return eventsTopic;
+        return producer.send(new ProducerRecord<>(eventsTopic, routingKey, gr));
     }
 
     private String buildRoutingKey(Event e) {

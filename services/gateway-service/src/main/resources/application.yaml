@@ -15,7 +15,6 @@ oddsmaker:
     bootstrap: localhost:9092
     topic:
       events: oddsmaker.events_raw
-      risk: oddsmaker.risk_events
     registry-url: http://localhost:8081/apis/registry/v2
     dlq-topic: oddsmaker.deadletter
     producer:

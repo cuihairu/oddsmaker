@@ -253,6 +253,24 @@ RISK_N=$($COMPOSE exec -T kafka /opt/kafka/bin/kafka-get-offsets.sh --bootstrap-
 echo "  risk_events offsets: ${RISK_N:-0} (baseline ${RISK_BASE:-0})"
 [ "${RISK_N:-0}" -gt "${RISK_BASE:-0}" ] && ok "risk_events topic grew" || bad "risk_events topic did not grow"
 
+# 契约回归：risk 类埋点必须走 events_raw 全链（曾因 gateway 改道 Avro 到 risk_events，
+# 造成 RiskJob 收不到埋点 + control JSON 消费者每条报错）
+TAG_ID="verify_risktag_$(date +%s)"
+TS=$(date +%s000)
+TBODY=$(printf '{"event_id":"%s","event_type":"risk","event_name":"user_risk_signal","game_id":"e2e_game","environment":"dev","device_id":"verify_tag_d","ts_client":%s}' "$TAG_ID" "$TS")
+R=$(printf '%s' "$TBODY" | curl -sS -X POST "$GW/v1/batch" -H "x-api-key: $API_KEY" -H "content-type: application/x-ndjson" --data-binary @- 2>&1)
+echo "$R" | grep -q "accepted" || bad "risk-tagged batch not accepted: $R"
+TAG_LANDED=""
+for i in $(seq 1 15); do
+  TAG_LANDED=$($CH "http://localhost:18123/?query=select+count()+from+events+where+event_id='$TAG_ID'" 2>/dev/null)
+  [ "${TAG_LANDED:-0}" -ge 1 ] && break
+  sleep 2
+done
+[ "${TAG_LANDED:-0}" -ge 1 ] && ok "risk-tagged event landed via events_raw (no detour)" || bad "risk-tagged event missing in CH events"
+TAG_TOPIC=$($COMPOSE exec -T kafka /opt/kafka/bin/kafka-get-offsets.sh --bootstrap-server localhost:9092 --topic oddsmaker.risk_events 2>/dev/null | awk -F: '{s+=$3} END {print s+0}')
+echo "  risk_events offsets after risk-tagged event: ${TAG_TOPIC:-0} (expect ${RISK_N:-0})"
+[ "${TAG_TOPIC:-0}" -eq "${RISK_N:-0}" ] && ok "gateway no longer writes Avro into risk_events" || bad "risk_events grew without a threshold hit (${RISK_N} -> ${TAG_TOPIC})"
+
 section "15. Flink configurable funnels（control PG 配置 → 加载 → funnels_configurable 落库）"
 # 幂等铺配置：control 真实迁移（V0.3.3）建的 funnel_analyses / funnel_steps 表。
 # job 启动时一次性加载，所以插完配置要 force-recreate 该容器
