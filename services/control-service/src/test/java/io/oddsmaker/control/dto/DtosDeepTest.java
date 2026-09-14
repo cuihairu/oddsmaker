@@ -56,7 +56,7 @@ class DtosDeepTest {
         e.emailVerified = true;
         e.twoFactorEnabled = true;
         e.loginAttempts = 5;
-        e.lastLogin = T;
+        e.lastLoginAt = T;
         e.lastLoginIp = "192.168.1.1";
         e.createdAt = T;
         e.updatedAt = T;
@@ -669,8 +669,8 @@ class DtosDeepTest {
         dto.status = "running";
         dto.salt = "salt-1";
         dto.config = MAPPER.valueToTree(Map.of("variants", List.of("a", "b")));
-        dto.createdAt = Instant.ofEpochMilli(1700000000000L);
-        dto.updatedAt = Instant.ofEpochMilli(1700000009999L);
+        dto.createdAt = LocalDateTime.of(2023, 11, 15, 1, 33, 20);
+        dto.updatedAt = LocalDateTime.of(2023, 11, 15, 1, 33, 20, 999_000_000);
 
         assertEquals("exp-1", dto.id);
         assertEquals("g-1", dto.gameId);
@@ -681,15 +681,16 @@ class DtosDeepTest {
         assertEquals("salt-1", dto.salt);
         assertEquals(2, dto.config.get("variants").size());
         assertEquals("b", dto.config.get("variants").get(1).asText());
-        assertEquals(Instant.ofEpochMilli(1700000000000L), dto.createdAt);
-        assertEquals(Instant.ofEpochMilli(1700000009999L), dto.updatedAt);
+        assertEquals(LocalDateTime.of(2023, 11, 15, 1, 33, 20), dto.createdAt);
+        assertEquals(LocalDateTime.of(2023, 11, 15, 1, 33, 20, 999_000_000), dto.updatedAt);
 
         JsonNode json = MAPPER.valueToTree(dto);
         assertEquals("exp-1", json.get("id").asText());
         assertEquals("running", json.get("status").asText());
         assertEquals("prod", json.get("environment").asText());
         assertEquals(2, json.get("config").get("variants").size());
-        assertEquals(1700000000L, json.get("createdAt").asLong());  // JSR310 默认秒级时间戳
+        // JavaTimeModule 默认把 LocalDateTime 序列化为数组节点 [年,月,日,时,分,秒]
+        assertEquals(2023, json.get("createdAt").get(0).asInt());
     }
 
     @Test

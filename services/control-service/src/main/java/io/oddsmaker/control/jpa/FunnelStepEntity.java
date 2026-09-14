@@ -1,6 +1,7 @@
 package io.oddsmaker.control.jpa;
 
 import jakarta.persistence.*;
+import java.util.UUID;
 
 /**
  * 漏斗步骤实体
@@ -10,9 +11,18 @@ import jakarta.persistence.*;
 @Table(name = "funnel_steps")
 public class FunnelStepEntity {
 
+    /**
+     * 主键：迁移中为 varchar(32)（非自增），@PrePersist 生成 32 位无横杠 UUID 对齐。
+     */
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    public Long id;
+    public String id;
+
+    @PrePersist
+    void ensureId() {
+        if (id == null || id.isEmpty()) {
+            id = UUID.randomUUID().toString().replace("-", "");
+        }
+    }
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "funnel_id", nullable = false)

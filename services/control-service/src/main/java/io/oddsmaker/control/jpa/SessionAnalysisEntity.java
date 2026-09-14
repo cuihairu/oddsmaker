@@ -1,6 +1,8 @@
 package io.oddsmaker.control.jpa;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
@@ -54,9 +56,11 @@ public class SessionAnalysisEntity {
 
     // 深度指标
     @Column(name = "avg_events_per_session", columnDefinition = "DECIMAL(10,2)")
+    @JdbcTypeCode(SqlTypes.NUMERIC)
     public Double avgEventsPerSession = 0.0;
 
     @Column(name = "avg_pages_per_session", columnDefinition = "DECIMAL(10,2)")
+    @JdbcTypeCode(SqlTypes.NUMERIC)
     public Double avgPagesPerSession = 0.0;
 
     // 跳出率
@@ -64,6 +68,7 @@ public class SessionAnalysisEntity {
     public Long bounceSessions = 0L;
 
     @Column(name = "bounce_rate", columnDefinition = "DECIMAL(5,4)")
+    @JdbcTypeCode(SqlTypes.NUMERIC)
     public Double bounceRate = 0.0;
 
     // 会话质量分布

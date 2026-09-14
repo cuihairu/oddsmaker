@@ -219,7 +219,7 @@ class UserPortalDeepTest {
         UserEntity updates = new UserEntity();
         updates.displayName = "新名称";
         updates.email = "new@example.com";
-        updates.avatar = "https://avatar";
+        updates.avatarUrl = "https://avatar";
         updates.timeZone = "Asia/Shanghai";
         updates.language = "zh";
         updates.status = UserEntity.UserStatus.PENDING;
@@ -233,7 +233,7 @@ class UserPortalDeepTest {
 
         assertEquals("新名称", result.displayName);
         assertEquals("new@example.com", result.email);
-        assertEquals("https://avatar", result.avatar);
+        assertEquals("https://avatar", result.avatarUrl);
         assertEquals("Asia/Shanghai", result.timeZone);
         assertEquals("zh", result.language);
         assertEquals(UserEntity.UserStatus.PENDING, result.status);

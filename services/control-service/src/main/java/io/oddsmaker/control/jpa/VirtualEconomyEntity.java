@@ -3,6 +3,8 @@ package io.oddsmaker.control.jpa;
 import jakarta.persistence.*;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
 
@@ -62,6 +64,7 @@ public class VirtualEconomyEntity {
     public String inflationCalcMethod = "circulating_supply";  // 通胀计算方法
 
     @Column(name = "inflation_threshold")
+    @JdbcTypeCode(SqlTypes.NUMERIC)
     public Double inflationThreshold = 0.05;  // 通胀阈值（5%）
 
     // 流量分析
@@ -69,6 +72,7 @@ public class VirtualEconomyEntity {
     public Boolean enableFlowAnalysis = true;  // 启用流量分析
 
     @Column(name = "flow_balance_threshold")
+    @JdbcTypeCode(SqlTypes.NUMERIC)
     public Double flowBalanceThreshold = 0.8;  // 流量平衡阈值
 
     // 告警
@@ -76,9 +80,11 @@ public class VirtualEconomyEntity {
     public Boolean enableAlerts = true;  // 启用告警
 
     @Column(name = "alert_threshold_low")
+    @JdbcTypeCode(SqlTypes.NUMERIC)
     public Double alertThresholdLow = 0.2;  // 低阈值
 
     @Column(name = "alert_threshold_high")
+    @JdbcTypeCode(SqlTypes.NUMERIC)
     public Double alertThresholdHigh = 0.8;  // 高阈值
 
     // 分组

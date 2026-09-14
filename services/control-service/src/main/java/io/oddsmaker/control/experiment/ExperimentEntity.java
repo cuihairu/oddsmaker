@@ -1,7 +1,7 @@
 package io.oddsmaker.control.experiment;
 
 import jakarta.persistence.*;
-import java.time.Instant;
+import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "experiments")
@@ -21,6 +21,6 @@ public class ExperimentEntity {
     @Lob
     @Column(name = "config_json", columnDefinition = "TEXT")
     public String configJson;
-    public Instant createdAt;
-    public Instant updatedAt;
+    public LocalDateTime createdAt;
+    public LocalDateTime updatedAt;
 }

@@ -1,6 +1,8 @@
 package io.oddsmaker.control.jpa;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import java.time.LocalDateTime;
 
 /**
@@ -49,33 +51,42 @@ public class HealthMetricEntity {
     public String source;  // 指标来源（如：server-1, db-primary）
 
     @Column(name = "metric_value", columnDefinition = "DECIMAL(20,4)")
+    @JdbcTypeCode(SqlTypes.NUMERIC)
     public Double metricValue;  // 指标值
 
     @Column(name = "unit", length = 20)
     public String unit;  // 单位（percent, bytes, count, ms, etc.）
 
     @Column(name = "min_value", columnDefinition = "DECIMAL(20,4)")
+    @JdbcTypeCode(SqlTypes.NUMERIC)
     public Double minValue;  // 最小值
 
     @Column(name = "max_value", columnDefinition = "DECIMAL(20,4)")
+    @JdbcTypeCode(SqlTypes.NUMERIC)
     public Double maxValue;  // 最大值
 
     @Column(name = "avg_value", columnDefinition = "DECIMAL(20,4)")
+    @JdbcTypeCode(SqlTypes.NUMERIC)
     public Double avgValue;  // 平均值
 
     @Column(name = "percentile_50", columnDefinition = "DECIMAL(20,4)")
+    @JdbcTypeCode(SqlTypes.NUMERIC)
     public Double percentile50;  // P50
 
     @Column(name = "percentile_95", columnDefinition = "DECIMAL(20,4)")
+    @JdbcTypeCode(SqlTypes.NUMERIC)
     public Double percentile95;  // P95
 
     @Column(name = "percentile_99", columnDefinition = "DECIMAL(20,4)")
+    @JdbcTypeCode(SqlTypes.NUMERIC)
     public Double percentile99;  // P99
 
     @Column(name = "warning_threshold", columnDefinition = "DECIMAL(20,4)")
+    @JdbcTypeCode(SqlTypes.NUMERIC)
     public Double warningThreshold;  // 警告阈值
 
     @Column(name = "critical_threshold", columnDefinition = "DECIMAL(20,4)")
+    @JdbcTypeCode(SqlTypes.NUMERIC)
     public Double criticalThreshold;  // 严重阈值
 
     @Column(name = "is_anomaly", columnDefinition = "BOOLEAN")

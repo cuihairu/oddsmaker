@@ -84,7 +84,7 @@ public class UserDTO {
         this.emailVerified = entity.emailVerified;
         this.twoFactorEnabled = entity.twoFactorEnabled;
         this.loginAttempts = entity.loginAttempts;
-        this.lastLogin = entity.lastLogin;
+        this.lastLogin = entity.lastLoginAt;  // 实体已合并重复字段到 lastLoginAt
         this.lastLoginIp = entity.lastLoginIp;
         this.isLocked = entity.isLocked();
         this.createdAt = entity.createdAt;

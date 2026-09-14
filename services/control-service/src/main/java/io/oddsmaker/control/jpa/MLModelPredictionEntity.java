@@ -1,6 +1,8 @@
 package io.oddsmaker.control.jpa;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import java.time.LocalDateTime;
 
 /**
@@ -75,9 +77,11 @@ public class MLModelPredictionEntity {
     public String predictionClass;  // 预测分类
 
     @Column(name = "prediction_score", columnDefinition = "DECIMAL(10,6)")
+    @JdbcTypeCode(SqlTypes.NUMERIC)
     public Double predictionScore;  // 预测分数/置信度
 
     @Column(name = "prediction_probability", columnDefinition = "DECIMAL(10,6)")
+    @JdbcTypeCode(SqlTypes.NUMERIC)
     public Double predictionProbability;  // 预测概率
 
     @Column(name = "top_predictions", columnDefinition = "TEXT")

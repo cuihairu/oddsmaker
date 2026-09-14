@@ -1,6 +1,8 @@
 package io.oddsmaker.control.jpa;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import java.time.LocalDateTime;
 
 /**
@@ -115,6 +117,7 @@ public class TelemetryConfigEntity {
     public Integer retryIntervalMs = 1000;  // 重试间隔（毫秒）
 
     @Column(name = "retry_backoff_multiplier", columnDefinition = "DECIMAL(5,2)")
+    @JdbcTypeCode(SqlTypes.NUMERIC)
     public Double retryBackoffMultiplier = 2.0;  // 重试退避乘数
 
     @Column(name = "max_retry_interval_ms", columnDefinition = "INTEGER")
@@ -150,6 +153,7 @@ public class TelemetryConfigEntity {
     public Boolean reportPerformance = true;  // 报告性能指标
 
     @Column(name = "sample_rate", columnDefinition = "DECIMAL(5,4)")
+    @JdbcTypeCode(SqlTypes.NUMERIC)
     public Double sampleRate = 1.0;  // 采样率
 
     // 超时配置

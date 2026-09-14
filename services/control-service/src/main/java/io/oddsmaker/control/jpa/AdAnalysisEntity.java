@@ -1,6 +1,8 @@
 package io.oddsmaker.control.jpa;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
@@ -73,9 +75,11 @@ public class AdAnalysisEntity {
 
     // 收入指标
     @Column(name = "revenue", columnDefinition = "DECIMAL(18,4)")
+    @JdbcTypeCode(SqlTypes.NUMERIC)
     public Double revenue = 0.0;
 
     @Column(name = "ecpm", columnDefinition = "DECIMAL(18,4)")
+    @JdbcTypeCode(SqlTypes.NUMERIC)
     public Double ecpm = 0.0;
 
     // 填充率
@@ -86,10 +90,12 @@ public class AdAnalysisEntity {
     public Long fills = 0L;
 
     @Column(name = "fill_rate", columnDefinition = "DECIMAL(5,4)")
+    @JdbcTypeCode(SqlTypes.NUMERIC)
     public Double fillRate = 0.0;
 
     // 点击率
     @Column(name = "ctr", columnDefinition = "DECIMAL(5,4)")
+    @JdbcTypeCode(SqlTypes.NUMERIC)
     public Double ctr = 0.0;
 
     // 用户指标

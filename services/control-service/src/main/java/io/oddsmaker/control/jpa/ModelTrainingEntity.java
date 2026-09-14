@@ -1,6 +1,8 @@
 package io.oddsmaker.control.jpa;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import java.time.LocalDateTime;
 
 /**
@@ -68,6 +70,7 @@ public class ModelTrainingEntity {
     public Integer batchSize;  // 批次大小
 
     @Column(name = "learning_rate", columnDefinition = "DECIMAL(10,8)")
+    @JdbcTypeCode(SqlTypes.NUMERIC)
     public Double learningRate;  // 学习率
 
     @Column(name = "training_samples", columnDefinition = "BIGINT")
@@ -95,6 +98,7 @@ public class ModelTrainingEntity {
     public Integer bestEpoch;  // 最佳轮数
 
     @Column(name = "best_loss", columnDefinition = "DECIMAL(20,10)")
+    @JdbcTypeCode(SqlTypes.NUMERIC)
     public Double bestLoss;  // 最佳损失
 
     @Column(name = "started_at")
@@ -107,9 +111,11 @@ public class ModelTrainingEntity {
     public Long durationMs;  // 执行时长（毫秒）
 
     @Column(name = "gpu_hours", columnDefinition = "DECIMAL(10,4)")
+    @JdbcTypeCode(SqlTypes.NUMERIC)
     public Double gpuHours;  // GPU使用时长
 
     @Column(name = "cpu_hours", columnDefinition = "DECIMAL(10,4)")
+    @JdbcTypeCode(SqlTypes.NUMERIC)
     public Double cpuHours;  // CPU使用时长
 
     @Column(name = "worker_node", length = 100)

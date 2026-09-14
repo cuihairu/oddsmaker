@@ -193,8 +193,8 @@ class MlExperimentDeepTest {
         e.status = status;
         e.salt = "salt_1";
         e.configJson = configJson;
-        e.createdAt = Instant.now();
-        e.updatedAt = Instant.now();
+        e.createdAt = LocalDateTime.now();
+        e.updatedAt = LocalDateTime.now();
         return e;
     }
 

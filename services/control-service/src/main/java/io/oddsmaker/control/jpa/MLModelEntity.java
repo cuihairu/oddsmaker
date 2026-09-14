@@ -1,6 +1,8 @@
 package io.oddsmaker.control.jpa;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import java.time.LocalDateTime;
 import java.util.Map;
 
@@ -97,18 +99,23 @@ public class MLModelEntity {
     public Long modelSizeBytes;  // 模型大小
 
     @Column(name = "accuracy_metric", columnDefinition = "DECIMAL(10,6)")
+    @JdbcTypeCode(SqlTypes.NUMERIC)
     public Double accuracyMetric;  // 准确率指标
 
     @Column(name = "precision_metric", columnDefinition = "DECIMAL(10,6)")
+    @JdbcTypeCode(SqlTypes.NUMERIC)
     public Double precisionMetric;  // 精确率指标
 
     @Column(name = "recall_metric", columnDefinition = "DECIMAL(10,6)")
+    @JdbcTypeCode(SqlTypes.NUMERIC)
     public Double recallMetric;  // 召回率指标
 
     @Column(name = "f1_score", columnDefinition = "DECIMAL(10,6)")
+    @JdbcTypeCode(SqlTypes.NUMERIC)
     public Double f1Score;  // F1分数
 
     @Column(name = "auc_score", columnDefinition = "DECIMAL(10,6)")
+    @JdbcTypeCode(SqlTypes.NUMERIC)
     public Double aucScore;  // AUC分数
 
     @Column(name = "custom_metrics", columnDefinition = "TEXT")

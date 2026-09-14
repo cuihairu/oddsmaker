@@ -1,6 +1,8 @@
 package io.oddsmaker.control.jpa;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
@@ -53,6 +55,7 @@ public class SocialAnalyticsEntity {
     public Long newFriendships = 0L;
 
     @Column(name = "avg_friends_per_user", columnDefinition = "DECIMAL(10,2)")
+    @JdbcTypeCode(SqlTypes.NUMERIC)
     public Double avgFriendsPerUser = 0.0;
 
     // 公会指标
@@ -63,6 +66,7 @@ public class SocialAnalyticsEntity {
     public Long newGuilds = 0L;
 
     @Column(name = "avg_guild_size", columnDefinition = "DECIMAL(10,2)")
+    @JdbcTypeCode(SqlTypes.NUMERIC)
     public Double avgGuildSize = 0.0;
 
     @Column(name = "guild_members", columnDefinition = "BIGINT")
@@ -83,19 +87,24 @@ public class SocialAnalyticsEntity {
 
     // 病毒系数
     @Column(name = "viral_coefficient", columnDefinition = "DECIMAL(5,4)")
+    @JdbcTypeCode(SqlTypes.NUMERIC)
     public Double viralCoefficient = 0.0;
 
     // 社交对留存的影响
     @Column(name = "social_users_retention_d1", columnDefinition = "DECIMAL(5,4)")
+    @JdbcTypeCode(SqlTypes.NUMERIC)
     public Double socialUsersRetentionD1 = 0.0;
 
     @Column(name = "social_users_retention_d7", columnDefinition = "DECIMAL(5,4)")
+    @JdbcTypeCode(SqlTypes.NUMERIC)
     public Double socialUsersRetentionD7 = 0.0;
 
     @Column(name = "non_social_users_retention_d1", columnDefinition = "DECIMAL(5,4)")
+    @JdbcTypeCode(SqlTypes.NUMERIC)
     public Double nonSocialUsersRetentionD1 = 0.0;
 
     @Column(name = "non_social_users_retention_d7", columnDefinition = "DECIMAL(5,4)")
+    @JdbcTypeCode(SqlTypes.NUMERIC)
     public Double nonSocialUsersRetentionD7 = 0.0;
 
     // 维度

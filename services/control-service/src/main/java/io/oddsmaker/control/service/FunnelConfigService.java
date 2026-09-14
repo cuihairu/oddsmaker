@@ -217,7 +217,7 @@ public class FunnelConfigService {
     /**
      * 更新漏斗步骤
      */
-    public FunnelStepEntity updateStep(Long stepId, FunnelStepEntity updates) {
+    public FunnelStepEntity updateStep(String stepId, FunnelStepEntity updates) {
         logger.info("Updating step: {}", stepId);
 
         FunnelStepEntity step = funnelStepRepo.findById(stepId)
@@ -257,7 +257,7 @@ public class FunnelConfigService {
     /**
      * 删除漏斗步骤
      */
-    public void deleteStep(Long stepId) {
+    public void deleteStep(String stepId) {
         logger.info("Deleting step: {}", stepId);
 
         FunnelStepEntity step = funnelStepRepo.findById(stepId)

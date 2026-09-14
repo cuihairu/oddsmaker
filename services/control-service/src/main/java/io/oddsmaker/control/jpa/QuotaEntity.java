@@ -1,6 +1,8 @@
 package io.oddsmaker.control.jpa;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import java.time.LocalDateTime;
 
 /**
@@ -49,12 +51,15 @@ public class QuotaEntity {
     public Long currentUsage = 0L;  // 当前使用量
 
     @Column(name = "usage_percent", columnDefinition = "DECIMAL(5,2)")
+    @JdbcTypeCode(SqlTypes.NUMERIC)
     public Double usagePercent;  // 使用百分比（缓存）
 
     @Column(name = "warning_threshold", columnDefinition = "DECIMAL(5,2)")
+    @JdbcTypeCode(SqlTypes.NUMERIC)
     public Double warningThreshold = 80.0;  // 警告阈值（百分比）
 
     @Column(name = "alert_threshold", columnDefinition = "DECIMAL(5,2)")
+    @JdbcTypeCode(SqlTypes.NUMERIC)
     public Double alertThreshold = 95.0;  // 告警阈值（百分比）
 
     @Column(name = "warning_sent", columnDefinition = "BOOLEAN")

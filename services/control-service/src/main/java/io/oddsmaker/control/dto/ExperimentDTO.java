@@ -4,7 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
-import java.time.Instant;
+import java.time.LocalDateTime;
 
 /**
  * A/B 实验控制面 DTO。
@@ -34,6 +34,6 @@ public class ExperimentDTO {
 
     public String salt;
     public JsonNode config;
-    public Instant createdAt;
-    public Instant updatedAt;
+    public LocalDateTime createdAt;
+    public LocalDateTime updatedAt;
 }

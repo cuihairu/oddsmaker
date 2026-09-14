@@ -18,7 +18,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -104,7 +104,7 @@ public class ExperimentService {
         JsonNode config = normalizeConfig(dto.config);
         validateConfig(config, "running".equals(status));
 
-        Instant now = Instant.now();
+        LocalDateTime now = LocalDateTime.now();
         ExperimentEntity entity = new ExperimentEntity();
         entity.id = id;
         entity.gameId = dto.gameId;
@@ -150,7 +150,7 @@ public class ExperimentService {
             }
             entity.status = status;
         }
-        entity.updatedAt = Instant.now();
+        entity.updatedAt = LocalDateTime.now();
         return toDto(experimentRepo.save(entity));
     }
 
@@ -159,7 +159,7 @@ public class ExperimentService {
             .orElseThrow(() -> new IllegalArgumentException("Experiment not found: " + id));
         validateConfig(readConfig(entity.configJson), true);
         entity.status = "running";
-        entity.updatedAt = Instant.now();
+        entity.updatedAt = LocalDateTime.now();
         return toDto(experimentRepo.save(entity));
     }
 
@@ -167,7 +167,7 @@ public class ExperimentService {
         ExperimentEntity entity = experimentRepo.findById(id)
             .orElseThrow(() -> new IllegalArgumentException("Experiment not found: " + id));
         entity.status = "paused";
-        entity.updatedAt = Instant.now();
+        entity.updatedAt = LocalDateTime.now();
         return toDto(experimentRepo.save(entity));
     }
 

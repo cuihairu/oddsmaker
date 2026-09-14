@@ -982,7 +982,7 @@ class FinalSweep3Test {
     @DisplayName("FunnelConfigService.updateStep 全字段更新与未找到")
     void testUpdateStep() {
         FunnelStepEntity step = new FunnelStepEntity();
-        when(funnelStepRepo.findById(5L)).thenReturn(Optional.of(step));
+        when(funnelStepRepo.findById("s5")).thenReturn(Optional.of(step));
         when(funnelStepRepo.save(any(FunnelStepEntity.class))).thenAnswer(inv -> inv.getArgument(0));
 
         FunnelStepEntity updates = new FunnelStepEntity();
@@ -994,7 +994,7 @@ class FinalSweep3Test {
         updates.optional = true;
         updates.icon = "cart";
         updates.color = "blue";
-        FunnelStepEntity out = funnelConfigService.updateStep(5L, updates);
+        FunnelStepEntity out = funnelConfigService.updateStep("s5", updates);
         assertEquals("pay", out.name);
         assertEquals("d", out.description);
         assertEquals("purchase", out.eventName);
@@ -1004,9 +1004,9 @@ class FinalSweep3Test {
         assertEquals("cart", out.icon);
         assertEquals("blue", out.color);
 
-        when(funnelStepRepo.findById(6L)).thenReturn(Optional.empty());
+        when(funnelStepRepo.findById("s6")).thenReturn(Optional.empty());
         assertThrows(IllegalArgumentException.class,
-            () -> funnelConfigService.updateStep(6L, new FunnelStepEntity()));
+            () -> funnelConfigService.updateStep("s6", new FunnelStepEntity()));
     }
 
     // ==================== PipelineService ====================

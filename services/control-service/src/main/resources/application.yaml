@@ -15,10 +15,11 @@ spring:
     password: ${DB_PASSWORD:oddsmaker}
 
   jpa:
-    # Schema 唯一真源是 Flyway 迁移；ddl-auto=update 会掩盖迁移缺列
-    # （funnel_steps 后续迁移补 NOT NULL 列即实锤），故关闭。
+    # Schema 唯一真源是 Flyway 迁移，validate 启动即校验实体↔表一致（漂移直接拒绝启动，
+    # 防止 update/none 掩盖差异）。差异修复见 V0.8.7__align_jpa_schema.sql 及
+    # test/.../tools/SchemaDiffExportTest（schema diff 导出工具）。
     hibernate:
-      ddl-auto: none
+      ddl-auto: validate
     open-in-view: false
     properties:
       hibernate:

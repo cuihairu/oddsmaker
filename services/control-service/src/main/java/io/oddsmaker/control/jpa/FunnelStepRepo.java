@@ -11,7 +11,7 @@ import java.util.List;
  * 漏斗步骤数据访问接口
  */
 @Repository
-public interface FunnelStepRepo extends JpaRepository<FunnelStepEntity, Long> {
+public interface FunnelStepRepo extends JpaRepository<FunnelStepEntity, String> {
 
     /**
      * 根据漏斗ID查找步骤

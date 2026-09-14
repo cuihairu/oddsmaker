@@ -103,9 +103,10 @@ public class UserService {
             }
             user.email = updates.email;
         }
-        if (updates.avatar != null) {
-            user.avatar = updates.avatar;
+        if (updates.avatarUrl != null) {
+            user.avatarUrl = updates.avatarUrl;
         }
+
         if (updates.timeZone != null) {
             user.timeZone = updates.timeZone;
         }

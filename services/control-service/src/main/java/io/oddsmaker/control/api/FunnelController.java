@@ -159,7 +159,7 @@ public class FunnelController {
     @PutMapping("/steps/{stepId}")
     @PreAuthorize("hasRole('ADMIN') or hasRole('MANAGER')")
     public ResponseEntity<FunnelStepEntity> updateStep(
-            @PathVariable Long stepId,
+            @PathVariable String stepId,
             @RequestBody FunnelStepEntity updates) {
         
         FunnelStepEntity updated = funnelConfigService.updateStep(stepId, updates);
@@ -171,7 +171,7 @@ public class FunnelController {
      */
     @DeleteMapping("/steps/{stepId}")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<Void> deleteStep(@PathVariable Long stepId) {
+    public ResponseEntity<Void> deleteStep(@PathVariable String stepId) {
         funnelConfigService.deleteStep(stepId);
         return ResponseEntity.ok().build();
     }

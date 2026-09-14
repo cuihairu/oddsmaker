@@ -65,7 +65,8 @@ public class RateLimitEntity {
     @Enumerated(EnumType.STRING)
     public Scope scope = Scope.GLOBAL;
 
-    @Column(name = "limit", nullable = false)
+    // 迁移中列名为 limit_value（limit 为 SQL 保留字），validate 按列名对齐
+    @Column(name = "limit_value", nullable = false)
     public Integer limit = 100;  // 限流阈值
 
     @Column(name = "window_type", nullable = false)

@@ -1,6 +1,8 @@
 package io.oddsmaker.control.jpa;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
@@ -42,15 +44,19 @@ public class RevenueAnalysisEntity {
 
     // 收入指标
     @Column(name = "total_revenue", columnDefinition = "DECIMAL(18,4)")
+    @JdbcTypeCode(SqlTypes.NUMERIC)
     public Double totalRevenue = 0.0;
 
     @Column(name = "iap_revenue", columnDefinition = "DECIMAL(18,4)")
+    @JdbcTypeCode(SqlTypes.NUMERIC)
     public Double iapRevenue = 0.0;
 
     @Column(name = "ad_revenue", columnDefinition = "DECIMAL(18,4)")
+    @JdbcTypeCode(SqlTypes.NUMERIC)
     public Double adRevenue = 0.0;
 
     @Column(name = "subscription_revenue", columnDefinition = "DECIMAL(18,4)")
+    @JdbcTypeCode(SqlTypes.NUMERIC)
     public Double subscriptionRevenue = 0.0;
 
     // 用户指标
@@ -65,9 +71,11 @@ public class RevenueAnalysisEntity {
 
     // ARPU/ARPPU
     @Column(name = "arpu", columnDefinition = "DECIMAL(18,4)")
+    @JdbcTypeCode(SqlTypes.NUMERIC)
     public Double arpu = 0.0;
 
     @Column(name = "arppu", columnDefinition = "DECIMAL(18,4)")
+    @JdbcTypeCode(SqlTypes.NUMERIC)
     public Double arppu = 0.0;
 
     // 交易指标
@@ -75,6 +83,7 @@ public class RevenueAnalysisEntity {
     public Long totalTransactions = 0L;
 
     @Column(name = "avg_transaction_value", columnDefinition = "DECIMAL(18,4)")
+    @JdbcTypeCode(SqlTypes.NUMERIC)
     public Double avgTransactionValue = 0.0;
 
     // 维度

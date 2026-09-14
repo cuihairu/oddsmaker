@@ -43,7 +43,7 @@ class FunnelConfigServiceTest {
     void setUp() {
         // 创建测试步骤
         testStep = new FunnelStepEntity();
-        testStep.id = 1L;
+        testStep.id = "s1";
         testStep.stepOrder = 1;
         testStep.name = "Level Start";
         testStep.eventName = "level_start";
@@ -204,10 +204,10 @@ class FunnelConfigServiceTest {
         updates.name = "Updated Step";
         updates.eventName = "updated_event";
 
-        when(funnelStepRepo.findById(1L)).thenReturn(Optional.of(testStep));
+        when(funnelStepRepo.findById("s1")).thenReturn(Optional.of(testStep));
         when(funnelStepRepo.save(any(FunnelStepEntity.class))).thenReturn(testStep);
 
-        FunnelStepEntity result = funnelConfigService.updateStep(1L, updates);
+        FunnelStepEntity result = funnelConfigService.updateStep("s1", updates);
 
         assertNotNull(result);
         verify(funnelStepRepo).save(any(FunnelStepEntity.class));
@@ -215,9 +215,9 @@ class FunnelConfigServiceTest {
 
     @Test
     void deleteStep_Success() {
-        when(funnelStepRepo.findById(1L)).thenReturn(Optional.of(testStep));
+        when(funnelStepRepo.findById("s1")).thenReturn(Optional.of(testStep));
 
-        funnelConfigService.deleteStep(1L);
+        funnelConfigService.deleteStep("s1");
 
         verify(funnelStepRepo).delete(testStep);
     }

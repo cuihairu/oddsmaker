@@ -1,6 +1,8 @@
 package io.oddsmaker.control.jpa;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import java.time.LocalDateTime;
 import java.util.Map;
 
@@ -84,9 +86,11 @@ public class SystemAlertEntity {
     public String affectedResource;  // 受影响的资源
 
     @Column(name = "metric_value", columnDefinition = "DECIMAL(20,4)")
+    @JdbcTypeCode(SqlTypes.NUMERIC)
     public Double metricValue;  // 触发告警的指标值
 
     @Column(name = "threshold_value", columnDefinition = "DECIMAL(20,4)")
+    @JdbcTypeCode(SqlTypes.NUMERIC)
     public Double thresholdValue;  // 阈值
 
     @Column(name = "condition", length = 50)

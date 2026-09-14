@@ -1,6 +1,8 @@
 package io.oddsmaker.control.jpa;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import java.time.LocalDateTime;
 
 /**
@@ -76,6 +78,7 @@ public class PerformanceMetricEntity {
 
     // 性能指标值
     @Column(name = "metric_value", columnDefinition = "DECIMAL(18,4)")
+    @JdbcTypeCode(SqlTypes.NUMERIC)
     public Double metricValue;
 
     @Column(name = "metric_unit", length = 20)

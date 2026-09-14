@@ -28,8 +28,6 @@ public class UserEntity {
     @Column(name = "display_name", length = 200)
     public String displayName;
 
-    @Column(length = 500)
-    public String avatar;
 
     /**
      * 用户状态: active, inactive, locked, pending
@@ -64,7 +62,8 @@ public class UserEntity {
     /**
      * 最后登录时间
      */
-    @Column(name = "last_login_at")
+    // 迁移中列名为 last_login（无 _at 后缀），validate 按列名对齐
+    @Column(name = "last_login")
     public LocalDateTime lastLoginAt;
 
     /**
@@ -116,6 +115,10 @@ public class UserEntity {
     @Column(length = 10)
     public String locale;
 
+    /**
+     * 头像 URL（迁移列 avatar_url）。历史上与 avatar 字段重复映射同列，
+     * 已合并到本字段（对外 UserDTO 契约字段名）。
+     */
     @Column(name = "avatar_url", length = 500)
     public String avatarUrl;
 
@@ -140,9 +143,6 @@ public class UserEntity {
 
     @Column(name = "login_attempts")
     public Integer loginAttempts;
-
-    @Column(name = "last_login")
-    public LocalDateTime lastLogin;
 
     /**
      * 全局角色枚举

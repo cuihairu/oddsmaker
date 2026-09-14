@@ -826,8 +826,8 @@ class ServicesFinalSweepTest {
         e.salt = "salt";
         e.configJson = "{\"variants\":[{\"name\":\"control\",\"weight\":1},"
             + "{\"name\":\"treatment\",\"weight\":1}]}";
-        e.createdAt = Instant.now();
-        e.updatedAt = Instant.now();
+        e.createdAt = LocalDateTime.now();
+        e.updatedAt = LocalDateTime.now();
         return e;
     }
 
@@ -1286,10 +1286,10 @@ class ServicesFinalSweepTest {
         assertThrows(IllegalArgumentException.class,
             () -> funnelConfigService.addStep("funnel_missing", new FunnelStepEntity()));
 
-        lenient().when(funnelStepRepo.findById(99L)).thenReturn(Optional.empty());
+        lenient().when(funnelStepRepo.findById("s99")).thenReturn(Optional.empty());
         assertThrows(IllegalArgumentException.class,
-            () -> funnelConfigService.updateStep(99L, new FunnelStepEntity()));
-        assertThrows(IllegalArgumentException.class, () -> funnelConfigService.deleteStep(99L));
+            () -> funnelConfigService.updateStep("s99", new FunnelStepEntity()));
+        assertThrows(IllegalArgumentException.class, () -> funnelConfigService.deleteStep("s99"));
     }
 
     // =========================================================

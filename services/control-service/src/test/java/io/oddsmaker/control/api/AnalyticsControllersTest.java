@@ -100,8 +100,8 @@ class AnalyticsControllersTest {
         assertEquals(200, funnelController.getEnabledFunnels("g").getStatusCode().value());
         assertEquals(200, funnelController.getFunnelsByType("g", io.oddsmaker.control.jpa.FunnelConfigEntity.FunnelType.STANDARD).getStatusCode().value());
         assertEquals(200, funnelController.addStep("f1", new io.oddsmaker.control.jpa.FunnelStepEntity()).getStatusCode().value());
-        assertEquals(200, funnelController.updateStep(1L, new io.oddsmaker.control.jpa.FunnelStepEntity()).getStatusCode().value());
-        assertEquals(200, funnelController.deleteStep(1L).getStatusCode().value());
+        assertEquals(200, funnelController.updateStep("s1", new io.oddsmaker.control.jpa.FunnelStepEntity()).getStatusCode().value());
+        assertEquals(200, funnelController.deleteStep("s1").getStatusCode().value());
         assertEquals(200, funnelController.getFunnelStatistics("g").getStatusCode().value());
         verify(funnelConfigService).findEnabledByGameId("g");
     }

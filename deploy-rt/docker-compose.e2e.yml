@@ -105,7 +105,7 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/oddsmaker
       SPRING_DATASOURCE_USERNAME: oddsmaker
       SPRING_DATASOURCE_PASSWORD: oddsmaker
-      SPRING_JPA_HIBERNATE_DDL_AUTO: none
+      SPRING_JPA_HIBERNATE_DDL_AUTO: validate
       SPRING_FLYWAY_ENABLED: "true"
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
