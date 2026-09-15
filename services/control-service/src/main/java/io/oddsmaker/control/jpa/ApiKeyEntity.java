@@ -23,7 +23,8 @@ public class ApiKeyEntity {
     @Column(name = "game_id", nullable = false, length = 32)
     public String gameId;
 
-    @Column(name = "environment_id", nullable = false, length = 32)
+    // 对齐 V0.9.0 扩宽后的 game_environments.id（varchar(100)）
+    @Column(name = "environment_id", nullable = false, length = 100)
     public String environmentId;
 
     @Column(nullable = false, length = 100)

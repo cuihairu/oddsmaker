@@ -30,7 +30,10 @@ public class Models {
         public String gameId;
         public String environmentId;
         public String storageProfileId;
+        public String name;
         public String keyRole; // client|server|admin
+        public String status;  // active|inactive|revoked
+        public String createdAt; // ISO-8601
         public Integer rpm;
         public Integer ipRpm;
         public List<String> propsAllowlist;

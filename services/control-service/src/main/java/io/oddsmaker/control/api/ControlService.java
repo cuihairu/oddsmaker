@@ -271,7 +271,10 @@ public class ControlService {
         r.apiKey = e.apiKey;
         r.gameId = e.gameId; r.environmentId = e.environmentId;
         r.storageProfileId = storageProfileIdFor(e.environmentId);
+        r.name = e.name;
         r.keyRole = e.keyType == null ? null : e.keyType.name().toLowerCase(Locale.ROOT);
+        r.status = e.status == null ? null : e.status.name().toLowerCase(Locale.ROOT);
+        r.createdAt = e.createdAt == null ? null : e.createdAt.toString();
         r.rpm = e.rpm; r.ipRpm = e.ipRpm;
         r.propsAllowlist = split(e.propsAllowlist);
         r.piiEmail = e.piiEmail; r.piiPhone = e.piiPhone; r.piiIp = e.piiIp;

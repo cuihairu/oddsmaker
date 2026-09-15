@@ -8,11 +8,13 @@ const showCreateModal = ref(false)
 const newApiKey = ref({
   name: '',
   gameId: '',
-  environment: 'dev',
-  type: 'client'
+  environmentId: '',
+  keyRole: 'client'
 })
 
 const games = ref([])
+// 所选游戏的环境列表（key 必须绑定到环境实体 id，不是环境名字）
+const environments = ref([])
 
 onMounted(async () => {
   await Promise.all([loadApiKeys(), loadGames()])
@@ -46,13 +48,30 @@ async function createApiKey() {
     newApiKey.value = {
       name: '',
       gameId: '',
-      environment: 'dev',
-      type: 'client'
+      environmentId: '',
+      keyRole: 'client'
     }
+    environments.value = []
     await loadApiKeys()
   } catch (error) {
     console.error('Failed to create API key:', error)
     alert('创建API密钥失败: ' + (error.response?.data?.message || error.message))
+  }
+}
+
+// 游戏切换后加载其环境列表；密钥的 environmentId 必须是环境实体 id（env_xxx）
+async function onGameChange() {
+  environments.value = []
+  newApiKey.value.environmentId = ''
+  if (!newApiKey.value.gameId) return
+  try {
+    const response = await api.get(`/api/games/${newApiKey.value.gameId}/environments`)
+    environments.value = response.data || []
+    if (environments.value.length === 1) {
+      newApiKey.value.environmentId = environments.value[0].id
+    }
+  } catch (error) {
+    console.error('Failed to load environments:', error)
   }
 }
 
@@ -130,15 +149,15 @@ function maskKey(key) {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="apiKey in apiKeys" :key="apiKey.id">
+            <tr v-for="apiKey in apiKeys" :key="apiKey.apiKey">
               <td>{{ apiKey.name }}</td>
               <td>
                 <div class="flex items-center space-x-2">
                   <code class="text-xs bg-gray-100 px-2 py-1 rounded">
-                    {{ maskKey(apiKey.key) }}
+                    {{ maskKey(apiKey.apiKey) }}
                   </code>
                   <button
-                    @click="copyToClipboard(apiKey.key)"
+                    @click="copyToClipboard(apiKey.apiKey)"
                     class="text-primary-600 hover:text-primary-700"
                     title="复制"
                   >
@@ -149,16 +168,16 @@ function maskKey(key) {
                 </div>
               </td>
               <td>{{ apiKey.gameId }}</td>
-              <td>{{ apiKey.environment }}</td>
+              <td>{{ apiKey.environmentId }}</td>
               <td>
                 <span class="badge bg-blue-100 text-blue-800">
-                  {{ apiKey.type }}
+                  {{ apiKey.keyRole }}
                 </span>
               </td>
-              <td>{{ new Date(apiKey.createdAt).toLocaleDateString('zh-CN') }}</td>
+              <td>{{ apiKey.createdAt ? new Date(apiKey.createdAt).toLocaleDateString('zh-CN') : '-' }}</td>
               <td>
                 <button
-                  @click="deleteApiKey(apiKey.id)"
+                  @click="deleteApiKey(apiKey.apiKey)"
                   class="text-red-600 hover:text-red-700"
                   title="删除"
                 >
@@ -201,26 +220,27 @@ function maskKey(key) {
                 
                 <div>
                   <label class="label">游戏 *</label>
-                  <select v-model="newApiKey.gameId" required class="input">
+                  <select v-model="newApiKey.gameId" required class="input" @change="onGameChange">
                     <option value="">选择游戏</option>
                     <option v-for="game in games" :key="game.id" :value="game.id">
                       {{ game.displayName || game.name }}
                     </option>
                   </select>
                 </div>
-                
+
                 <div>
-                  <label class="label">环境</label>
-                  <select v-model="newApiKey.environment" class="input">
-                    <option value="dev">开发</option>
-                    <option value="staging">测试</option>
-                    <option value="prod">生产</option>
+                  <label class="label">环境 *</label>
+                  <select v-model="newApiKey.environmentId" required class="input">
+                    <option value="">请先选择游戏</option>
+                    <option v-for="env in environments" :key="env.id" :value="env.id">
+                      {{ env.displayName || env.name }}
+                    </option>
                   </select>
                 </div>
-                
+
                 <div>
                   <label class="label">类型</label>
-                  <select v-model="newApiKey.type" class="input">
+                  <select v-model="newApiKey.keyRole" class="input">
                     <option value="client">客户端</option>
                     <option value="server">服务端</option>
                     <option value="admin">管理</option>

@@ -18,7 +18,8 @@ import java.util.List;
 public class GameEnvironmentEntity {
 
     @Id
-    @Column(length = 32)
+    // env_{gameId}_{environmentName} 可达 76 字符（game_+16hex 的 gameId + 最长 50 的环境名）
+    @Column(length = 100)
     public String id;
 
     @Column(name = "game_id", nullable = false, length = 32)

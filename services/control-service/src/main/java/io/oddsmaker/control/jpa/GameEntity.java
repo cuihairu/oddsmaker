@@ -16,11 +16,30 @@ import java.util.Set;
  */
 @Entity
 @Table(name = "games")
-public class GameEntity {
+public class GameEntity implements org.springframework.data.domain.Persistable<String> {
 
     @Id
     @Column(length = 32)
     public String id;
+
+    /**
+     * 手动分配 id 的实体走 SimpleJpaRepository.save 的 merge 分支；
+     * merge 携带非空 @ElementCollection（platforms）的 detached 实体时，
+     * flush 会对新行生成 UPDATE 且 created_at 绑定 null（干净库创建游戏 500 的根因）。
+     * 实现 Persistable 让新建实体显式走 persist（INSERT），从库加载的实例走 update。
+     */
+    @Transient
+    public boolean isNew = true;
+
+    @PostLoad
+    @PostPersist
+    void markNotNew() { isNew = false; }
+
+    @Override
+    public String getId() { return id; }
+
+    @Override
+    public boolean isNew() { return isNew; }
 
     @Column(nullable = false, length = 100)
     public String name;

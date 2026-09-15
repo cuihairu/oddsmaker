@@ -177,6 +177,11 @@ public class SecurityConfig {
      */
     @Bean
     JwtDecoder jwtDecoder() {
+        // 分支选择静默是排障黑洞（曾出现同 jar 容器/裸机行为分叉），启动即打分支依据
+        org.slf4j.LoggerFactory.getLogger(SecurityConfig.class).warn(
+            "jwtDecoder branch inputs: jwkSetUri='{}', jwtIssuerUri='{}', jwtSecretLen={}",
+            jwkSetUri, jwtIssuerUri,
+            jwtSecret == null ? -1 : jwtSecret.getBytes(java.nio.charset.StandardCharsets.UTF_8).length);
         if (jwkSetUri != null && !jwkSetUri.isEmpty()) {
             return NimbusJwtDecoder.withJwkSetUri(jwkSetUri).build();
         }
