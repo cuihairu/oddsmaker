@@ -536,8 +536,14 @@ class ApiControllersDeepTest {
         lenient().when(svc.listKeys()).thenReturn(all);
         lenient().when(svc.searchKeys(null, null, "demo", 1, 10)).thenReturn(paged);
 
-        assertSame(all, apiController.listKeys(null, null, null, null, null));
-        assertSame(all, apiController.listApiKeys(null, null, null, null, null));
+        // 无过滤路径与分页同构（content/items 双字段），前端列表页统一读 content
+        ControlService.Paged<Models.KeyDetailResp> noFilter =
+            (ControlService.Paged<Models.KeyDetailResp>) apiController.listKeys(null, null, null, null, null);
+        assertSame(all, noFilter.getContent());
+        assertEquals(1L, noFilter.getTotalElements());
+        ControlService.Paged<Models.KeyDetailResp> noFilter2 =
+            (ControlService.Paged<Models.KeyDetailResp>) apiController.listApiKeys(null, null, null, null, null);
+        assertSame(all, noFilter2.getContent());
         assertSame(paged, apiController.listApiKeys("demo", null, null, 1, 10));
     }
 

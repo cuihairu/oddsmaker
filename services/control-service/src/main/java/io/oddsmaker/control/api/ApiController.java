@@ -77,7 +77,9 @@ public class ApiController {
                            @RequestParam(value = "page", required = false) Integer page,
                            @RequestParam(value = "size", required = false) Integer size) {
         if (page == null && size == null && q == null && gameId == null && environmentId == null) {
-            return svc.listKeys();
+            // 与分页路径同构（content/items 双字段），前端列表页统一读 content
+            var all = svc.listKeys();
+            return new ControlService.Paged<>(all, all.size());
         }
         int p = page == null ? 0 : Math.max(0, page);
         int s = size == null ? 50 : Math.max(1, size);

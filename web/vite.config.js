@@ -16,7 +16,8 @@ export default defineConfig({
   server: {
     port: 3000,
     proxy: {
-      '/api': {
+      // 正则锚定 /api/xxx：前缀匹配会把 /api-keys 页面路由也转发给后端（401 白屏）
+      '^/api/': {
         // control-service 地址；远端环境用 VITE_PROXY_TARGET 覆盖
         // （如 ssh -L 18085:localhost:8085 后指向 http://localhost:18085）
         target: process.env.VITE_PROXY_TARGET || 'http://localhost:8085',

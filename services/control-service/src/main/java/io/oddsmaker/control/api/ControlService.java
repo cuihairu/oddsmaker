@@ -154,9 +154,16 @@ public class ControlService {
         return apiKeys.size();
     }
 
+    /**
+     * 分页响应。同时输出 items/total 与 content/totalElements 两套字段：
+     * content 是前端列表页（Spring Page 事实标准，risk-rules/users/audit-logs 同款）
+     * 的读取字段；items 保留给既有消费方（e2e 脚本等）。
+     */
     public static class Paged<T> {
         public java.util.List<T> items; public long total;
         public Paged(java.util.List<T> items, long total){ this.items=items; this.total=total; }
+        public java.util.List<T> getContent() { return items; }
+        public long getTotalElements() { return total; }
     }
 
     public Models.KeyDetailResp updatePolicy(String apiKey, Models.KeyDetailResp req) {
