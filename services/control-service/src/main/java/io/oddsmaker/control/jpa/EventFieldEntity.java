@@ -1,6 +1,8 @@
 package io.oddsmaker.control.jpa;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
@@ -49,9 +51,11 @@ public class EventFieldEntity {
     public String allowedValues;  // 允许的值（JSON数组）
 
     @Column(name = "min_value")
+    @JdbcTypeCode(SqlTypes.NUMERIC)
     public Double minValue;
 
     @Column(name = "max_value")
+    @JdbcTypeCode(SqlTypes.NUMERIC)
     public Double maxValue;
 
     @Column(name = "min_length")

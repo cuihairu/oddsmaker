@@ -1,6 +1,8 @@
 package io.oddsmaker.control.jpa;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
@@ -80,6 +82,7 @@ public class GameEnvironmentEntity {
     public Boolean enableSampling = true;
 
     @Column(name = "sample_rate")
+    @JdbcTypeCode(SqlTypes.NUMERIC)
     public Double sampleRate = 1.0; // 采样率
 
     @Column(name = "enable_real_time")
@@ -103,6 +106,7 @@ public class GameEnvironmentEntity {
     public String alertEmail;
 
     @Column(name = "error_threshold")
+    @JdbcTypeCode(SqlTypes.NUMERIC)
     public Double errorThreshold = 0.05; // 错误率阈值
 
     // 版本控制

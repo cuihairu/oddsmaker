@@ -1,6 +1,8 @@
 package io.oddsmaker.control.jpa;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
@@ -76,6 +78,7 @@ public class RetentionAnalysisEntity {
     public Integer minimumCohortSize = 100;  // 最小队列大小
 
     @Column(name = "confidence_level")
+    @JdbcTypeCode(SqlTypes.NUMERIC)
     public Double confidenceLevel = 0.95;  // 置信水平
 
     // 分组

@@ -1,6 +1,8 @@
 package io.oddsmaker.control.jpa;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
@@ -64,6 +66,7 @@ public class LevelProgressionEntity {
     public Boolean enableAnomalyDetection = true;  // 启用异常检测
 
     @Column(name = "anomaly_threshold")
+    @JdbcTypeCode(SqlTypes.NUMERIC)
     public Double anomalyThreshold = 2.0;  // 异常阈值（标准差倍数）
 
     @Column(name = "min_attempts_for_analysis")

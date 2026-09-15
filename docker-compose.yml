@@ -1,126 +1,172 @@
-# Oddsmaker Gaming Analytics Platform - Docker Compose
-# Local development environment
-
-version: '3.8'
-
+# Oddsmaker Gaming Analytics Platform — 本机单机全栈编排
+#
+# 形态与 deploy-rt/docker-compose.e2e.yml 一致（该编排已由 e2e-verify 40/40 实证）：
+#   中间件 + control/gateway 镜像构建 + Flink job 以 local executor（fatJar）直跑。
+#
+# Flink 镜像说明：官方 flink 镜像没有 Java 21 变体（flink:1.19.1 实测默认 Java 11，
+# -java17/-java21 变体不含 21），而工程字节码是 Java 21（options.release=21），
+# 因此 job 不用 flink 官方镜像，沿用 e2e 已验证形态：
+#   eclipse-temurin:21-jre + 9 个 --add-opens + java -jar 直跑 fatJar。
+#   Flink job 需要宿主先构建 jar（与 e2e 同一目录约定）：
+#     ./gradlew build
+#     cp jobs/flink/*/build/libs/*-all.jar deploy-rt/jars/
+#     cp services/*/build/libs/*.jar deploy-rt/jars/   # 不以 build 镜像方式跑时才需要
+#
+# 宿主端口统一错开 runner-docker 已占端口（croupier 栈 5432/6379/8123/9000/8080、
+# e2e 栈 15432/16379/9092/18123/19000/8081/8085/18080 等）。
 services:
-  # PostgreSQL Database
+  # PostgreSQL（control 的唯一 schema 真源是 Flyway 迁移，由 control 启动自动执行；
+  # 这里不再挂 migration 目录到 initdb，避免与 Flyway 双跑）
   postgres:
     image: postgres:16-alpine
     container_name: oddsmaker-postgres
     environment:
       POSTGRES_DB: oddsmaker
       POSTGRES_USER: oddsmaker
-      POSTGRES_PASSWORD: oddsmaker_dev_password
+      POSTGRES_PASSWORD: oddsmaker
     ports:
-      - "5432:5432"
+      - "25432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./services/control-service/src/main/resources/db/migration:/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U oddsmaker"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      interval: 5s
+      timeout: 3s
+      retries: 20
     networks:
       - oddsmaker-network
 
-  # Redis Cache
   redis:
     image: redis:7-alpine
     container_name: oddsmaker-redis
     ports:
-      - "6379:6379"
+      - "26379:6379"
     volumes:
       - redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      interval: 5s
+      timeout: 3s
+      retries: 20
     networks:
       - oddsmaker-network
 
-  # Kafka
-  zookeeper:
-    image: confluentinc/cp-zookeeper:7.5.0
-    container_name: oddsmaker-zookeeper
-    environment:
-      ZOOKEEPER_CLIENT_PORT: 2181
-      ZOOKEEPER_TICK_TIME: 2000
-    ports:
-      - "2181:2181"
-    networks:
-      - oddsmaker-network
-
+  # Kafka（KRaft 单节点，与 e2e 同款；额外开 PLAINTEXT_HOST 供宿主脚本直连调试）
   kafka:
-    image: confluentinc/cp-kafka:7.5.0
+    image: apache/kafka:3.7.0
     container_name: oddsmaker-kafka
-    depends_on:
-      - zookeeper
     ports:
-      - "9092:9092"
-      - "9093:9093"
+      - "29092:29092"
     environment:
-      KAFKA_BROKER_ID: 1
-      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
-      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093,PLAINTEXT_HOST://:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: true
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_MESSAGE_MAX_BYTES: 10485760
     healthcheck:
-      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1"]
       interval: 10s
-      timeout: 5s
-      retries: 5
+      timeout: 10s
+      retries: 20
     networks:
       - oddsmaker-network
 
-  # ClickHouse
+  # 一次性建齐全部 topic。broker 的 auto-create 只在 produce/metadata 时触发，
+  # Flink source 启动即查 topic，不存在会直接退出（一把梭时序：必须先建 topic 再起 job）
+  topic-init:
+    image: apache/kafka:3.7.0
+    container_name: oddsmaker-topic-init
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        for t in oddsmaker.events_raw oddsmaker.risk_events oddsmaker.identity_events oddsmaker.deadletter; do
+          /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic "$$t" --partitions 1 --replication-factor 1
+        done
+        echo "topics ready"
+    networks:
+      - oddsmaker-network
+
+  # ClickHouse 24.8（与 e2e 同版；表在 default 库；initdb 只在空卷首跑，
+  # 幂等重放三件套见 e2e-verify 第 10 节）
   clickhouse:
-    image: clickhouse/clickhouse-server:24.3-alpine
+    image: clickhouse/clickhouse-server:24.8
     container_name: oddsmaker-clickhouse
-    ports:
-      - "8123:8123"
-      - "9000:9000"
-    volumes:
-      - clickhouse_data:/var/lib/clickhouse
     environment:
-      CLICKHOUSE_DB: oddsmaker
       CLICKHOUSE_USER: oddsmaker
-      CLICKHOUSE_PASSWORD: oddsmaker_dev_password
+      CLICKHOUSE_PASSWORD: oddsmaker
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+    ports:
+      - "28123:8123"
+      - "29000:9000"
+    volumes:
+      - ./schema/sql/clickhouse/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./schema/sql/clickhouse/analytics.sql:/docker-entrypoint-initdb.d/02-analytics.sql:ro
+      - ./schema/sql/clickhouse/configurable-funnels-schema.sql:/docker-entrypoint-initdb.d/03-configurable-funnels.sql:ro
+      - ./schema/sql/clickhouse/ltv.sql:/docker-entrypoint-initdb.d/04-ltv.sql:ro
+      - ./schema/sql/clickhouse/ml.sql:/docker-entrypoint-initdb.d/05-ml.sql:ro
+      - ./schema/sql/clickhouse/crash.sql:/docker-entrypoint-initdb.d/06-crash.sql:ro
+      - clickhouse_data:/var/lib/clickhouse
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8123/ping"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:8123/ping"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 20
     networks:
       - oddsmaker-network
 
-  # Control Service
+  # Avro Schema Registry（gateway 产出与 Flink job 消费 events_raw 都依赖）
+  apicurio:
+    image: quay.io/apicurio/apicurio-registry-mem:2.6.5.Final
+    container_name: oddsmaker-apicurio
+    ports:
+      - "28081:8080"
+    environment:
+      - QUARKUS_HTTP_PORT=8080
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/health || wget -qO- http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    networks:
+      - oddsmaker-network
+
+  # Control Service（镜像构建；schema 由 Flyway 启动迁移，ddl-auto=validate 校验）
   control-service:
     build:
       context: .
       dockerfile: services/control-service/Dockerfile
     container_name: oddsmaker-control-service
     ports:
-      - "8085:8085"
-      - "8086:8086"
+      - "28085:8085"
     environment:
-      SPRING_PROFILES_ACTIVE: dev
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/oddsmaker
       SPRING_DATASOURCE_USERNAME: oddsmaker
-      SPRING_DATASOURCE_PASSWORD: oddsmaker_dev_password
-      SPRING_REDIS_HOST: redis
-      SPRING_REDIS_PORT: 6379
-      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-      CLICKHOUSE_URL: jdbc:clickhouse://clickhouse:8123/oddsmaker
+      SPRING_DATASOURCE_PASSWORD: oddsmaker
+      SPRING_JPA_HIBERNATE_DDL_AUTO: validate
+      SPRING_FLYWAY_ENABLED: "true"
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      CLICKHOUSE_URL: jdbc:clickhouse://clickhouse:8123/default
       CLICKHOUSE_USER: oddsmaker
-      CLICKHOUSE_PASSWORD: oddsmaker_dev_password
-      ODDSMAKER_COMPANY_NAME: "Oddsmaker Dev"
-      ODDSMAKER_DEPLOYMENT_ID: "dev-local"
-      ODDSMAKER_ADMIN_TOKEN: "dev-admin-token-change-in-production"
+      CLICKHOUSE_PASSWORD: oddsmaker
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_REDIS_HOST: redis
+      ODDSMAKER_ADMIN_TOKEN: dev-admin-token
+      ODDSMAKER_INTERNAL_TOKEN: dev-internal-token
+      ODDSMAKER_PLAYER_EXPORT_DIR: /app/data/player-exports
+      LOGGING_LEVEL_IO_ODDSMAKER: INFO
+      LOGGING_LEVEL_ORG_HIBERNATE_SQL: WARN
     depends_on:
       postgres:
         condition: service_healthy
@@ -128,43 +174,335 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
+      topic-init:
+        condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8086/actuator/health"]
-      interval: 30s
-      timeout: 3s
-      start_period: 60s
-      retries: 3
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8085/actuator/health | grep -q '\"status\":\"UP\"' || curl -fsS http://localhost:8085/actuator/health | grep -q '\"status\":\"UP\"'"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 90s
     networks:
       - oddsmaker-network
 
-  # Flink Job Manager
-  flink-jobmanager:
-    image: flink:1.18.1-scala_2.12-java17
-    container_name: oddsmaker-flink-jobmanager
+  # Gateway Service（镜像构建；采集入口 → Kafka events_raw）
+  gateway-service:
+    build:
+      context: .
+      dockerfile: services/gateway-service/Dockerfile
+    container_name: oddsmaker-gateway-service
     ports:
-      - "8081:8081"
-    command: jobmanager
+      - "28080:8080"
     environment:
-      FLINK_PROPERTIES_JOBMANAGER_RPC_ADDRESS: flink-jobmanager
-    volumes:
-      - flink_data:/opt/flink/data
-    networks:
-      - oddsmaker-network
-
-  # Flink Task Manager
-  flink-taskmanager:
-    image: flink:1.18.1-scala_2.12-java17
-    container_name: oddsmaker-flink-taskmanager
+      ODDSMAKER_KAFKA_BOOTSTRAP: kafka:9092
+      ODDSMAKER_KAFKA_REGISTRY_URL: http://apicurio:8080/apis/registry/v2
+      ODDSMAKER_CONTROL_URL: http://control-service:8085
+      ODDSMAKER_CONTROL_INTERNAL_TOKEN: dev-internal-token
+      ODDSMAKER_AUTH_KEYS_DEVKEY: dev-secret
+      ODDSMAKER_KAFKA_TOPIC_EVENTS: oddsmaker.events_raw
+      ODDSMAKER_KAFKA_TOPIC_RISK: oddsmaker.risk_events
     depends_on:
-      - flink-jobmanager
-    command: taskmanager
-    environment:
-      FLINK_PROPERTIES_JOBMANAGER_RPC_ADDRESS: flink-jobmanager
-      FLINK_PROPERTIES_TASK_MANAGER_NUMBER_OF_TASK_SLOTS: 4
+      control-service:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      apicurio:
+        condition: service_healthy
+      topic-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health | grep -q '\"status\":\"UP\"' || curl -fsS http://localhost:8080/actuator/health | grep -q '\"status\":\"UP\"'"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 60s
     networks:
       - oddsmaker-network
 
-  # Superset (optional - for dashboards)
+  # ————— Flink 分析 job（local executor 形态，依赖宿主构建的 fatJar）—————
+  # 全部以 latest 起点订阅 events_raw；先起 job 再发事件才能收到。
+
+  events-enrich-job:
+    image: eclipse-temurin:21-jre
+    container_name: oddsmaker-enrich
+    working_dir: /app
+    command: ["java", "-XX:MaxRAMPercentage=70.0",
+              # Flink 1.19 在 Java 17+ 官方要求的模块开放（local executor 无启动脚本代劳）
+              "--add-opens=java.base/java.lang=ALL-UNNAMED",
+              "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
+              "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+              "--add-opens=java.base/java.io=ALL-UNNAMED",
+              "--add-opens=java.base/java.net=ALL-UNNAMED",
+              "--add-opens=java.base/java.nio=ALL-UNNAMED",
+              "--add-opens=java.base/java.util=ALL-UNNAMED",
+              "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
+              "--add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED",
+              "-Dkafka.bootstrap=kafka:9092",
+              "-Dregistry.url=http://apicurio:8080/apis/registry/v2",
+              "-Dkafka.topic=oddsmaker.events_raw",
+              "-Dkafka.dlq=oddsmaker.deadletter",
+              "-Dclickhouse.url=jdbc:clickhouse://clickhouse:8123/default",
+              "-Dclickhouse.user=oddsmaker",
+              "-Dclickhouse.pass=oddsmaker",
+              "-jar", "/jars/events-enrich-job-0.1.0-all.jar"]
+    volumes:
+      - ./deploy-rt/jars:/jars:ro
+    depends_on:
+      kafka: { condition: service_healthy }
+      apicurio: { condition: service_healthy }
+      clickhouse: { condition: service_healthy }
+      topic-init: { condition: service_completed_successfully }
+    # local executor 无 REST/指标口，healthcheck 退化为 JVM 进程存活；
+    # env.execute 抛异常时 JVM 退出、容器转 unhealthy，可被发现
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'events-enrich-job-0.1.0-all.jar' >/dev/null"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - oddsmaker-network
+
+  sessions-job:
+    image: eclipse-temurin:21-jre
+    container_name: oddsmaker-sessions
+    working_dir: /app
+    command: ["java", "-XX:MaxRAMPercentage=70.0",
+              "--add-opens=java.base/java.lang=ALL-UNNAMED",
+              "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
+              "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+              "--add-opens=java.base/java.io=ALL-UNNAMED",
+              "--add-opens=java.base/java.net=ALL-UNNAMED",
+              "--add-opens=java.base/java.nio=ALL-UNNAMED",
+              "--add-opens=java.base/java.util=ALL-UNNAMED",
+              "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
+              "--add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED",
+              "-Dkafka.bootstrap=kafka:9092",
+              "-Dregistry.url=http://apicurio:8080/apis/registry/v2",
+              "-Dkafka.topic=oddsmaker.events_raw",
+              "-Dclickhouse.url=jdbc:clickhouse://clickhouse:8123/default",
+              "-Dclickhouse.user=oddsmaker",
+              "-Dclickhouse.pass=oddsmaker",
+              # 开发环境沿用 e2e 已验证的短窗口参数，秒级可观察到窗口 fire
+              # （生产默认 gap=30min、乱序容忍=10min，见 SessionsJob）
+              "-Dsession.gap.minutes=1",
+              "-Dwatermark.ooo.minutes=0",
+              "-jar", "/jars/sessions-job-0.1.0-all.jar"]
+    volumes:
+      - ./deploy-rt/jars:/jars:ro
+    depends_on:
+      kafka: { condition: service_healthy }
+      apicurio: { condition: service_healthy }
+      clickhouse: { condition: service_healthy }
+      topic-init: { condition: service_completed_successfully }
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'sessions-job-0.1.0-all.jar' >/dev/null"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - oddsmaker-network
+
+  retention-job:
+    image: eclipse-temurin:21-jre
+    container_name: oddsmaker-retention
+    working_dir: /app
+    command: ["java", "-XX:MaxRAMPercentage=70.0",
+              "--add-opens=java.base/java.lang=ALL-UNNAMED",
+              "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
+              "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+              "--add-opens=java.base/java.io=ALL-UNNAMED",
+              "--add-opens=java.base/java.net=ALL-UNNAMED",
+              "--add-opens=java.base/java.nio=ALL-UNNAMED",
+              "--add-opens=java.base/java.util=ALL-UNNAMED",
+              "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
+              "--add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED",
+              "-Dkafka.bootstrap=kafka:9092",
+              "-Dregistry.url=http://apicurio:8080/apis/registry/v2",
+              "-Dkafka.topic=oddsmaker.events_raw",
+              "-Dclickhouse.url=jdbc:clickhouse://clickhouse:8123/default",
+              "-Dclickhouse.user=oddsmaker",
+              "-Dclickhouse.pass=oddsmaker",
+              "-jar", "/jars/retention-job-0.1.0-all.jar"]
+    volumes:
+      - ./deploy-rt/jars:/jars:ro
+    depends_on:
+      kafka: { condition: service_healthy }
+      apicurio: { condition: service_healthy }
+      clickhouse: { condition: service_healthy }
+      topic-init: { condition: service_completed_successfully }
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'retention-job-0.1.0-all.jar' >/dev/null"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - oddsmaker-network
+
+  funnels-job:
+    image: eclipse-temurin:21-jre
+    container_name: oddsmaker-funnels
+    working_dir: /app
+    command: ["java", "-XX:MaxRAMPercentage=70.0",
+              "--add-opens=java.base/java.lang=ALL-UNNAMED",
+              "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
+              "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+              "--add-opens=java.base/java.io=ALL-UNNAMED",
+              "--add-opens=java.base/java.net=ALL-UNNAMED",
+              "--add-opens=java.base/java.nio=ALL-UNNAMED",
+              "--add-opens=java.base/java.util=ALL-UNNAMED",
+              "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
+              "--add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED",
+              "-Dkafka.bootstrap=kafka:9092",
+              "-Dregistry.url=http://apicurio:8080/apis/registry/v2",
+              "-Dkafka.topic=oddsmaker.events_raw",
+              "-Dclickhouse.url=jdbc:clickhouse://clickhouse:8123/default",
+              "-Dclickhouse.user=oddsmaker",
+              "-Dclickhouse.pass=oddsmaker",
+              "-jar", "/jars/funnels-job-0.1.0-all.jar"]
+    volumes:
+      - ./deploy-rt/jars:/jars:ro
+    depends_on:
+      kafka: { condition: service_healthy }
+      apicurio: { condition: service_healthy }
+      clickhouse: { condition: service_healthy }
+      topic-init: { condition: service_completed_successfully }
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'funnels-job-0.1.0-all.jar' >/dev/null"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - oddsmaker-network
+
+  # 同一个 funnels fatJar 的第二个 main：从 control PG 加载漏斗配置（funnel_analyses/funnel_steps）。
+  # 表由 control 的 Flyway 迁移创建，故等 control healthy 后再起，避免空库启动失败。
+  configurable-funnels-job:
+    image: eclipse-temurin:21-jre
+    container_name: oddsmaker-configurable-funnels
+    working_dir: /app
+    command: ["java", "-XX:MaxRAMPercentage=70.0",
+              "--add-opens=java.base/java.lang=ALL-UNNAMED",
+              "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
+              "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+              "--add-opens=java.base/java.io=ALL-UNNAMED",
+              "--add-opens=java.base/java.net=ALL-UNNAMED",
+              "--add-opens=java.base/java.nio=ALL-UNNAMED",
+              "--add-opens=java.base/java.util=ALL-UNNAMED",
+              "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
+              "--add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED",
+              "-Dkafka.bootstrap=kafka:9092",
+              "-Dregistry.url=http://apicurio:8080/apis/registry/v2",
+              "-Dkafka.topic=oddsmaker.events_raw",
+              "-Dclickhouse.url=jdbc:clickhouse://clickhouse:8123/default",
+              "-Dclickhouse.user=oddsmaker",
+              "-Dclickhouse.pass=oddsmaker",
+              "-Dcontrol.db.url=jdbc:postgresql://postgres:5432/oddsmaker",
+              "-Dcontrol.db.user=oddsmaker",
+              "-Dcontrol.db.pass=oddsmaker",
+              "-cp", "/jars/funnels-job-0.1.0-all.jar",
+              "io.oddsmaker.jobs.funnels.ConfigurableFunnelsJob"]
+    volumes:
+      - ./deploy-rt/jars:/jars:ro
+    depends_on:
+      kafka: { condition: service_healthy }
+      apicurio: { condition: service_healthy }
+      clickhouse: { condition: service_healthy }
+      topic-init: { condition: service_completed_successfully }
+      control-service: { condition: service_healthy }
+    healthcheck:
+      # 与 funnels-job 用同一个 jar，pgrep 区分 -cp 后的主类名
+      test: ["CMD-SHELL", "pgrep -f 'ConfigurableFunnelsJob' >/dev/null"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - oddsmaker-network
+
+  identity-merge-job:
+    image: eclipse-temurin:21-jre
+    container_name: oddsmaker-identity
+    working_dir: /app
+    command: ["java", "-XX:MaxRAMPercentage=70.0",
+              "--add-opens=java.base/java.lang=ALL-UNNAMED",
+              "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
+              "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+              "--add-opens=java.base/java.io=ALL-UNNAMED",
+              "--add-opens=java.base/java.net=ALL-UNNAMED",
+              "--add-opens=java.base/java.nio=ALL-UNNAMED",
+              "--add-opens=java.base/java.util=ALL-UNNAMED",
+              "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
+              "--add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED",
+              "-Dkafka.bootstrap=kafka:9092",
+              "-Dregistry.url=http://apicurio:8080/apis/registry/v2",
+              "-Dkafka.topic=oddsmaker.events_raw",
+              "-Dclickhouse.url=jdbc:clickhouse://clickhouse:8123/default",
+              "-Dclickhouse.user=oddsmaker",
+              "-Dclickhouse.pass=oddsmaker",
+              "-Didentity.topic=oddsmaker.identity_events",
+              "-jar", "/jars/identity-merge-job-0.1.0-all.jar"]
+    volumes:
+      - ./deploy-rt/jars:/jars:ro
+    depends_on:
+      kafka: { condition: service_healthy }
+      apicurio: { condition: service_healthy }
+      clickhouse: { condition: service_healthy }
+      topic-init: { condition: service_completed_successfully }
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'identity-merge-job-0.1.0-all.jar' >/dev/null"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - oddsmaker-network
+
+  risk-job:
+    image: eclipse-temurin:21-jre
+    container_name: oddsmaker-risk
+    working_dir: /app
+    command: ["java", "-XX:MaxRAMPercentage=70.0",
+              "--add-opens=java.base/java.lang=ALL-UNNAMED",
+              "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
+              "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+              "--add-opens=java.base/java.io=ALL-UNNAMED",
+              "--add-opens=java.base/java.net=ALL-UNNAMED",
+              "--add-opens=java.base/java.nio=ALL-UNNAMED",
+              "--add-opens=java.base/java.util=ALL-UNNAMED",
+              "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
+              "--add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED",
+              "-Dkafka.bootstrap=kafka:9092",
+              "-Dregistry.url=http://apicurio:8080/apis/registry/v2",
+              "-Dkafka.topic=oddsmaker.events_raw",
+              "-Dclickhouse.url=jdbc:clickhouse://clickhouse:8123/default",
+              "-Dclickhouse.user=oddsmaker",
+              "-Dclickhouse.pass=oddsmaker",
+              # 规则从 control 拉取（RuleFetcher 后台刷新，拉取失败走内置默认规则）
+              "-Dcontrol.url=http://control-service:8085",
+              "-Dcontrol.gameId=dev_game",
+              "-Drisk.topic=oddsmaker.risk_events",
+              "-jar", "/jars/risk-job-0.1.0-all.jar"]
+    volumes:
+      - ./deploy-rt/jars:/jars:ro
+    depends_on:
+      kafka: { condition: service_healthy }
+      apicurio: { condition: service_healthy }
+      clickhouse: { condition: service_healthy }
+      topic-init: { condition: service_completed_successfully }
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'risk-job-0.1.0-all.jar' >/dev/null"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - oddsmaker-network
+
+  # Superset（可选看板，需手动初始化管理员后使用）
   superset:
     image: apache/superset:3.1.0
     container_name: oddsmaker-superset
@@ -188,8 +526,6 @@ volumes:
   redis_data:
     driver: local
   clickhouse_data:
-    driver: local
-  flink_data:
     driver: local
   superset_data:
     driver: local

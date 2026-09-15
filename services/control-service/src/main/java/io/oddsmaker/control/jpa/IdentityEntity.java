@@ -2,6 +2,8 @@ package io.oddsmaker.control.jpa;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
@@ -78,6 +80,7 @@ public class IdentityEntity {
     public String mergeReason;  // 合并原因
 
     @Column(name = "confidence_score")
+    @JdbcTypeCode(SqlTypes.NUMERIC)
     public Double confidenceScore = 1.0;  // 合并置信度（0-1）
 
     // 属性

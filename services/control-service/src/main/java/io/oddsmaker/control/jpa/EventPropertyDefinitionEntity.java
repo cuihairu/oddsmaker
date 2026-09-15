@@ -1,6 +1,8 @@
 package io.oddsmaker.control.jpa;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
@@ -57,9 +59,11 @@ public class EventPropertyDefinitionEntity {
 
     // 验证规则
     @Column(name = "min_value")
+    @JdbcTypeCode(SqlTypes.NUMERIC)
     public Double minValue;          // 最小值（数值类型）
 
     @Column(name = "max_value")
+    @JdbcTypeCode(SqlTypes.NUMERIC)
     public Double maxValue;          // 最大值（数值类型）
 
     @Column(name = "min_length")

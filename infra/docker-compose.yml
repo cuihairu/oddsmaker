@@ -1,46 +1,80 @@
-version: '3.9'
+# Oddsmaker 中间件 + 可观测性编排（与仓库根全栈 compose 互补的轻量子集）
+# 用途：只想起中间件/看板（如 k8s/helm 之外的快速替代）时使用；
+# 业务服务（control/gateway/Flink job）与完整开发环境见仓库根 docker-compose.yml。
+# 两者可同机并存：本文件宿主端口用 29xxx/18088/13000 段，与根 compose（2xxxx 业务段）、
+# deploy-rt 的 e2e 栈（15/16/18/19 段）互不冲突。
 services:
-  zookeeper:
-    image: bitnami/zookeeper:3.8
-    environment:
-      - ALLOW_ANONYMOUS_LOGIN=yes
-    ports: ["2181:2181"]
-
+  # Kafka（KRaft 单节点；原 bitnami/zookeeper:3.8 + bitnami/kafka:3.7 组合的版本标签
+  # 已从 Docker Hub 下架无法拉取，改用与根 compose / e2e 同款镜像，仅宿主口不同）
   kafka:
-    image: bitnami/kafka:3.7
-    depends_on: [zookeeper]
-    ports: ["9092:9092"]
+    image: apache/kafka:3.7.0
+    container_name: infra-kafka
+    ports: ["29192:29092"]
     environment:
-      - KAFKA_BROKER_ID=1
-      - KAFKA_CFG_ZOOKEEPER_CONNECT=zookeeper:2181
-      - KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE=true
-      - ALLOW_PLAINTEXT_LISTENER=yes
-      - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092
-      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:9092
-      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093,PLAINTEXT_HOST://:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29192
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 20
 
+  # initdb 仅空卷首跑；schema/analytics/configurable-funnels 三件套幂等，
+  # 非空卷缺表时用 clickhouse-client 重放（同 e2e-verify 第 10 节）
   clickhouse:
     image: clickhouse/clickhouse-server:24.8
-    ports: ["8123:8123", "9000:9000"]
+    container_name: infra-clickhouse
+    environment:
+      CLICKHOUSE_USER: oddsmaker
+      CLICKHOUSE_PASSWORD: oddsmaker
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+    ports: ["29123:8123", "29100:9000"]
     volumes:
       - ./../schema/sql/clickhouse/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
       - ./../schema/sql/clickhouse/analytics.sql:/docker-entrypoint-initdb.d/02-analytics.sql:ro
+      - ./../schema/sql/clickhouse/configurable-funnels-schema.sql:/docker-entrypoint-initdb.d/03-configurable-funnels.sql:ro
+      - clickhouse_data:/var/lib/clickhouse
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8123/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
 
   apicurio:
     image: quay.io/apicurio/apicurio-registry-mem:2.6.5.Final
-    ports: ["8081:8080"]
+    container_name: infra-apicurio
+    ports: ["29081:8080"]
     environment:
       - QUARKUS_HTTP_PORT=8080
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/health || wget -qO- http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
 
   superset:
     image: apache/superset:3.0.2
-    ports: ["8088:8088"]
+    container_name: infra-superset
+    ports: ["18088:8088"]
     environment:
       - SUPERSET_SECRET_KEY=pit
     depends_on: [clickhouse]
+    volumes:
+      - superset_data:/app/superset_home
 
   otel-collector:
     image: otel/opentelemetry-collector:0.100.0
+    container_name: infra-otel-collector
     volumes:
       - ./otel-collector.yaml:/etc/otel-collector.yaml:ro
     command: ["--config", "/etc/otel-collector.yaml"]
@@ -48,6 +82,7 @@ services:
 
   prometheus:
     image: prom/prometheus:v2.53.0
+    container_name: infra-prometheus
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
     ports: ["9090:9090"]
@@ -55,7 +90,8 @@ services:
 
   grafana:
     image: grafana/grafana:11.2.0
-    ports: ["3000:3000"]
+    container_name: infra-grafana
+    ports: ["13000:3000"]
     environment:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=admin
@@ -63,3 +99,7 @@ services:
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
       - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+
+volumes:
+  clickhouse_data:
+  superset_data:

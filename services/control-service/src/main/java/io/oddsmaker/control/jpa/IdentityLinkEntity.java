@@ -1,6 +1,8 @@
 package io.oddsmaker.control.jpa;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
@@ -34,6 +36,7 @@ public class IdentityLinkEntity {
 
     // 关联强度
     @Column(name = "link_strength")
+    @JdbcTypeCode(SqlTypes.NUMERIC)
     public Double linkStrength = 1.0;  // 关联强度（0-1）
 
     // 时间信息

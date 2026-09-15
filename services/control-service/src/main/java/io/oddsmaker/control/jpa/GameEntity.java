@@ -1,6 +1,8 @@
 package io.oddsmaker.control.jpa;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
@@ -107,6 +109,7 @@ public class GameEntity {
     public Boolean enableCrashReporting = true;
 
     @Column(name = "sample_rate")
+    @JdbcTypeCode(SqlTypes.NUMERIC)
     public Double sampleRate = 1.0; // 采样率 0.0-1.0
 
     // 隐私和合规配置

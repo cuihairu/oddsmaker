@@ -1,0 +1,15 @@
+# docker build context 瘦身（context = 仓库根）：构建产物与宿主 jar 不进 context，
+# Dockerfile 只 COPY 精确源码路径；deploy-rt/jars 由 compose bind mount 使用，无需进镜像
+.git
+.gradle
+.claude
+.idea
+**/build/
+node_modules/
+deploy-rt/jars/
+data/
+docs/
+bi/
+web/
+sdks/
+tests/

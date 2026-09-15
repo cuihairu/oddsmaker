@@ -28,8 +28,9 @@ SELECT
   uniqExactIf(session_id, session_id != '') AS session_count,
   countIf(event_type = 'resource') AS resource_event_count,
   sumIf(revenue_amount, revenue_amount > 0) AS revenue_total,
-  sumIfIf(resource_amount, event_type = 'resource', flow_type = 'source') AS resource_source_total,
-  sumIfIf(resource_amount, event_type = 'resource', flow_type = 'sink') AS resource_sink_total,
+  -- CH 不支持嵌套相同 combinator（sumIfIf 报 ILLEGAL_AGGREGATION），条件用 AND 合并
+  sumIf(resource_amount, event_type = 'resource' AND flow_type = 'source') AS resource_source_total,
+  sumIf(resource_amount, event_type = 'resource' AND flow_type = 'sink') AS resource_sink_total,
   max(event_date) AS last_active_date,
   dateDiff('day', max(event_date), today()) AS days_inactive,
   uniqExactIf(level_id, level_id != '') AS unique_levels,
