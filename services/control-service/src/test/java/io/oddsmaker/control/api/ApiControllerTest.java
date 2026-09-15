@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 
+import io.oddsmaker.control.jpa.GameRepo;
 import io.oddsmaker.control.service.AuditLogService;
 import io.oddsmaker.control.service.ExperimentService;
 import io.oddsmaker.control.service.GameService;
@@ -29,6 +30,9 @@ class ApiControllerTest {
 
     @MockBean
     private StorageProfileService storageProfileService;
+
+    @MockBean
+    private GameRepo gameRepo;
 
     // WebConfig（WebMvcConfigurer）在 @WebMvcTest 下会被强制加载，
     // 其依赖链 AuditLogInterceptor → AuditLogService 会拉入该 @Service，

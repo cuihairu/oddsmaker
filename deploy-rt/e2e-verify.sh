@@ -147,10 +147,11 @@ done
 
 echo
 echo "== 10. CH schema 幂等重放（initdb 只在空卷跑，缺失表在此自愈）=="
-# 只重放幂等且覆盖全部 Flink job 目标表的三个文件；
-# 目录里 ltv/crash/queries* 等含裸 DDL，重放会报表已存在，不纳入
+# 只重放幂等文件：schema/analytics/configurable-funnels 覆盖全部 Flink job 目标表；
+# ltv/crash 全部语句为 CREATE OR REPLACE VIEW（纯视图），control 的 finance/
+# payment/crash 大屏接口依赖它们——老卷 initdb 未执行过即缺失（曾致 500）
 # 脚本 cd 在 deploy-rt 下，schema 在仓库根的上一级
-for f in ../schema/sql/clickhouse/schema.sql ../schema/sql/clickhouse/analytics.sql ../schema/sql/clickhouse/configurable-funnels-schema.sql; do
+for f in ../schema/sql/clickhouse/schema.sql ../schema/sql/clickhouse/analytics.sql ../schema/sql/clickhouse/configurable-funnels-schema.sql ../schema/sql/clickhouse/ltv.sql ../schema/sql/clickhouse/crash.sql; do
   if $COMPOSE exec -T clickhouse clickhouse-client --multiquery < "$f" >/dev/null 2>&1; then
     ok "replay $(basename "$f")"
   else

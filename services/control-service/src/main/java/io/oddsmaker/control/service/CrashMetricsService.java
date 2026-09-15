@@ -78,7 +78,8 @@ public class CrashMetricsService {
         }
         LocalDate since = LocalDate.now().minusDays(d);
         String sql = "SELECT app_version AS app_version, event_date AS event_date, "
-                + "crash_devices AS crash_devices, active_devices AS active_devices, crash_rate AS crash_rate "
+                + "crash_devices AS crash_devices, active_devices AS active_devices, "
+                + "round(crash_devices / active_devices, 6) AS crash_rate "
                 + "FROM (SELECT game_id, environment, event_date, app_version, "
                 + "uniqExact(device_id) AS crash_devices "
                 + "FROM events WHERE event_type = 'error' AND game_id = ?" + envFilter(environment)

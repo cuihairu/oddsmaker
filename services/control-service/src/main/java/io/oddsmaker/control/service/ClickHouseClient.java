@@ -42,14 +42,40 @@ public class ClickHouseClient {
     }
 
     public List<Map<String, Object>> query(String sql, Object... args) {
-        return jdbc.queryForList(sql, args);
+        return jdbc.queryForList(sql, sanitize(args));
     }
 
     public int update(String sql, Object... args) {
-        return jdbc.update(sql, args);
+        return jdbc.update(sql, sanitize(args));
     }
 
     public <T> T execute(ConnectionCallback<T> action) {
         return jdbc.execute(action);
     }
+
+    /**
+     * clickhouse-jdbc 0.6.5 的 JdbcTemplate 路径（setObject）把 Timestamp 参数
+     * 渲染成 "HH:mm:ss.n"（丢日期部分）→ CH SYNTAX_ERROR；PreparedStatement 的
+     * setTimestamp 才完整。此处统一把时间类参数转 'yyyy-MM-dd HH:mm:ss' 字符串，
+     * CH 与 DateTime/DateTime64 的比较和写入都做隐式解析。
+     */
+    private static Object[] sanitize(Object... args) {
+        Object[] out = new Object[args.length];
+        for (int i = 0; i < args.length; i++) {
+            Object a = args[i];
+            if (a instanceof java.sql.Timestamp t) {
+                out[i] = TS_FMT.format(t.toLocalDateTime());
+            } else if (a instanceof java.time.LocalDateTime ldt) {
+                out[i] = TS_FMT.format(ldt);
+            } else if (a instanceof java.time.LocalDate ld) {
+                out[i] = ld.toString();
+            } else {
+                out[i] = a;
+            }
+        }
+        return out;
+    }
+
+    private static final java.time.format.DateTimeFormatter TS_FMT =
+            java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 }

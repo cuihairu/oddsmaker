@@ -5,6 +5,8 @@ import io.oddsmaker.control.dto.ExperimentConfigDTO;
 import io.oddsmaker.control.dto.ExperimentDTO;
 import io.oddsmaker.control.dto.GameDTO;
 import io.oddsmaker.control.dto.StorageProfileDTO;
+import io.oddsmaker.control.jpa.GameEntity;
+import io.oddsmaker.control.jpa.GameRepo;
 import io.oddsmaker.control.service.ExperimentService;
 import io.oddsmaker.control.service.GameService;
 import io.oddsmaker.control.service.StorageProfileService;
@@ -36,12 +38,14 @@ public class ApiController {
     private final GameService gameService;
     private final ExperimentService experimentService;
     private final StorageProfileService storageProfileService;
+    private final GameRepo gameRepo;
     public ApiController(ControlService svc, GameService gameService, ExperimentService experimentService,
-                        StorageProfileService storageProfileService) {
+                        StorageProfileService storageProfileService, GameRepo gameRepo) {
         this.svc = svc;
         this.gameService = gameService;
         this.experimentService = experimentService;
         this.storageProfileService = storageProfileService;
+        this.gameRepo = gameRepo;
     }
 
     @PostMapping("/keys")
@@ -147,6 +151,19 @@ public class ApiController {
             ? gameService.getGames(pageable)
             : gameService.searchGames(q, pageable);
         return new ControlService.Paged<>(result.getContent(), result.getTotalElements());
+    }
+
+    /**
+     * 游戏统计（控制面 Dashboard 卡片：totalGames/liveGames）。
+     * 前端此前调用此路径但后端无端点，Dashboard 一直 404 空数据。
+     */
+    @GetMapping("/games/statistics")
+    @Operation(summary = "获取游戏统计", description = "游戏总数与上线数统计")
+    public ResponseEntity<Map<String, Object>> getGameStatistics() {
+        return ResponseEntity.ok(Map.of(
+            "totalGames", gameRepo.countByDeletedAtIsNull(),
+            "liveGames", gameRepo.countByStatusAndDeletedAtIsNull(GameEntity.GameStatus.LIVE)
+        ));
     }
 
     @PostMapping("/games")
