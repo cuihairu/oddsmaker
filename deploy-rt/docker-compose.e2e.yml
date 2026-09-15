@@ -56,6 +56,24 @@ services:
       retries: 20
     networks: [e2e]
 
+  # kafka 无持久卷，down 后 topic 全丢；broker auto-create 只对 producer 生效，
+  # Flink source 启动即查 topic metadata、查不到直接 CANCELED → 容器 Exited(1)
+  # （与根 compose 同款解法：建齐 topic 后业务服务才启动）
+  topic-init:
+    image: apache/kafka:3.7.0
+    container_name: e2e-topic-init
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        for t in oddsmaker.events_raw oddsmaker.risk_events oddsmaker.identity_events oddsmaker.deadletter; do
+          /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic "$$t" --partitions 1 --replication-factor 1
+        done
+        echo "topics ready"
+    networks: [e2e]
+
   clickhouse:
     image: clickhouse/clickhouse-server:24.8
     container_name: e2e-clickhouse
@@ -150,6 +168,7 @@ services:
       ODDSMAKER_KAFKA_TOPIC_RISK: oddsmaker.risk_events
     depends_on:
       kafka: { condition: service_healthy }
+      topic-init: { condition: service_completed_successfully }
       apicurio: { condition: service_healthy }
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health | grep -q '\"status\":\"UP\"' || curl -fsS http://localhost:8080/actuator/health | grep -q '\"status\":\"UP\"'"]
@@ -186,6 +205,7 @@ services:
       - ./jars:/jars:ro
     depends_on:
       kafka: { condition: service_healthy }
+      topic-init: { condition: service_completed_successfully }
       apicurio: { condition: service_healthy }
       clickhouse: { condition: service_healthy }
     # local executor 无 REST/指标口，healthcheck 退化为 JVM 进程存活；
@@ -228,6 +248,7 @@ services:
       - ./jars:/jars:ro
     depends_on:
       kafka: { condition: service_healthy }
+      topic-init: { condition: service_completed_successfully }
       apicurio: { condition: service_healthy }
       clickhouse: { condition: service_healthy }
     healthcheck:
@@ -266,6 +287,7 @@ services:
       - ./jars:/jars:ro
     depends_on:
       kafka: { condition: service_healthy }
+      topic-init: { condition: service_completed_successfully }
       apicurio: { condition: service_healthy }
       clickhouse: { condition: service_healthy }
     healthcheck:
@@ -301,6 +323,7 @@ services:
       - ./jars:/jars:ro
     depends_on:
       kafka: { condition: service_healthy }
+      topic-init: { condition: service_completed_successfully }
       apicurio: { condition: service_healthy }
       clickhouse: { condition: service_healthy }
     healthcheck:
@@ -341,6 +364,7 @@ services:
       - ./jars:/jars:ro
     depends_on:
       kafka: { condition: service_healthy }
+      topic-init: { condition: service_completed_successfully }
       apicurio: { condition: service_healthy }
       clickhouse: { condition: service_healthy }
       postgres: { condition: service_healthy }
@@ -379,6 +403,7 @@ services:
       - ./jars:/jars:ro
     depends_on:
       kafka: { condition: service_healthy }
+      topic-init: { condition: service_completed_successfully }
       apicurio: { condition: service_healthy }
       clickhouse: { condition: service_healthy }
     healthcheck:
@@ -418,6 +443,7 @@ services:
       - ./jars:/jars:ro
     depends_on:
       kafka: { condition: service_healthy }
+      topic-init: { condition: service_completed_successfully }
       apicurio: { condition: service_healthy }
       clickhouse: { condition: service_healthy }
     healthcheck:
