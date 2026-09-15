@@ -175,6 +175,16 @@ public class UserService {
     }
 
     /**
+     * 记录一次成功登录（last_login / login_count）。不写审计日志——
+     * 登录不是业务数据变更，走 updateUser 会误报 UPDATE 审计。
+     */
+    public void recordLogin(UserEntity user) {
+        user.lastLoginAt = LocalDateTime.now();
+        user.loginCount = (user.loginCount == null ? 0L : user.loginCount) + 1;
+        userRepo.save(user);
+    }
+
+    /**
      * 根据邮箱查找用户
      */
     public Optional<UserEntity> findByEmail(String email) {

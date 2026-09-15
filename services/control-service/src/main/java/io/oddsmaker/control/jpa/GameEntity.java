@@ -169,6 +169,7 @@ public class GameEntity {
         DEVELOPMENT,  // 开发中
         TESTING,      // 测试中
         LIVE,         // 已上线
+        PUBLISHED,    // 已发布（V0.4.1 迁移 seed 的 DEFAULT 游戏即此状态，枚举缺失曾致列表全 500）
         MAINTENANCE,  // 维护中
         DISCONTINUED  // 已停服
     }

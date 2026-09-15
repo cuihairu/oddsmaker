@@ -1,5 +1,6 @@
 package io.oddsmaker.control.jpa;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
@@ -21,6 +22,14 @@ public class UserEntity {
 
     @Column(nullable = false, unique = true, length = 100)
     public String username;
+
+    /**
+     * 本地登录口令（bcrypt）。迁移列 V0.2.0 就有，此前实体未映射、登录端点缺失，
+     * 控制面前端 /api/auth/login 一直是死接口。不对外序列化。
+     */
+    @JsonIgnore
+    @Column(name = "password_hash", length = 255)
+    public String passwordHash;
 
     @Column(unique = true, length = 200)
     public String email;

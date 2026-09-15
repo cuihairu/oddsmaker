@@ -59,6 +59,11 @@ oddsmaker:
   internal:
     # Gateway 等服务间调用必须显式配置；留空时 /internal/** 默认拒绝。
     token: ${ODDSMAKER_INTERNAL_TOKEN:}
+  auth:
+    # 本地登录 JWT（HS256）签名密钥，>=32 字节；留空时 /api/** 仅 Admin Token 可用，
+    # 控制面无法登录。初始账号 admin/admin123（V0.8.9 seed），生产必须更换。
+    jwt-secret: ${ODDSMAKER_AUTH_JWT_SECRET:oddsmaker-dev-jwt-secret-0123456789abcdef0123456789abcdef}
+    jwt-ttl-seconds: ${ODDSMAKER_AUTH_JWT_TTL_SECONDS:86400}
 
   company:
     # 单公司部署元信息

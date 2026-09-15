@@ -583,6 +583,8 @@ public class GameService {
             case DEVELOPMENT -> newStatus == GameEntity.GameStatus.TESTING;
             case TESTING -> newStatus == GameEntity.GameStatus.LIVE || newStatus == GameEntity.GameStatus.DEVELOPMENT;
             case LIVE -> newStatus == GameEntity.GameStatus.MAINTENANCE;
+            case PUBLISHED -> newStatus == GameEntity.GameStatus.MAINTENANCE
+                || newStatus == GameEntity.GameStatus.DISCONTINUED;
             case MAINTENANCE -> newStatus == GameEntity.GameStatus.LIVE || newStatus == GameEntity.GameStatus.DISCONTINUED;
             case DISCONTINUED -> false; // 已停服不能变更状态
         };

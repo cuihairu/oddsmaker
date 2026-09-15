@@ -45,6 +45,15 @@ public class KeycloakJwtAuthenticationConverter implements Converter<Jwt, Abstra
     private Collection<GrantedAuthority> extractKeycloakAuthorities(Jwt jwt) {
         Collection<GrantedAuthority> authorities = new ArrayList<>();
 
+        // 本地登录签发的自签 JWT：顶层 roles 数组（JwtService.issue 的约定）
+        List<String> localRoles = jwt.getClaimAsStringList(ROLES_CLAIM);
+        if (localRoles != null) {
+            localRoles.stream()
+                .filter(role -> role != null && !role.isBlank())
+                .map(role -> new SimpleGrantedAuthority("ROLE_" + role.toUpperCase()))
+                .forEach(authorities::add);
+        }
+
         // 从realm_access中提取角色
         Map<String, Object> realmAccess = jwt.getClaimAsMap(REALM_ACCESS_CLAIM);
         if (realmAccess != null && realmAccess.containsKey(ROLES_CLAIM)) {

@@ -39,6 +39,9 @@ public class SecurityConfig {
     @Value("${spring.security.oauth2.resourceserver.jwt.jwk-set-uri:}")
     private String jwkSetUri;
 
+    @Value("${oddsmaker.auth.jwt-secret:}")
+    private String jwtSecret;
+
     /**
      * 公开端点列表（不需要认证）
      */
@@ -48,6 +51,8 @@ public class SecurityConfig {
         "/actuator/info",
         "/actuator/prometheus",
         "/api/config/**",
+        "/api/auth/login",
+        "/api/auth/logout",
         "/internal/**",
         "/swagger-ui/**",
         "/swagger-ui.html",
@@ -166,7 +171,9 @@ public class SecurityConfig {
     }
 
     /**
-     * JWT解码器
+     * JWT解码器：优先 Keycloak（jwk-set-uri/issuer-uri），其次本地自签 HS256
+     * （oddsmaker.auth.jwt-secret，配合 AuthController 的本地登录），都没有才回落
+     * 空实现（仅 Admin Token 认证可用）。
      */
     @Bean
     JwtDecoder jwtDecoder() {
@@ -175,6 +182,13 @@ public class SecurityConfig {
         }
         if (jwtIssuerUri != null && !jwtIssuerUri.isEmpty()) {
             return NimbusJwtDecoder.withIssuerLocation(jwtIssuerUri).build();
+        }
+        if (jwtSecret != null && jwtSecret.getBytes(java.nio.charset.StandardCharsets.UTF_8).length >= 32) {
+            javax.crypto.SecretKey key =
+                io.jsonwebtoken.security.Keys.hmacShaKeyFor(jwtSecret.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            return NimbusJwtDecoder.withSecretKey(key)
+                .macAlgorithm(org.springframework.security.oauth2.jose.jws.MacAlgorithm.HS256)
+                .build();
         }
         // 如果没有配置JWT，返回一个空实现（依赖Admin Token认证）
         return token -> null;

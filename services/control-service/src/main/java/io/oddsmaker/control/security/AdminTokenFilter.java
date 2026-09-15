@@ -38,6 +38,11 @@ public class AdminTokenFilter extends OncePerRequestFilter {
         if (path.startsWith("/api/config/")) {
             return true;
         }
+        // 登录/登出由 SecurityConfig 的 permitAll 放行：登录请求本身不带任何 token，
+        // 在此拦截会永远 401（AuthController 也就无法签发 token）。
+        if (path.startsWith("/api/auth/")) {
+            return true;
+        }
         // 只处理 API 和内部端点的请求
         return !path.startsWith("/api/") && !path.startsWith("/internal/");
     }
@@ -46,6 +51,15 @@ public class AdminTokenFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
         // 如果已经有OAuth2认证，跳过Admin Token检查
         if (SecurityContextHolder.getContext().getAuthentication() instanceof JwtAuthenticationToken) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
+        // Bearer 请求（本地登录 JWT / Keycloak）交给 Security 链的 oauth2 filter：
+        // 本过滤器注册在 oauth2 解码之前，此时 SecurityContext 尚无 JwtAuthenticationToken，
+        // 不放行会把合法登录会话误杀成 401。无效 token 由 oauth2 filter 拒绝。
+        String authorization = request.getHeader("Authorization");
+        if (authorization != null && authorization.startsWith("Bearer ")) {
             filterChain.doFilter(request, response);
             return;
         }
