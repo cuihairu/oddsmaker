@@ -7,6 +7,10 @@ plugins {
 dependencies {
   implementation("org.springframework.boot:spring-boot-starter-web")
   implementation("org.springframework.boot:spring-boot-starter-actuator")
+
+  // Prometheus 指标暴露（application.yaml 已声明 prometheus 端点，缺此依赖端点 404）
+  runtimeOnly("io.micrometer:micrometer-registry-prometheus")
+
   implementation("org.springframework.boot:spring-boot-starter-data-jpa")
   implementation("org.springframework.boot:spring-boot-starter-security")
   implementation("org.springframework.boot:spring-boot-starter-validation")

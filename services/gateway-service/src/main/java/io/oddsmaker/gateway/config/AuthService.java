@@ -1,5 +1,6 @@
 package io.oddsmaker.gateway.config;
 
+import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.core.env.Environment;
 import org.slf4j.Logger;
@@ -25,8 +26,12 @@ public class AuthService {
     private final java.net.http.HttpClient client;
     private final String controlUrl;
     private final String internalToken;
+    private final MeterRegistry meters;
     private final com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
     private final ConcurrentHashMap<String, CacheEntry> cache = new ConcurrentHashMap<>();
+
+    /** 远程 key 查找结果指标：outcome=ok|http_error|exception|not_configured，code=HTTP 状态码（非 HTTP 场景 none）。 */
+    static final String REMOTE_LOOKUP_METRIC = "oddsmaker.gateway.remote.key.lookup.total";
 
     static class CacheEntry {
         ApiKeyContext context;
@@ -79,10 +84,11 @@ public class AuthService {
         }
     }
 
-    public AuthService(Environment env) {
+    public AuthService(Environment env, MeterRegistry meters) {
         this.localSecrets = Binder.get(env).bind("oddsmaker.auth.keys", Map.class).orElse(Map.of());
         this.controlUrl = Binder.get(env).bind("oddsmaker.control.url", String.class).orElse(null);
         this.internalToken = Binder.get(env).bind("oddsmaker.control.internal-token", String.class).orElse("");
+        this.meters = meters;
         this.client = java.net.http.HttpClient.newBuilder()
             .connectTimeout(java.time.Duration.ofSeconds(2))
             .build();
@@ -126,6 +132,7 @@ public class AuthService {
      */
     private ApiKeyContext fetchRemoteContext(String apiKey) {
         if (controlUrl == null || controlUrl.isBlank() || internalToken == null || internalToken.isBlank()) {
+            meters.counter(REMOTE_LOOKUP_METRIC, "outcome", "not_configured", "code", "none").increment();
             return null;
         }
         try {
@@ -139,11 +146,15 @@ public class AuthService {
             java.net.http.HttpResponse<String> response =
                 client.send(request, java.net.http.HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() != 200) {
+                meters.counter(REMOTE_LOOKUP_METRIC,
+                    "outcome", "http_error", "code", String.valueOf(response.statusCode())).increment();
                 logger.warn("Remote key lookup failed for {}: HTTP {}", apiKey, response.statusCode());
                 return null;
             }
+            meters.counter(REMOTE_LOOKUP_METRIC, "outcome", "ok", "code", "200").increment();
             return mapper.readValue(response.body(), ApiKeyContext.class);
         } catch (Exception e) {
+            meters.counter(REMOTE_LOOKUP_METRIC, "outcome", "exception", "code", "none").increment();
             logger.warn("Remote key lookup error for {}: {}", apiKey, e.toString());
             return null;
         }

@@ -14,6 +14,9 @@ dependencies {
   implementation("org.springframework.boot:spring-boot-starter-actuator")
   implementation("org.springframework.boot:spring-boot-starter-validation")
 
+  // Prometheus 指标暴露（/actuator/prometheus）
+  runtimeOnly("io.micrometer:micrometer-registry-prometheus")
+
   implementation("com.fasterxml.jackson.core:jackson-databind")
   implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310")
   implementation("org.apache.avro:avro:1.11.3")

@@ -1,6 +1,7 @@
 package io.oddsmaker.gateway.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.env.MockEnvironment;
@@ -275,7 +276,7 @@ class GatewayConfigComponentsTest {
     void authServiceLocalAndCache() {
         MockEnvironment env = new MockEnvironment()
             .withProperty("oddsmaker.auth.keys.local-dev-key", "dev-secret");
-        AuthService service = new AuthService(env);
+        AuthService service = new AuthService(env, new SimpleMeterRegistry());
 
         assertNull(service.getContext(null));
         assertNull(service.getContext(" "));
@@ -316,18 +317,26 @@ class GatewayConfigComponentsTest {
             .withProperty("oddsmaker.auth.keys.k1", "s1")
             .withProperty("oddsmaker.control.url", "http://127.0.0.1:1")
             .withProperty("oddsmaker.control.internal-token", "tok");
-        AuthService service = new AuthService(env);
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
+        AuthService service = new AuthService(env, registry);
         // 远端连接拒绝（onErrorResume → empty）→ 本地回退
         AuthService.ApiKeyContext ctx = service.getContext("k1");
         assertNotNull(ctx);
         assertEquals("s1", ctx.secret);
+        // 远端失败必须留指标，不再只有 logger.warn
+        assertEquals(1.0, registry.get(AuthService.REMOTE_LOOKUP_METRIC)
+            .tag("outcome", "exception").counter().count());
 
         // internal-token 空白 → 直接本地
         MockEnvironment noToken = new MockEnvironment()
             .withProperty("oddsmaker.auth.keys.k2", "s2")
             .withProperty("oddsmaker.control.url", "http://127.0.0.1:1");
-        AuthService noTokenService = new AuthService(noToken);
+        SimpleMeterRegistry noTokenRegistry = new SimpleMeterRegistry();
+        AuthService noTokenService = new AuthService(noToken, noTokenRegistry);
         assertEquals("s2", noTokenService.getContext("k2").secret);
+        // 未配置 control → not_configured，区别于"配置了但失败"
+        assertEquals(1.0, noTokenRegistry.get(AuthService.REMOTE_LOOKUP_METRIC)
+            .tag("outcome", "not_configured").counter().count());
 
         // ApiKeyContext 判定分支
         AuthService.ApiKeyContext scoped = new AuthService.ApiKeyContext();
