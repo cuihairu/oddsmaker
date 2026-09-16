@@ -983,8 +983,8 @@ class FinalSweep6Test {
     @Test
     @DisplayName("assign：variants 为 null 返回 null 分支")
     void splitterAssignNullVariants() {
-        assertNull(ExperimentSplitter.assign("salt", "u1", null));
-        assertNull(ExperimentSplitter.assign("salt", "u1", List.of()));
+        assertNull(ExperimentSplitter.assign("exp", "salt", "u1", null));
+        assertNull(ExperimentSplitter.assign("exp", "salt", "u1", List.of()));
     }
 
     // ==================== TrackingPlanService.parseAllowedValues ====================

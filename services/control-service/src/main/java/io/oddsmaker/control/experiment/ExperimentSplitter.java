@@ -2,22 +2,19 @@ package io.oddsmaker.control.experiment;
 
 import com.fasterxml.jackson.databind.JsonNode;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
  * 实验分流器：确定性哈希分桶 + 变体权重分配。
  *
- * 算法：SHA-256(salt + ":" + subjectId) 取前 4 字节 → [0, 10000) 桶，
- * 按变体累积权重落位。同一 (salt, subjectId) 永远落在同一变体，
- * 保证曝光/转化口径稳定；SDK 端实现相同算法即可与服务端一致。
+ * 算法与四个客户端 SDK（sdks/web、android、ios、unity）完全一致：
+ * hash32(experimentId + ":" + salt + ":" + subjectId)（FNV-1a 32 变体）
+ * → 无符号取模总权重 → 按变体累积权重落位。
+ * 同一 (experimentId, salt, subjectId) 永远落在同一变体，保证曝光/转化口径稳定；
+ * 跨端锚定向量见 ExperimentSplitterTest（与 sdks/web tests/hash_test.js 相同）。
  */
 public final class ExperimentSplitter {
-
-    public static final int BUCKETS = 10_000;
 
     /** 变体分配：name + weight（正整数） */
     public static final class Variant {
@@ -35,13 +32,14 @@ public final class ExperimentSplitter {
     /**
      * 为主体（userId/deviceId）分配变体。
      *
-     * @param salt 实验盐值（保证不同实验之间分配独立）
+     * @param experimentId 实验 id（参与哈希，保证不同实验之间分配独立）
+     * @param salt 实验盐值
      * @param subjectId 主体标识
      * @param variants 变体列表（weight 之和需大于 0）
      * @return 命中的变体名；无有效变体时返回 null
      */
-    public static String assign(String salt, String subjectId, List<Variant> variants) {
-        if (salt == null || subjectId == null || variants == null || variants.isEmpty()) {
+    public static String assign(String experimentId, String salt, String subjectId, List<Variant> variants) {
+        if (experimentId == null || salt == null || subjectId == null || variants == null || variants.isEmpty()) {
             return null;
         }
         int totalWeight = 0;
@@ -52,15 +50,15 @@ public final class ExperimentSplitter {
             totalWeight += v.weight;
         }
 
-        int bucket = bucketOf(salt, subjectId);
+        long h = Integer.toUnsignedLong(hash32(experimentId + ":" + salt + ":" + subjectId)) % totalWeight;
         int cumulative = 0;
         for (Variant v : variants) {
             cumulative += v.weight;
-            if (bucket < cumulative * BUCKETS / totalWeight) {
+            if (h < cumulative) {
                 return v.name;
             }
         }
-        // 整除边界兜底：落在最后一个变体
+        // 取模兜底：落在最后一个变体
         return variants.get(variants.size() - 1).name;
     }
 
@@ -86,19 +84,16 @@ public final class ExperimentSplitter {
         return out;
     }
 
-    /** 主体落桶：SHA-256 摘要前 4 字节无符号整数取模 */
-    static int bucketOf(String salt, String subjectId) {
-        try {
-            byte[] digest = MessageDigest.getInstance("SHA-256")
-                .digest((salt + ":" + subjectId).getBytes(StandardCharsets.UTF_8));
-            int value = ((digest[0] & 0xFF) << 24)
-                | ((digest[1] & 0xFF) << 16)
-                | ((digest[2] & 0xFF) << 8)
-                | (digest[3] & 0xFF);
-            return Math.floorMod(value, BUCKETS);
-        } catch (NoSuchAlgorithmException e) {
-            // SHA-256 为 JVM 必备算法
-            throw new IllegalStateException("SHA-256 unavailable", e);
+    /**
+     * 四端 SDK 同款哈希（sdks/web src/index.ts hash32 等）：UTF-16 码元逐位混合，
+     * 溢出按 32 位回绕（各端同余）。锚定向量：hash32("a")=0xe40c292c、hash32("foobar")=0xbf9cf968。
+     */
+    static int hash32(String s) {
+        int h = 0x811c9dc5;
+        for (int i = 0; i < s.length(); i++) {
+            h ^= s.charAt(i);
+            h += (h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24);
         }
+        return h;
     }
 }

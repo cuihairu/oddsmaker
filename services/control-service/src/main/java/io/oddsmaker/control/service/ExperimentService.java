@@ -208,7 +208,7 @@ public class ExperimentService {
         JsonNode config = readConfig(entity.configJson);
         String controlVariant = config.path("control_variant").asText(null);
         List<ExperimentSplitter.Variant> variants = ExperimentSplitter.parseVariants(config);
-        String assigned = ExperimentSplitter.assign(entity.salt, subjectId.trim(), variants);
+        String assigned = ExperimentSplitter.assign(experimentId, entity.salt, subjectId.trim(), variants);
         if (assigned == null && controlVariant != null) {
             return controlVariant;
         }
