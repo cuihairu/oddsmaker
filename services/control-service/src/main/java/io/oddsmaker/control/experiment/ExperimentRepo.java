@@ -11,6 +11,7 @@ import java.util.List;
 public interface ExperimentRepo extends JpaRepository<ExperimentEntity, String> {
     List<ExperimentEntity> findByGameIdAndEnvironmentId(String gameId, String environmentId);
     List<ExperimentEntity> findByGameIdAndEnvironmentIdAndStatus(String gameId, String environmentId, String status);
+    List<ExperimentEntity> findByStatus(String status);
 
     @Query("SELECT e FROM ExperimentEntity e WHERE " +
            "(:gameId IS NULL OR e.gameId=:gameId) AND " +

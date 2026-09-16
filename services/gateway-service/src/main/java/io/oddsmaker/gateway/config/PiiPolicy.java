@@ -73,15 +73,19 @@ public class PiiPolicy {
         if (val instanceof String) {
             String s = (String) val;
             String lk = key == null ? "" : key.toLowerCase(Locale.ROOT);
+            // 预检查长度：合法邮箱不超过 320 字符（RFC 5321 路径上限），超长值直接
+            // 跳过邮箱正则——原正则对无 '@' 的超长文本存在灾难性回溯（实测 7 万字符
+            // 耗时 40s+），本方法跑在请求处理链路上，会被一个超大 props 卡死 event loop
+            boolean emailDetectable = s.length() <= 320;
             // direct key masking
             Set<String> mk = o != null && o.maskKeys != null ? o.maskKeys : maskKeys;
             if (mk.contains(lk)) {
-                if (EMAIL.matcher(s).find()) return maskEmail(s);
+                if (emailDetectable && EMAIL.matcher(s).find()) return maskEmail(s);
                 if (countDigits(s) >= 10) return maskPhone(s);
                 return maskAll(s);
             }
             // email
-            if (EMAIL.matcher(s).find()) {
+            if (emailDetectable && EMAIL.matcher(s).find()) {
                 Mode em = o != null && o.emailMode != null ? o.emailMode : emailMode;
                 if (em == Mode.DROP) return null;
                 if (em == Mode.MASK) return maskEmail(s);
@@ -171,13 +175,15 @@ public class PiiPolicy {
     }
 
     private String maskPhone(String s) {
+        // 循环外数一次总位数：循环内重调 countDigits(s) 对超长数字串是 O(n²)
+        int keep = Math.max(0, countDigits(s) - 2);
         StringBuilder out = new StringBuilder();
         int digits = 0;
         for (int i=0;i<s.length();i++) {
             char ch = s.charAt(i);
             if (Character.isDigit(ch)) {
                 digits++;
-                if (digits <= Math.max(0, countDigits(s)-2)) out.append('x');
+                if (digits <= keep) out.append('x');
                 else out.append(ch);
             } else out.append(ch);
         }

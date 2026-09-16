@@ -87,14 +87,9 @@ public class BlockListClient {
         }
 
         // 2) 未命中部分请求 control
+        // 注：错误吸收在 doBatchCheckRequest 内部完成（onErrorResume → Mono.empty()），
+        // 此处仅兜底空响应为 emptyMap（=无人被封禁），保证响应链不坍缩
         return doBatchCheckRequest(gameId, misses)
-                .onErrorResume(e -> {
-                    log.warn("blocklist check failed, treating as not blocked: {}", e.getMessage());
-                    return Mono.just(Collections.emptyMap());
-                })
-                // control 不可达/返回空时 doBatchCheckRequest 可能产出 Mono.empty()，
-                // 此时 onErrorResume 不触发，下游 .map 会被跳过导致 batch 返回空响应体。
-                // 兜底成 emptyMap（=无人被封禁），保证响应链不坍缩。
                 .defaultIfEmpty(Collections.emptyMap())
                 .map(remote -> {
                     // 更新缓存

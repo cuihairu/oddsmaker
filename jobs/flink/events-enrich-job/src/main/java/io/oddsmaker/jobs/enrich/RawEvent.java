@@ -57,6 +57,7 @@ public class RawEvent {
     public String device_fingerprint;
     public String client_integrity;
     public String props_json;
+    public java.util.Map<String, String> experiments;
 
     public RawEvent() {}
 
@@ -108,7 +109,23 @@ public class RawEvent {
         e.device_fingerprint = str(r, "device_fingerprint");
         e.client_integrity = str(r, "client_integrity");
         e.props_json = str(r, "props_json");
+        e.experiments = mp(r, "experiments");
         return e;
+    }
+
+    /** Avro map 字段解析（空 map 视为 null，序列化体积友好） */
+    static java.util.Map<String, String> mp(GenericRecord r, String field) {
+        Object v = field(r, field);
+        if (!(v instanceof java.util.Map<?, ?> m) || m.isEmpty()) {
+            return null;
+        }
+        java.util.Map<String, String> out = new java.util.HashMap<>();
+        for (java.util.Map.Entry<?, ?> en : m.entrySet()) {
+            if (en.getKey() != null && en.getValue() != null) {
+                out.put(en.getKey().toString(), en.getValue().toString());
+            }
+        }
+        return out;
     }
 
     static String toDlqJson(RawEvent e, String reason) {

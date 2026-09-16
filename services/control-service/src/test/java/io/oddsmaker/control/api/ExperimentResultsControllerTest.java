@@ -3,6 +3,7 @@ package io.oddsmaker.control.api;
 import io.oddsmaker.control.experiment.ExperimentEntity;
 import io.oddsmaker.control.experiment.ExperimentMetricSnapshotEntity;
 import io.oddsmaker.control.experiment.ExperimentMetricSnapshotRepo;
+import io.oddsmaker.control.experiment.ExperimentMetricsAggregator;
 import io.oddsmaker.control.experiment.ExperimentRepo;
 import io.oddsmaker.control.experiment.ExperimentStatsService;
 import io.oddsmaker.control.service.ExperimentService;
@@ -39,6 +40,9 @@ class ExperimentResultsControllerTest {
 
     @Mock
     private ExperimentService experimentService;
+
+    @Mock
+    private ExperimentMetricsAggregator metricsAggregator;
 
     @InjectMocks
     private ExperimentResultsController controller;

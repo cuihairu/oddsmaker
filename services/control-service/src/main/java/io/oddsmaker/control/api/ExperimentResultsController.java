@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import io.oddsmaker.control.experiment.ExperimentEntity;
 import io.oddsmaker.control.experiment.ExperimentMetricSnapshotEntity;
 import io.oddsmaker.control.experiment.ExperimentMetricSnapshotRepo;
+import io.oddsmaker.control.experiment.ExperimentMetricsAggregator;
 import io.oddsmaker.control.experiment.ExperimentRepo;
 import io.oddsmaker.control.experiment.ExperimentSplitter;
 import io.oddsmaker.control.experiment.ExperimentStatsService;
@@ -31,15 +32,18 @@ public class ExperimentResultsController {
     private final ExperimentMetricSnapshotRepo snapshotRepo;
     private final ExperimentStatsService statsService;
     private final ExperimentService experimentService;
+    private final ExperimentMetricsAggregator metricsAggregator;
 
     public ExperimentResultsController(ExperimentRepo experimentRepo,
                                        ExperimentMetricSnapshotRepo snapshotRepo,
                                        ExperimentStatsService statsService,
-                                       ExperimentService experimentService) {
+                                       ExperimentService experimentService,
+                                       ExperimentMetricsAggregator metricsAggregator) {
         this.experimentRepo = experimentRepo;
         this.snapshotRepo = snapshotRepo;
         this.statsService = statsService;
         this.experimentService = experimentService;
+        this.metricsAggregator = metricsAggregator;
     }
 
     public static class MetricSnapshotReq {
@@ -97,6 +101,17 @@ public class ExperimentResultsController {
             saved++;
         }
         return ResponseEntity.ok(Map.of("experimentId", id, "ingested", saved));
+    }
+
+    /**
+     * 手动触发聚合（与定时任务同路径）：从 ClickHouse 聚合当天窗口回填快照。
+     */
+    @PostMapping("/metrics/aggregate")
+    public ResponseEntity<Map<String, Object>> aggregate(@PathVariable String id) {
+        experimentRepo.findById(id)
+            .orElseThrow(() -> new IllegalArgumentException("Experiment not found: " + id));
+        int written = metricsAggregator.aggregate(id);
+        return ResponseEntity.ok(Map.of("experimentId", id, "aggregated", written));
     }
 
     /**

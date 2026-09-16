@@ -15,10 +15,16 @@ public class JsonSchemaValidator {
     private final ObjectMapper om;
     private final JsonNode schema;
 
+    @org.springframework.beans.factory.annotation.Autowired
     public JsonSchemaValidator(ObjectMapper om) {
+        this(om, "schemas/oddsmaker-event-schema.json");
+    }
+
+    /** 测试注入入口：自定义 schema 覆盖生产 schema 未使用的规则（enum/array/integer 等）。 */
+    JsonSchemaValidator(ObjectMapper om, String schemaClasspathLocation) {
         this.om = om;
         try {
-            ClassPathResource res = new ClassPathResource("schemas/oddsmaker-event-schema.json");
+            ClassPathResource res = new ClassPathResource(schemaClasspathLocation);
             try (InputStream is = res.getInputStream()) {
                 this.schema = om.readTree(is);
             }

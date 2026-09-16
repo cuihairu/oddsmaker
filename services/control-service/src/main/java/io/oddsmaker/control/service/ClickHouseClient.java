@@ -41,6 +41,11 @@ public class ClickHouseClient {
         return jdbc != null;
     }
 
+    /** 测试注入：直接给定 JdbcTemplate，覆盖 sanitize 参数规范化与 query/update/execute 转发。 */
+    ClickHouseClient(JdbcTemplate jdbc) {
+        this.jdbc = jdbc;
+    }
+
     public List<Map<String, Object>> query(String sql, Object... args) {
         return jdbc.queryForList(sql, sanitize(args));
     }

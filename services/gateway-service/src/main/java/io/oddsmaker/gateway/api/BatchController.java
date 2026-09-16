@@ -214,18 +214,8 @@ public class BatchController {
                 }
             }
 
-            // 无封禁检查目标 → 直接发布
-            if (targets.isEmpty()) {
-                for (Event event : eventsToPublish) {
-                    try {
-                        publisher.publish(event);
-                        resp.accepted.add(event.eventId);
-                    } catch (Exception ex) {
-                        reject(resp, event, "kafka_error");
-                    }
-                }
-                return Mono.just(resp);
-            }
+            // 注：不设 targets 空快路径——device_id 过 schema minLength=1 后 targets 恒非空，
+            // 空列表场景由 BlockListClient.batchCheck 直接返回空结果兜底
 
             // 3) 批量检查封禁
             return blockListClient.batchCheck(gameId, targets)
@@ -354,32 +344,21 @@ public class BatchController {
     private Event readCompatEvent(JsonNode node) {
         JsonNode normalizedNode = normalizeCompatNode(node);
         Event event = om.convertValue(normalizedNode, Event.class);
+        // 注：game_id/environment/event_type/revenue_* 的 snake_case 兜底映射已删除——
+        // gateway ObjectMapper 已配置 SNAKE_CASE 命名策略，convertValue 直接完成映射
         if (event.gameId == null) {
-            if (node.hasNonNull("game_id")) {
-                event.gameId = node.get("game_id").asText();
-            } else if (node.hasNonNull("project_id")) {
+            if (node.hasNonNull("project_id")) {
                 event.gameId = node.get("project_id").asText();
             } else if (node.hasNonNull("app_id")) {
                 event.gameId = parseGameIdFromAppId(node.get("app_id").asText());
             }
         }
         if (event.environment == null) {
-            if (node.hasNonNull("environment")) {
-                event.environment = node.get("environment").asText();
-            } else if (node.hasNonNull("environment_id")) {
+            if (node.hasNonNull("environment_id")) {
                 event.environment = normalizeEnvironment(node.get("environment_id").asText());
             } else if (node.hasNonNull("app_id")) {
                 event.environment = parseEnvironmentFromAppId(node.get("app_id").asText());
             }
-        }
-        if (event.eventType == null && node.hasNonNull("event_type")) {
-            event.eventType = node.get("event_type").asText();
-        }
-        if (event.revenueAmount == null && node.hasNonNull("revenue_amount")) {
-            event.revenueAmount = node.get("revenue_amount").asDouble();
-        }
-        if (event.revenueCurrency == null && node.hasNonNull("revenue_currency")) {
-            event.revenueCurrency = node.get("revenue_currency").asText();
         }
         if (node.hasNonNull("ts_client")) {
             Long tsClient = parseEpochMillis(node.get("ts_client"));

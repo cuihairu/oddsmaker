@@ -156,6 +156,7 @@ public class EventsEnrichJob {
             if (osFamily != null && !osFamily.isEmpty()) merged = mergeProps(merged, "os_family", osFamily);
             if (deviceClass != null && !deviceClass.isEmpty()) merged = mergeProps(merged, "device_class", deviceClass);
             row.props_json = merged;
+            row.experiments = mapLiteral(record.experiments);
             row.revenue_amount = decimalOrZero(record.revenue_amount);
             row.revenue_currency = nz(record.revenue_currency);
             return row;
@@ -170,8 +171,8 @@ public class EventsEnrichJob {
                         "order_id, product_id, revenue_amount, revenue_currency, receipt_hash, " +
                         "virtual_currency, virtual_amount, flow_type, item_id, operation_id, operation_type, " +
                         "resource_id, resource_amount, " +
-                        "ad_network, ad_placement, ad_format, ad_impression_id, props_json" +
-                        ") VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                        "ad_network, ad_placement, ad_format, ad_impression_id, props_json, experiments" +
+                        ") VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (ps, r) -> {
                     ps.setString(1, r.game_id);
                     ps.setString(2, r.environment);
@@ -215,6 +216,7 @@ public class EventsEnrichJob {
                     ps.setString(40, r.ad_format);
                     ps.setString(41, r.ad_impression_id);
                     ps.setString(42, r.props_json);
+                    ps.setString(43, r.experiments);
                 },
                 JdbcExecutionOptions.builder().withBatchIntervalMs(200).withBatchSize(2000).withMaxRetries(3).build(),
                 new JdbcConnectionOptions.JdbcConnectionOptionsBuilder()
@@ -251,6 +253,33 @@ public class EventsEnrichJob {
     }
     private static Timestamp toTimestamp(Long micros) {
         return micros == null ? null : new Timestamp(micros / 1000L);
+    }
+
+    /**
+     * Map → ClickHouse map 字面量（写入 events.experiments Map(String,String) 列）。
+     * 返回 {} / {'k':'v'} 形式（mapFromString 全版本支持），转义反斜杠与单引号；null 项剔除。
+     */
+    static String mapLiteral(java.util.Map<String, String> m) {
+        if (m == null || m.isEmpty()) {
+            return "{}";
+        }
+        StringBuilder sb = new StringBuilder("{");
+        boolean first = true;
+        for (java.util.Map.Entry<String, String> en : m.entrySet()) {
+            if (en.getKey() == null || en.getValue() == null) {
+                continue;
+            }
+            if (!first) {
+                sb.append(',');
+            }
+            first = false;
+            sb.append('\'').append(esc(en.getKey())).append("':'").append(esc(en.getValue())).append('\'');
+        }
+        return sb.length() == 1 ? "{}" : sb.append('}').toString();
+    }
+
+    private static String esc(String s) {
+        return s.replace("\\", "\\\\").replace("'", "\\'");
     }
 
     public static class EventRow {
@@ -294,6 +323,7 @@ public class EventsEnrichJob {
         public String ad_format;
         public String ad_impression_id;
         public String props_json;
+        public String experiments;
         public BigDecimal revenue_amount;
         public String revenue_currency;
     }

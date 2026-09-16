@@ -223,4 +223,36 @@ class PublishersTest {
         assertEquals("game_rpg_staging", AvroPublisher.targetDatabase("rpg", "staging"));
         assertNotNull(future);
     }
+
+    @Test
+    @DisplayName("DlqPublisher init：按配置装配 KafkaProducer（String 序列化，惰性建连）")
+    void dlqPublisherInitBuildsProducer() {
+        DlqPublisher dlq = new DlqPublisher();
+        ReflectionTestUtils.setField(dlq, "bootstrap", "127.0.0.1:19092");
+        ReflectionTestUtils.setField(dlq, "dlqTopic", "oddsmaker.deadletter");
+        dlq.init();
+        Object producerInstance = ReflectionTestUtils.getField(dlq, "producer");
+        assertNotNull(producerInstance);
+        assertTrue(producerInstance instanceof KafkaProducer);
+        ((KafkaProducer<?, ?>) producerInstance).close(java.time.Duration.ZERO);
+    }
+
+    @Test
+    @DisplayName("AvroPublisher init：加载 avsc + Apicurio 序列化器装配（惰性建连）")
+    void avroPublisherInitLoadsSchemaAndProducer() throws Exception {
+        AvroPublisher avro = new AvroPublisher(new ObjectMapper());
+        ReflectionTestUtils.setField(avro, "bootstrap", "127.0.0.1:19092");
+        ReflectionTestUtils.setField(avro, "eventsTopic", "oddsmaker.events_raw");
+        ReflectionTestUtils.setField(avro, "registryUrl", "http://127.0.0.1:18081/apis/registry/v2");
+        ReflectionTestUtils.setField(avro, "lingerMs", 5);
+        ReflectionTestUtils.setField(avro, "batchSize", 65536);
+        ReflectionTestUtils.setField(avro, "avroSchemaRes",
+            new org.springframework.core.io.ClassPathResource("schemas/oddsmaker-event.avsc"));
+        avro.init();
+        assertNotNull(ReflectionTestUtils.getField(avro, "schema"));
+        Object producerInstance = ReflectionTestUtils.getField(avro, "producer");
+        assertNotNull(producerInstance);
+        assertTrue(producerInstance instanceof KafkaProducer);
+        ((KafkaProducer<?, ?>) producerInstance).close(java.time.Duration.ZERO);
+    }
 }
