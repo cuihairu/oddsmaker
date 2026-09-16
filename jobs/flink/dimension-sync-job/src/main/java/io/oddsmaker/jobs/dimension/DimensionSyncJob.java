@@ -21,16 +21,63 @@ import java.time.Duration;
 
 public class DimensionSyncJob {
 
+    static final String JOB_NAME = "oddsmaker-dimension-sync";
+
+    /** 入口：读配置 → 搭管道 → 触发执行（execute 才真正连接 source/sink）。 */
     public static void main(String[] args) throws Exception {
-        String bootstrap = System.getProperty("kafka.bootstrap", "localhost:9092");
-        String registry = System.getProperty("registry.url", "http://localhost:8081/apis/registry/v2");
-        String topic = System.getProperty("kafka.topic", "oddsmaker.events_raw");
-        String chUrl = System.getProperty("clickhouse.url", "jdbc:clickhouse://localhost:8123/default");
-        String chUser = System.getProperty("clickhouse.user", "default");
-        String chPass = System.getProperty("clickhouse.pass", "");
+        buildPipeline(StreamExecutionEnvironment.getExecutionEnvironment(), config()).getExecutionEnvironment().execute(JOB_NAME);
+    }
 
-        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+    /** 配置读取（System properties，单测可 setProperty 后逐项直测）。 */
+    static String[] config() {
+        return new String[]{kafkaBootstrap(), registryUrl(), kafkaTopic(), chUrl(), chUser(), chPass()};
+    }
 
+    static String kafkaBootstrap() {
+        return System.getProperty("kafka.bootstrap", "localhost:9092");
+    }
+
+    static String registryUrl() {
+        return System.getProperty("registry.url", "http://localhost:8081/apis/registry/v2");
+    }
+
+    static String kafkaTopic() {
+        return System.getProperty("kafka.topic", "oddsmaker.events_raw");
+    }
+
+    static String chUrl() {
+        return System.getProperty("clickhouse.url", "jdbc:clickhouse://localhost:8123/default");
+    }
+
+    static String chUser() {
+        return System.getProperty("clickhouse.user", "default");
+    }
+
+    static String chPass() {
+        return System.getProperty("clickhouse.pass", "");
+    }
+
+    /** 有界乱序水位线（5 分钟），时间戳取 ts_server → ts_client → now。 */
+    static WatermarkStrategy<RawEvent> watermarks() {
+        return WatermarkStrategy.<RawEvent>forBoundedOutOfOrderness(Duration.ofMinutes(5))
+                .withTimestampAssigner((r, ts) -> eventMillis(r));
+    }
+
+    /** item 维度分流谓词。 */
+    static boolean isItem(DimRecord r) {
+        return "item".equals(r.dimType);
+    }
+
+    /** level 维度分流谓词。 */
+    static boolean isLevel(DimRecord r) {
+        return "level".equals(r.dimType);
+    }
+
+    /**
+     * 搭建维度同步管道（惰性：source/sink 均到 execute 才连接，单测可用本地环境直跑）。
+     */
+    static SingleOutputStreamOperator<DimRecord> buildPipeline(StreamExecutionEnvironment env, String[] cfg) {
+        String bootstrap = cfg[0], registry = cfg[1], topic = cfg[2], chUrl = cfg[3], chUser = cfg[4], chPass = cfg[5];
         KafkaSource<RawEvent> source = KafkaSource.<RawEvent>builder()
                 .setBootstrapServers(bootstrap)
                 .setTopics(topic)
@@ -39,46 +86,19 @@ public class DimensionSyncJob {
                 .setDeserializer(new ApicurioAvroFlinkDeserializer(registry))
                 .build();
 
-        WatermarkStrategy<RawEvent> wm = WatermarkStrategy.<RawEvent>forBoundedOutOfOrderness(Duration.ofMinutes(5))
-                .withTimestampAssigner((r, ts) -> {
-                    Long s = r.ts_server;
-                    Long c = r.ts_client;
-                    long micros = s != null ? s : (c != null ? c : System.currentTimeMillis() * 1000L);
-                    return micros / 1000L;
-                });
-
-        DataStream<RawEvent> raw = env.fromSource(source, wm, "events-raw");
+        DataStream<RawEvent> raw = env.fromSource(source, watermarks(), "events-raw");
 
         SingleOutputStreamOperator<DimRecord> allDims = raw
-                .flatMap((FlatMapFunction<RawEvent, DimRecord>) (r, out) -> {
-                    if (!"dimension".equals(r.event_type)) return;
-                    String gameId = r.game_id;
-                    String environment = r.environment;
-                    if (gameId == null || environment == null) return;
-                    String propsJson = r.props_json;
-                    if (propsJson == null || propsJson.isEmpty()) return;
-                    DimRecord rec = parseProps(gameId, environment, propsJson);
-                    if (rec != null) out.collect(rec);
-                })
+                .flatMap((FlatMapFunction<RawEvent, DimRecord>) DimensionSyncJob::dimRecords)
                 .returns(Types.POJO(DimRecord.class))
                 .name("dimension-parse");
 
-        DataStream<DimRecord> items = allDims.filter(r -> "item".equals(r.dimType)).returns(Types.POJO(DimRecord.class));
-        DataStream<DimRecord> levels = allDims.filter(r -> "level".equals(r.dimType)).returns(Types.POJO(DimRecord.class));
+        DataStream<DimRecord> items = allDims.filter(DimensionSyncJob::isItem).returns(Types.POJO(DimRecord.class));
+        DataStream<DimRecord> levels = allDims.filter(DimensionSyncJob::isLevel).returns(Types.POJO(DimRecord.class));
 
         var itemSink = JdbcSink.<DimRecord>sink(
                 "INSERT INTO item_dim (game_id, environment, resource_id, name, type, rarity, category, description, version_ts, is_current) VALUES (?,?,?,?,?,?,?,?,?,1)",
-                (ps, r) -> {
-                    ps.setString(1, r.gameId);
-                    ps.setString(2, r.environment);
-                    ps.setString(3, r.id);
-                    ps.setString(4, r.attributes.getOrDefault("name", ""));
-                    ps.setString(5, r.attributes.getOrDefault("type", ""));
-                    ps.setString(6, r.attributes.getOrDefault("rarity", ""));
-                    ps.setString(7, r.attributes.getOrDefault("category", ""));
-                    ps.setString(8, r.attributes.getOrDefault("description", ""));
-                    ps.setTimestamp(9, r.versionTs);
-                },
+                DimensionSyncJob::bindItemDim,
                 JdbcExecutionOptions.builder().withBatchIntervalMs(500).withBatchSize(500).withMaxRetries(3).build(),
                 new JdbcConnectionOptions.JdbcConnectionOptionsBuilder()
                         .withUrl(chUrl).withDriverName("com.clickhouse.jdbc.ClickHouseDriver")
@@ -87,15 +107,7 @@ public class DimensionSyncJob {
 
         var levelSink = JdbcSink.<DimRecord>sink(
                 "INSERT INTO level_dim (game_id, environment, level_id, name, difficulty, chapter, version_ts, is_current) VALUES (?,?,?,?,?,?,?,1)",
-                (ps, r) -> {
-                    ps.setString(1, r.gameId);
-                    ps.setString(2, r.environment);
-                    ps.setString(3, r.id);
-                    ps.setString(4, r.attributes.getOrDefault("name", ""));
-                    ps.setString(5, r.attributes.getOrDefault("difficulty", ""));
-                    ps.setString(6, r.attributes.getOrDefault("chapter", ""));
-                    ps.setTimestamp(7, r.versionTs);
-                },
+                DimensionSyncJob::bindLevelDim,
                 JdbcExecutionOptions.builder().withBatchIntervalMs(500).withBatchSize(500).withMaxRetries(3).build(),
                 new JdbcConnectionOptions.JdbcConnectionOptionsBuilder()
                         .withUrl(chUrl).withDriverName("com.clickhouse.jdbc.ClickHouseDriver")
@@ -104,8 +116,51 @@ public class DimensionSyncJob {
 
         items.addSink(itemSink).name("clickhouse-item-dim");
         levels.addSink(levelSink).name("clickhouse-level-dim");
+        return allDims;
+    }
 
-        env.execute("oddsmaker-dimension-sync");
+    /** 水位线时间戳：ts_server 优先，回退 ts_client，均缺省用当前时间（微秒 → 毫秒）。 */
+    static long eventMillis(RawEvent r) {
+        Long s = r.ts_server;
+        Long c = r.ts_client;
+        long micros = s != null ? s : (c != null ? c : System.currentTimeMillis() * 1000L);
+        return micros / 1000L;
+    }
+
+    /** flatMap 体：dimension 事件解析为维度记录，无效负载静默丢弃。 */
+    static void dimRecords(RawEvent r, Collector<DimRecord> out) {
+        if (!"dimension".equals(r.event_type)) return;
+        String gameId = r.game_id;
+        String environment = r.environment;
+        if (gameId == null || environment == null) return;
+        String propsJson = r.props_json;
+        if (propsJson == null || propsJson.isEmpty()) return;
+        DimRecord rec = parseProps(gameId, environment, propsJson);
+        if (rec != null) out.collect(rec);
+    }
+
+    /** item_dim 写入绑定。 */
+    static void bindItemDim(java.sql.PreparedStatement ps, DimRecord r) throws java.sql.SQLException {
+        ps.setString(1, r.gameId);
+        ps.setString(2, r.environment);
+        ps.setString(3, r.id);
+        ps.setString(4, r.attributes.getOrDefault("name", ""));
+        ps.setString(5, r.attributes.getOrDefault("type", ""));
+        ps.setString(6, r.attributes.getOrDefault("rarity", ""));
+        ps.setString(7, r.attributes.getOrDefault("category", ""));
+        ps.setString(8, r.attributes.getOrDefault("description", ""));
+        ps.setTimestamp(9, r.versionTs);
+    }
+
+    /** level_dim 写入绑定。 */
+    static void bindLevelDim(java.sql.PreparedStatement ps, DimRecord r) throws java.sql.SQLException {
+        ps.setString(1, r.gameId);
+        ps.setString(2, r.environment);
+        ps.setString(3, r.id);
+        ps.setString(4, r.attributes.getOrDefault("name", ""));
+        ps.setString(5, r.attributes.getOrDefault("difficulty", ""));
+        ps.setString(6, r.attributes.getOrDefault("chapter", ""));
+        ps.setTimestamp(7, r.versionTs);
     }
 
     public static DimRecord parseProps(String gameId, String environment, String json) {
@@ -173,12 +228,12 @@ public class DimensionSyncJob {
     }
 
     /** 环境名归一化：production → prod，其余原样。 */
-    private static String normalizeEnv(String env) {
+    static String normalizeEnv(String env) {
         return "production".equals(env) ? "prod" : env;
     }
 
     /** 维度类型/表名归一化：resource/items → item，levels → level，其余原样。 */
-    private static String normalizeDimType(String t) {
+    static String normalizeDimType(String t) {
         if (t == null) return "item";
         return switch (t) {
             case "resource", "items" -> "item";
@@ -188,7 +243,7 @@ public class DimensionSyncJob {
     }
 
     /** 依次取第一个非空文本字段。 */
-    private static String firstNonEmpty(com.fasterxml.jackson.databind.JsonNode node, String... keys) {
+    static String firstNonEmpty(com.fasterxml.jackson.databind.JsonNode node, String... keys) {
         for (String k : keys) {
             String v = node.path(k).asText("");
             if (!v.isEmpty()) return v;
@@ -197,7 +252,7 @@ public class DimensionSyncJob {
     }
 
     /** 属性键归一化：display_name/level_name → name，quality → rarity，level_difficulty → difficulty。 */
-    private static void putAttribute(java.util.Map<String, String> attrs, String key, String value) {
+    static void putAttribute(java.util.Map<String, String> attrs, String key, String value) {
         switch (key) {
             case "display_name", "level_name" -> attrs.put("name", value);
             case "quality" -> attrs.put("rarity", value);

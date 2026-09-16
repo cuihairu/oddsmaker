@@ -32,6 +32,7 @@ class UnorderedFunnelLogicTest {
         assertFalse(UnorderedFunnelLogic.allStepsDone(3, state));
         state.put(1, 2_000L);
         assertTrue(UnorderedFunnelLogic.allStepsDone(3, state));
+        assertFalse(UnorderedFunnelLogic.allStepsDone(0, state));   // 无步骤恒未完成
     }
 
     @Test

@@ -13,7 +13,8 @@ import java.util.Map;
 
 public class ApicurioAvroFlinkDeserializer implements KafkaRecordDeserializationSchema<RawEvent> {
     private final String registryUrl;
-    private transient AvroKafkaDeserializer<GenericRecord> deser;
+    // Kafka Deserializer 接口类型（AvroKafkaDeserializer 即其实现），便于替身注入
+    private transient org.apache.kafka.common.serialization.Deserializer<GenericRecord> deser;
 
     public ApicurioAvroFlinkDeserializer(String registryUrl) {
         this.registryUrl = registryUrl;
@@ -22,19 +23,24 @@ public class ApicurioAvroFlinkDeserializer implements KafkaRecordDeserialization
     @Override
     public void deserialize(ConsumerRecord<byte[], byte[]> record, Collector<RawEvent> out) throws java.io.IOException {
         if (deser == null) init();
-        Object obj = deser.deserialize(record.topic(), record.headers(), record.value());
+        collectRaw(deser.deserialize(record.topic(), record.headers(), record.value()), out);
+    }
+
+    /** Avro GenericRecord → RawEvent；非 record 载荷丢弃。 */
+    static void collectRaw(Object obj, Collector<RawEvent> out) {
         if (obj instanceof GenericRecord r) {
             out.collect(RawEvent.from(r));
         }
     }
 
     private void init() {
-        deser = new AvroKafkaDeserializer<>();
+        AvroKafkaDeserializer<GenericRecord> apicurio = new AvroKafkaDeserializer<>();
         Map<String, Object> cfg = new HashMap<>();
         cfg.put("apicurio.registry.url", registryUrl);
         cfg.put("apicurio.registry.find-latest", true);
         cfg.put("apicurio.registry.auto-register", false);
-        deser.configure(cfg, false);
+        apicurio.configure(cfg, false);
+        deser = apicurio;
     }
 
     @Override

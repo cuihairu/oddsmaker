@@ -8,7 +8,6 @@ import org.apache.flink.api.common.state.MapState;
 import org.apache.flink.api.common.state.MapStateDescriptor;
 import org.apache.flink.api.common.state.StateTtlConfig;
 import org.apache.flink.api.common.time.Time;
-import org.apache.flink.api.common.typeinfo.TypeHint;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.connector.jdbc.JdbcConnectionOptions;
 import org.apache.flink.connector.jdbc.JdbcExecutionOptions;
@@ -16,30 +15,56 @@ import org.apache.flink.connector.jdbc.JdbcSink;
 import org.apache.flink.connector.kafka.source.KafkaSource;
 import org.apache.flink.connector.kafka.source.enumerator.initializer.OffsetsInitializer;
 import org.apache.flink.streaming.api.datastream.DataStream;
+import org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.functions.KeyedProcessFunction;
 import org.apache.flink.util.Collector;
 
-import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
 
 public class RetentionJob {
+    static final String JOB_NAME = "oddsmaker-retention";
+
+    /** 入口：读配置 → 搭管道 → 触发执行（execute 才真正连接 source/sink）。 */
     public static void main(String[] args) throws Exception {
-        String bootstrap = System.getProperty("kafka.bootstrap", "localhost:9092");
-        String registry = System.getProperty("registry.url", "http://localhost:8081/apis/registry/v2");
-        String topic = System.getProperty("kafka.topic", "oddsmaker.events_raw");
-        String chUrl = System.getProperty("clickhouse.url", "jdbc:clickhouse://localhost:8123/default");
-        String chUser = System.getProperty("clickhouse.user", "default");
-        String chPass = System.getProperty("clickhouse.pass", "");
+        buildPipeline(StreamExecutionEnvironment.getExecutionEnvironment(), config()).getExecutionEnvironment().execute(JOB_NAME);
+    }
 
-        // 可配置留存口径：N-Day（恰好第 N 天活跃）与 Rolling（第 N 天及以后任意活跃）
+    /** 配置读取（System properties，单测可 setProperty 后直测）。顺序见 buildPipeline。 */
+    static String[] config() {
+        return new String[]{
+                System.getProperty("kafka.bootstrap", "localhost:9092"),
+                System.getProperty("registry.url", "http://localhost:8081/apis/registry/v2"),
+                System.getProperty("kafka.topic", "oddsmaker.events_raw"),
+                System.getProperty("clickhouse.url", "jdbc:clickhouse://localhost:8123/default"),
+                System.getProperty("clickhouse.user", "default"),
+                System.getProperty("clickhouse.pass", ""),
+                // 可配置留存口径：N-Day（恰好第 N 天活跃）与 Rolling（第 N 天及以后任意活跃）
+                System.getProperty("retention.ndays", "1,7,30"),
+                System.getProperty("retention.rolling.ndays", "1,3,7,14,30"),
+        };
+    }
+
+    /** 有界乱序水位线（10 分钟），时间戳取 ts_server → ts_client → now。 */
+    static WatermarkStrategy<RawEvent> watermarks() {
+        return WatermarkStrategy.<RawEvent>forBoundedOutOfOrderness(Duration.ofMinutes(10))
+                .withTimestampAssigner((SerializableTimestampAssigner<RawEvent>) (element, recordTimestamp) -> {
+                    Long tsServer = element.ts_server;
+                    Long tsClient = element.ts_client;
+                    long micros = tsServer != null ? tsServer : (tsClient != null ? tsClient : System.currentTimeMillis() * 1000L);
+                    return micros / 1000L;
+                });
+    }
+
+    /**
+     * 搭建留存管道（惰性：source/sink 均到 execute 才连接，单测可用本地环境直跑）。
+     */
+    static DataStream<RetentionEmit> buildPipeline(StreamExecutionEnvironment env, String[] cfg) {
+        String bootstrap = cfg[0], registry = cfg[1], topic = cfg[2], chUrl = cfg[3], chUser = cfg[4], chPass = cfg[5];
         RetentionPolicy policy = new RetentionPolicy(
-            RetentionPolicy.parseDays(System.getProperty("retention.ndays", "1,7,30")),
-            RetentionPolicy.parseDays(System.getProperty("retention.rolling.ndays", "1,3,7,14,30")));
+                RetentionPolicy.parseDays(cfg[6]), RetentionPolicy.parseDays(cfg[7]));
 
-        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
         // local executor 默认并行度=CPU 核数，而 events_raw 只有 1 个分区：
         // 多余的空 source subtask 会把全局 watermark 卡死。
         // 显式置 1；集群模式提交时用 flink run -p 覆盖
@@ -53,31 +78,17 @@ public class RetentionJob {
                 .setDeserializer(new ApicurioAvroFlinkDeserializer(registry))
                 .build();
 
-        var wm = WatermarkStrategy.<RawEvent>forBoundedOutOfOrderness(Duration.ofMinutes(10))
-                .withTimestampAssigner((SerializableTimestampAssigner<RawEvent>) (element, recordTimestamp) -> {
-                    Long tsServer = element.ts_server;
-                    Long tsClient = element.ts_client;
-                    long micros = tsServer != null ? tsServer : (tsClient != null ? tsClient : System.currentTimeMillis() * 1000L);
-                    return micros / 1000L;
-                });
+        DataStream<RawEvent> stream = env.fromSource(source, watermarks(), "events-raw");
 
-        DataStream<RawEvent> stream = env.fromSource(source, wm, "events-raw");
-
-        DataStream<RetentionEmit> emissions = stream
-                .keyBy(r -> (r.game_id+"|"+r.environment+"|"+ uidOf(r)))
+        SingleOutputStreamOperator<RetentionEmit> emissions = stream
+                .keyBy(RetentionJob::retentionKey)
                 .process(new RetentionProcess(policy));
 
         // N-Day 留存：恰好第 N 天活跃
-        emissions.filter(e -> e.rolling == 0)
+        emissions.filter(RetentionJob::isNDay)
                 .addSink(JdbcSink.sink(
                         "INSERT INTO retention_daily (game_id, environment, cohort_date, d, users) VALUES (?,?,?,?,?)",
-                        (ps, row) -> {
-                            ps.setString(1, row.gameId);
-                            ps.setString(2, row.environment);
-                            ps.setDate(3, new java.sql.Date(row.cohortEpochDay * 86400000L));
-                            ps.setInt(4, row.d);
-                            ps.setLong(5, 1L);
-                        },
+                        RetentionJob::bindRetention,
                         JdbcExecutionOptions.builder().withBatchIntervalMs(1000).withBatchSize(2000).withMaxRetries(3).build(),
                         new JdbcConnectionOptions.JdbcConnectionOptionsBuilder()
                                 .withUrl(chUrl).withDriverName("com.clickhouse.jdbc.ClickHouseDriver")
@@ -85,23 +96,41 @@ public class RetentionJob {
                 )).name("clickhouse-retention-nday");
 
         // Rolling 留存：第 N 天及以后任意一天活跃
-        emissions.filter(e -> e.rolling > 0)
+        emissions.filter(RetentionJob::isRolling)
                 .addSink(JdbcSink.sink(
                         "INSERT INTO retention_rolling (game_id, environment, cohort_date, n, users) VALUES (?,?,?,?,?)",
-                        (ps, row) -> {
-                            ps.setString(1, row.gameId);
-                            ps.setString(2, row.environment);
-                            ps.setDate(3, new java.sql.Date(row.cohortEpochDay * 86400000L));
-                            ps.setInt(4, row.d);
-                            ps.setLong(5, 1L);
-                        },
+                        RetentionJob::bindRetention,
                         JdbcExecutionOptions.builder().withBatchIntervalMs(1000).withBatchSize(2000).withMaxRetries(3).build(),
                         new JdbcConnectionOptions.JdbcConnectionOptionsBuilder()
                                 .withUrl(chUrl).withDriverName("com.clickhouse.jdbc.ClickHouseDriver")
                                 .withUsername(chUser).withPassword(chPass).build()
                 )).name("clickhouse-retention-rolling");
 
-        env.execute("oddsmaker-retention");
+        return emissions;
+    }
+
+    /** 留存分组键：game|environment|uid。 */
+    static String retentionKey(RawEvent r) {
+        return r.game_id + "|" + r.environment + "|" + uidOf(r);
+    }
+
+    /** N-Day 输出行（rolling == 0）。 */
+    static boolean isNDay(RetentionEmit e) {
+        return e.rolling == 0;
+    }
+
+    /** Rolling 输出行（rolling > 0）。 */
+    static boolean isRolling(RetentionEmit e) {
+        return e.rolling > 0;
+    }
+
+    /** retention_daily / retention_rolling 写入绑定（两表参数同构）。 */
+    static void bindRetention(java.sql.PreparedStatement ps, RetentionEmit row) throws java.sql.SQLException {
+        ps.setString(1, row.gameId);
+        ps.setString(2, row.environment);
+        ps.setDate(3, new java.sql.Date(row.cohortEpochDay * 86400000L));
+        ps.setInt(4, row.d);
+        ps.setLong(5, 1L);
     }
 
     static String uidOf(RawEvent r) {

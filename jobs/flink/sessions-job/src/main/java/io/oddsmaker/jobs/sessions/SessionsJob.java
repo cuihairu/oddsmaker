@@ -28,20 +28,44 @@ import java.time.Duration;
 import java.util.HexFormat;
 
 public class SessionsJob {
+    static final String JOB_NAME = "oddsmaker-sessions";
+
+    /** 入口：读配置 → 搭管道 → 触发执行（execute 才真正连接 source/sink）。 */
     public static void main(String[] args) throws Exception {
-        String bootstrap = System.getProperty("kafka.bootstrap", "localhost:9092");
-        String registry = System.getProperty("registry.url", "http://localhost:8081/apis/registry/v2");
-        String topic = System.getProperty("kafka.topic", "oddsmaker.events_raw"); // 可切换到 events_enriched
-        long gapMinutes = Long.getLong("session.gap.minutes", 30L);
-        // event-time session 窗口只在 watermark 越过 窗口末+gap 后 fire；
-        // 容差越小，无后续事件时落库等待越短。e2e 用 0，生产默认 10 分钟乱序容忍
-        long oooMinutes = Long.getLong("watermark.ooo.minutes", 10L);
+        buildPipeline(StreamExecutionEnvironment.getExecutionEnvironment(), config()).getExecutionEnvironment().execute(JOB_NAME);
+    }
 
-        String chUrl = System.getProperty("clickhouse.url", "jdbc:clickhouse://localhost:8123/default");
-        String chUser = System.getProperty("clickhouse.user", "default");
-        String chPass = System.getProperty("clickhouse.pass", "");
+    /** 配置读取（System properties，单测可 setProperty 后逐项直测）。 */
+    static String[] config() {
+        return new String[]{
+                System.getProperty("kafka.bootstrap", "localhost:9092"),
+                System.getProperty("registry.url", "http://localhost:8081/apis/registry/v2"),
+                // 可切换到 events_enriched
+                System.getProperty("kafka.topic", "oddsmaker.events_raw"),
+                System.getProperty("clickhouse.url", "jdbc:clickhouse://localhost:8123/default"),
+                System.getProperty("clickhouse.user", "default"),
+                System.getProperty("clickhouse.pass", ""),
+                // event-time session 窗口只在 watermark 越过 窗口末+gap 后 fire；
+                // 容差越小，无后续事件时落库等待越短。e2e 用 0，生产默认 10 分钟乱序容忍
+                Long.toString(Long.getLong("session.gap.minutes", 30L)),
+                Long.toString(Long.getLong("watermark.ooo.minutes", 10L)),
+        };
+    }
 
-        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+    /** session 窗口水位线（事件时间 = EventLite.eventTimeMs）。 */
+    static WatermarkStrategy<EventLite> watermarks(long oooMinutes) {
+        return WatermarkStrategy.<EventLite>forBoundedOutOfOrderness(Duration.ofMinutes(oooMinutes))
+                .withTimestampAssigner((SerializableTimestampAssigner<EventLite>) (element, recordTimestamp) -> element.eventTimeMs);
+    }
+
+    /**
+     * 搭建 session 聚合管道（惰性：source/sink 均到 execute 才连接，单测可用本地环境直跑）。
+     */
+    static org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator<SessionRow> buildPipeline(StreamExecutionEnvironment env, String[] cfg) {
+        String bootstrap = cfg[0], registry = cfg[1], topic = cfg[2], chUrl = cfg[3], chUser = cfg[4], chPass = cfg[5];
+        long gapMinutes = Long.parseLong(cfg[6]);
+        long oooMinutes = Long.parseLong(cfg[7]);
+
         // local executor 默认并行度=CPU 核数，而 events_raw 只有 1 个分区：
         // 多余的空 source subtask 会把全局 watermark 卡死，session 窗口永不 fire。
         // 显式置 1；集群模式提交时用 flink run -p 覆盖
@@ -55,46 +79,45 @@ public class SessionsJob {
                 .setDeserializer(new ApicurioAvroFlinkDeserializer(registry))
                 .build();
 
-        var wm = WatermarkStrategy.<EventLite>forBoundedOutOfOrderness(Duration.ofMinutes(oooMinutes))
-                .withTimestampAssigner((SerializableTimestampAssigner<EventLite>) (element, recordTimestamp) -> element.eventTimeMs);
-
         DataStream<EventLite> events = env.fromSource(source, WatermarkStrategy.noWatermarks(), "events-raw")
                 .map((MapFunction<RawEvent, EventLite>) SessionsJob::toLite)
-                .assignTimestampsAndWatermarks(wm);
+                .assignTimestampsAndWatermarks(watermarks(oooMinutes));
 
-        events
+        org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator<SessionRow> sessions = events
                 // Tuple3 泛型在 lambda 中被擦除，需显式提供 key 类型信息
-                .keyBy(e -> Tuple3.of(e.gameId, e.environment, e.userOrDeviceId()),
+                .keyBy(SessionsJob::sessionKey,
                         org.apache.flink.api.common.typeinfo.Types.TUPLE(
                                 org.apache.flink.api.common.typeinfo.Types.STRING,
                                 org.apache.flink.api.common.typeinfo.Types.STRING,
                                 org.apache.flink.api.common.typeinfo.Types.STRING))
                 .window(EventTimeSessionWindows.withGap(Time.minutes(gapMinutes)))
-                .process(new BuildSession())
-                .addSink(JdbcSink.sink(
-                        "INSERT INTO sessions (game_id, environment, session_id, user_id, device_id, session_start, session_end, duration, country, events) VALUES (?,?,?,?,?,?,?,?,?,?)",
-                        (ps, s) -> {
-                            ps.setString(1, s.game_id);
-                            ps.setString(2, s.environment);
-                            ps.setString(3, s.session_id);
-                            ps.setString(4, s.user_id);
-                            ps.setString(5, s.device_id);
-                            ps.setTimestamp(6, s.session_start);
-                            ps.setTimestamp(7, s.session_end);
-                            ps.setInt(8, s.duration);
-                            ps.setString(9, s.country);
-                            ps.setInt(10, s.events);
-                        },
-                        JdbcExecutionOptions.builder().withBatchIntervalMs(500).withBatchSize(1000).withMaxRetries(3).build(),
-                        new JdbcConnectionOptions.JdbcConnectionOptionsBuilder()
-                                .withUrl(chUrl)
-                                .withDriverName("com.clickhouse.jdbc.ClickHouseDriver")
-                                .withUsername(chUser)
-                                .withPassword(chPass)
-                                .build()
-                ));
+                .process(new BuildSession());
 
-        env.execute("oddsmaker-sessions");
+        sessions.addSink(JdbcSink.sink(
+                "INSERT INTO sessions (game_id, environment, session_id, user_id, device_id, session_start, session_end, duration, country, events) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                SessionsJob::bindSession,
+                JdbcExecutionOptions.builder().withBatchIntervalMs(500).withBatchSize(1000).withMaxRetries(3).build(),
+                new JdbcConnectionOptions.JdbcConnectionOptionsBuilder()
+                        .withUrl(chUrl)
+                        .withDriverName("com.clickhouse.jdbc.ClickHouseDriver")
+                        .withUsername(chUser)
+                        .withPassword(chPass)
+                        .build()));
+        return sessions;
+    }
+
+    /** sessions 表写入绑定。 */
+    static void bindSession(java.sql.PreparedStatement ps, SessionRow s) throws java.sql.SQLException {
+        ps.setString(1, s.game_id);
+        ps.setString(2, s.environment);
+        ps.setString(3, s.session_id);
+        ps.setString(4, s.user_id);
+        ps.setString(5, s.device_id);
+        ps.setTimestamp(6, s.session_start);
+        ps.setTimestamp(7, s.session_end);
+        ps.setInt(8, s.duration);
+        ps.setString(9, s.country);
+        ps.setInt(10, s.events);
     }
 
     static EventLite toLite(RawEvent r) {
@@ -113,6 +136,21 @@ public class SessionsJob {
 
     static String str(Object v) { return v == null ? null : v.toString(); }
     static String nz(String s) { return s == null ? "" : s; }
+
+    /** 会话分组键：(gameId, environment, userId 优先回退 deviceId)。 */
+    static Tuple3<String, String, String> sessionKey(EventLite e) {
+        return Tuple3.of(e.gameId, e.environment, e.userOrDeviceId());
+    }
+
+    /** 会话 user_id 归位：key 即 userId 时原样，否则取窗口首事件的 userId（无则空串）。 */
+    static String resolveUserId(String userOrDevice, String firstUserId) {
+        return userOrDevice.equals(firstUserId) ? userOrDevice : (firstUserId == null ? "" : firstUserId);
+    }
+
+    /** 会话 device_id：窗口首事件缺失时空串。 */
+    static String resolveDeviceId(String firstDeviceId) {
+        return firstDeviceId == null ? "" : firstDeviceId;
+    }
 
     public static class EventLite {
         public String gameId;
@@ -148,12 +186,13 @@ public class SessionsJob {
                 cnt++;
             }
             if (cnt == 0) return;
+            EventLite first = elements.iterator().next();
             SessionRow s = new SessionRow();
             s.game_id = key.f0;
             s.environment = key.f1;
             String userOrDevice = key.f2;
-            s.user_id = userOrDevice.equals(elements.iterator().next().userId) ? userOrDevice : (elements.iterator().next().userId == null ? "" : elements.iterator().next().userId);
-            s.device_id = elements.iterator().next().deviceId == null ? "" : elements.iterator().next().deviceId;
+            s.user_id = resolveUserId(userOrDevice, first.userId);
+            s.device_id = resolveDeviceId(first.deviceId);
             s.session_start = new Timestamp(minTs);
             s.session_end = new Timestamp(maxTs);
             s.duration = (int) Math.max(0, (maxTs - minTs)/1000);

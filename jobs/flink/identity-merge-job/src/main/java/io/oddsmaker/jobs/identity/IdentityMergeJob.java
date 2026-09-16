@@ -2,6 +2,7 @@ package io.oddsmaker.jobs.identity;
 
 import io.oddsmaker.jobs.enrich.ApicurioAvroFlinkDeserializer;
 import io.oddsmaker.jobs.enrich.RawEvent;
+import org.apache.flink.api.common.eventtime.SerializableTimestampAssigner;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.api.common.state.StateTtlConfig;
 import org.apache.flink.api.common.state.ValueState;
@@ -22,23 +23,48 @@ import org.apache.flink.util.Collector;
 
 import java.sql.Timestamp;
 import java.time.Duration;
-import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.UUID;
 
 public class IdentityMergeJob {
+    static final String JOB_NAME = "oddsmaker-identity-merge";
 
+    /** 入口：读配置 → 搭管道 → 触发执行（execute 才真正连接 source/sink）。 */
     public static void main(String[] args) throws Exception {
-        String bootstrap = System.getProperty("kafka.bootstrap", "localhost:9092");
-        String registry = System.getProperty("registry.url", "http://localhost:8081/apis/registry/v2");
-        String topic = System.getProperty("kafka.topic", "oddsmaker.events_raw");
-        String identityTopic = System.getProperty("identity.topic", "oddsmaker.identity_events");
-        String chUrl = System.getProperty("clickhouse.url", "jdbc:clickhouse://localhost:8123/default");
-        String chUser = System.getProperty("clickhouse.user", "default");
-        String chPass = System.getProperty("clickhouse.pass", "");
+        buildPipeline(StreamExecutionEnvironment.getExecutionEnvironment(), config()).getExecutionEnvironment().execute(JOB_NAME);
+    }
 
-        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+    /** 配置读取（System properties，单测可 setProperty 后直测）。顺序见 buildPipeline。 */
+    static String[] config() {
+        return new String[]{
+                System.getProperty("kafka.bootstrap", "localhost:9092"),
+                System.getProperty("registry.url", "http://localhost:8081/apis/registry/v2"),
+                System.getProperty("kafka.topic", "oddsmaker.events_raw"),
+                System.getProperty("identity.topic", "oddsmaker.identity_events"),
+                System.getProperty("clickhouse.url", "jdbc:clickhouse://localhost:8123/default"),
+                System.getProperty("clickhouse.user", "default"),
+                System.getProperty("clickhouse.pass", ""),
+        };
+    }
+
+    /** 有界乱序水位线（5 分钟），时间戳取 ts_server → ts_client → now。 */
+    static WatermarkStrategy<RawEvent> watermarks() {
+        return WatermarkStrategy.<RawEvent>forBoundedOutOfOrderness(Duration.ofMinutes(5))
+                .withTimestampAssigner((SerializableTimestampAssigner<RawEvent>) (r, ts) -> {
+                    Long s = r.ts_server;
+                    Long c = r.ts_client;
+                    long micros = s != null ? s : (c != null ? c : System.currentTimeMillis() * 1000L);
+                    return micros / 1000L;
+                });
+    }
+
+    /**
+     * 搭建身份合并管道（惰性：source/sink 均到 execute 才连接，单测可用本地环境直跑）。
+     */
+    static DataStream<IdentityRecord> buildPipeline(StreamExecutionEnvironment env, String[] cfg) {
+        String bootstrap = cfg[0], registry = cfg[1], topic = cfg[2], identityTopic = cfg[3], chUrl = cfg[4], chUser = cfg[5], chPass = cfg[6];
+
         // local executor 默认并行度=CPU 核数，而 events_raw 只有 1 个分区：
         // 多余的空 source subtask 会把全局 watermark 卡死。
         // 显式置 1；集群模式提交时用 flink run -p 覆盖
@@ -52,26 +78,13 @@ public class IdentityMergeJob {
                 .setDeserializer(new ApicurioAvroFlinkDeserializer(registry))
                 .build();
 
-        WatermarkStrategy<RawEvent> wm = WatermarkStrategy.<RawEvent>forBoundedOutOfOrderness(Duration.ofMinutes(5))
-                .withTimestampAssigner((r, ts) -> {
-                    Long s = r.ts_server;
-                    Long c = r.ts_client;
-                    long micros = s != null ? s : (c != null ? c : System.currentTimeMillis() * 1000L);
-                    return micros / 1000L;
-                });
-
-        DataStream<RawEvent> raw = env.fromSource(source, wm, "events-raw");
+        DataStream<RawEvent> raw = env.fromSource(source, watermarks(), "events-raw");
 
         DataStream<IdentityRecord> identities = raw
-                .filter((org.apache.flink.api.common.functions.FilterFunction<RawEvent>) r -> {
-                    Object t = r.event_type;
-                    Object n = r.event_name;
-                    return t != null && "identity".equals(t.toString())
-                            || (n != null && "$identify".equals(n.toString()));
-                })
+                .filter(IdentityMergeJob::isIdentityEvent)
                 // RawEvent 是合法 POJO，用 POJO 类型信息而非 GENERIC（后者走 Kryo 泛型序列化）
                 .returns(Types.POJO(RawEvent.class))
-                .keyBy(r -> nz(str(r.game_id)) + "|" + nz(str(r.environment)) + "|" + nz(str(r.user_id)))
+                .keyBy(IdentityMergeJob::identityKey)
                 .process(new IdentityMergeFunction())
                 .name("identity-merge");
 
@@ -80,17 +93,7 @@ public class IdentityMergeJob {
                         "(game_id, environment, identity_id, user_id, player_id, character_ids, device_ids, first_seen, last_seen, risk_score) " +
                         // ClickHouse 没有 split 函数（只有 splitByString），实测 24.8 报 UNKNOWN_FUNCTION
                         "VALUES (?, ?, ?, ?, ?, splitByString('||', ?), splitByString('||', ?), ?, ?, 0)",
-                (ps, r) -> {
-                    ps.setString(1, r.gameId);
-                    ps.setString(2, r.environment);
-                    ps.setString(3, r.identityId);
-                    ps.setString(4, r.userId);
-                    ps.setString(5, r.playerId);
-                    ps.setString(6, joinList(r.characterIds));
-                    ps.setString(7, joinList(r.deviceIds));
-                    ps.setTimestamp(8, r.firstSeen);
-                    ps.setTimestamp(9, r.lastSeen);
-                },
+                IdentityMergeJob::bindIdentity,
                 JdbcExecutionOptions.builder().withBatchIntervalMs(500).withBatchSize(500).withMaxRetries(3).build(),
                 new JdbcConnectionOptions.JdbcConnectionOptionsBuilder()
                         .withUrl(chUrl)
@@ -112,10 +115,36 @@ public class IdentityMergeJob {
                 .build();
         identities.map(IdentityMergeJob::toJson).returns(Types.STRING).sinkTo(kafkaSink).name("kafka-identity-events");
 
-        env.execute("oddsmaker-identity-merge");
+        return identities;
     }
 
-    private static String joinList(Set<String> list) {
+    /** 身份事件：event_type=identity 或 event_name=$identify。 */
+    static boolean isIdentityEvent(RawEvent r) {
+        Object t = r.event_type;
+        Object n = r.event_name;
+        return t != null && "identity".equals(t.toString())
+                || (n != null && "$identify".equals(n.toString()));
+    }
+
+    /** 身份分组键：game|environment|user。 */
+    static String identityKey(RawEvent r) {
+        return nz(str(r.game_id)) + "|" + nz(str(r.environment)) + "|" + nz(str(r.user_id));
+    }
+
+    /** identities 写入绑定。 */
+    static void bindIdentity(java.sql.PreparedStatement ps, IdentityRecord r) throws java.sql.SQLException {
+        ps.setString(1, r.gameId);
+        ps.setString(2, r.environment);
+        ps.setString(3, r.identityId);
+        ps.setString(4, r.userId);
+        ps.setString(5, r.playerId);
+        ps.setString(6, joinList(r.characterIds));
+        ps.setString(7, joinList(r.deviceIds));
+        ps.setTimestamp(8, r.firstSeen);
+        ps.setTimestamp(9, r.lastSeen);
+    }
+
+    static String joinList(Set<String> list) {
         if (list == null || list.isEmpty()) return "";
         return String.join("||", list);
     }
@@ -236,18 +265,18 @@ public class IdentityMergeJob {
         return s == null ? "" : s.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 
-    private static String str(Object v) { return v == null ? null : v.toString(); }
+    static String str(Object v) { return v == null ? null : v.toString(); }
 
-    private static String nz(String s) { return s == null ? "" : s; }
+    static String nz(String s) { return s == null ? "" : s; }
 
-    private static Timestamp extractTs(RawEvent r) {
+    static Timestamp extractTs(RawEvent r) {
         Long tsServer = r.ts_server;
         Long tsClient = r.ts_client;
         long micros = tsServer != null ? tsServer : (tsClient != null ? tsClient : System.currentTimeMillis() * 1000L);
         return new Timestamp(micros / 1000L);
     }
 
-    private static String extractPlayerId(RawEvent r) {
+    static String extractPlayerId(RawEvent r) {
         if (r.player_id != null && !r.player_id.isEmpty()) return r.player_id;
         String json = r.props_json;
         if (json != null) {

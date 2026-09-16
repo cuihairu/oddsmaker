@@ -85,4 +85,17 @@ class RetentionPolicyTest {
         assertEquals(2, RetentionPolicy.parseDays("0,3,x,,7").length);  // 仅 3,7
         assertEquals(1, RetentionPolicy.parseDays("-2,5").length);      // 仅 5
     }
+
+    @Test
+    @DisplayName("getter 返回排序去重副本（改动不影响内部状态）")
+    void gettersReturnDefensiveSortedCopy() {
+        assertArrayEquals(new int[]{1, 7, 30}, policy.nDays());
+        assertArrayEquals(new int[]{1, 3, 7, 14, 30}, policy.rollingDays());
+        RetentionPolicy messy = new RetentionPolicy(new int[]{7, 1, 7, -3}, new int[]{5, 3, 5});
+        assertArrayEquals(new int[]{1, 7}, messy.nDays());
+        assertArrayEquals(new int[]{3, 5}, messy.rollingDays());
+        int[] copy = messy.nDays();
+        copy[0] = 99;
+        assertArrayEquals(new int[]{1, 7}, messy.nDays());   // clone 防御
+    }
 }

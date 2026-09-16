@@ -33,29 +33,53 @@ import java.util.List;
  * 支持多步骤漏斗分析，从数据库读取漏斗配置
  */
 public class ConfigurableFunnelsJob {
-    
+    static final String JOB_NAME = "oddsmaker-configurable-funnels";
+
     public static void main(String[] args) throws Exception {
-        String bootstrap = System.getProperty("kafka.bootstrap", "localhost:9092");
-        String registry = System.getProperty("registry.url", "http://localhost:8081/apis/registry/v2");
-        String topic = System.getProperty("kafka.topic", "oddsmaker.events_raw");
-        String chUrl = System.getProperty("clickhouse.url", "jdbc:clickhouse://localhost:8123/default");
-        String chUser = System.getProperty("clickhouse.user", "default");
-        String chPass = System.getProperty("clickhouse.pass", "");
-        String controlDbUrl = System.getProperty("control.db.url", "jdbc:postgresql://localhost:5432/oddsmaker");
-        String controlDbUser = System.getProperty("control.db.user", "oddsmaker");
-        String controlDbPass = System.getProperty("control.db.pass", "oddsmaker");
-        
-        // 从控制面数据库加载漏斗配置
-        List<FunnelConfig> funnelConfigs = loadFunnelConfigs(controlDbUrl, controlDbUser, controlDbPass);
-        
+        String[] cfg = config();
+        // 从控制面数据库加载漏斗配置；连不上/无配置时安全退出（不 execute）
+        List<FunnelConfig> funnelConfigs = loadFromControlDb(cfg[6], cfg[7], cfg[8]);
         if (funnelConfigs.isEmpty()) {
             System.out.println("No funnel configurations found. Exiting.");
             return;
         }
-        
         System.out.println("Loaded " + funnelConfigs.size() + " funnel configurations");
-        
-        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        buildPipeline(StreamExecutionEnvironment.getExecutionEnvironment(), cfg, funnelConfigs).execute(JOB_NAME);
+    }
+
+    /** 配置读取（System properties，单测可 setProperty 后直测）。前 6 项同其他 job，后 3 项为控制面库。 */
+    static String[] config() {
+        return new String[]{
+                System.getProperty("kafka.bootstrap", "localhost:9092"),
+                System.getProperty("registry.url", "http://localhost:8081/apis/registry/v2"),
+                System.getProperty("kafka.topic", "oddsmaker.events_raw"),
+                System.getProperty("clickhouse.url", "jdbc:clickhouse://localhost:8123/default"),
+                System.getProperty("clickhouse.user", "default"),
+                System.getProperty("clickhouse.pass", ""),
+                System.getProperty("control.db.url", "jdbc:postgresql://localhost:5432/oddsmaker"),
+                System.getProperty("control.db.user", "oddsmaker"),
+                System.getProperty("control.db.pass", "oddsmaker"),
+        };
+    }
+
+    /** 有界乱序水位线（10 分钟），时间戳取 ts_server → ts_client → now。 */
+    static WatermarkStrategy<RawEvent> watermarks() {
+        return WatermarkStrategy.<RawEvent>forBoundedOutOfOrderness(Duration.ofMinutes(10))
+                .withTimestampAssigner((SerializableTimestampAssigner<RawEvent>) (element, recordTimestamp) -> {
+                    Long tsServer = element.ts_server;
+                    Long tsClient = element.ts_client;
+                    long micros = tsServer != null ? tsServer : (tsClient != null ? tsClient : System.currentTimeMillis() * 1000L);
+                    return micros / 1000L;
+                });
+    }
+
+    /**
+     * 搭建可配置漏斗管道（惰性：source/sink 均到 execute 才连接，单测可用本地环境直跑）。
+     * 每个启用的漏斗配置一条处理链路。
+     */
+    static StreamExecutionEnvironment buildPipeline(StreamExecutionEnvironment env, String[] cfg, List<FunnelConfig> funnelConfigs) {
+        String bootstrap = cfg[0], registry = cfg[1], topic = cfg[2], chUrl = cfg[3], chUser = cfg[4], chPass = cfg[5];
+
         // local executor 默认并行度=CPU 核数，而 events_raw 只有 1 个分区：
         // 多余的空 source subtask 会把全局 watermark 卡死。
         // 显式置 1；集群模式提交时用 flink run -p 覆盖
@@ -68,121 +92,154 @@ public class ConfigurableFunnelsJob {
                 .setStartingOffsets(OffsetsInitializer.latest())
                 .setDeserializer(new ApicurioAvroFlinkDeserializer(registry))
                 .build();
-        
-        var wm = WatermarkStrategy.<RawEvent>forBoundedOutOfOrderness(Duration.ofMinutes(10))
-                .withTimestampAssigner((SerializableTimestampAssigner<RawEvent>) (element, recordTimestamp) -> {
-                    Long tsServer = element.ts_server;
-                    Long tsClient = element.ts_client;
-                    long micros = tsServer != null ? tsServer : (tsClient != null ? tsClient : System.currentTimeMillis() * 1000L);
-                    return micros / 1000L;
-                });
-        
-        DataStream<RawEvent> stream = env.fromSource(source, wm, "events-raw");
-        
+
+        DataStream<RawEvent> stream = env.fromSource(source, watermarks(), "events-raw");
+
         // 为每个漏斗配置创建处理链路
         for (FunnelConfig config : funnelConfigs) {
             if (!config.enabled) {
                 System.out.println("Skipping disabled funnel: " + config.name);
                 continue;
             }
-            
+
             System.out.println("Processing funnel: " + config.name + " with " + config.steps.size() + " steps");
-            
-            // 收集所有步骤的事件名称
-            List<String> stepEvents = config.steps.stream()
-                .map(step -> step.eventName)
-                .toList();
-            
+
             // 过滤相关事件
-            DataStream<RawEvent> filteredStream = stream
-                .filter(r -> {
-                    Object n = r.event_name;
-                    if (n == null) return false;
-                    String ev = n.toString();
-                    return stepEvents.contains(ev);
-                });
-            
+            DataStream<RawEvent> filteredStream = stream.filter(stepFilter(config));
+
             // 按用户键分组并处理漏斗
             filteredStream
-                .keyBy(r -> (r.game_id + "|" + r.environment + "|" + uidOf(r)))
+                .keyBy(ConfigurableFunnelsJob::funnelKey)
                 .process(new ConfigurableFunnelProcess(config))
                 .addSink(JdbcSink.sink(
                     "INSERT INTO funnels_configurable (game_id, environment, funnel_id, event_date, step, step_name, users, conversion_rate) VALUES (?,?,?,?,?,?,?,?)",
-                    (ps, row) -> {
-                        ps.setString(1, row.gameId);
-                        ps.setString(2, row.environment);
-                        ps.setString(3, row.funnelId);
-                        ps.setDate(4, new java.sql.Date(row.eventDateEpochDay * 24 * 3600 * 1000));
-                        ps.setInt(5, row.step);
-                        ps.setString(6, row.stepName);
-                        ps.setLong(7, row.users);
-                        ps.setDouble(8, row.conversionRate);
-                    },
+                    ConfigurableFunnelsJob::bindConfigurableRow,
                     JdbcExecutionOptions.builder().withBatchIntervalMs(1000).withBatchSize(2000).withMaxRetries(3).build(),
                     new JdbcConnectionOptions.JdbcConnectionOptionsBuilder()
                         .withUrl(chUrl).withDriverName("com.clickhouse.jdbc.ClickHouseDriver")
                         .withUsername(chUser).withPassword(chPass).build()
                 ));
         }
-        
-        env.execute("oddsmaker-configurable-funnels");
-    }
-    
-    /**
-     * 从控制面数据库加载漏斗配置
-     */
-    private static List<FunnelConfig> loadFunnelConfigs(String dbUrl, String dbUser, String dbPass) {
-        List<FunnelConfig> configs = new ArrayList<>();
 
+        return env;
+    }
+
+    /** 步骤事件名清单。 */
+    static List<String> stepEventNames(FunnelConfig config) {
+        return config.steps.stream()
+                .map(step -> step.eventName)
+                .toList();
+    }
+
+    /** 事件名是否属于某漏斗的步骤事件。 */
+    static boolean isStepEventIn(RawEvent r, List<String> stepEvents) {
+        Object n = r.event_name;
+        return n != null && stepEvents.contains(n.toString());
+    }
+
+    /** 过滤算子工厂（lambda 体可经返回值直调覆盖）。 */
+    static org.apache.flink.api.common.functions.FilterFunction<RawEvent> stepFilter(FunnelConfig config) {
+        List<String> names = stepEventNames(config);
+        return r -> isStepEventIn(r, names);
+    }
+
+    /** 漏斗分组键：game|environment|uid。 */
+    static String funnelKey(RawEvent r) {
+        return r.game_id + "|" + r.environment + "|" + uidOf(r);
+    }
+
+    /** funnels_configurable 写入绑定。 */
+    static void bindConfigurableRow(java.sql.PreparedStatement ps, FunnelRow row) throws java.sql.SQLException {
+        ps.setString(1, row.gameId);
+        ps.setString(2, row.environment);
+        ps.setString(3, row.funnelId);
+        ps.setDate(4, new java.sql.Date(row.eventDateEpochDay * 24 * 3600 * 1000));
+        ps.setInt(5, row.step);
+        ps.setString(6, row.stepName);
+        ps.setLong(7, row.users);
+        ps.setDouble(8, row.conversionRate);
+    }
+
+    /**
+     * 打开控制面库连接并加载漏斗配置。驱动缺失/连接失败均安全返回空列表。
+     */
+    static List<FunnelConfig> loadFromControlDb(String dbUrl, String dbUser, String dbPass) {
         // fatJar 合并依赖时 META-INF/services 可能被同名文件覆盖，DriverManager SPI
         // 注册不到 PG 驱动（"No suitable driver"），显式加载兜底
-        try {
-            Class.forName("org.postgresql.Driver");
-        } catch (ClassNotFoundException e) {
-            System.err.println("PostgreSQL JDBC driver not on classpath: " + e.getMessage());
-            return configs;
+        if (!driverAvailable("org.postgresql.Driver")) {
+            return new ArrayList<>();
         }
+        return loadWithConnection(() -> DriverManager.getConnection(dbUrl, dbUser, dbPass));
+    }
 
-        try (Connection conn = DriverManager.getConnection(dbUrl, dbUser, dbPass)) {
-            // 查询启用的漏斗配置——适配 control 真实迁移（V0.3.3）建的表：
-            // funnel_analyses（status/deleted_at 表达启用态，funnel_type 是类型，max_completion_time 是总窗口秒数）。
-            // 原来硬编码的 funnel_configs(user_key/time_window_sec/enabled) 在 control 里不存在
-            String sql = "SELECT f.id, f.game_id, f.name, f.funnel_type, f.max_completion_time " +
-                        "FROM funnel_analyses f " +
-                        "WHERE f.status = 'ACTIVE' AND f.deleted_at IS NULL";
+    /** 驱动类是否在 classpath（单测可传不存在的类名覆盖缺失分支）。 */
+    static boolean driverAvailable(String className) {
+        try {
+            Class.forName(className);
+            return true;
+        } catch (ClassNotFoundException e) {
+            System.err.println("JDBC driver not on classpath: " + e.getMessage());
+            return false;
+        }
+    }
 
-            try (PreparedStatement ps = conn.prepareStatement(sql)) {
-                ResultSet rs = ps.executeQuery();
+    /** 连接供应商（允许抛受检异常，便于直接包裹 DriverManager.getConnection）。 */
+    interface ConnectionSupplier {
+        Connection get() throws Exception;
+    }
 
-                while (rs.next()) {
-                    FunnelConfig config = new FunnelConfig();
-                    config.id = rs.getString("id");
-                    config.gameId = rs.getString("game_id");
-                    config.name = rs.getString("name");
-                    config.type = rs.getString("funnel_type");
-                    config.userKey = "";
-                    long maxCompletion = rs.getLong("max_completion_time");
-                    config.timeWindowSec = rs.wasNull() || maxCompletion <= 0 ? 24 * 3600 : maxCompletion;
-                    config.enabled = true;
-
-                    // 加载漏斗步骤
-                    config.steps = loadFunnelSteps(conn, config.id);
-
-                    configs.add(config);
-                }
-            }
+    /** 打开连接并加载配置；获取/查询失败安全返回空列表。单测可注入 Connection 供应商直测成功路径。 */
+    static List<FunnelConfig> loadWithConnection(ConnectionSupplier connectionSupplier) {
+        List<FunnelConfig> configs = new ArrayList<>();
+        try (Connection conn = connectionSupplier.get()) {
+            configs = loadFunnelConfigs(conn);
         } catch (Exception e) {
             System.err.println("Failed to load funnel configs: " + e.getMessage());
-            e.printStackTrace();
         }
-        
+        return configs;
+    }
+
+    /**
+     * 从控制面库连接读取启用的漏斗配置（含步骤）。
+     */
+    static List<FunnelConfig> loadFunnelConfigs(Connection conn) throws Exception {
+        List<FunnelConfig> configs = new ArrayList<>();
+
+        // 查询启用的漏斗配置——适配 control 真实迁移（V0.3.3）建的表：
+        // funnel_analyses（status/deleted_at 表达启用态，funnel_type 是类型，max_completion_time 是总窗口秒数）。
+        // 原来硬编码的 funnel_configs(user_key/time_window_sec/enabled) 在 control 里不存在
+        String sql = "SELECT f.id, f.game_id, f.name, f.funnel_type, f.max_completion_time " +
+                    "FROM funnel_analyses f " +
+                    "WHERE f.status = 'ACTIVE' AND f.deleted_at IS NULL";
+
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ResultSet rs = ps.executeQuery();
+
+            while (rs.next()) {
+                FunnelConfig config = new FunnelConfig();
+                config.id = rs.getString("id");
+                config.gameId = rs.getString("game_id");
+                config.name = rs.getString("name");
+                config.type = rs.getString("funnel_type");
+                config.userKey = "";
+                long maxCompletion = rs.getLong("max_completion_time");
+                config.timeWindowSec = rs.wasNull() || maxCompletion <= 0 ? 24 * 3600 : maxCompletion;
+                config.enabled = true;
+
+                // 加载漏斗步骤
+                config.steps = loadFunnelSteps(conn, config.id);
+
+                configs.add(config);
+            }
+        }
+
         return configs;
     }
     
     /**
      * 加载漏斗步骤
      */
-    private static List<FunnelStep> loadFunnelSteps(Connection conn, String funnelId) throws Exception {
+    static List<FunnelStep> loadFunnelSteps(Connection conn, String funnelId) throws Exception {
         List<FunnelStep> steps = new ArrayList<>();
         
         // funnel_steps 同样适配 control 真实迁移：funnel_analysis_id 外键、
