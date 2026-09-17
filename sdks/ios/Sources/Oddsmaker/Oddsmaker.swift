@@ -1,5 +1,19 @@
 import Foundation
+import CoreFoundation
+
+#if canImport(UIKit)
 import UIKit
+#endif
+
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
+
+#if canImport(CryptoKit)
+import CryptoKit
+#elseif canImport(Crypto)
+import Crypto
+#endif
 
 public struct OddsmakerOptions {
     public let apiKey: String
@@ -71,8 +85,10 @@ public final class Oddsmaker {
         
         errorHandler?.info("SDK initialized with deviceId=\(deviceId) queued=\(queue.count)")
         
+        #if canImport(UIKit)
         NotificationCenter.default.addObserver(self, selector: #selector(appDidEnterBackground), name: UIApplication.didEnterBackgroundNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(appWillEnterForeground), name: UIApplication.willEnterForegroundNotification, object: nil)
+        #endif
     }
 
     public func setUserId(_ id: String?) { self.userId = id }
@@ -219,6 +235,12 @@ public final class Oddsmaker {
         }
         if let amount = revenueAmount { merged["amount"] = amount }
         if let currency = revenueCurrency { merged["currency"] = currency }
+        #if canImport(UIKit)
+        let appVersion = Bundle.main.infoDictionary?[(kCFBundleVersionKey as String)] as? String
+        #else
+        // kCFBundleVersionKey 的值即 "CFBundleVersion"(CFBundle.h),Linux 上常量类型不可桥接,用字面量等价替代
+        let appVersion = Bundle.main.infoDictionary?["CFBundleVersion"] as? String
+        #endif
         return Event(
             event_id: Self.uuidv7(),
             game_id: options.gameId,
@@ -230,7 +252,7 @@ public final class Oddsmaker {
             session_id: sessionId,
             ts_client: Int64((now * 1000.0).rounded()),
             platform: "ios",
-            app_version: Bundle.main.infoDictionary?[(kCFBundleVersionKey as String)] as? String,
+            app_version: appVersion,
             country: nil,
             revenue_amount: revenueAmount,
             revenue_currency: revenueCurrency,
@@ -245,8 +267,10 @@ public final class Oddsmaker {
         }
     }
 
+    #if canImport(UIKit)
     @objc private func appDidEnterBackground() { flush() }
     @objc private func appWillEnterForeground() { lastActive = Date().timeIntervalSince1970 }
+    #endif
 
     private func persistQueueNoLock() {
         do {
@@ -274,7 +298,11 @@ public final class Oddsmaker {
     private static func loadOrCreateDeviceId(gameId: String, environment: String) -> String {
         let key = "oddsmaker_device_id_\(gameId)_\(environment)"
         if let existing = UserDefaults.standard.string(forKey: key), !existing.isEmpty { return existing }
+        #if canImport(UIKit)
         let idfv = UIDevice.current.identifierForVendor?.uuidString ?? UUID().uuidString
+        #else
+        let idfv = UUID().uuidString
+        #endif
         let hashed = "d_" + String(SHA1hex(idfv).prefix(24))
         UserDefaults.standard.set(hashed, forKey: key)
         return hashed
