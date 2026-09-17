@@ -105,7 +105,8 @@ function storageSet(key: string, val: string) {
 class Queue {
   private items: Event[] = [];
   private bytes = 0;
-  constructor(private maxQueueBytes: number) {}
+  private maxQueueBytes: number;
+  constructor(maxQueueBytes: number) { this.maxQueueBytes = maxQueueBytes; }
   push(e: Event) {
     const est = JSON.stringify(e).length + 1;
     this.items.push(e);

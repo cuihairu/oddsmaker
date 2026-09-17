@@ -11,7 +11,8 @@
     "clean": "rm -rf dist",
     "test:hash": "node tests/hash_test.js",
     "test:game": "node tests/game_helpers_test.js",
-    "test": "npm run test:hash && npm run test:game"
+    "test:src": "node --test --experimental-test-coverage tests/index.test.ts tests/game-events.test.ts",
+    "test": "npm run test:hash && npm run test:game && npm run test:src"
   },
   "devDependencies": {
     "typescript": "^5.5.4"

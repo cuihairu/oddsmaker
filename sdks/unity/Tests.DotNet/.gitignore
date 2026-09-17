@@ -1,0 +1,4 @@
+bin/
+obj/
+cov.xml
+coverage/
