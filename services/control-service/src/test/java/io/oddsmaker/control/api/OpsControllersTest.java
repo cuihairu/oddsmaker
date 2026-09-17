@@ -62,6 +62,11 @@ class OpsControllersTest {
         lenient().when(announcementService.schedule(eq("a1"), any(), anyString())).thenReturn(entity);
         lenient().when(announcementService.offline(eq("a1"), anyString())).thenReturn(entity);
         lenient().when(announcementService.delete(eq("a1"), anyString())).thenReturn(true);
+        lenient().when(announcementService.delete(eq("a2"), anyString())).thenReturn(false);
+        AnnouncementEntity a2 = new AnnouncementEntity();  // 存在但 delete 返回 false（并发已删）
+        a2.id = "a2";
+        a2.gameId = "g";
+        lenient().when(announcementService.get("a2")).thenReturn(a2);
 
         assertEquals(200, announcementController.list("g").getStatusCode().value());
         assertEquals(200, announcementController.get("g", "a1").getStatusCode().value());
@@ -72,9 +77,21 @@ class OpsControllersTest {
         AnnouncementController.ScheduleReq req = new AnnouncementController.ScheduleReq();
         req.scheduledAt = "2026-09-10T10:00:00";
         assertEquals(200, announcementController.schedule("g", "a1", req).getStatusCode().value());
+        assertEquals(200, announcementController.schedule("g", "a1", new AnnouncementController.ScheduleReq()).getStatusCode().value());  // scheduledAt 缺省
         assertEquals(200, announcementController.offline("g", "a1").getStatusCode().value());
         assertEquals(200, announcementController.delete("g", "a1").getStatusCode().value());
         assertEquals(200, announcementController.listActive("g", null).getStatusCode().value());
+
+        // 跨游戏 / 不存在 → 404；delete 未删除 → 404
+        assertEquals(404, announcementController.update("g", "other", new AnnouncementEntity()).getStatusCode().value());
+        assertEquals(404, announcementController.update("other-game", "a1", new AnnouncementEntity()).getStatusCode().value());
+        assertEquals(404, announcementController.publish("g", "other").getStatusCode().value());
+        assertEquals(404, announcementController.publish("other-game", "a1").getStatusCode().value());
+        assertEquals(404, announcementController.schedule("g", "other", req).getStatusCode().value());
+        assertEquals(404, announcementController.offline("g", "other").getStatusCode().value());
+        assertEquals(404, announcementController.offline("other-game", "a1").getStatusCode().value());
+        assertEquals(404, announcementController.delete("g", "other").getStatusCode().value());
+        assertEquals(404, announcementController.delete("g", "a2").getStatusCode().value());
         verify(announcementService).list("g");
     }
 
@@ -190,8 +207,11 @@ class OpsControllersTest {
         job.id = "pex_1";
         job.gameId = "g";
         lenient().when(playerExportService.create(eq("g"), eq("p1"), any(), any(), any(), anyString())).thenReturn(job);
+        lenient().when(playerExportService.create(eq("bad"), any(), any(), any(), any(), anyString()))
+            .thenThrow(new IllegalArgumentException("非法分区"));
         lenient().when(playerExportService.get("pex_1")).thenReturn(job);
         lenient().when(playerExportService.get("nope")).thenThrow(new IllegalArgumentException("nf"));
+        lenient().when(playerExportService.get("gone")).thenThrow(new IllegalArgumentException("nf"));
         PlayerExportJobEntity pending = new PlayerExportJobEntity();
         pending.id = "pend";
         pending.gameId = "g";
@@ -204,10 +224,13 @@ class OpsControllersTest {
         req.gameId = "g";
         req.playerId = "p1";
         assertEquals(200, playerExportController.create(req).getStatusCode().value());
+        req.gameId = "bad";
+        assertEquals(400, playerExportController.create(req).getStatusCode().value());  // 非法参数
         assertEquals(200, playerExportController.list("g", "p1").getStatusCode().value());
         assertEquals(200, playerExportController.get("pex_1").getStatusCode().value());
         assertEquals(404, playerExportController.get("nope").getStatusCode().value());
         assertEquals(200, playerExportController.download("pex_1").getStatusCode().value());
+        assertEquals(404, playerExportController.download("gone").getStatusCode().value());  // 任务不存在
         assertEquals(409, playerExportController.download("pend").getStatusCode().value());
     }
 

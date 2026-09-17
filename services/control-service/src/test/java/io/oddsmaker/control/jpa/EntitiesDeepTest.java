@@ -1120,4 +1120,32 @@ class EntitiesDeepTest {
         f.steps = null;
         assertEquals(0, f.getStepCount());
     }
+
+    @Test
+    @DisplayName("PrePersist 主键生成：FunnelStep/AuditLog 空 id 落库前生成 32 位 hex，已有 id 保留")
+    void prePersistIdGeneration() {
+        // FunnelStepEntity.ensureId：null → 生成；空串 → 生成；非空 → 保留
+        FunnelStepEntity step = new FunnelStepEntity();
+        step.ensureId();
+        assertEquals(32, step.id.length());
+        assertFalse(step.id.contains("-"));
+        step.id = "";
+        step.ensureId();
+        assertEquals(32, step.id.length());
+        step.id = "preset";
+        step.ensureId();
+        assertEquals("preset", step.id);
+
+        // AuditLogEntity.generateId：null/空白 → 生成；已有 → 保留
+        AuditLogEntity log = new AuditLogEntity();
+        log.generateId();
+        assertEquals(32, log.id.length());
+        assertFalse(log.id.contains("-"));
+        log.id = "  ";
+        log.generateId();
+        assertEquals(32, log.id.length());
+        log.id = "preset-log";
+        log.generateId();
+        assertEquals("preset-log", log.id);
+    }
 }
