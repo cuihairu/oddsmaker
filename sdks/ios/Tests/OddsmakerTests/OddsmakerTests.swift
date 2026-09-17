@@ -389,13 +389,15 @@ final class OddsmakerTests: XCTestCase {
     }
 
     func testFlushConnectionFailureRestoresQueue() {
-        // 127.0.0.1:1 端口必然拒绝连接
-        sdk.initSDK(makeOpts(endpoint: "http://127.0.0.1:1", maxBatch: 1))   // track 即触发 flush
-        sdk.track("offline")
-        waitUntil { self.queueEvents().count == 1 }
-        XCTAssertEqual(queueEvents()[0]["event_name"] as? String, "offline")
-        waitUntil { !self.errors.isEmpty }   // 还原写盘与错误回调几乎同时,补等
-        XCTAssertFalse(errors.isEmpty)
+        // status 0 = 服务器接受连接后立即断开(不发响应)→ 确定性连接失败;
+        // 未监听端口(如 127.0.0.1:1)在受限网络下可能被静默丢弃,completion 分钟级才回调
+        sdk.initSDK(makeOpts(endpoint: TestServer.shared.url, maxBatch: 1))
+        TestServer.shared.enqueue(status: 0)
+        sdk.track("offline")   // maxBatch=1,track 即触发 flush
+        waitUntil { !self.errors.isEmpty }   // 回队写盘与错误回调几乎同时,以错误回调为完成信号
+        let events = self.queueEvents()
+        XCTAssertEqual(events.count, 1)
+        XCTAssertEqual(events.first?["event_name"] as? String, "offline")
     }
 
     func testDebugLoggingEnqueueAndFlushSuccess() {
@@ -442,11 +444,12 @@ final class OddsmakerTests: XCTestCase {
             XCTFail("expected invalidResponse(500), got \(err)")
         }
 
+        TestServer.shared.enqueue(status: 0)   // 接受后立即断开 → 确定性连接失败
         let dead = waitForFetch {
-            sdk.fetchExperiments(controlURL: URL(string: "http://127.0.0.1:1")!,
+            sdk.fetchExperiments(controlURL: URL(string: TestServer.shared.url)!,
                                  gameId: "g", environment: "p", completion: $0)
         }
-        guard case .failure = dead else { return XCTFail("expected failure on dead port") }
+        guard case .failure = dead else { return XCTFail("expected failure on dead connection") }
     }
 
     func testGetCachedExperimentsMissHitAndSingleSegment() {
@@ -509,9 +512,10 @@ final class OddsmakerTests: XCTestCase {
     }
 
     func testFetchExperimentsCachedFailureCompletesWithEmptyData() {
-        sdk.initSDK(makeOpts(endpoint: "http://127.0.0.1:1"))
+        TestServer.shared.enqueue(status: 0)   // 接受后立即断开 → 确定性连接失败
+        sdk.initSDK(makeOpts(endpoint: TestServer.shared.url))
         var got: Data?
-        sdk.fetchExperimentsCached(controlURL: URL(string: "http://127.0.0.1:1")!,
+        sdk.fetchExperimentsCached(controlURL: URL(string: TestServer.shared.url)!,
                                    gameId: "game1", environment: "prod") { got = $0 }
         waitUntil { got != nil }
         XCTAssertEqual(got!, Data())   // 失败兜底空数据
@@ -549,5 +553,103 @@ final class OddsmakerTests: XCTestCase {
         XCTAssertEqual(pick, Oddsmaker.assignVariant(expId: "exp", salt: "s", variants: variants, key: "u1"))
         let saltless = Oddsmaker.assignVariant(expId: "exp", salt: nil, variants: variants, key: "u1")
         XCTAssertTrue(["A", "B"].contains(saltless))
+    }
+
+    // ---------- 与 Web SDK/后端契约一致性 ----------
+
+    private func requestEventLines() -> [[String: Any]] {
+        TestServer.shared.requests.flatMap { req in
+            let body = req["body"] as? String ?? ""
+            return body.split(separator: "\n").compactMap {
+                (try? JSONSerialization.jsonObject(with: Data(String($0).utf8))) as? [String: Any]
+            }
+        }
+    }
+
+    func testRevenueNormalizesCurrencyToUpperAndSetPlayerEmitsTopLevel() {
+        TestServer.shared.enqueue(status: 200)
+        initSdk(makeOpts(endpoint: TestServer.shared.url))
+        sdk.setPlayer("player-1")
+        sdk.revenue(amount: 9.99, currency: "usd")
+        sdk.flush()
+        waitUntil { TestServer.shared.requests.count == 1 }
+        let events = requestEventLines()
+        XCTAssertEqual(events.count, 1)
+        XCTAssertEqual(events[0]["revenue_currency"] as? String, "USD")
+        XCTAssertEqual(events[0]["revenue_amount"] as? Double, 9.99)
+        XCTAssertEqual(events[0]["player_id"] as? String, "player-1")   // 顶层字段(与 Web 一致)
+        let props = events[0]["props"] as? [String: Any]
+        XCTAssertEqual(props?["currency"] as? String, "USD")
+        XCTAssertEqual(props?["player_id"] as? String, "player-1")
+    }
+
+    func testTypedHelpersFillContractTopLevelFields() {
+        TestServer.shared.enqueue(status: 200)
+        initSdk(makeOpts(endpoint: TestServer.shared.url))
+        sdk.levelStart("L1")
+        sdk.currencySource(currency: "gem", amount: 5)
+        sdk.itemConsume(itemId: "sword", quantity: 2)
+        sdk.iapOrder(orderId: "order-9", amount: 4.5, currency: "eur")
+        sdk.levelComplete("L1", props: ["game_mode": "pvp"])
+        sdk.currencySink(currency: "gem", amount: 1)
+        sdk.adImpression(amount: 0.02, currency: "usd",
+                         props: ["network": "adcolony", "placement_id": "menu", "ad_format": "rewarded"])
+        sdk.flush()
+        waitUntil { TestServer.shared.requests.count == 1 }
+        let events = requestEventLines()
+        XCTAssertEqual(events.count, 7)
+        XCTAssertEqual(events[0]["event_name"] as? String, "level_start")
+        XCTAssertEqual(events[0]["level_id"] as? String, "L1")
+        XCTAssertEqual(events[1]["resource_id"] as? String, "GEM")
+        XCTAssertEqual(events[1]["resource_amount"] as? Double, 5)
+        XCTAssertEqual(events[1]["virtual_currency"] as? String, "GEM")
+        XCTAssertEqual(events[1]["flow_type"] as? String, "source")
+        XCTAssertEqual(events[2]["item_id"] as? String, "sword")
+        XCTAssertEqual(events[2]["flow_type"] as? String, "sink")
+        XCTAssertEqual(events[3]["order_id"] as? String, "order-9")
+        XCTAssertEqual(events[3]["revenue_currency"] as? String, "EUR")
+        XCTAssertEqual(events[4]["level_id"] as? String, "L1")
+        XCTAssertEqual(events[4]["game_mode"] as? String, "pvp")
+        XCTAssertEqual(events[5]["flow_type"] as? String, "sink")
+        XCTAssertEqual(events[6]["ad_network"] as? String, "adcolony")
+        XCTAssertEqual(events[6]["ad_placement"] as? String, "menu")
+        XCTAssertEqual(events[6]["ad_format"] as? String, "rewarded")
+        XCTAssertEqual(events[6]["revenue_currency"] as? String, "USD")
+    }
+
+    func testFlushRequeuesKafkaErrorRejectedAndDropsPermanentRejections() {
+        initSdk(makeOpts(endpoint: TestServer.shared.url))
+        let idRetry = sdk.track("retryable")
+        let idDead = sdk.track("permanent")
+        let rejectedBody = "{\"accepted\":[],\"rejected\":[" +
+            "{\"event_id\":\"\(idRetry)\",\"reason\":\"kafka_error\"}," +
+            "{\"event_id\":\"\(idDead)\",\"reason\":\"invalid_schema\"}]}"
+        TestServer.shared.enqueue(status: 200, body: rejectedBody)
+        sdk.flush()
+        waitUntil { TestServer.shared.requests.count == 1 }
+        // kafka_error 回队、permanent 丢弃
+        waitUntil {
+            let ids = self.queueEvents().compactMap { $0["event_id"] as? String }
+            return ids == [idRetry]
+        }
+        TestServer.shared.enqueue(status: 200)
+        sdk.flush()
+        waitUntil { TestServer.shared.requests.count == 2 }
+        // 只看第二条请求:重发的应只有 kafka_error 回队的那条
+        let resent = (TestServer.shared.requests.last?["body"] as? String ?? "")
+            .split(separator: "\n").compactMap {
+                ((try? JSONSerialization.jsonObject(with: Data(String($0).utf8))) as? [String: Any])?["event_id"] as? String
+            }
+        XCTAssertEqual(resent, [idRetry])
+    }
+
+    func testEndpointSubpathPreservedOnFlush() {
+        TestServer.shared.enqueue(status: 200)
+        // endpoint 带子路径(反代部署):flush 必须请求 <subpath>/v1/batch,不能丢路径
+        initSdk(makeOpts(endpoint: TestServer.shared.url + "/gateway"))
+        sdk.track("sub")
+        sdk.flush()
+        waitUntil { TestServer.shared.requests.count == 1 }
+        XCTAssertEqual(TestServer.shared.requests[0]["path"] as? String, "/gateway/v1/batch")
     }
 }

@@ -46,13 +46,27 @@ class Oddsmaker(private val ctx: Context, private val opts: Options) {
     val event_name: String,
     val user_id: String? = null,
     val device_id: String,
+    val player_id: String? = null,
     val session_id: String? = null,
     val ts_client: Long,
     val platform: String? = "android",
     val app_version: String? = null,
     val country: String? = null,
+    val level_id: String? = null,
+    val game_mode: String? = null,
+    val order_id: String? = null,
+    val product_id: String? = null,
     val revenue_amount: Double? = null,
     val revenue_currency: String? = null,
+    val virtual_currency: String? = null,
+    val virtual_amount: Double? = null,
+    val item_id: String? = null,
+    val resource_id: String? = null,
+    val resource_amount: Double? = null,
+    val flow_type: String? = null,
+    val ad_network: String? = null,
+    val ad_placement: String? = null,
+    val ad_format: String? = null,
     val props: Map<String, Any?>? = null
   )
 
@@ -97,7 +111,129 @@ class Oddsmaker(private val ctx: Context, private val opts: Options) {
     return track("\$identify", identifyProps)
   }
 
-  fun track(eventName: String, props: Map<String, Any?>? = null): String {
+  fun track(eventName: String, props: Map<String, Any?>? = null): String =
+    queueEvent(eventName, props)
+
+  fun expose(exp: String, variant: String) =
+    track("experiment_exposure", mapOf("exp" to exp, "variant" to variant))
+
+  fun revenue(amount: Number, currency: String, props: Map<String, Any?>? = null): String {
+    val code = currency.uppercase()
+    val merged = withCoreProps(props, mapOf("amount" to amount, "currency" to code))
+    return queueEvent(
+      "revenue", merged,
+      revenueAmount = amount.toDouble(), revenueCurrency = code
+    )
+  }
+
+  // ---- 类型化便捷事件:与 Web SDK 对齐,填充事件契约顶层字段(分析视图直接消费) ----
+
+  fun levelStart(levelId: String, props: Map<String, Any?>? = null): String {
+    val merged = withCoreProps(props, mapOf("level_id" to levelId))
+    return queueEvent("level_start", merged, levelId = levelId, gameMode = optStr(merged, "game_mode"))
+  }
+
+  fun levelFail(levelId: String, reason: String, props: Map<String, Any?>? = null): String {
+    val merged = withCoreProps(props, mapOf("level_id" to levelId, "fail_reason" to reason))
+    return queueEvent("level_fail", merged, levelId = levelId, gameMode = optStr(merged, "game_mode"))
+  }
+
+  fun levelComplete(levelId: String, props: Map<String, Any?>? = null): String {
+    val merged = withCoreProps(props, mapOf("level_id" to levelId))
+    return queueEvent("level_complete", merged, levelId = levelId, gameMode = optStr(merged, "game_mode"))
+  }
+
+  fun currencySource(currency: String, amount: Number, props: Map<String, Any?>? = null): String {
+    val code = currency.uppercase()
+    val merged = withCoreProps(props, mapOf("currency_code" to code, "amount" to amount))
+    return queueEvent(
+      "currency_source", merged,
+      resourceId = code, resourceAmount = amount.toDouble(),
+      virtualCurrency = code, virtualAmount = amount.toDouble(), flowType = "source"
+    )
+  }
+
+  fun currencySink(currency: String, amount: Number, props: Map<String, Any?>? = null): String {
+    val code = currency.uppercase()
+    val merged = withCoreProps(props, mapOf("currency_code" to code, "amount" to amount))
+    return queueEvent(
+      "currency_sink", merged,
+      resourceId = code, resourceAmount = amount.toDouble(),
+      virtualCurrency = code, virtualAmount = amount.toDouble(), flowType = "sink"
+    )
+  }
+
+  fun itemGrant(itemId: String, quantity: Int = 1, props: Map<String, Any?>? = null): String {
+    val merged = withCoreProps(props, mapOf("item_id" to itemId, "quantity" to quantity))
+    return queueEvent(
+      "item_grant", merged,
+      itemId = itemId, resourceId = itemId, resourceAmount = quantity.toDouble(), flowType = "source"
+    )
+  }
+
+  fun itemConsume(itemId: String, quantity: Int = 1, props: Map<String, Any?>? = null): String {
+    val merged = withCoreProps(props, mapOf("item_id" to itemId, "quantity" to quantity))
+    return queueEvent(
+      "item_consume", merged,
+      itemId = itemId, resourceId = itemId, resourceAmount = quantity.toDouble(), flowType = "sink"
+    )
+  }
+
+  fun iapOrder(orderId: String, amount: Number, currency: String, props: Map<String, Any?>? = null): String {
+    val code = currency.uppercase()
+    val merged = withCoreProps(withCoreProps(props, mapOf("order_id" to orderId)), mapOf("amount" to amount, "currency" to code))
+    return queueEvent(
+      "iap_order", merged,
+      orderId = orderId, productId = optStr(merged, "product_id"),
+      revenueAmount = amount.toDouble(), revenueCurrency = code
+    )
+  }
+
+  fun webshopOrder(orderId: String, amount: Number, currency: String, props: Map<String, Any?>? = null): String {
+    val code = currency.uppercase()
+    val merged = withCoreProps(withCoreProps(props, mapOf("order_id" to orderId)), mapOf("amount" to amount, "currency" to code))
+    return queueEvent(
+      "webshop_order", merged,
+      orderId = orderId, productId = optStr(merged, "product_id"),
+      revenueAmount = amount.toDouble(), revenueCurrency = code
+    )
+  }
+
+  fun adImpression(amount: Number, currency: String, props: Map<String, Any?>? = null): String {
+    val code = currency.uppercase()
+    val merged = withCoreProps(props, mapOf("amount" to amount, "currency" to code))
+    return queueEvent(
+      "ad_impression", merged,
+      adNetwork = optStr(merged, "network"), adPlacement = optStr(merged, "placement_id"),
+      adFormat = optStr(merged, "ad_format"),
+      revenueAmount = amount.toDouble(), revenueCurrency = code
+    )
+  }
+
+  private fun withCoreProps(props: Map<String, Any?>?, core: Map<String, Any?>): Map<String, Any?> =
+    (props ?: emptyMap()) + core
+
+  private fun optStr(props: Map<String, Any?>, key: String): String? = props[key] as? String
+
+  private fun queueEvent(
+    eventName: String,
+    props: Map<String, Any?>? = null,
+    levelId: String? = null,
+    gameMode: String? = null,
+    orderId: String? = null,
+    productId: String? = null,
+    revenueAmount: Double? = null,
+    revenueCurrency: String? = null,
+    virtualCurrency: String? = null,
+    virtualAmount: Double? = null,
+    itemId: String? = null,
+    resourceId: String? = null,
+    resourceAmount: Double? = null,
+    flowType: String? = null,
+    adNetwork: String? = null,
+    adPlacement: String? = null,
+    adFormat: String? = null
+  ): String {
     val now = System.currentTimeMillis()
     rollSession(now)
     val evt = Event(
@@ -108,38 +244,26 @@ class Oddsmaker(private val ctx: Context, private val opts: Options) {
       event_name = eventName,
       user_id = userId,
       device_id = deviceId,
+      player_id = playerId,
       session_id = sessionId,
       ts_client = now,
       platform = "android",
+      level_id = levelId,
+      game_mode = gameMode,
+      order_id = orderId,
+      product_id = productId,
+      revenue_amount = revenueAmount,
+      revenue_currency = revenueCurrency,
+      virtual_currency = virtualCurrency,
+      virtual_amount = virtualAmount,
+      item_id = itemId,
+      resource_id = resourceId,
+      resource_amount = resourceAmount,
+      flow_type = flowType,
+      ad_network = adNetwork,
+      ad_placement = adPlacement,
+      ad_format = adFormat,
       props = mergeProps(props)
-    )
-    enqueue(evt, now)
-    return evt.event_id
-  }
-
-  fun expose(exp: String, variant: String) =
-    track("experiment_exposure", mapOf("exp" to exp, "variant" to variant))
-
-  fun revenue(amount: Number, currency: String, props: Map<String, Any?>? = null): String {
-    val now = System.currentTimeMillis()
-    rollSession(now)
-    val merged = mergeProps(props).orEmpty().toMutableMap()
-    merged["amount"] = amount
-    merged["currency"] = currency
-    val evt = Event(
-      event_id = uuidv7(),
-      game_id = opts.gameId,
-      environment = opts.environment,
-      event_type = inferEventType("revenue"),
-      event_name = "revenue",
-      user_id = userId,
-      device_id = deviceId,
-      session_id = sessionId,
-      ts_client = now,
-      platform = "android",
-      revenue_amount = amount.toDouble(),
-      revenue_currency = currency,
-      props = merged
     )
     enqueue(evt, now)
     return evt.event_id
@@ -214,11 +338,45 @@ class Oddsmaker(private val ctx: Context, private val opts: Options) {
         if (!resp.isSuccessful) {
           queue.addAll(0, batch)
           recalcQueueBytes()
+        } else {
+          handleBatchResponse(resp.body?.string(), batch)
         }
       }
     } catch (_: Exception) {
       queue.addAll(0, batch)
       recalcQueueBytes()
+    }
+  }
+
+  /**
+   * 2xx 响应体仍含逐事件拒绝（gateway BatchResponse）：
+   * 仅 kafka_error 属临时故障需回队首发重试；invalid_schema/blocked 等为永久失败，
+   * 重发无意义，丢弃并按 debug 记录。响应体解析失败按全成功处理（幂等于既有行为）。
+   */
+  private fun handleBatchResponse(body: String?, batch: List<Event>) {
+    if (body.isNullOrEmpty()) return
+    val parsed = try { JSONObject(body) } catch (_: Throwable) { return }
+    val rejected = parsed.optJSONArray("rejected") ?: return
+    val reasons = HashMap<String, String>()
+    for (i in 0 until rejected.length()) {
+      val entry = rejected.optJSONObject(i) ?: continue
+      val id = entry.optString("event_id")
+      if (id.isNotEmpty()) reasons[id] = entry.optString("reason")
+    }
+    if (reasons.isEmpty()) return
+    val retryable = ArrayList<Event>()
+    for (e in batch) {
+      when (reasons[e.event_id]) {
+        null -> {}
+        "kafka_error" -> retryable.add(e)
+        else -> if (opts.debug) Log.w("Oddsmaker", "event rejected: ${e.event_id} ${reasons[e.event_id]}")
+      }
+    }
+    if (retryable.isNotEmpty()) {
+      synchronized(this) {
+        queue.addAll(0, retryable)
+        recalcQueueBytes()
+      }
     }
   }
 
@@ -233,13 +391,27 @@ class Oddsmaker(private val ctx: Context, private val opts: Options) {
       field(sb, "event_name", e.event_name)
       e.user_id?.let { field(sb, "user_id", it) }
       field(sb, "device_id", e.device_id)
+      e.player_id?.let { field(sb, "player_id", it) }
       e.session_id?.let { field(sb, "session_id", it) }
       field(sb, "ts_client", e.ts_client)
       e.platform?.let { field(sb, "platform", it) }
       e.app_version?.let { field(sb, "app_version", it) }
       e.country?.let { field(sb, "country", it) }
+      e.level_id?.let { field(sb, "level_id", it) }
+      e.game_mode?.let { field(sb, "game_mode", it) }
+      e.order_id?.let { field(sb, "order_id", it) }
+      e.product_id?.let { field(sb, "product_id", it) }
       e.revenue_amount?.let { field(sb, "revenue_amount", it) }
       e.revenue_currency?.let { field(sb, "revenue_currency", it) }
+      e.virtual_currency?.let { field(sb, "virtual_currency", it) }
+      e.virtual_amount?.let { field(sb, "virtual_amount", it) }
+      e.item_id?.let { field(sb, "item_id", it) }
+      e.resource_id?.let { field(sb, "resource_id", it) }
+      e.resource_amount?.let { field(sb, "resource_amount", it) }
+      e.flow_type?.let { field(sb, "flow_type", it) }
+      e.ad_network?.let { field(sb, "ad_network", it) }
+      e.ad_placement?.let { field(sb, "ad_placement", it) }
+      e.ad_format?.let { field(sb, "ad_format", it) }
       e.props?.let { objField(sb, "props", it) }
       if (sb.last() == ',') sb.setLength(sb.length - 1)
       sb.append('}')
@@ -258,13 +430,27 @@ class Oddsmaker(private val ctx: Context, private val opts: Options) {
           event_name = o.getString("event_name"),
           user_id = o.optStringOrNull("user_id"),
           device_id = o.getString("device_id"),
+          player_id = o.optStringOrNull("player_id"),
           session_id = o.optStringOrNull("session_id"),
           ts_client = o.getLong("ts_client"),
           platform = o.optStringOrNull("platform"),
           app_version = o.optStringOrNull("app_version"),
           country = o.optStringOrNull("country"),
+          level_id = o.optStringOrNull("level_id"),
+          game_mode = o.optStringOrNull("game_mode"),
+          order_id = o.optStringOrNull("order_id"),
+          product_id = o.optStringOrNull("product_id"),
           revenue_amount = if (o.has("revenue_amount") && !o.isNull("revenue_amount")) o.getDouble("revenue_amount") else null,
           revenue_currency = o.optStringOrNull("revenue_currency"),
+          virtual_currency = o.optStringOrNull("virtual_currency"),
+          virtual_amount = if (o.has("virtual_amount") && !o.isNull("virtual_amount")) o.getDouble("virtual_amount") else null,
+          item_id = o.optStringOrNull("item_id"),
+          resource_id = o.optStringOrNull("resource_id"),
+          resource_amount = if (o.has("resource_amount") && !o.isNull("resource_amount")) o.getDouble("resource_amount") else null,
+          flow_type = o.optStringOrNull("flow_type"),
+          ad_network = o.optStringOrNull("ad_network"),
+          ad_placement = o.optStringOrNull("ad_placement"),
+          ad_format = o.optStringOrNull("ad_format"),
           props = propsObj?.toMap()
         )
       } catch (_: Throwable) {

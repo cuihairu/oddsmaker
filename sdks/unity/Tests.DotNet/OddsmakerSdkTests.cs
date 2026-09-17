@@ -582,6 +582,85 @@ public class OddsmakerSdkTests : IDisposable
         Assert.Contains("\"amount\":1,", QueueLines()[1]);
     }
 
+    // ---------- 与 Web SDK/后端契约一致性 ----------
+
+    [Fact]
+    public void RevenueNormalizesCurrencyToUpperAndSetPlayerEmitsTopLevel()
+    {
+        InitSdk();
+        Oddsmaker.Oddsmaker.SetPlayer("player-1");
+        Oddsmaker.Oddsmaker.Revenue(9.99, "usd");
+        var line = QueueLines()[0];
+        Assert.Equal("revenue", FieldOf(line, "event_name"));
+        Assert.Equal("USD", FieldOf(line, "revenue_currency"));   // 币种统一大写(财务按币种分组的口径)
+        Assert.Equal("player-1", FieldOf(line, "player_id"));     // 顶层主体(在线/财务指标的主体口径)
+    }
+
+    [Fact]
+    public void TypedHelpersFillContractTopLevelFields()
+    {
+        InitSdk();
+        Oddsmaker.Oddsmaker.LevelStart("L1");
+        Oddsmaker.Oddsmaker.CurrencySource("gem", 5);
+        Oddsmaker.Oddsmaker.ItemConsume("sword", 2);
+        Oddsmaker.Oddsmaker.IapOrder("order-9", 4.5, "eur");
+        Oddsmaker.Oddsmaker.LevelComplete("L1", new Dictionary<string, object> { ["game_mode"] = "pvp" });
+        Oddsmaker.Oddsmaker.CurrencySink("gem", 1);
+        Oddsmaker.Oddsmaker.AdImpression(0.02, "usd", new Dictionary<string, object> {
+            ["network"] = "adcolony", ["placement_id"] = "menu", ["ad_format"] = "rewarded" });
+        var lines = QueueLines();
+        Assert.Equal(7, lines.Count);
+        Assert.Equal("level_start", FieldOf(lines[0], "event_name"));
+        Assert.Equal("L1", FieldOf(lines[0], "level_id"));
+        Assert.Equal("GEM", FieldOf(lines[1], "resource_id"));
+        Assert.Contains("\"resource_amount\":5", lines[1]);
+        Assert.Equal("GEM", FieldOf(lines[1], "virtual_currency"));
+        Assert.Equal("source", FieldOf(lines[1], "flow_type"));
+        Assert.Equal("sword", FieldOf(lines[2], "item_id"));
+        Assert.Equal("sink", FieldOf(lines[2], "flow_type"));
+        Assert.Equal("order-9", FieldOf(lines[3], "order_id"));
+        Assert.Equal("EUR", FieldOf(lines[3], "revenue_currency"));
+        Assert.Equal("L1", FieldOf(lines[4], "level_id"));
+        Assert.Equal("pvp", FieldOf(lines[4], "game_mode"));   // props 里的 game_mode 同时提升到顶层
+        Assert.Equal("sink", FieldOf(lines[5], "flow_type"));
+        Assert.Equal("adcolony", FieldOf(lines[6], "ad_network"));
+        Assert.Equal("menu", FieldOf(lines[6], "ad_placement"));
+        Assert.Equal("rewarded", FieldOf(lines[6], "ad_format"));
+        Assert.Equal("USD", FieldOf(lines[6], "revenue_currency"));
+    }
+
+    [Fact]
+    public void FlushRequeuesKafkaErrorRejectedAndDropsPermanentRejections()
+    {
+        InitSdk();
+        var idRetry = Oddsmaker.Oddsmaker.Track("retryable");
+        var idDead = Oddsmaker.Oddsmaker.Track("permanent");
+        UnityWebRequest.Script.Enqueue(ScriptedResponse.Ok(
+            "{\"accepted\":[],\"rejected\":[" +
+            "{\"event_id\":\"" + idRetry + "\",\"reason\":\"kafka_error\"}," +
+            "{\"event_id\":\"" + idDead + "\",\"reason\":\"invalid_schema\"}]}"));
+        UnityWebRequest.Script.Enqueue(ScriptedResponse.Ok());   // 重发成功
+        Oddsmaker.Oddsmaker.Flush();
+        UnitySim.Pump(100);
+        // kafka_error(临时故障)回队后重发,permanent 拒绝不重发
+        // (FlushLoop 在 UnitySim 中无延时,回队事件随即被重发,直接断言第二条请求体)
+        Assert.Equal(2, UnityWebRequest.Sent.Count);
+        var resent = Encoding.UTF8.GetString(Gunzip(UnityWebRequest.Sent[1].Body));
+        Assert.Contains(idRetry, resent);
+        Assert.DoesNotContain(idDead, resent);
+        Assert.Empty(QueueLines());   // 重发成功 → 队列清空
+    }
+
+    [Fact]
+    public void EndpointSubpathPreservedOnFlush()
+    {
+        InitSdk(o => { o.endpoint = "https://ing.example/gateway/"; });   // 反代部署带子路径
+        UnityWebRequest.Script.Enqueue(ScriptedResponse.Ok());
+        Oddsmaker.Oddsmaker.Track("sub");
+        UnitySim.Pump(100);
+        Assert.Equal("https://ing.example/gateway/v1/batch", UnityWebRequest.Sent[0].Url);
+    }
+
     [Fact]
     public void RollSessionContinuesWithinGapAndRotatesAfterGap()
     {
@@ -643,10 +722,11 @@ public class OddsmakerSdkTests : IDisposable
         Assert.True(File.Exists(ExperimentCacheFile()));
         Assert.Contains("\"timestamp\":", File.ReadAllText(ExperimentCacheFile()));
 
-        // TTL 内 → 直接回调,不再发请求
+        // TTL 内 → 直接回调缓存 data,不再发请求
         Oddsmaker.Oddsmaker.FetchExperimentsCached("https://ctl.example/", results.Add);
         UnitySim.Pump(50);
         Assert.Equal(2, results.Count);
+        Assert.Equal("[{\"id\":\"fresh\"}]", results[1]);
         Assert.Single(UnityWebRequest.Sent);
 
         // 重启 + 缓存过期(timestamp 过去)→ 重新拉取
@@ -738,8 +818,8 @@ public class OddsmakerSdkTests : IDisposable
         Oddsmaker.Oddsmaker.FetchExperimentsCached("https://ctl.example/", results.Add, ttlSec: int.MaxValue);   // ~68 年,必命中
         UnitySim.Pump(50);
         Assert.Single(results);
-        // 现状:LoadExperimentCache 只恢复 timestamp、不恢复字典内容 → 命中时回调空字典序列化
-        Assert.Equal("{}", results[0]);
+        // 命中缓存 → 回调缓存文件 data 字段的原样内容
+        Assert.Equal("[]", results[0]);
         Assert.Empty(UnityWebRequest.Sent);               // 未发请求
     }
 

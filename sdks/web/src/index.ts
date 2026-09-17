@@ -449,6 +449,7 @@ export class Oddsmaker {
       try {
         const res = await fetch(url, { method: 'POST', headers, body });
         if (res.ok) {
+          await this.handleBatchResponse(res, evts);
           if (this.debug) console.debug('[oddsmaker] flushed', evts.length, 'gzip=', useGzip);
           return;
         }
@@ -468,6 +469,35 @@ export class Oddsmaker {
         await sleep(backoff + jitter(250));
         backoff = Math.min(backoff * 2, 30_000);
       }
+    }
+  }
+
+  /**
+   * 2xx 响应体仍含逐事件拒绝（gateway BatchResponse）：
+   * 仅 kafka_error 属临时故障需回队首发重试；invalid_schema/blocked 等为永久失败，
+   * 重发无意义，丢弃并按 debug 记录。响应体不可解析按全成功处理（幂等于既有行为）。
+   */
+  private async handleBatchResponse(res: Response, evts: Event[]) {
+    let body: any = null;
+    try { body = await res.json(); } catch { return; }
+    const rejected = Array.isArray(body?.rejected) ? body.rejected : [];
+    if (!rejected.length) return;
+    const reasons = new Map<string, string>();
+    for (const r of rejected) {
+      if (r && typeof r.event_id === 'string') reasons.set(r.event_id, String(r.reason ?? ''));
+    }
+    const retryable = evts.filter(e => reasons.get(e.event_id) === 'kafka_error');
+    if (this.debug) {
+      for (const e of evts) {
+        const reason = reasons.get(e.event_id);
+        if (reason && reason !== 'kafka_error') {
+          console.debug(`[oddsmaker] event rejected: ${e.event_id} ${reason}`);
+        }
+      }
+    }
+    if (retryable.length) {
+      this.queue.restore([...retryable, ...this.queue.snapshot()]);
+      this.persistQueue();
     }
   }
 }

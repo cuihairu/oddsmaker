@@ -45,39 +45,29 @@ namespace Oddsmaker
         public string event_name;
         public string user_id;
         public string device_id;
+        public string player_id;
         public string session_id;
         public long ts_client;
         public string platform = "unity";
         public string app_version;
         public string sdk_version = "1.0.0";
         public string country;
+        public string level_id;
+        public string game_mode;
+        public string order_id;
+        public string product_id;
         public double? revenue_amount;
         public string revenue_currency;
+        public string virtual_currency;
+        public double? virtual_amount;
+        public string item_id;
+        public string resource_id;
+        public double? resource_amount;
+        public string flow_type;
+        public string ad_network;
+        public string ad_placement;
+        public string ad_format;
         public Dictionary<string, object> props;
-    }
-
-    [Serializable]
-    public class ExperimentConfig
-    {
-        public string id;
-        public string name;
-        public List<Variant> variants;
-        public Targeting targeting;
-    }
-
-    [Serializable]
-    public class Variant
-    {
-        public string name;
-        public int weight;
-    }
-
-    [Serializable]
-    public class Targeting
-    {
-        public List<string> platform;
-        public List<string> appVersion;
-        public List<string> country;
     }
 
     [Serializable]
@@ -85,6 +75,21 @@ namespace Oddsmaker
     {
         public long timestamp;
         public string data;
+    }
+
+    // gateway /v1/batch 响应(JsonUtility 反序列化用):逐事件拒绝清单
+    [Serializable]
+    public class BatchRejectedEntry
+    {
+        public string event_id;
+        public string reason;
+    }
+
+    [Serializable]
+    public class BatchResponseDto
+    {
+        public List<string> accepted;
+        public List<BatchRejectedEntry> rejected;
     }
 
     public class OddsmakerError
@@ -118,8 +123,8 @@ namespace Oddsmaker
         private bool _isFlushing = false;
         private int _retryCount = 0;
 
-        // 实验缓存
-        private Dictionary<string, ExperimentConfig> _experimentCache = new Dictionary<string, ExperimentConfig>();
+        // 实验缓存:原始配置 JSON + 时间戳(与 Android/iOS 的 "ts\njson" 语义一致)
+        private string _experimentCacheData = "";
         private long _experimentCacheTimestamp = 0;
         private const int EXPERIMENT_CACHE_TTL_SEC = 300;
 
@@ -245,10 +250,113 @@ namespace Oddsmaker
         public static string Revenue(double amount, string currency, Dictionary<string, object> props = null)
         {
             if (Instance == null) return null;
-            var p = props == null ? new Dictionary<string, object>() : new Dictionary<string, object>(props);
-            p["amount"] = amount;
-            p["currency"] = currency;
-            return Instance.TrackInternal("revenue", p, amount, currency);
+            string code = currency == null ? null : currency.ToUpperInvariant();
+            var p = WithCoreProps(props, new Dictionary<string, object> { { "amount", amount }, { "currency", code } });
+            return Instance.TrackInternal("revenue", p, revenueAmount: amount, revenueCurrency: code);
+        }
+
+        // ---- 类型化便捷事件:与 Web SDK 对齐,填充事件契约顶层字段(分析视图直接消费) ----
+
+        public static string LevelStart(string levelId, Dictionary<string, object> props = null)
+        {
+            if (Instance == null) return null;
+            var merged = WithCoreProps(props, new Dictionary<string, object> { { "level_id", levelId } });
+            merged.TryGetValue("game_mode", out object gm);
+            return Instance.TrackInternal("level_start", merged, levelId: levelId, gameMode: gm as string);
+        }
+
+        public static string LevelFail(string levelId, string reason, Dictionary<string, object> props = null)
+        {
+            if (Instance == null) return null;
+            var merged = WithCoreProps(props, new Dictionary<string, object> { { "level_id", levelId }, { "fail_reason", reason } });
+            merged.TryGetValue("game_mode", out object gm);
+            return Instance.TrackInternal("level_fail", merged, levelId: levelId, gameMode: gm as string);
+        }
+
+        public static string LevelComplete(string levelId, Dictionary<string, object> props = null)
+        {
+            if (Instance == null) return null;
+            var merged = WithCoreProps(props, new Dictionary<string, object> { { "level_id", levelId } });
+            merged.TryGetValue("game_mode", out object gm);
+            return Instance.TrackInternal("level_complete", merged, levelId: levelId, gameMode: gm as string);
+        }
+
+        public static string CurrencySource(string currency, double amount, Dictionary<string, object> props = null)
+        {
+            if (Instance == null) return null;
+            string code = currency == null ? null : currency.ToUpperInvariant();
+            var merged = WithCoreProps(props, new Dictionary<string, object> { { "currency_code", code }, { "amount", amount } });
+            return Instance.TrackInternal("currency_source", merged,
+                resourceId: code, resourceAmount: amount, virtualCurrency: code, virtualAmount: amount, flowType: "source");
+        }
+
+        public static string CurrencySink(string currency, double amount, Dictionary<string, object> props = null)
+        {
+            if (Instance == null) return null;
+            string code = currency == null ? null : currency.ToUpperInvariant();
+            var merged = WithCoreProps(props, new Dictionary<string, object> { { "currency_code", code }, { "amount", amount } });
+            return Instance.TrackInternal("currency_sink", merged,
+                resourceId: code, resourceAmount: amount, virtualCurrency: code, virtualAmount: amount, flowType: "sink");
+        }
+
+        public static string ItemGrant(string itemId, int quantity = 1, Dictionary<string, object> props = null)
+        {
+            if (Instance == null) return null;
+            var merged = WithCoreProps(props, new Dictionary<string, object> { { "item_id", itemId }, { "quantity", quantity } });
+            return Instance.TrackInternal("item_grant", merged,
+                itemId: itemId, resourceId: itemId, resourceAmount: quantity, flowType: "source");
+        }
+
+        public static string ItemConsume(string itemId, int quantity = 1, Dictionary<string, object> props = null)
+        {
+            if (Instance == null) return null;
+            var merged = WithCoreProps(props, new Dictionary<string, object> { { "item_id", itemId }, { "quantity", quantity } });
+            return Instance.TrackInternal("item_consume", merged,
+                itemId: itemId, resourceId: itemId, resourceAmount: quantity, flowType: "sink");
+        }
+
+        public static string IapOrder(string orderId, double amount, string currency, Dictionary<string, object> props = null)
+        {
+            if (Instance == null) return null;
+            string code = currency == null ? null : currency.ToUpperInvariant();
+            var merged = WithCoreProps(
+                WithCoreProps(props, new Dictionary<string, object> { { "order_id", orderId } }),
+                new Dictionary<string, object> { { "amount", amount }, { "currency", code } });
+            merged.TryGetValue("product_id", out object pid);
+            return Instance.TrackInternal("iap_order", merged,
+                orderId: orderId, productId: pid as string, revenueAmount: amount, revenueCurrency: code);
+        }
+
+        public static string WebshopOrder(string orderId, double amount, string currency, Dictionary<string, object> props = null)
+        {
+            if (Instance == null) return null;
+            string code = currency == null ? null : currency.ToUpperInvariant();
+            var merged = WithCoreProps(
+                WithCoreProps(props, new Dictionary<string, object> { { "order_id", orderId } }),
+                new Dictionary<string, object> { { "amount", amount }, { "currency", code } });
+            merged.TryGetValue("product_id", out object pid);
+            return Instance.TrackInternal("webshop_order", merged,
+                orderId: orderId, productId: pid as string, revenueAmount: amount, revenueCurrency: code);
+        }
+
+        public static string AdImpression(double amount, string currency, Dictionary<string, object> props = null)
+        {
+            if (Instance == null) return null;
+            string code = currency == null ? null : currency.ToUpperInvariant();
+            var merged = WithCoreProps(props, new Dictionary<string, object> { { "amount", amount }, { "currency", code } });
+            merged.TryGetValue("network", out object network);
+            merged.TryGetValue("placement_id", out object placement);
+            merged.TryGetValue("ad_format", out object format);
+            return Instance.TrackInternal("ad_impression", merged,
+                adNetwork: network as string, adPlacement: placement as string, adFormat: format as string,
+                revenueAmount: amount, revenueCurrency: code);
+        }
+
+        private static Dictionary<string, object> WithCoreProps(Dictionary<string, object> props, Dictionary<string, object> core)
+        {
+            var merged = props == null ? new Dictionary<string, object>() : new Dictionary<string, object>(props);
+            foreach (var kv in core) merged[kv.Key] = kv.Value;
+            return merged;
         }
 
         public static void Flush()
@@ -268,13 +376,13 @@ namespace Oddsmaker
         {
             if (Instance == null) return;
 
-            // 检查缓存
-            if (Instance._experimentCacheTimestamp > 0)
+            // TTL 内命中缓存 → 直接回调缓存的原始配置 JSON(与 Web/Android/iOS 语义一致)
+            if (Instance._experimentCacheTimestamp > 0 && !string.IsNullOrEmpty(Instance._experimentCacheData))
             {
                 long now = NowMs();
                 if (now - Instance._experimentCacheTimestamp < ttlSec * 1000L)
                 {
-                    callback?.Invoke(JsonUtility.ToJson(Instance._experimentCache));
+                    callback?.Invoke(Instance._experimentCacheData);
                     return;
                 }
             }
@@ -282,6 +390,7 @@ namespace Oddsmaker
             Instance.StartCoroutine(Instance.FetchExperimentsCoroutine(controlURL, (data) =>
             {
                 Instance._experimentCacheTimestamp = NowMs();
+                Instance._experimentCacheData = data ?? "";
                 Instance.SaveExperimentCache();
                 callback?.Invoke(data);
             }));
@@ -320,7 +429,14 @@ namespace Oddsmaker
 
         // 内部实现
 
-        private string TrackInternal(string eventName, Dictionary<string, object> props, double? revenueAmount = null, string revenueCurrency = null)
+        private string TrackInternal(string eventName, Dictionary<string, object> props,
+            string levelId = null, string gameMode = null,
+            string orderId = null, string productId = null,
+            double? revenueAmount = null, string revenueCurrency = null,
+            string virtualCurrency = null, double? virtualAmount = null,
+            string itemId = null, string resourceId = null, double? resourceAmount = null,
+            string flowType = null,
+            string adNetwork = null, string adPlacement = null, string adFormat = null)
         {
             long now = NowMs();
             RollSession(now);
@@ -333,13 +449,27 @@ namespace Oddsmaker
                 event_name = eventName,
                 user_id = _userId,
                 device_id = _deviceId,
+                player_id = _playerId,
                 session_id = _sessionId,
                 ts_client = now,
                 platform = "unity",
                 app_version = Application.version,
                 sdk_version = "1.0.0",
+                level_id = levelId,
+                game_mode = gameMode,
+                order_id = orderId,
+                product_id = productId,
                 revenue_amount = revenueAmount,
                 revenue_currency = revenueCurrency,
+                virtual_currency = virtualCurrency,
+                virtual_amount = virtualAmount,
+                item_id = itemId,
+                resource_id = resourceId,
+                resource_amount = resourceAmount,
+                flow_type = flowType,
+                ad_network = adNetwork,
+                ad_placement = adPlacement,
+                ad_format = adFormat,
                 props = MergeProps(props)
             };
             int est = EstimateSize(e);
@@ -403,11 +533,19 @@ namespace Oddsmaker
                 
                 if (req.result == UnityWebRequest.Result.Success && req.responseCode >= 200 && req.responseCode < 300)
                 {
+                    // 2xx 响应体仍含逐事件拒绝:仅 kafka_error 回队首发重试,其余永久失败丢弃并告警
+                    var retryable = ParseKafkaErrorIds(req.downloadHandler != null ? req.downloadHandler.text : null, slice);
+
                     _queue.RemoveRange(0, n);
+                    if (retryable.Count > 0)
+                    {
+                        _queue.InsertRange(0, retryable);
+                    }
                     RecalcQueueBytes();
-                    _totalEventsSent += n;
+                    SaveQueue();   // kafka_error 回队的事件立即落盘,进程被杀也不丢
+                    _totalEventsSent += n - retryable.Count;
                     _retryCount = 0;
-                    if (_opts.debug) LogDebug($"flushed {n} events ok");
+                    if (_opts.debug) LogDebug($"flushed {n - retryable.Count} events ok, {retryable.Count} retryable");
                 }
                 else
                 {
@@ -439,13 +577,13 @@ namespace Oddsmaker
         private IEnumerator FetchExperimentsCoroutine(string controlURL, Action<string> callback)
         {
             string url = controlURL.TrimEnd('/') + $"/api/config/{_opts.gameId}/{_opts.environment}";
-            
+
             using (var req = UnityWebRequest.Get(url))
             {
                 req.SetRequestHeader("accept", "application/json");
 
                 yield return req.SendWebRequest();
-                
+
                 if (req.result == UnityWebRequest.Result.Success)
                 {
                     string data = req.downloadHandler.text;
@@ -459,6 +597,36 @@ namespace Oddsmaker
                     callback?.Invoke(null);
                 }
             }
+        }
+
+        /** 从 /v1/batch 2xx 响应体提取 reason=kafka_error 的拒绝事件(临时故障,需重发);响应体缺失/不可解析按全成功处理。 */
+        private List<Event> ParseKafkaErrorIds(string responseBody, List<Event> slice)
+        {
+            var retryable = new List<Event>();
+            if (string.IsNullOrEmpty(responseBody)) return retryable;
+            BatchResponseDto dto;
+            try
+            {
+                dto = JsonUtility.FromJson<BatchResponseDto>(responseBody);
+            }
+            catch (Exception)
+            {
+                return retryable;
+            }
+            if (dto == null || dto.rejected == null || dto.rejected.Count == 0) return retryable;
+            var reasons = new Dictionary<string, string>();
+            foreach (var r in dto.rejected)
+            {
+                if (r != null && !string.IsNullOrEmpty(r.event_id)) reasons[r.event_id] = r.reason;
+            }
+            if (reasons.Count == 0) return retryable;
+            foreach (var e in slice)
+            {
+                if (!reasons.TryGetValue(e.event_id, out string reason)) continue;
+                if (reason == "kafka_error") retryable.Add(e);
+                else OnError?.Invoke(new OddsmakerError("EVENT_REJECTED", $"event rejected: {e.event_id} {reason}"));
+            }
+            return retryable;
         }
 
         private void RollSession(long nowMs)
@@ -509,9 +677,10 @@ namespace Oddsmaker
                 if (!File.Exists(ExperimentCachePath)) return;
                 string json = File.ReadAllText(ExperimentCachePath);
                 var cache = JsonUtility.FromJson<ExperimentCache>(json);
-                if (cache != null && !string.IsNullOrEmpty(cache.data))
+                if (cache != null)
                 {
                     _experimentCacheTimestamp = cache.timestamp;
+                    _experimentCacheData = cache.data ?? "";
                 }
             }
             catch (Exception ex)
@@ -527,7 +696,7 @@ namespace Oddsmaker
                 var cache = new ExperimentCache
                 {
                     timestamp = _experimentCacheTimestamp,
-                    data = ""
+                    data = _experimentCacheData
                 };
                 string json = JsonUtility.ToJson(cache);
                 File.WriteAllText(ExperimentCachePath, json);
@@ -569,14 +738,28 @@ namespace Oddsmaker
             JField(sb, "event_name", e.event_name);
             if (!string.IsNullOrEmpty(e.user_id)) JField(sb, "user_id", e.user_id);
             JField(sb, "device_id", e.device_id);
+            if (!string.IsNullOrEmpty(e.player_id)) JField(sb, "player_id", e.player_id);
             if (!string.IsNullOrEmpty(e.session_id)) JField(sb, "session_id", e.session_id);
             JField(sb, "ts_client", e.ts_client);
             if (!string.IsNullOrEmpty(e.platform)) JField(sb, "platform", e.platform);
             if (!string.IsNullOrEmpty(e.app_version)) JField(sb, "app_version", e.app_version);
             if (!string.IsNullOrEmpty(e.sdk_version)) JField(sb, "sdk_version", e.sdk_version);
             if (!string.IsNullOrEmpty(e.country)) JField(sb, "country", e.country);
+            if (!string.IsNullOrEmpty(e.level_id)) JField(sb, "level_id", e.level_id);
+            if (!string.IsNullOrEmpty(e.game_mode)) JField(sb, "game_mode", e.game_mode);
+            if (!string.IsNullOrEmpty(e.order_id)) JField(sb, "order_id", e.order_id);
+            if (!string.IsNullOrEmpty(e.product_id)) JField(sb, "product_id", e.product_id);
             if (e.revenue_amount.HasValue) JField(sb, "revenue_amount", e.revenue_amount.Value);
             if (!string.IsNullOrEmpty(e.revenue_currency)) JField(sb, "revenue_currency", e.revenue_currency);
+            if (!string.IsNullOrEmpty(e.virtual_currency)) JField(sb, "virtual_currency", e.virtual_currency);
+            if (e.virtual_amount.HasValue) JField(sb, "virtual_amount", e.virtual_amount.Value);
+            if (!string.IsNullOrEmpty(e.item_id)) JField(sb, "item_id", e.item_id);
+            if (!string.IsNullOrEmpty(e.resource_id)) JField(sb, "resource_id", e.resource_id);
+            if (e.resource_amount.HasValue) JField(sb, "resource_amount", e.resource_amount.Value);
+            if (!string.IsNullOrEmpty(e.flow_type)) JField(sb, "flow_type", e.flow_type);
+            if (!string.IsNullOrEmpty(e.ad_network)) JField(sb, "ad_network", e.ad_network);
+            if (!string.IsNullOrEmpty(e.ad_placement)) JField(sb, "ad_placement", e.ad_placement);
+            if (!string.IsNullOrEmpty(e.ad_format)) JField(sb, "ad_format", e.ad_format);
             if (e.props != null && e.props.Count > 0) JObject(sb, "props", e.props);
             if (sb[sb.Length - 1] == ',') sb.Length -= 1;
             sb.Append('}');
@@ -597,13 +780,25 @@ namespace Oddsmaker
                     event_name = JsonString(line, "event_name"),
                     user_id = JsonString(line, "user_id"),
                     device_id = JsonString(line, "device_id"),
+                    player_id = JsonString(line, "player_id"),
                     session_id = JsonString(line, "session_id"),
                     ts_client = JsonLong(line, "ts_client"),
                     platform = JsonString(line, "platform"),
                     app_version = JsonString(line, "app_version"),
                     sdk_version = JsonString(line, "sdk_version"),
                     country = JsonString(line, "country"),
-                    revenue_currency = JsonString(line, "revenue_currency")
+                    level_id = JsonString(line, "level_id"),
+                    game_mode = JsonString(line, "game_mode"),
+                    order_id = JsonString(line, "order_id"),
+                    product_id = JsonString(line, "product_id"),
+                    revenue_currency = JsonString(line, "revenue_currency"),
+                    virtual_currency = JsonString(line, "virtual_currency"),
+                    item_id = JsonString(line, "item_id"),
+                    resource_id = JsonString(line, "resource_id"),
+                    flow_type = JsonString(line, "flow_type"),
+                    ad_network = JsonString(line, "ad_network"),
+                    ad_placement = JsonString(line, "ad_placement"),
+                    ad_format = JsonString(line, "ad_format")
                 };
                 if (string.IsNullOrEmpty(e.event_id) ||
                     string.IsNullOrEmpty(e.game_id) ||

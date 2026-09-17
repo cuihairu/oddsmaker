@@ -419,6 +419,51 @@ test('send 成功:真 gzip(body 1f 8b)+ 头 + URL(尾斜杠剥离)+ debug 日志
   assert.ok(env.debugs.some(d => d.includes('flushed')));   // debug 分支
 });
 
+test('2xx 响应逐事件拒绝:kafka_error 回队重发,permanent 丢弃', async t => {
+  const env = setup(t, [{ status: 200 }, { status: 200 }]);
+  const sdk = makeSdk(t, env, { maxBatch: 50 });
+  const idRetry = sdk.track('retryable');
+  const idDead = sdk.track('permanent');
+  // fetchSteps 运行时取用:flush 前注入第一步的 BatchResponse(需 track 后的 event_id)
+  (env as any).fetchSteps[0].body = JSON.stringify({
+    accepted: [],
+    rejected: [
+      { event_id: idRetry, reason: 'kafka_error' },
+      { event_id: idDead, reason: 'invalid_schema' },
+    ],
+  });
+  await sdk.flush();   // 第一次:首发 2 条 → 拒绝 → kafka_error 回队
+  // 不数 fetchCalls:前序测试的在途 flush 链可能晚到并计入本 env(全量低概率 flake),以内容为准
+  const queued = env.queued();
+  assert.equal(queued.length, 1);
+  assert.equal(queued[0].event_id, idRetry);
+
+  await sdk.flush();   // 重发成功
+  const texts = env.fetchCalls.map(c => {
+    const raw = c.init.body;
+    if (raw == null) return '';
+    if (typeof raw === 'string') return raw;
+    return Buffer.from(raw)[0] === 0x1f ? gunzipSync(Buffer.from(raw)).toString() : String(raw);
+  });
+  // kafka_error 回队后确有单事件重发;permanent(invalid_schema)仅首发一次,不重发
+  const resent = texts.find(t => {
+    const lines = t.trim() ? t.trim().split('\n') : [];
+    return lines.length === 1 && lines[0].includes(idRetry);
+  });
+  assert.ok(resent, 'kafka_error 事件应被回队重发');
+  assert.equal(texts.filter(t => t.includes(idDead)).length, 1);
+  assert.equal(env.queued().length, 0);
+});
+
+test('2xx 响应体不可解析 → 按全成功(幂等既有行为)', async t => {
+  const env = setup(t, [{ status: 200, body: 'not-json' }]);
+  const sdk = makeSdk(t, env, { maxBatch: 50 });
+  sdk.track('x');
+  await sdk.flush();
+  assert.equal(env.fetchCalls.length, 1);
+  assert.equal(env.queued().length, 0);   // 不回队、不重试
+});
+
 test('send 成功:无 CompressionStream → 明文 ndjson', async t => {
   const env = setup(t, [{ status: 200 }], { compression: false });
   const sdk = makeSdk(t, env, { maxBatch: 1 });

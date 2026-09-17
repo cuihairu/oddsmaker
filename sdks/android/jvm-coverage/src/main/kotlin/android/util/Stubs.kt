@@ -1,9 +1,10 @@
-// android.util 替身:Log.d 记录以便断言;Base64 仅被 import(未使用),提供空壳即可编译。
+// android.util 替身:Log.d 记录以便断言;Log.w 同样记录(事件被拒时的告警路径);Base64 仅被 import(未使用),提供空壳即可编译。
 package android.util
 
 object Log {
   val lines = mutableListOf<String>()
   fun d(tag: String, msg: String): Int { lines.add("$tag: $msg"); return 0 }
+  fun w(tag: String, msg: String): Int { lines.add("$tag: $msg"); return 0 }
   fun reset() { lines.clear() }
 }
 

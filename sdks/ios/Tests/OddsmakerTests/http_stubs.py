@@ -47,6 +47,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                 "body": body}) + "\n")
             fcntl.flock(f, fcntl.LOCK_UN)
         r = next_response()
+        if r["status"] == 0:
+            # 写一个非法状态行后断开——确定性的传输层失败。
+            # 静默关闭在 HTTP/1.1 复用连接上会被 URLSession 自动重试,
+            # 重试请求落到空脚本队列又变成默认 200,断言就会拿到 success。
+            self.wfile.write(b"HTTP/1.1 000 Bogus\r\n\r\n")
+            self.wfile.flush()
+            self.close_connection = True
+            return
         data = r["body"].encode()
         self.send_response(r["status"])
         self.send_header("Content-Length", str(len(data)))

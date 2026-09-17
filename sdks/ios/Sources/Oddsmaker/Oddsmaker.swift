@@ -113,12 +113,7 @@ public final class Oddsmaker {
     }
 
     public func track(_ name: String, props: [String: Any]? = nil) -> String {
-        guard let o = opts else { return "" }
-        let now = Date().timeIntervalSince1970
-        rollSession(now)
-        let event = buildEvent(name: name, props: props, revenueAmount: nil, revenueCurrency: nil, options: o, now: now)
-        enqueue(event, now: now, maxQueueBytes: o.maxQueueBytes)
-        return event.event_id
+        return enqueueEvent(name: name, props: props)
     }
 
     public func expose(_ exp: String, variant: String) -> String {
@@ -126,10 +121,117 @@ public final class Oddsmaker {
     }
 
     public func revenue(amount: Double, currency: String, props: [String: Any]? = nil) -> String {
+        let code = currency.uppercased()
+        let merged = withCoreProps(props, ["amount": amount, "currency": code])
+        return enqueueEvent(name: "revenue", props: merged, revenueAmount: amount, revenueCurrency: code)
+    }
+
+    // MARK: - 类型化便捷事件:与 Web SDK 对齐,填充事件契约顶层字段(分析视图直接消费)
+
+    public func levelStart(_ levelId: String, props: [String: Any]? = nil) -> String {
+        let merged = withCoreProps(props, ["level_id": levelId])
+        return enqueueEvent(name: "level_start", props: merged, levelId: levelId, gameMode: merged["game_mode"] as? String)
+    }
+
+    public func levelFail(_ levelId: String, reason: String, props: [String: Any]? = nil) -> String {
+        let merged = withCoreProps(props, ["level_id": levelId, "fail_reason": reason])
+        return enqueueEvent(name: "level_fail", props: merged, levelId: levelId, gameMode: merged["game_mode"] as? String)
+    }
+
+    public func levelComplete(_ levelId: String, props: [String: Any]? = nil) -> String {
+        let merged = withCoreProps(props, ["level_id": levelId])
+        return enqueueEvent(name: "level_complete", props: merged, levelId: levelId, gameMode: merged["game_mode"] as? String)
+    }
+
+    public func currencySource(currency: String, amount: Double, props: [String: Any]? = nil) -> String {
+        let code = currency.uppercased()
+        let merged = withCoreProps(props, ["currency_code": code, "amount": amount])
+        return enqueueEvent(name: "currency_source", props: merged,
+                            virtualCurrency: code, virtualAmount: amount,
+                            resourceId: code, resourceAmount: amount, flowType: "source")
+    }
+
+    public func currencySink(currency: String, amount: Double, props: [String: Any]? = nil) -> String {
+        let code = currency.uppercased()
+        let merged = withCoreProps(props, ["currency_code": code, "amount": amount])
+        return enqueueEvent(name: "currency_sink", props: merged,
+                            virtualCurrency: code, virtualAmount: amount,
+                            resourceId: code, resourceAmount: amount, flowType: "sink")
+    }
+
+    public func itemGrant(itemId: String, quantity: Int = 1, props: [String: Any]? = nil) -> String {
+        let merged = withCoreProps(props, ["item_id": itemId, "quantity": quantity])
+        return enqueueEvent(name: "item_grant", props: merged,
+                            itemId: itemId, resourceId: itemId, resourceAmount: Double(quantity), flowType: "source")
+    }
+
+    public func itemConsume(itemId: String, quantity: Int = 1, props: [String: Any]? = nil) -> String {
+        let merged = withCoreProps(props, ["item_id": itemId, "quantity": quantity])
+        return enqueueEvent(name: "item_consume", props: merged,
+                            itemId: itemId, resourceId: itemId, resourceAmount: Double(quantity), flowType: "sink")
+    }
+
+    public func iapOrder(orderId: String, amount: Double, currency: String, props: [String: Any]? = nil) -> String {
+        let code = currency.uppercased()
+        var merged = withCoreProps(props, ["order_id": orderId])
+        merged = withCoreProps(merged, ["amount": amount, "currency": code])
+        return enqueueEvent(name: "iap_order", props: merged,
+                            orderId: orderId, productId: merged["product_id"] as? String,
+                            revenueAmount: amount, revenueCurrency: code)
+    }
+
+    public func webshopOrder(orderId: String, amount: Double, currency: String, props: [String: Any]? = nil) -> String {
+        let code = currency.uppercased()
+        var merged = withCoreProps(props, ["order_id": orderId])
+        merged = withCoreProps(merged, ["amount": amount, "currency": code])
+        return enqueueEvent(name: "webshop_order", props: merged,
+                            orderId: orderId, productId: merged["product_id"] as? String,
+                            revenueAmount: amount, revenueCurrency: code)
+    }
+
+    public func adImpression(amount: Double, currency: String, props: [String: Any]? = nil) -> String {
+        let code = currency.uppercased()
+        let merged = withCoreProps(props, ["amount": amount, "currency": code])
+        return enqueueEvent(name: "ad_impression", props: merged,
+                            revenueAmount: amount, revenueCurrency: code,
+                            adNetwork: merged["network"] as? String,
+                            adPlacement: merged["placement_id"] as? String,
+                            adFormat: merged["ad_format"] as? String)
+    }
+
+    private func withCoreProps(_ props: [String: Any]?, _ core: [String: Any]) -> [String: Any] {
+        var merged = props ?? [:]
+        for (k, v) in core { merged[k] = v }
+        return merged
+    }
+
+    private func enqueueEvent(name: String,
+                              props: [String: Any]?,
+                              levelId: String? = nil,
+                              gameMode: String? = nil,
+                              orderId: String? = nil,
+                              productId: String? = nil,
+                              revenueAmount: Double? = nil,
+                              revenueCurrency: String? = nil,
+                              virtualCurrency: String? = nil,
+                              virtualAmount: Double? = nil,
+                              itemId: String? = nil,
+                              resourceId: String? = nil,
+                              resourceAmount: Double? = nil,
+                              flowType: String? = nil,
+                              adNetwork: String? = nil,
+                              adPlacement: String? = nil,
+                              adFormat: String? = nil) -> String {
         guard let o = opts else { return "" }
         let now = Date().timeIntervalSince1970
         rollSession(now)
-        let event = buildEvent(name: "revenue", props: props, revenueAmount: amount, revenueCurrency: currency, options: o, now: now)
+        let event = buildEvent(name: name, props: props, levelId: levelId, gameMode: gameMode,
+                               orderId: orderId, productId: productId,
+                               revenueAmount: revenueAmount, revenueCurrency: revenueCurrency,
+                               virtualCurrency: virtualCurrency, virtualAmount: virtualAmount,
+                               itemId: itemId, resourceId: resourceId, resourceAmount: resourceAmount,
+                               flowType: flowType, adNetwork: adNetwork, adPlacement: adPlacement, adFormat: adFormat,
+                               options: o, now: now)
         enqueue(event, now: now, maxQueueBytes: o.maxQueueBytes)
         return event.event_id
     }
@@ -157,7 +259,11 @@ public final class Oddsmaker {
         queueLock.unlock()
 
         let ndjson = slice.map { $0.toJsonLine() }.joined(separator: "\n")
-        guard let url = URL(string: "/v1/batch", relativeTo: o.endpoint) else {
+        // 与 Web/Android/Unity 一致:基于 endpoint 字符串拼接,保留子路径(反代部署);
+        // URL(relativeTo:) 对以 "/" 开头的字符串会丢弃 endpoint 的路径部分
+        let base = o.endpoint.absoluteString
+        let trimmedBase = base.hasSuffix("/") ? String(base.dropLast()) : base
+        guard let url = URL(string: trimmedBase + "/v1/batch") else {
             queueLock.lock()
             queue.insert(contentsOf: slice, at: 0)
             recalcQueueBytesNoLock()
@@ -176,11 +282,13 @@ public final class Oddsmaker {
         let sem = DispatchSemaphore(value: 0)
         var success = false
         var lastError: Error?
-        
-        URLSession.shared.dataTask(with: req) { _, resp, err in
+        var retryable: [Event] = []
+        let batch = slice   // 闭包内只用不可变副本,避免并发捕获 var 警告
+
+        URLSession.shared.dataTask(with: req) { data, resp, err in
             let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
             success = err == nil && (200..<300).contains(code)
-            
+
             if let error = err {
                 lastError = error
                 self.errorHandler?.error("Flush failed with error: \(error.localizedDescription)")
@@ -188,9 +296,26 @@ public final class Oddsmaker {
                 lastError = OddsmakerError.invalidResponse(statusCode: code, message: "Flush failed")
                 self.errorHandler?.error("Flush failed with status code: \(code)")
             } else {
-                self.errorHandler?.debug("Flush successful, count=\(slice.count)")
+                self.errorHandler?.debug("Flush successful, count=\(batch.count)")
+                // 2xx 响应体仍含逐事件拒绝:仅 kafka_error 回队首发重试,其余永久失败丢弃
+                if let data = data,
+                   let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let rejected = obj["rejected"] as? [[String: Any]] {
+                    var reasons: [String: String] = [:]
+                    for entry in rejected {
+                        if let id = entry["event_id"] as? String {
+                            reasons[id] = entry["reason"] as? String
+                        }
+                    }
+                    retryable = batch.filter { reasons[$0.event_id] == "kafka_error" }
+                    for event in batch {
+                        if let reason = reasons[event.event_id], reason != "kafka_error" {
+                            self.errorHandler?.error("Event rejected: \(event.event_id) \(reason)")
+                        }
+                    }
+                }
             }
-            
+
             sem.signal()
         }.resume()
         _ = sem.wait(timeout: .now() + 15)
@@ -200,10 +325,16 @@ public final class Oddsmaker {
             recalcQueueBytesNoLock()
             persistQueueNoLock()
             queueLock.unlock()
-            
+
             if let error = lastError {
                 errorHandler?.handle(error)
             }
+        } else if !retryable.isEmpty {
+            queueLock.lock()
+            queue.insert(contentsOf: retryable, at: 0)
+            recalcQueueBytesNoLock()
+            persistQueueNoLock()
+            queueLock.unlock()
         }
     }
 
@@ -222,10 +353,25 @@ public final class Oddsmaker {
 
     private func buildEvent(name: String,
                             props: [String: Any]?,
-                            revenueAmount: Double?,
-                            revenueCurrency: String?,
+                            levelId: String? = nil,
+                            gameMode: String? = nil,
+                            orderId: String? = nil,
+                            productId: String? = nil,
+                            revenueAmount: Double? = nil,
+                            revenueCurrency: String? = nil,
+                            virtualCurrency: String? = nil,
+                            virtualAmount: Double? = nil,
+                            itemId: String? = nil,
+                            resourceId: String? = nil,
+                            resourceAmount: Double? = nil,
+                            flowType: String? = nil,
+                            adNetwork: String? = nil,
+                            adPlacement: String? = nil,
+                            adFormat: String? = nil,
                             options: OddsmakerOptions,
                             now: TimeInterval) -> Event {
+        // 币种统一大写,与 Web/Android/Unity 一致,避免财务报表按币种分组时大小写分裂
+        let normalizedCurrency = revenueCurrency?.uppercased()
         var merged = userProps
         if let pid = self.playerId { merged["player_id"] = pid }
         if let props = props {
@@ -234,7 +380,7 @@ public final class Oddsmaker {
             }
         }
         if let amount = revenueAmount { merged["amount"] = amount }
-        if let currency = revenueCurrency { merged["currency"] = currency }
+        if let currency = normalizedCurrency { merged["currency"] = currency }
         #if canImport(UIKit)
         let appVersion = Bundle.main.infoDictionary?[(kCFBundleVersionKey as String)] as? String
         #else
@@ -249,13 +395,27 @@ public final class Oddsmaker {
             event_name: name,
             user_id: userId,
             device_id: deviceId,
+            player_id: playerId,
             session_id: sessionId,
             ts_client: Int64((now * 1000.0).rounded()),
             platform: "ios",
             app_version: appVersion,
             country: nil,
+            level_id: levelId,
+            game_mode: gameMode,
+            order_id: orderId,
+            product_id: productId,
             revenue_amount: revenueAmount,
-            revenue_currency: revenueCurrency,
+            revenue_currency: normalizedCurrency,
+            virtual_currency: virtualCurrency,
+            virtual_amount: virtualAmount,
+            item_id: itemId,
+            resource_id: resourceId,
+            resource_amount: resourceAmount,
+            flow_type: flowType,
+            ad_network: adNetwork,
+            ad_placement: adPlacement,
+            ad_format: adFormat,
             props: merged.isEmpty ? nil : merged
         )
     }
@@ -349,13 +509,27 @@ public final class Oddsmaker {
         let event_name: String
         let user_id: String?
         let device_id: String
+        let player_id: String?
         let session_id: String?
         let ts_client: Int64
         let platform: String?
         let app_version: String?
         let country: String?
+        let level_id: String?
+        let game_mode: String?
+        let order_id: String?
+        let product_id: String?
         let revenue_amount: Double?
         let revenue_currency: String?
+        let virtual_currency: String?
+        let virtual_amount: Double?
+        let item_id: String?
+        let resource_id: String?
+        let resource_amount: Double?
+        let flow_type: String?
+        let ad_network: String?
+        let ad_placement: String?
+        let ad_format: String?
         let props: [String: Any]?
 
         func toJsonLine() -> String { Self.toJson(self) }
@@ -375,13 +549,27 @@ public final class Oddsmaker {
             f("event_name", e.event_name)
             if let u = e.user_id { f("user_id", u) }
             f("device_id", e.device_id)
+            if let p = e.player_id { f("player_id", p) }
             if let s = e.session_id { f("session_id", s) }
             n("ts_client", e.ts_client)
             if let p = e.platform { f("platform", p) }
             if let v = e.app_version { f("app_version", v) }
             if let c = e.country { f("country", c) }
+            if let v = e.level_id { f("level_id", v) }
+            if let v = e.game_mode { f("game_mode", v) }
+            if let v = e.order_id { f("order_id", v) }
+            if let v = e.product_id { f("product_id", v) }
             if let amount = e.revenue_amount { d("revenue_amount", amount) }
             if let currency = e.revenue_currency { f("revenue_currency", currency) }
+            if let v = e.virtual_currency { f("virtual_currency", v) }
+            if let v = e.virtual_amount { d("virtual_amount", v) }
+            if let v = e.item_id { f("item_id", v) }
+            if let v = e.resource_id { f("resource_id", v) }
+            if let v = e.resource_amount { d("resource_amount", v) }
+            if let v = e.flow_type { f("flow_type", v) }
+            if let v = e.ad_network { f("ad_network", v) }
+            if let v = e.ad_placement { f("ad_placement", v) }
+            if let v = e.ad_format { f("ad_format", v) }
             if let pr = e.props, !pr.isEmpty { o("props", pr) }
             return "{" + a.joined(separator: ",") + "}"
         }
@@ -413,13 +601,27 @@ public final class Oddsmaker {
                 event_name: eventName,
                 user_id: obj["user_id"] as? String,
                 device_id: deviceId,
+                player_id: obj["player_id"] as? String,
                 session_id: obj["session_id"] as? String,
                 ts_client: tsClient,
                 platform: obj["platform"] as? String,
                 app_version: obj["app_version"] as? String,
                 country: obj["country"] as? String,
+                level_id: obj["level_id"] as? String,
+                game_mode: obj["game_mode"] as? String,
+                order_id: obj["order_id"] as? String,
+                product_id: obj["product_id"] as? String,
                 revenue_amount: (obj["revenue_amount"] as? NSNumber)?.doubleValue,
                 revenue_currency: obj["revenue_currency"] as? String,
+                virtual_currency: obj["virtual_currency"] as? String,
+                virtual_amount: (obj["virtual_amount"] as? NSNumber)?.doubleValue,
+                item_id: obj["item_id"] as? String,
+                resource_id: obj["resource_id"] as? String,
+                resource_amount: (obj["resource_amount"] as? NSNumber)?.doubleValue,
+                flow_type: obj["flow_type"] as? String,
+                ad_network: obj["ad_network"] as? String,
+                ad_placement: obj["ad_placement"] as? String,
+                ad_format: obj["ad_format"] as? String,
                 props: obj["props"] as? [String: Any]
             )
         }
