@@ -654,4 +654,42 @@ class ConfigurableFunnelsJobTest {
         fn.processElement(event("e1", 0L), keyedContext(fn), sinkTo(out));   // open 接线的状态可写
         assertEquals(1, out.size());
     }
+
+    // ===== main 带配置全流程（替身 JDBC 与执行环境） =====
+
+    @Test
+    @DisplayName("main：控制库返回配置时完成入口（替身 JDBC 与执行环境，不触达真实集群）")
+    void mainLoadConfigsAndCompletes() throws Exception {
+        java.sql.ResultSet rs = org.mockito.Mockito.mock(java.sql.ResultSet.class);
+        try (org.mockito.MockedStatic<org.apache.flink.streaming.api.environment.StreamExecutionEnvironment> envMock =
+                 org.mockito.Mockito.mockStatic(org.apache.flink.streaming.api.environment.StreamExecutionEnvironment.class);
+             org.mockito.MockedStatic<java.sql.DriverManager> dmMock = org.mockito.Mockito.mockStatic(java.sql.DriverManager.class)) {
+
+            org.apache.flink.streaming.api.environment.StreamExecutionEnvironment env = org.mockito.Mockito.mock(
+                org.apache.flink.streaming.api.environment.StreamExecutionEnvironment.class,
+                org.mockito.Mockito.RETURNS_DEEP_STUBS);
+            envMock.when(org.apache.flink.streaming.api.environment.StreamExecutionEnvironment::getExecutionEnvironment)
+                .thenReturn(env);
+
+            // 漏斗主查询返回 1 行 ACTIVE 配置；步骤查询返回空
+            org.mockito.Mockito.when(rs.next()).thenReturn(true, false, false);
+            org.mockito.Mockito.when(rs.getString("id")).thenReturn("f1");
+            org.mockito.Mockito.when(rs.getString("game_id")).thenReturn("g");
+            org.mockito.Mockito.when(rs.getString("name")).thenReturn("n");
+            org.mockito.Mockito.when(rs.getString("funnel_type")).thenReturn("standard");
+            org.mockito.Mockito.when(rs.getLong("max_completion_time")).thenReturn(0L);
+            org.mockito.Mockito.when(rs.wasNull()).thenReturn(true);
+            java.sql.PreparedStatement ps = org.mockito.Mockito.mock(java.sql.PreparedStatement.class);
+            org.mockito.Mockito.when(ps.executeQuery()).thenReturn(rs);
+            java.sql.Connection conn = org.mockito.Mockito.mock(java.sql.Connection.class);
+            org.mockito.Mockito.when(conn.prepareStatement(org.mockito.ArgumentMatchers.anyString())).thenReturn(ps);
+            dmMock.when(() -> java.sql.DriverManager.getConnection(
+                    org.mockito.ArgumentMatchers.anyString(),
+                    org.mockito.ArgumentMatchers.anyString(),
+                    org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn(conn);
+
+            org.junit.jupiter.api.Assertions.assertDoesNotThrow(() -> ConfigurableFunnelsJob.main(new String[0]));
+        }
+    }
 }

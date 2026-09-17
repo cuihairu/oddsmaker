@@ -317,6 +317,25 @@ class PlayerExportServiceTest {
         assertThrows(IllegalStateException.class, () -> service.download(job.id));
     }
 
+    @Test
+    @DisplayName("下载：文件读取 IO 失败（路径是目录）转 IllegalStateException")
+    void downloadReadFailure() throws Exception {
+        PlayerExportJobEntity job = new PlayerExportJobEntity();
+        job.id = "pex_dir";
+        job.fileName = "export.json";
+        job.exportFormat = "json";
+        job.status = PlayerExportJobEntity.Status.COMPLETED;
+        job.expiresAt = LocalDateTime.now().plusHours(1);
+        java.nio.file.Path dir = tempDir.resolve("as-directory");
+        java.nio.file.Files.createDirectories(dir);
+        job.filePath = dir.toString();
+        when(jobRepo.findById("pex_dir")).thenReturn(Optional.of(job));
+
+        IllegalStateException ex =
+            assertThrows(IllegalStateException.class, () -> service.download("pex_dir"));
+        assertTrue(ex.getMessage().contains("Failed to read export file"));
+    }
+
     // ========== 列表 / sweep / cleanup ==========
 
     @Test

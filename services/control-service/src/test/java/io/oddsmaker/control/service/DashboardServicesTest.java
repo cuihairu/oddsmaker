@@ -133,6 +133,14 @@ class DashboardServicesTest {
         assertNotNull(dashboard);
     }
 
+    @Test
+    @DisplayName("风控大屏：since=null 默认 7 天；intervalHours/limit 非正用默认值")
+    void riskDashboardDefaultParameters() {
+        assertNotNull(riskDashboardService.getOverview("g", null));
+        assertNotNull(riskDashboardService.getRiskTrends("g", null, 0));
+        assertNotNull(riskDashboardService.getHighRiskTargets("g", null, 0));
+    }
+
     // ===== WebhookService =====
 
     @Mock

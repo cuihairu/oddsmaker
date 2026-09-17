@@ -208,4 +208,46 @@ class UserServiceTest {
         verify(userRepo).save(testUser);
         verify(auditLogRepo).save(any());
     }
+
+    @Test
+    void createUser_DefaultsApplied() {
+        UserEntity fresh = new UserEntity();  // id/status/roles 全空 → 走默认填充
+        fresh.username = "newuser";
+        fresh.email = "new@example.com";
+        when(userRepo.existsByUsername("newuser")).thenReturn(false);
+        when(userRepo.existsByEmail("new@example.com")).thenReturn(false);
+        when(userRepo.save(any(UserEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        UserEntity saved = userService.createUser(fresh, "operator");
+        assertNotNull(saved.id);
+        assertEquals(UserEntity.UserStatus.ACTIVE, saved.status);
+        assertFalse(saved.roles.isEmpty());
+    }
+
+    @Test
+    void recordLoginEntityOverload_DoesNotAudit() {
+        testUser.loginCount = 2L;
+        userService.recordLogin(testUser);
+
+        assertNotNull(testUser.lastLoginAt);
+        assertEquals(3L, testUser.loginCount);
+        verify(userRepo).save(testUser);
+        verify(auditLogRepo, never()).save(any());  // 登录不写业务审计
+    }
+
+    @Test
+    void listSearchAndRoleQueries_Delegate() {
+        org.springframework.data.domain.Pageable pageable =
+            org.springframework.data.domain.PageRequest.of(0, 10);
+        when(userRepo.findByStatusAndDeletedAtIsNull(UserEntity.UserStatus.ACTIVE, pageable))
+            .thenReturn(org.springframework.data.domain.Page.empty());
+        when(userRepo.searchByName("test", pageable))
+            .thenReturn(org.springframework.data.domain.Page.empty());
+        when(userRepo.findByRole(UserEntity.UserRole.VIEWER))
+            .thenReturn(java.util.List.of(testUser));
+
+        assertEquals(0, userService.listUsers(pageable).getTotalElements());
+        assertEquals(0, userService.searchUsers("test", pageable).getTotalElements());
+        assertEquals(1, userService.findByRole(UserEntity.UserRole.VIEWER).size());
+    }
 }

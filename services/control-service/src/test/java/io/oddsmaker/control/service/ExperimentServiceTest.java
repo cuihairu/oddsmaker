@@ -11,13 +11,16 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import io.oddsmaker.control.experiment.ExperimentEntity;
 import io.oddsmaker.control.experiment.ExperimentRepo;
+import io.oddsmaker.control.jpa.GameEntity;
 import io.oddsmaker.control.jpa.GameRepo;
 import io.oddsmaker.control.jpa.GameEnvironmentRepo;
 
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
 /**
@@ -99,5 +102,25 @@ class ExperimentServiceTest {
     void assignUnknownExperimentThrows() {
         when(experimentRepo.findById(anyString())).thenReturn(Optional.empty());
         assertThrows(IllegalArgumentException.class, () -> experimentService.assign("exp_x", "u1"));
+    }
+
+    @Test
+    @DisplayName("校验：createExperiment 的 gameId 空白/游戏不存在拒绝；status 标准化下传")
+    void validationBranches() {
+        // requireGame：gameId 空白 / 游戏不存在（createExperiment 入口）
+        io.oddsmaker.control.dto.ExperimentDTO blank = new io.oddsmaker.control.dto.ExperimentDTO();
+        blank.gameId = " ";
+        assertThrows(IllegalArgumentException.class, () -> experimentService.createExperiment(blank));
+        when(gameRepo.findById("game_x")).thenReturn(Optional.empty());
+        io.oddsmaker.control.dto.ExperimentDTO missing = new io.oddsmaker.control.dto.ExperimentDTO();
+        missing.gameId = "game_x";
+        assertThrows(IllegalArgumentException.class, () -> experimentService.createExperiment(missing));
+
+        // listExperiments：status 非空白走标准化后下传 repo
+        when(experimentRepo.search(any(), any(), any(), any()))
+            .thenReturn(org.springframework.data.domain.Page.empty());
+        experimentService.listExperiments("game_demo", null, null, " RUNNING ", 0, 10);
+        org.mockito.Mockito.verify(experimentRepo)
+            .search(eq("game_demo"), any(), eq("running"), any());
     }
 }

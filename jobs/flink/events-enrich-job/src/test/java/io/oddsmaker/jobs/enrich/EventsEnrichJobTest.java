@@ -637,4 +637,92 @@ class EventsEnrichJobTest {
         m.put("a", null);
         assertEquals("{}", EventsEnrichJob.mapLiteral(m));
     }
+
+    // ===== 覆盖缺口补充 =====
+
+    @Test
+    @DisplayName("from：数值字段为不可解析字符串时归 null")
+    void fromNonNumericStringFieldsYieldNull() {
+        var record = new org.apache.avro.generic.GenericData.Record(eventSchema());
+        record.put("ts_client", "12x");
+        record.put("revenue_amount", "abc");
+        RawEvent e = RawEvent.from(record);
+        assertNull(e.ts_client);
+        assertNull(e.revenue_amount);
+    }
+
+    @Test
+    @DisplayName("Enrichers：坏 mmdb 文件构建失败回退 geoip=null")
+    void enrichersBrokenMmdbFallsBackToNull() throws Exception {
+        java.nio.file.Path bad = java.nio.file.Files.createTempFile("bad", ".mmdb");
+        java.nio.file.Files.writeString(bad, "not-a-mmdb");
+        try {
+            EventsEnrichJob.Enrichers e = EventsEnrichJob.Enrichers.create(bad.toString());
+            assertNull(e.countryByIp("1.2.3.4"));
+        } finally {
+            java.nio.file.Files.deleteIfExists(bad);
+        }
+    }
+
+    @Test
+    @DisplayName("Enrichers：UA 解析器抛错时兜底返回 null")
+    void uaValueParseFailureReturnsNull() throws Exception {
+        EventsEnrichJob.Enrichers e = EventsEnrichJob.Enrichers.create("");
+        assertNull(e.uaFamily(null));   // 先走一次真实初始化
+
+        nl.basjes.parse.useragent.UserAgentAnalyzer broken =
+            org.mockito.Mockito.mock(nl.basjes.parse.useragent.UserAgentAnalyzer.class);
+        org.mockito.Mockito.when(broken.parse(org.mockito.ArgumentMatchers.anyString()))
+            .thenThrow(new IllegalStateException("boom"));
+        Field f = EventsEnrichJob.Enrichers.class.getDeclaredField("uaa");
+        f.setAccessible(true);
+        f.set(e, broken);
+
+        assertNull(e.uaFamily("Mozilla/5.0"));
+        assertNull(e.osFamily("Mozilla/5.0"));
+        assertNull(e.deviceClass("Mozilla/5.0"));
+    }
+
+    @Test
+    @DisplayName("main：替身执行环境下完成入口（不触达真实集群）")
+    void mainCompletesWithMockEnv() {
+        try (org.mockito.MockedStatic<org.apache.flink.streaming.api.environment.StreamExecutionEnvironment> mocked =
+                 org.mockito.Mockito.mockStatic(org.apache.flink.streaming.api.environment.StreamExecutionEnvironment.class)) {
+            org.apache.flink.streaming.api.environment.StreamExecutionEnvironment env = org.mockito.Mockito.mock(
+                org.apache.flink.streaming.api.environment.StreamExecutionEnvironment.class,
+                org.mockito.Mockito.RETURNS_DEEP_STUBS);
+            mocked.when(org.apache.flink.streaming.api.environment.StreamExecutionEnvironment::getExecutionEnvironment)
+                .thenReturn(env);
+            assertDoesNotThrow(() -> EventsEnrichJob.main(new String[0]));
+        }
+    }
+
+    @Test
+    @DisplayName("Enrichers：mmdb 路径存在时构建 DatabaseReader 并按库返回国家")
+    void enrichersMmdbPathBuildsReader() throws Exception {
+        java.nio.file.Path any = java.nio.file.Files.createTempFile("any", ".mmdb");
+        java.nio.file.Files.writeString(any, "placeholder");
+        try {
+            // 显式 stub 链：builder.build() → reader.city(ip) → 响应含 isoCode
+            com.maxmind.geoip2.record.Country country =
+                org.mockito.Mockito.mock(com.maxmind.geoip2.record.Country.class);
+            org.mockito.Mockito.when(country.getIsoCode()).thenReturn("JP");
+            com.maxmind.geoip2.model.CityResponse resp =
+                org.mockito.Mockito.mock(com.maxmind.geoip2.model.CityResponse.class);
+            org.mockito.Mockito.when(resp.getCountry()).thenReturn(country);
+            com.maxmind.geoip2.DatabaseReader reader =
+                org.mockito.Mockito.mock(com.maxmind.geoip2.DatabaseReader.class);
+            org.mockito.Mockito.when(reader.city(org.mockito.ArgumentMatchers.any(java.net.InetAddress.class)))
+                .thenReturn(resp);
+
+            try (org.mockito.MockedConstruction<com.maxmind.geoip2.DatabaseReader.Builder> mocked =
+                     org.mockito.Mockito.mockConstruction(com.maxmind.geoip2.DatabaseReader.Builder.class,
+                         (builder, context) -> org.mockito.Mockito.when(builder.build()).thenReturn(reader))) {
+                EventsEnrichJob.Enrichers e = EventsEnrichJob.Enrichers.create(any.toString());
+                assertEquals("JP", e.countryByIp("1.2.3.4"));
+            }
+        } finally {
+            java.nio.file.Files.deleteIfExists(any);
+        }
+    }
 }

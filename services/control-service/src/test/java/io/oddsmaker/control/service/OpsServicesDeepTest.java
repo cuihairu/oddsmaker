@@ -332,6 +332,34 @@ class OpsServicesDeepTest {
         assertEquals(1, ((List<?>) userStats.get("recentExports")).size());
     }
 
+    @Test
+    @DisplayName("导出：columns 序列化失败吞掉、excel 格式字节系数、定时任务异常吞掉")
+    void exportResilienceBranches() {
+        lenient().when(exportJobRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        // columns 不可序列化 → catch 吞掉，创建仍成功
+        ExportJobEntity created = exportService.createExportJob(
+            "g", "env", "u1", "users",
+            LocalDateTime.now().minusDays(1), LocalDateTime.now(),
+            "json", null, null,
+            (List) java.util.List.of(new Object()), null, false, null);
+        assertNotNull(created);
+
+        // excel 格式 → 150 字节/行系数
+        ExportJobEntity excel = exportJob("e_excel", ExportJobEntity.ExportStatus.PENDING);
+        excel.exportFormat = "excel";
+        lenient().when(exportJobRepo.findById("e_excel")).thenReturn(Optional.of(excel));
+        ExportJobEntity done = exportService.processExportJob("e_excel");
+        assertEquals(ExportJobEntity.ExportStatus.COMPLETED, done.exportStatus);
+        assertTrue(done.fileSizeBytes > 0);
+
+        // 定时任务：repo 抛异常各自吞掉
+        lenient().when(exportJobRepo.deleteExpired(any())).thenThrow(new IllegalStateException("boom"));
+        org.junit.jupiter.api.Assertions.assertDoesNotThrow(() -> exportService.cleanupExpiredExports());
+        lenient().when(exportJobRepo.findProcessing()).thenThrow(new IllegalStateException("boom"));
+        org.junit.jupiter.api.Assertions.assertDoesNotThrow(() -> exportService.checkTimeoutExports());
+    }
+
     // ===== Cohort =====
 
     @Mock

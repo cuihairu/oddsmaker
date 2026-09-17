@@ -39,6 +39,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -494,6 +496,32 @@ class RiskServicesDeepTest {
         assertNotNull(timed.expiresAt);
         assertEquals("security", timed.blockCategory);
         assertEquals("1.2.3.4", timed.targetName);
+    }
+
+    @Test
+    @DisplayName("封禁名单：cleanup 异常吞掉、recordHit 失败不炸、HIGH 案例默认 7 天")
+    void blockListResilienceBranches() {
+        // cleanupExpiredBlocks：repo 抛异常被 catch，不向外抛
+        lenient().when(blockListRepo.findExpiredBlocks(any())).thenThrow(new RuntimeException("ch down"));
+        assertDoesNotThrow(() -> blockListService.cleanupExpiredBlocks());
+
+        // recordHit 失败被吞，isBlocked 仍按命中返回
+        BlockListEntity hit = block("bl_hit", "env1");
+        lenient().when(blockListRepo.findActiveBlock(eq("g"), eq("device"), eq("d1"), any()))
+            .thenReturn(Optional.of(hit));
+        doThrow(new RuntimeException("hit write failed")).when(blockListRepo).recordHit(eq("bl_hit"), any());
+        assertTrue(blockListService.isBlocked("g", "env1", "device", "d1"));
+
+        // HIGH 风控案例 → 默认时长 10080 分钟（7 天）
+        lenient().when(blockListRepo.save(any(BlockListEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+        lenient().when(blockListRepo.findActiveBlock(anyString(), anyString(), anyString(), any()))
+            .thenReturn(Optional.empty());
+        RiskCaseEntity high = riskCase("rc_high", RiskCaseEntity.RiskLevel.HIGH, RiskCaseEntity.ActionType.BLOCK);
+        high.targetId = "d8";
+        lenient().when(riskCaseRepo.findById("rc_high")).thenReturn(Optional.of(high));
+        BlockListEntity timed = blockListService.createBlockFromRiskCase("rc_high", "op");
+        assertFalse(timed.isPermanent);
+        assertNotNull(timed.expiresAt);
     }
 
     @Test

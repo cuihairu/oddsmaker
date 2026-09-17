@@ -22,6 +22,7 @@ dependencies {
   runtimeOnly("org.apache.logging.log4j:log4j-core:2.23.1")
   runtimeOnly("org.apache.logging.log4j:log4j-slf4j2-impl:2.23.1")
   testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
+  testImplementation("org.mockito:mockito-core:5.15.2")
 }
 
 tasks.withType<JavaCompile> { options.release.set(21) }

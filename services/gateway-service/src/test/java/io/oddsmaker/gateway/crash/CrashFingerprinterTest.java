@@ -86,6 +86,8 @@ class CrashFingerprinterTest {
     void fallbackAndSkips() {
         assertEquals("name:error_crash", CrashFingerprinter.signature("Error_Crash ", null));
         assertEquals("name:error_crash", CrashFingerprinter.signature("error_crash", "\n   \n...3 more frames\n"));
+        // “N more frames” 省略行（不以 ... 开头）同样被跳过
+        assertEquals("name:error_crash", CrashFingerprinter.signature("error_crash", "\n14 more frames\n"));
     }
 
     @Test
@@ -144,5 +146,17 @@ class CrashFingerprinterTest {
         String hash = CrashFingerprinter.fingerprint(null, null);
         assertEquals(16, hash.length());
         assertEquals(hash, CrashFingerprinter.fingerprint(null, "  \n"));
+    }
+
+    @Test
+    @DisplayName("指纹：SHA-256 算法不可用时降级抛 IllegalStateException")
+    void sha256UnavailableThrows() {
+        try (org.mockito.MockedStatic<java.security.MessageDigest> mocked =
+                 org.mockito.Mockito.mockStatic(java.security.MessageDigest.class)) {
+            mocked.when(() -> java.security.MessageDigest.getInstance("SHA-256"))
+                .thenThrow(new java.security.NoSuchAlgorithmException("boom"));
+            org.junit.jupiter.api.Assertions.assertThrows(IllegalStateException.class,
+                () -> CrashFingerprinter.fingerprint("error_crash", "at A.a(A:1)"));
+        }
     }
 }

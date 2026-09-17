@@ -392,4 +392,56 @@ class PermissionServiceTest {
         assertThrows(IllegalArgumentException.class,
             () -> permissionService.revokeRole("u2", "viewer", null, null));
     }
+
+    @Test
+    void hasGamePermission_InvalidRolesSkipped_ReturnsFalse() {
+        // enabled=false 的角色分配 isValid() 为 false → continue 跳过，循环自然结束后返回 false
+        UserRoleEntity invalid = new UserRoleEntity();
+        invalid.userId = "user_test123";
+        invalid.roleId = "viewer";
+        invalid.enabled = false;
+
+        when(userRepo.findById("user_test123")).thenReturn(Optional.of(testUser));
+        when(userRoleRepo.findByUserIdAndGameId("user_test123", "game_123"))
+            .thenReturn(List.of(invalid));
+        when(userRoleRepo.findGlobalByUserId("user_test123"))
+            .thenReturn(List.of(invalid));
+
+        assertFalse(permissionService.hasGamePermission("user_test123", "game_123", "game:read"));
+    }
+
+    @Test
+    void hasEnvironmentPermission_InvalidRolesSkipped_ReturnsFalse() {
+        UserRoleEntity invalid = new UserRoleEntity();
+        invalid.userId = "user_test123";
+        invalid.roleId = "viewer";
+        invalid.enabled = false;
+
+        when(userRepo.findById("user_test123")).thenReturn(Optional.of(testUser));
+        when(userRoleRepo.findByUserIdAndGameIdAndEnvironment("user_test123", "g1", "prod"))
+            .thenReturn(List.of(invalid));
+        when(userRoleRepo.findByUserIdAndGameId("user_test123", "g1"))
+            .thenReturn(List.of(invalid));
+        when(userRoleRepo.findGlobalByUserId("user_test123"))
+            .thenReturn(List.of(invalid));
+
+        assertFalse(permissionService.hasEnvironmentPermission("user_test123", "g1", "prod", "game:read"));
+    }
+
+    @Test
+    void getEnvironmentPermissions_InvalidRolesSkipped_ReturnsEmpty() {
+        UserRoleEntity invalid = new UserRoleEntity();
+        invalid.userId = "user_test123";
+        invalid.roleId = "viewer";
+        invalid.enabled = false;
+
+        when(userRoleRepo.findByUserIdAndGameIdAndEnvironment("user_test123", "g1", "prod"))
+            .thenReturn(List.of(invalid));
+        when(userRoleRepo.findByUserIdAndGameId("user_test123", "g1"))
+            .thenReturn(List.of(invalid));
+        when(userRoleRepo.findGlobalByUserId("user_test123"))
+            .thenReturn(List.of(invalid));
+
+        assertTrue(permissionService.getEnvironmentPermissions("user_test123", "g1", "prod").isEmpty());
+    }
 }

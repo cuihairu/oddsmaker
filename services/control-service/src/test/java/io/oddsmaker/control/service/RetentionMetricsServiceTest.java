@@ -89,4 +89,11 @@ class RetentionMetricsServiceTest {
         assertEquals(90, RetentionMetricsService.clampDays(null));
         assertEquals(730, RetentionMetricsService.clampDays(99999));
     }
+
+    @Test
+    @DisplayName("粒度 null/空白归一为 day")
+    void normalizesBlankGranularityToDay() {
+        assertEquals("day", RetentionMetricsService.normalizeGranularity(null));
+        assertEquals("day", RetentionMetricsService.normalizeGranularity("  "));
+    }
 }

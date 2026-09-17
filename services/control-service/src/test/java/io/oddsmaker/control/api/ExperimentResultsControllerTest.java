@@ -115,4 +115,34 @@ class ExperimentResultsControllerTest {
         when(experimentRepo.findById("nope")).thenReturn(Optional.empty());
         assertThrows(IllegalArgumentException.class, () -> controller.results("nope"));
     }
+
+    @Test
+    @DisplayName("aggregate：手动触发聚合并回填写入数；实验不存在拒绝")
+    void aggregateEndpoint() {
+        ExperimentEntity experiment = new ExperimentEntity();
+        when(experimentRepo.findById("exp_1")).thenReturn(Optional.of(experiment));
+        when(metricsAggregator.aggregate("exp_1")).thenReturn(5);
+
+        var resp = controller.aggregate("exp_1");
+        assertEquals(200, resp.getStatusCode().value());
+        assertEquals("exp_1", resp.getBody().get("experimentId"));
+        assertEquals(5, resp.getBody().get("aggregated"));
+
+        when(experimentRepo.findById("nope")).thenReturn(Optional.empty());
+        assertThrows(IllegalArgumentException.class, () -> controller.aggregate("nope"));
+    }
+
+    @Test
+    @DisplayName("results：configJson 非法时回退空配置继续出报告")
+    void resultsBadConfigFallsBack() {
+        ExperimentEntity experiment = new ExperimentEntity();
+        experiment.configJson = "{invalid json";
+        experiment.status = "running";
+        when(experimentRepo.findById("exp_bad")).thenReturn(Optional.of(experiment));
+        when(snapshotRepo.findByExperimentIdOrderByWindowStartAsc("exp_bad")).thenReturn(List.of());
+
+        var resp = controller.results("exp_bad");
+        assertEquals(200, resp.getStatusCode().value());
+        assertEquals("running", resp.getBody().get("status"));
+    }
 }

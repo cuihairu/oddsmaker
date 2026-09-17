@@ -61,6 +61,8 @@ class RiskControllersTest {
         lenient().when(riskRuleService.update(eq("rr_1"), any(), anyString())).thenReturn(rule);
         lenient().when(riskRuleService.setStatus(eq("rr_1"), anyBoolean(), anyString())).thenReturn(rule);
         lenient().when(riskRuleService.delete(eq("rr_1"), anyString())).thenReturn(true);
+        lenient().when(riskRuleService.delete(eq("rr_2"), anyString())).thenReturn(false);
+        lenient().when(riskRuleService.get("rr_2")).thenReturn(rule);
 
         assertEquals(200, riskRuleController.list("g", null, null, null, null, 0, 20).getStatusCode().value());
         assertEquals(200, riskRuleController.list(null, null, null, null, null, 0, 20).getStatusCode().value());
@@ -70,9 +72,13 @@ class RiskControllersTest {
         org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
             () -> riskRuleController.create(new RiskRuleEntity()));  // gameId 缺失由异常处理器转 400
         assertEquals(200, riskRuleController.update("rr_1", rule).getStatusCode().value());
+        assertEquals(404, riskRuleController.update("nope", rule).getStatusCode().value());
         assertEquals(200, riskRuleController.enable("rr_1").getStatusCode().value());
         assertEquals(200, riskRuleController.disable("rr_1").getStatusCode().value());
+        assertEquals(404, riskRuleController.enable("nope").getStatusCode().value());
         assertEquals(204, riskRuleController.delete("rr_1").getStatusCode().value());
+        assertEquals(404, riskRuleController.delete("nope").getStatusCode().value());
+        assertEquals(404, riskRuleController.delete("rr_2").getStatusCode().value());  // 删除未生效（并发已删）
     }
 
     // ===== 风控大屏 =====

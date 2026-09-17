@@ -12,6 +12,7 @@ import io.oddsmaker.control.experiment.ExperimentRepo;
 import io.oddsmaker.control.experiment.ExperimentStatsService;
 import io.oddsmaker.control.jpa.AnnouncementEntity;
 import io.oddsmaker.control.jpa.AnnouncementRepo;
+import io.oddsmaker.control.jpa.GameEntity;
 import io.oddsmaker.control.jpa.GameRepo;
 import io.oddsmaker.control.jpa.GameEnvironmentRepo;
 import io.oddsmaker.control.service.AnnouncementService;
@@ -236,6 +237,23 @@ class ApiControllersDeepTest {
 
         assertSame(published, apiController.publishGame("game_1").getBody());
         assertSame(unpublished, apiController.unpublishGame("game_1").getBody());
+    }
+
+    @Test
+    @DisplayName("getApiKey：委托 getKey 同路径；getGameStatistics 聚合 repo 计数")
+    void apiKeyAliasAndGameStatistics() {
+        Models.KeyDetailResp key = new Models.KeyDetailResp();
+        lenient().when(svc.getKey("ak_1")).thenReturn(key);
+        lenient().when(svc.getKey("nope")).thenReturn(null);
+
+        assertSame(key, apiController.getApiKey("ak_1").getBody());
+        assertEquals(404, apiController.getApiKey("nope").getStatusCode().value());
+
+        lenient().when(gameRepo.countByDeletedAtIsNull()).thenReturn(7L);
+        lenient().when(gameRepo.countByStatusAndDeletedAtIsNull(GameEntity.GameStatus.LIVE)).thenReturn(3L);
+        var stats = apiController.getGameStatistics().getBody();
+        assertEquals(7L, stats.get("totalGames"));
+        assertEquals(3L, stats.get("liveGames"));
     }
 
     // =====================================================================

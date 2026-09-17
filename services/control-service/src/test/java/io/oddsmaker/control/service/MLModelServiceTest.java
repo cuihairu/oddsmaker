@@ -530,4 +530,71 @@ class MLModelServiceTest {
         assertThat(stats.get("trainingCount")).isEqualTo(5L);
         assertThat(stats.get("predictionTotal")).isEqualTo(1000L);
     }
+
+    @Test
+    @DisplayName("序列化失败分支：各配置/指标含不可序列化对象时 catch 吞掉不中断主流程")
+    void serializationFailureBranchesTolerated() {
+        Map<String, Object> bad = new HashMap<>();
+        bad.put("bad", new Object());
+
+        // createTrainingJob：trainingConfig 序列化失败 → 吞掉，任务仍创建
+        when(mlModelRepo.findById("ml_test123")).thenReturn(Optional.of(testModel));
+        when(modelTrainingRepo.save(any(ModelTrainingEntity.class)))
+            .thenAnswer(inv -> inv.getArgument(0));
+        ModelTrainingEntity created = mlModelService.createTrainingJob(
+            "ml_test123", "job", bad, null, null, "op");
+        assertThat(created.trainingJobName).isEqualTo("job");
+
+        // updateTrainingProgress：metrics 序列化失败 → 吞掉
+        testTraining.trainingStatus = ModelTrainingEntity.TrainingStatus.RUNNING;
+        when(modelTrainingRepo.findById("train_test123")).thenReturn(Optional.of(testTraining));
+        assertThat(mlModelService.updateTrainingProgress("train_test123", 1, 10, 0.5, bad)).isNotNull();
+
+        // completeTraining：finalMetrics 序列化失败 → 吞掉，模型仍完成
+        when(mlModelRepo.save(any(MLModelEntity.class))).thenReturn(testModel);
+        assertThat(mlModelService.completeTraining("train_test123", "s3://artifact", bad)).isNotNull();
+
+        // cancelTraining：模型处于 TRAINING 时回退 DRAFT
+        testModel.modelStatus = MLModelEntity.ModelStatus.TRAINING;
+        testTraining.trainingStatus = ModelTrainingEntity.TrainingStatus.PENDING;
+        assertThat(mlModelService.cancelTraining("train_test123", "op")).isNotNull();
+        assertThat(testModel.modelStatus).isEqualTo(MLModelEntity.ModelStatus.DRAFT);
+
+        // deployModel：deploymentConfig 序列化失败 → 吞掉，仍部署
+        testModel.modelStatus = MLModelEntity.ModelStatus.EVALUATING;
+        testModel.modelArtifactPath = "s3://artifact";
+        assertThat(mlModelService.deployModel("ml_test123", bad, "op")).isNotNull();
+
+        // configureAbTest：abTestConfig 序列化失败 → 吞掉
+        testModel.modelStatus = MLModelEntity.ModelStatus.DEPLOYED;
+        assertThat(mlModelService.configureAbTest("ml_test123", "ml_base", 30, bad, "op")).isNotNull();
+
+        // recordPrediction：inputData 序列化失败 → 吞掉，预测仍落库
+        when(modelPredictionRepo.save(any(MLModelPredictionEntity.class)))
+            .thenAnswer(inv -> inv.getArgument(0));
+        assertThat(mlModelService.recordPrediction(
+            "ml_test123", "user", "u1", bad, "req_1", "c1", "api")).isNotNull();
+    }
+
+    @Test
+    @DisplayName("完成预测：输出整体/嵌套字段序列化失败均吞掉，class 与 probability 正常提取")
+    void completePredictionSerializationFailuresTolerated() {
+        Map<String, Object> bad = new HashMap<>();
+        bad.put("class", "churn");
+        bad.put("probability", 0.9);
+        bad.put("topPredictions", new Object());
+        bad.put("featureImportance", new Object());
+
+        MLModelPredictionEntity prediction = new MLModelPredictionEntity();
+        prediction.id = "pred_1";
+        when(modelPredictionRepo.findById("pred_1")).thenReturn(Optional.of(prediction));
+        when(modelPredictionRepo.save(any(MLModelPredictionEntity.class)))
+            .thenAnswer(inv -> inv.getArgument(0));
+
+        MLModelPredictionEntity result = mlModelService.completePrediction("pred_1", bad, 0.9, 12);
+
+        assertThat(result.predictionClass).isEqualTo("churn");
+        assertThat(result.predictionProbability).isEqualTo(0.9);
+        assertThat(result.latencyMs).isEqualTo(12);
+    }
 }

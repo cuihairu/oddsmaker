@@ -140,4 +140,18 @@ class ExperimentSplitterTest {
         assertEquals(1, variants.size());
         assertEquals("ok", variants.get(0).name);
     }
+
+    @Test
+    @DisplayName("variants 非数组 / 缺失 → 空列表；零权重/空参数 → null")
+    void parseVariantsNonArrayOrMissing() throws Exception {
+        assertTrue(ExperimentSplitter.parseVariants(
+            new ObjectMapper().readTree("{\"variants\":\"not-array\"}")).isEmpty());
+        assertTrue(ExperimentSplitter.parseVariants(
+            new ObjectMapper().readTree("{\"other\":1}")).isEmpty());
+        assertTrue(ExperimentSplitter.parseVariants(null).isEmpty());
+        // 零权重变体被拒绝（防除零/兜底歧义）
+        assertNull(ExperimentSplitter.assign("exp", "salt", "s",
+            List.of(new ExperimentSplitter.Variant("only", 0))));
+        assertNull(ExperimentSplitter.assign("exp", "salt", "s", List.of()));
+    }
 }

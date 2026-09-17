@@ -118,4 +118,15 @@ class SymbolicationServiceTest {
         assertEquals("at A.a(A:1)", result.symbolized());
         assertEquals(0, result.rulesApplied());
     }
+
+    @Test
+    @DisplayName("堆栈概要：空行与省略行被跳过")
+    void stackSummarySkipsBlankAndElidedLines() {
+        Map<String, Object> summary = SymbolicationService.stackSummary(
+            "java.lang.IllegalStateException: boom\n\n...\nat A.a(A:1)\n\nat B.b(B:2)", 10);
+        @SuppressWarnings("unchecked")
+        java.util.List<String> frames = (java.util.List<String>) summary.get("frames");
+        assertEquals(3, frames.size());
+        assertEquals("java.lang.IllegalStateException: boom", summary.get("exception"));
+    }
 }

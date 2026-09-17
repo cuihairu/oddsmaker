@@ -94,4 +94,13 @@ class FinanceMetricsAssemblerTest {
         String csv = FinanceMetricsAssembler.toCsv("g", "day", rows);
         assertTrue(csv.contains("\"bad,\"\"date\""));
     }
+
+    @Test
+    void toRows_skipsRowsWithBlankStatDate() {
+        // stat_date 为空串时 asDate 返回 "" → 行被跳过
+        List<Map<String, Object>> rows = FinanceMetricsAssembler.toRows(
+                List.of(Map.of("stat_date", "", "dau", 1L)),
+                List.of(Map.of("stat_date", "", "new_users", 1L)));
+        assertTrue(rows.isEmpty());
+    }
 }

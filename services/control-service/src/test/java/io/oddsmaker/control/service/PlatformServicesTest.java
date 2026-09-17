@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
@@ -132,6 +133,25 @@ class PlatformServicesTest {
         assertNotNull(maintenanceService.getSystemStatus());
     }
 
+    @Test
+    @DisplayName("维护：公共配置聚合非空映射；定时检查异常被顶层 catch 吞掉")
+    void maintenanceResilienceAndPublicConfigs() {
+        io.oddsmaker.control.jpa.SystemConfigEntity pub = new io.oddsmaker.control.jpa.SystemConfigEntity();
+        pub.configKey = "site.name";
+        pub.configValue = "Oddsmaker";
+        lenient().when(systemConfigRepo.findPublic()).thenReturn(List.of(pub));
+        java.util.Map<String, String> configs = maintenanceService.getPublicConfigs();
+        org.junit.jupiter.api.Assertions.assertEquals("Oddsmaker", configs.get("site.name"));
+
+        // 三个定时检查：repo 抛异常各自吞掉
+        lenient().when(maintenanceWindowRepo.findPending(any())).thenThrow(new IllegalStateException("boom"));
+        org.junit.jupiter.api.Assertions.assertDoesNotThrow(() -> maintenanceService.checkPendingMaintenances());
+        lenient().when(maintenanceWindowRepo.findShouldEnd(any())).thenThrow(new IllegalStateException("boom"));
+        org.junit.jupiter.api.Assertions.assertDoesNotThrow(() -> maintenanceService.checkEndingMaintenances());
+        lenient().when(featureFlagRepo.findScheduledToEnable(any())).thenThrow(new IllegalStateException("boom"));
+        org.junit.jupiter.api.Assertions.assertDoesNotThrow(() -> maintenanceService.checkScheduledFeatureFlags());
+    }
+
     // ===== 报表 =====
 
     @Mock
@@ -139,6 +159,9 @@ class PlatformServicesTest {
 
     @Mock
     private ReportExecutionRepo executionRepo;
+
+    @Spy
+    private com.fasterxml.jackson.databind.ObjectMapper objectMapper = new com.fasterxml.jackson.databind.ObjectMapper();
 
     @InjectMocks
     private ReportService reportService;
@@ -156,6 +179,35 @@ class PlatformServicesTest {
         reportService.searchReports("g", "q");
         assertNotNull(reportService.getGameReportOverview("g"));
         assertThrows(IllegalArgumentException.class, () -> reportService.getReport("r1"));
+    }
+
+    @Test
+    @DisplayName("报表：参数序列化失败吞掉仍执行；超时/清理任务异常被吞")
+    void reportResilienceBranches() {
+        // executeReport：parameters 不可序列化 → catch 吞掉，执行记录照常创建并异步模拟完成
+        io.oddsmaker.control.jpa.ReportEntity report = new io.oddsmaker.control.jpa.ReportEntity();
+        report.id = "r1";
+        report.gameId = "g";
+        when(reportRepo.findById("r1")).thenReturn(java.util.Optional.of(report));
+        when(executionRepo.save(any(io.oddsmaker.control.jpa.ReportExecutionEntity.class)))
+            .thenAnswer(inv -> inv.getArgument(0));
+        when(reportRepo.save(any(io.oddsmaker.control.jpa.ReportEntity.class)))
+            .thenAnswer(inv -> inv.getArgument(0));
+        java.util.Map<String, Object> bad = new java.util.HashMap<>();
+        bad.put("bad", new Object());
+        io.oddsmaker.control.jpa.ReportExecutionEntity execution =
+            reportService.executeReport("r1", "op", null, bad, null);
+        org.junit.jupiter.api.Assertions.assertNotNull(execution);
+
+        // checkTimeoutExecutions：repo 抛异常被顶层 catch 吞掉
+        when(executionRepo.findTimeout(any(java.time.LocalDateTime.class)))
+            .thenThrow(new IllegalStateException("db down"));
+        org.junit.jupiter.api.Assertions.assertDoesNotThrow(() -> reportService.checkTimeoutExecutions());
+
+        // cleanupExpiredExecutions：repo 抛异常被顶层 catch 吞掉
+        when(executionRepo.deleteExpired(any(java.time.LocalDateTime.class)))
+            .thenThrow(new IllegalStateException("db down"));
+        org.junit.jupiter.api.Assertions.assertDoesNotThrow(() -> reportService.cleanupExpiredExecutions());
     }
 
     // ===== 导出 =====

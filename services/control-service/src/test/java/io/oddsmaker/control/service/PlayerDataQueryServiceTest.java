@@ -242,4 +242,27 @@ class PlayerDataQueryServiceTest {
         noPlayer.gameId = "game_demo";
         assertThrows(IllegalArgumentException.class, () -> service.ingestLogin(noPlayer));
     }
+
+    @Test
+    @DisplayName("上报校验：gameId 缺失拒绝（充值/登录）；查询 limit<=0 用默认 50")
+    void ingestGameIdRequiredAndCapDefault() {
+        // ingestPayment：gameId blank → 拒绝
+        PlayerPaymentEntity noGame = payment("o1", "5", PlayerPaymentEntity.Status.COMPLETED);
+        noGame.gameId = " ";
+        assertThrows(IllegalArgumentException.class, () -> service.ingestPayment(noGame));
+
+        // ingestLogin：gameId null → 拒绝
+        PlayerLoginLogEntity badLog = new PlayerLoginLogEntity();
+        badLog.gameId = null;
+        assertThrows(IllegalArgumentException.class, () -> service.ingestLogin(badLog));
+
+        // loginLogs：limit<=0 → cap 内默认 50（记录数不足时全量返回）
+        when(gameRepo.findById("game_demo")).thenReturn(Optional.of(gameDemo));
+        when(loginLogRepo.findByGameIdAndPlayerIdOrderByLoginAtDesc("game_demo", "p1"))
+            .thenReturn(List.of(new PlayerLoginLogEntity()));
+        when(loginLogRepo.findFirstByGameIdAndPlayerIdOrderByLoginAtDesc("game_demo", "p1"))
+            .thenReturn(Optional.empty());
+        java.util.Map<String, Object> out = service.loginLogs("game_demo", "p1", 0);
+        assertEquals(1, ((List<?>) out.get("logs")).size());
+    }
 }

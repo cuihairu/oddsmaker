@@ -1148,4 +1148,19 @@ class EntitiesDeepTest {
         log.generateId();
         assertEquals("preset-log", log.id);
     }
+
+    @Test
+    @DisplayName("实体收尾：markNotNew 持久化回调与限流用量空值分支")
+    void entityPersistenceDefaults() {
+        // GameEntity.markNotNew：持久化回调后 isNew 置 false
+        GameEntity g = new GameEntity();
+        assertTrue(g.isNew);
+        g.markNotNew();
+        assertFalse(g.isNew);
+
+        // RateLimitPolicyEntity.getUsagePercentage：currentUsage 缺失 → 0.0
+        RateLimitPolicyEntity r = new RateLimitPolicyEntity();
+        r.currentUsage = null;
+        assertEquals(0.0, r.getUsagePercentage());
+    }
 }

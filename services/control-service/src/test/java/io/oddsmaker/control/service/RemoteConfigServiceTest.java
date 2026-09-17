@@ -209,4 +209,28 @@ class RemoteConfigServiceTest {
         assertThrows(IllegalArgumentException.class, () -> service.list("game_nope", null));
         assertThrows(IllegalArgumentException.class, () -> service.resolve("game_nope", null));
     }
+
+    @Test
+    @DisplayName("校验：configValue 为空直接拒绝；解析类型还原浮点与文本")
+    void validateBlankAndParseScalarTypes() {
+        when(gameRepo.findById("game_demo")).thenReturn(Optional.of(game));
+
+        // configValue 为空 → 必填校验先于 JSON 解析
+        RemoteConfigEntity blank = new RemoteConfigEntity();
+        blank.gameId = "game_demo";
+        blank.configKey = "shop.rate";
+        blank.configValue = "  ";
+        assertThrows(IllegalArgumentException.class, () -> service.create(blank, "ops1"));
+
+        // resolve 类型还原：浮点 → double，文本 → String
+        when(repo.findEffective("game_demo", null)).thenReturn(List.of(
+            config("", "rate.float", "0.75", 1, RemoteConfigEntity.Status.ACTIVE),
+            config("", "greeting", "\"hello\"", 1, RemoteConfigEntity.Status.ACTIVE),
+            config("", "raw.object", "{\"k\":1}", 1, RemoteConfigEntity.Status.ACTIVE)));
+        Map<String, Object> out = service.resolve("game_demo", null);
+        Map<?, ?> configs = (Map<?, ?>) out.get("configs");
+        assertEquals(0.75, configs.get("rate.float"));
+        assertEquals("hello", configs.get("greeting"));
+        assertNotNull(configs.get("raw.object"));  // 非标量原样解析为 JsonNode/Map
+    }
 }

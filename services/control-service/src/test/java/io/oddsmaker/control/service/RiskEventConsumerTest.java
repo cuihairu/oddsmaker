@@ -50,6 +50,7 @@ class RiskEventConsumerTest {
     @Mock private io.oddsmaker.control.jpa.RiskCaseRepo riskCaseRepo;
     @Mock private ReviewQueueService reviewQueueService;
     @Mock private RiskActionRecorder riskActionRecorder;
+    @Mock private io.oddsmaker.control.jpa.IdentityLinkRepo identityLinkRepo;
 
     private RiskEventConsumer consumer;
     private final ObjectMapper om = new ObjectMapper();
@@ -191,6 +192,46 @@ class RiskEventConsumerTest {
         verify(webhookService).sendCustomWebhook(eq("game_demo"), eq("risk_action"), payload.capture());
         assertEquals("review", payload.getValue().get("action"));
         assertEquals("queued", payload.getValue().get("state"));
+    }
+
+    @Test
+    @DisplayName("REVIEW + DEVICE → subject_type 映射为 device_id")
+    void reviewDevice_mapsToDeviceId() {
+        when(riskCaseRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        consumer.onRiskEvent(riskEventJson("REVIEW", "HIGH", "DEVICE", "dev_rv", "rr_freq"));
+
+        org.mockito.ArgumentCaptor<io.oddsmaker.control.jpa.RiskCaseEntity> caseCaptor =
+            org.mockito.ArgumentCaptor.forClass(io.oddsmaker.control.jpa.RiskCaseEntity.class);
+        verify(riskCaseRepo).save(caseCaptor.capture());
+        assertEquals("device_id", caseCaptor.getValue().targetType);
+        assertEquals("dev_rv", caseCaptor.getValue().targetId);
+    }
+
+    @Test
+    @DisplayName("处置链路异常被顶层 catch 吞掉，不向外抛")
+    void handlerFailure_swallowedByTopLevelCatch() {
+        when(riskCaseRepo.save(any())).thenThrow(new RuntimeException("db down"));
+
+        assertDoesNotThrow(() ->
+            consumer.onRiskEvent(riskEventJson("REVIEW", "HIGH", "PLAYER", "user_9", "rr_receipt")));
+        verify(webhookService, never()).sendCustomWebhook(anyString(), anyString(), anyMap());
+    }
+
+    @Test
+    @DisplayName("身份扩散封禁：查询 identity_links 失败仅告警不阻断主封禁")
+    void identityExtendFailure_nonFatal() {
+        ReflectionTestUtils.setField(consumer, "identityExtend", true);
+        ReflectionTestUtils.setField(consumer, "identityLinkRepo", identityLinkRepo);
+        when(identityLinkRepo.findByTypeAndId(anyString(), anyString()))
+            .thenThrow(new RuntimeException("ch unavailable"));
+
+        assertDoesNotThrow(() ->
+            consumer.onRiskEvent(riskEventJson("BLOCK", "HIGH", "DEVICE", "dev_ext", "rr_threshold")));
+        // 主封禁不受扩散失败影响
+        verify(blockListService).addBlock(
+            eq("game_demo"), eq("prod"), eq("device_id"), eq("dev_ext"),
+            anyString(), eq("fraud"), any(), anyBoolean(), any(), anyString(), isNull(), anyString());
     }
 
     @Test

@@ -797,6 +797,31 @@ class InfraServicesDeepTest2 {
     }
 
     @Test
+    @DisplayName("集成：config/payload 不可序列化时 catch 吞掉，主流程继续")
+    void integrationSerializationFailureTolerated() {
+        java.util.Map<String, Object> bad = new java.util.HashMap<>();
+        bad.put("obj", new Object());  // Jackson 无法序列化
+
+        // 创建：config 序列化失败 → config 为 null，创建仍成功
+        IntegrationEntity created = integrationService.createIntegration("g1", "bad-cfg", null,
+            IntegrationEntity.IntegrationType.WEBHOOK, IntegrationEntity.AuthType.NONE,
+            "http://unit.test/x", null, null, bad, null, "admin");
+        assertNotNull(created.id);
+
+        // 更新：同样吞掉
+        IntegrationEntity entity = integration("i1", IntegrationEntity.IntegrationStatus.ACTIVE, true);
+        lenient().when(integrationRepo.findById("i1")).thenReturn(Optional.of(entity));
+        IntegrationEntity updated = integrationService.updateIntegration("i1", null, null, null, null, null, bad);
+        assertNotNull(updated);
+
+        // 调用：payload 序列化失败 → requestBody 为 null，调用继续
+        entity.enabled = true;
+        entity.integrationStatus = IntegrationEntity.IntegrationStatus.ACTIVE;  // update 后已重置为 INACTIVE
+        IntegrationLogEntity result = integrationService.callIntegration("i1", "evt", bad, "cid");
+        assertNotNull(result);
+    }
+
+    @Test
     @DisplayName("集成：验证/启用/禁用/获取/删除")
     void integrationVerifyEnableDisableDelete() {
         // 验证：不存在

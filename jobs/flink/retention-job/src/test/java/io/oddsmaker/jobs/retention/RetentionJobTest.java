@@ -351,4 +351,20 @@ class RetentionJobTest {
         assertEquals(2, state.m.size());   // first + last
         assertNull(state.m.get("seen_d_1"));
     }
+
+    // ===== 覆盖缺口补充 =====
+
+    @Test
+    @DisplayName("main：替身执行环境下完成入口（不触达真实集群）")
+    void mainCompletesWithMockEnv() {
+        try (org.mockito.MockedStatic<org.apache.flink.streaming.api.environment.StreamExecutionEnvironment> mocked =
+                 org.mockito.Mockito.mockStatic(org.apache.flink.streaming.api.environment.StreamExecutionEnvironment.class)) {
+            org.apache.flink.streaming.api.environment.StreamExecutionEnvironment env = org.mockito.Mockito.mock(
+                org.apache.flink.streaming.api.environment.StreamExecutionEnvironment.class,
+                org.mockito.Mockito.RETURNS_DEEP_STUBS);
+            mocked.when(org.apache.flink.streaming.api.environment.StreamExecutionEnvironment::getExecutionEnvironment)
+                .thenReturn(env);
+            org.junit.jupiter.api.Assertions.assertDoesNotThrow(() -> RetentionJob.main(new String[0]));
+        }
+    }
 }

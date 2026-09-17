@@ -114,6 +114,11 @@ class OpsControllersTest {
         lenient().when(mailService.create(any(), anyString())).thenReturn(mail);
         lenient().when(mailService.send(eq("m1"), anyString())).thenReturn(mail);
         lenient().when(mailService.delete(eq("m1"), anyString())).thenReturn(true);
+        lenient().when(mailService.delete(eq("m2"), anyString())).thenReturn(false);
+        MailEntity m2 = new MailEntity();  // 存在但删除未生效（并发已删）
+        m2.id = "m2";
+        m2.gameId = "g";
+        lenient().when(mailService.get("m2")).thenReturn(m2);
         io.oddsmaker.control.jpa.MailClaimEntity claimT = new io.oddsmaker.control.jpa.MailClaimEntity();
         claimT.id = "mc_1";
         claimT.mailId = "m1";
@@ -126,7 +131,12 @@ class OpsControllersTest {
         assertEquals(404, mailController.get("g", "other").getStatusCode().value());
         assertEquals(200, mailController.create("g", new MailEntity()).getStatusCode().value());
         assertEquals(200, mailController.send("g", "m1").getStatusCode().value());
+        assertEquals(404, mailController.send("g", "other").getStatusCode().value());
+        assertEquals(404, mailController.send("other-game", "m1").getStatusCode().value());
         assertEquals(200, mailController.delete("g", "m1").getStatusCode().value());
+        assertEquals(404, mailController.delete("g", "other").getStatusCode().value());
+        assertEquals(404, mailController.delete("other-game", "m1").getStatusCode().value());
+        assertEquals(404, mailController.delete("g", "m2").getStatusCode().value());  // 删除未生效（并发已删）
         assertEquals(200, mailController.inbox("g", "p1", null).getStatusCode().value());
         assertEquals(200, mailController.claim("m1", "g", "p1").getStatusCode().value());
     }
@@ -165,6 +175,10 @@ class OpsControllersTest {
         assertEquals(200, redeemCodeController.create("g", new RedeemCodeBatchEntity(), null, 12, null).getStatusCode().value());
         assertEquals(200, redeemCodeController.disable("g", "b1").getStatusCode().value());
         assertEquals(200, redeemCodeController.codes("g", "b1").getStatusCode().value());
+        assertEquals(404, redeemCodeController.disable("g", "other").getStatusCode().value());
+        assertEquals(404, redeemCodeController.disable("other-game", "b1").getStatusCode().value());
+        assertEquals(404, redeemCodeController.codes("g", "other").getStatusCode().value());
+        assertEquals(404, redeemCodeController.codes("other-game", "b1").getStatusCode().value());
         assertEquals(200, redeemCodeController.redeem("g", "p1", "CODE").getStatusCode().value());
         assertEquals(200, redeemCodeController.history("g", "p1").getStatusCode().value());
     }

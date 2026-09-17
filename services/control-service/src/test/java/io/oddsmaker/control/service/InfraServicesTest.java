@@ -22,6 +22,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
@@ -32,6 +33,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 /**
  * 基础设施类 Service 测试：Flink 作业/集成/健康监控/限流/管线/安全（空数据源下的主路径）。
@@ -46,7 +49,13 @@ class InfraServicesTest {
     private FlinkJobRepo flinkJobRepo;
 
     @Mock
+    private io.oddsmaker.control.service.AuditLogService auditLogService;
+
+    @Mock
     private RiskRuleRepo riskRuleRepo;
+
+    @Spy
+    private com.fasterxml.jackson.databind.ObjectMapper objectMapper = new com.fasterxml.jackson.databind.ObjectMapper();
 
     @InjectMocks
     private FlinkJobService flinkJobService;
@@ -61,6 +70,31 @@ class InfraServicesTest {
         flinkJobService.getGameJobs("g");
         flinkJobService.getRunningJobs("g");
         assertNotNull(flinkJobService.getJobStats("g"));
+    }
+
+    @Test
+    @DisplayName("Flink 作业：配置序列化失败抛出；部署时规则ID解析失败不阻塞部署")
+    void flinkJobSerializationAndDeployResilience() {
+        // createJob：jobConfig 不可序列化 → RuntimeException
+        java.util.Map<String, Object> bad = new java.util.HashMap<>();
+        bad.put("bad", new Object());
+        org.junit.jupiter.api.Assertions.assertThrows(RuntimeException.class,
+            () -> flinkJobService.createJob("g", "env1", "j1", "Job1", "d", null,
+                bad, null, null, null, 1, "op"));
+
+        // deployJob：ruleIds 非法 JSON → buildProgramArgs 内 catch，部署仍成功（模拟集群）
+        io.oddsmaker.control.jpa.FlinkJobEntity job = new io.oddsmaker.control.jpa.FlinkJobEntity();
+        job.id = "fj1";
+        job.gameId = "g";
+        job.name = "j1";
+        job.status = io.oddsmaker.control.jpa.FlinkJobEntity.JobStatus.DRAFT;
+        job.ruleIds = "not-json";
+        when(flinkJobRepo.findById("fj1")).thenReturn(java.util.Optional.of(job));
+        when(flinkJobRepo.save(any(io.oddsmaker.control.jpa.FlinkJobEntity.class)))
+            .thenAnswer(inv -> inv.getArgument(0));
+        io.oddsmaker.control.jpa.FlinkJobEntity deployed = flinkJobService.deployJob("fj1", "op");
+        org.junit.jupiter.api.Assertions.assertEquals(
+            io.oddsmaker.control.jpa.FlinkJobEntity.JobStatus.RUNNING, deployed.status);
     }
 
     // ===== 集成 =====
@@ -124,6 +158,36 @@ class InfraServicesTest {
         assertNotNull(healthMonitorService.getSystemHealth());
         healthMonitorService.cleanupExpiredMetrics();
         healthMonitorService.cleanupClosedAlerts();
+    }
+
+    @Test
+    @DisplayName("健康监控：DISK 指标超阈值触发挥盘告警；各定时任务异常被顶层 catch 吞掉")
+    void healthResilienceAndDiskAlert() {
+        // DISK_USAGE 超过 critical 阈值 → isCritical → 创建 HIGH_DISK 告警
+        when(healthMetricRepo.save(any(io.oddsmaker.control.jpa.HealthMetricEntity.class)))
+            .thenAnswer(inv -> inv.getArgument(0));
+        io.oddsmaker.control.jpa.HealthMetricEntity disk = healthMonitorService.collectMetric(
+            io.oddsmaker.control.jpa.HealthMetricEntity.MetricType.DISK_USAGE, "system", 95.0);
+        org.junit.jupiter.api.Assertions.assertTrue(disk.isAnomaly);
+        verify(systemAlertRepo).save(any(io.oddsmaker.control.jpa.SystemAlertEntity.class));
+
+        // performScheduledHealthChecks：repo 抛异常被顶层 catch 吞掉
+        when(healthCheckRepo.findDueChecks(any(java.time.LocalDateTime.class)))
+            .thenThrow(new IllegalStateException("db down"));
+        org.junit.jupiter.api.Assertions.assertDoesNotThrow(() -> healthMonitorService.performScheduledHealthChecks());
+
+        // collectSystemMetrics：save 抛异常被顶层 catch 吞掉
+        when(healthMetricRepo.save(any(io.oddsmaker.control.jpa.HealthMetricEntity.class)))
+            .thenThrow(new IllegalStateException("db down"));
+        org.junit.jupiter.api.Assertions.assertDoesNotThrow(() -> healthMonitorService.collectSystemMetrics());
+
+        // cleanupExpiredMetrics / cleanupClosedAlerts：repo 抛异常被吞
+        when(healthMetricRepo.deleteExpired(any(java.time.LocalDateTime.class)))
+            .thenThrow(new IllegalStateException("db down"));
+        org.junit.jupiter.api.Assertions.assertDoesNotThrow(() -> healthMonitorService.cleanupExpiredMetrics());
+        when(systemAlertRepo.deleteClosedBefore(any(java.time.LocalDateTime.class)))
+            .thenThrow(new IllegalStateException("db down"));
+        org.junit.jupiter.api.Assertions.assertDoesNotThrow(() -> healthMonitorService.cleanupClosedAlerts());
     }
 
     // ===== 限流 =====
@@ -192,6 +256,50 @@ class InfraServicesTest {
         pipelineService.cleanupOldJobs();
     }
 
+    @Test
+    @DisplayName("管线：配置序列化失败吞掉、执行遇 stopOnFailure 质量失败、清理异常吞掉")
+    void pipelineResilienceBranches() throws Exception {
+        when(pipelineRepo.save(any(io.oddsmaker.control.jpa.PipelineEntity.class)))
+            .thenAnswer(inv -> inv.getArgument(0));
+        when(dataQualityRuleRepo.save(any(io.oddsmaker.control.jpa.DataQualityRuleEntity.class)))
+            .thenAnswer(inv -> inv.getArgument(0));
+
+        // 不可 JSON 序列化的对象 → 序列化 catch 吞掉，创建仍成功
+        java.util.Map<String, Object> unserializable = new java.util.HashMap<>();
+        unserializable.put("bad", new Object());
+        assertNotNull(pipelineService.createPipeline("g", "prod", "p",
+            io.oddsmaker.control.jpa.PipelineEntity.PipelineType.BATCH, "d",
+            unserializable, null, null, "op"));
+        assertNotNull(pipelineService.createQualityRule("g", "p1", "r",
+            io.oddsmaker.control.jpa.DataQualityRuleEntity.RuleType.COMPLETENESS,
+            io.oddsmaker.control.jpa.DataQualityRuleEntity.Severity.ERROR,
+            "t", "c", unserializable, "op"));
+
+        // cleanupOldJobs：repo 抛异常被 catch
+        when(pipelineJobRepo.deleteCompletedBefore(any(java.time.LocalDateTime.class)))
+            .thenThrow(new IllegalStateException("ch down"));
+        org.junit.jupiter.api.Assertions.assertDoesNotThrow(() -> pipelineService.cleanupOldJobs());
+
+        // 执行：质量规则未通过且 stopOnFailure → job 记录质量失败
+        io.oddsmaker.control.jpa.PipelineEntity active = new io.oddsmaker.control.jpa.PipelineEntity();
+        active.id = "p_run";
+        active.gameId = "g";
+        active.pipelineStatus = io.oddsmaker.control.jpa.PipelineEntity.PipelineStatus.ACTIVE;
+        when(pipelineRepo.findById("p_run")).thenReturn(java.util.Optional.of(active));
+        when(pipelineJobRepo.save(any(io.oddsmaker.control.jpa.PipelineJobEntity.class)))
+            .thenAnswer(inv -> inv.getArgument(0));
+        io.oddsmaker.control.jpa.DataQualityRuleEntity failing =
+            new io.oddsmaker.control.jpa.DataQualityRuleEntity();
+        failing.ruleName = "not_null_check";
+        failing.ruleStatus = io.oddsmaker.control.jpa.DataQualityRuleEntity.RuleStatus.ACTIVE;
+        failing.enabled = true;
+        failing.actionOnFailure = "stop";
+        when(dataQualityRuleRepo.findByPipelineId("p_run")).thenReturn(List.of(failing));
+
+        io.oddsmaker.control.jpa.PipelineJobEntity job = pipelineService.executePipeline("p_run", "op");
+        assertNotNull(job);
+    }
+
     // ===== 安全（MFA/SSO/会话） =====
 
     @Mock
@@ -226,5 +334,17 @@ class InfraServicesTest {
         securityService.getSessionPolicies("g");
         securityService.getMFAPolicies("g");
                 securityService.cleanupExpiredSessions();
+    }
+
+    @Test
+    @DisplayName("安全：过期会话清理与旧会话删除任务异常被顶层 catch 吞掉")
+    void securityScheduledResilience() {
+        when(securitySessionRepo.findExpired(any(java.time.LocalDateTime.class)))
+            .thenThrow(new IllegalStateException("db down"));
+        org.junit.jupiter.api.Assertions.assertDoesNotThrow(() -> securityService.cleanupExpiredSessions());
+
+        when(securitySessionRepo.deleteExpired(any(java.time.LocalDateTime.class)))
+            .thenThrow(new IllegalStateException("db down"));
+        org.junit.jupiter.api.Assertions.assertDoesNotThrow(() -> securityService.deleteOldSessions());
     }
 }

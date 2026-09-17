@@ -125,6 +125,34 @@ class SecurityComponentsTest {
     }
 
     @Test
+    @DisplayName("登录路径与 Bearer 请求直接放行；空令牌比较返回不匹配")
+    void adminFilterAuthPathAndBearerPassthrough() throws Exception {
+        AdminTokenFilter f = filter("secret", "internal-secret");
+
+        // /api/auth/** 由 SecurityConfig permitAll 放行，过滤器跳过
+        assertTrue(f.shouldNotFilter(new MockHttpServletRequest("POST", "/api/auth/login")));
+
+        // Bearer 请求交给 Security 链 oauth2 filter 处理，直接放行
+        SecurityContextHolder.clearContext();
+        MockHttpServletRequest bearerReq = new MockHttpServletRequest("GET", "/api/games");
+        bearerReq.addHeader("Authorization", "Bearer some-jwt");
+        MockHttpServletResponse bearerResp = new MockHttpServletResponse();
+        jakarta.servlet.FilterChain chain = (req, res) -> ((MockHttpServletResponse) res).setStatus(200);
+        f.doFilter(bearerReq, bearerResp, chain);
+        assertEquals(200, bearerResp.getStatus());  // 未被 401 拦截
+
+        // internal token 未配置 → matches 空参短路 401
+        SecurityContextHolder.clearContext();
+        MockHttpServletResponse noInternal = run(filter("secret", null), "/internal/keys", null, null);
+        assertEquals(401, noInternal.getStatus());
+
+        // 请求不带 x-admin-token 头 → supplied 为空短路 401
+        SecurityContextHolder.clearContext();
+        MockHttpServletResponse noAdmin = run(filter("secret", "internal-secret"), "/api/games", null, null);
+        assertEquals(401, noAdmin.getStatus());
+    }
+
+    @Test
     @DisplayName("已有 JwtAuthenticationToken 时跳过 Admin 检查")
     void adminFilterSkipsExistingJwt() throws Exception {
         AdminTokenFilter f = filter("secret", null);
@@ -300,5 +328,22 @@ class SecurityComponentsTest {
             new UsernamePasswordAuthenticationToken("gw", "pw",
                 List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_INTERNAL"))));
         guard.requireGamePermission("any", "game:read");
+    }
+
+    @Test
+    @DisplayName("AccessGuard：普通用户权限遍历完 authorities 后走 hasGamePermission 链路")
+    void accessGuardPlainUserIteration() {
+        var permissionService2 = mock(PermissionService.class);
+        AccessGuard guard = new AccessGuard(permissionService2);
+        // 普通用户（非 ROLE_ADMIN/ROLE_INTERNAL）：两个 for 循环均遍历至自然结束
+        SecurityContextHolder.getContext().setAuthentication(
+            new UsernamePasswordAuthenticationToken("u", "pw",
+                List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_VIEWER"))));
+
+        when(permissionService2.hasGamePermission("u", "g1", "game:read")).thenReturn(true);
+        org.junit.jupiter.api.Assertions.assertTrue(guard.canAccessGame("g1", "game:read"));
+
+        when(permissionService2.hasGamePermission("u", "g2", "game:read")).thenReturn(false);
+        assertThrows(SecurityException.class, () -> guard.requireGamePermission("g2", "game:read"));
     }
 }

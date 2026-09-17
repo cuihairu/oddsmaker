@@ -90,4 +90,14 @@ class PaymentFunnelAssemblerTest {
         assertEquals("retained30", steps.get(3).get("key"));
         assertEquals("月留存", steps.get(3).get("label"));
     }
+
+    @Test
+    void toCohortPoints_skipsRowsWithBlankCohort() {
+        // cohort 为空串时 asDate 返回 "" → 行被跳过
+        List<Map<String, Object>> points = PaymentFunnelAssembler.toCohortPoints(
+                List.of(Map.of("cohort", "", "registered", 1L)),
+                List.of(Map.of("cohort", "", "retained_30", 1L)),
+                LocalDate.now().minusDays(31).toString());
+        assertTrue(points.isEmpty());
+    }
 }
