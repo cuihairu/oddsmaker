@@ -22,4 +22,10 @@ public interface PlayerPaymentRepo extends JpaRepository<PlayerPaymentEntity, St
     @Query("SELECT COALESCE(SUM(p.amount), 0) FROM PlayerPaymentEntity p "
         + "WHERE p.gameId = :gameId AND p.playerId = :playerId AND p.status = 'COMPLETED'")
     BigDecimal sumCompletedAmount(@Param("gameId") String gameId, @Param("playerId") String playerId);
+
+    /** 玩家数据删除：物理删除充值流水（订单号/金额属个人数据） */
+    @org.springframework.data.jpa.repository.Modifying
+    @org.springframework.data.jpa.repository.Query("DELETE FROM PlayerPaymentEntity p "
+        + "WHERE p.gameId = :gameId AND p.playerId IN :playerIds")
+    int deleteByGameIdAndPlayerIdIn(@Param("gameId") String gameId, @Param("playerIds") List<String> playerIds);
 }

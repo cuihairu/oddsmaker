@@ -65,4 +65,23 @@ public interface IdentityRepo extends JpaRepository<IdentityEntity, String> {
      */
     @Query("SELECT COUNT(DISTINCT i.deviceId) FROM IdentityEntity i WHERE i.gameId = :gameId AND i.status = 'ACTIVE' AND i.deletedAt IS NULL AND i.lastSeenAt >= :since")
     long countActiveDevicesSince(@Param("gameId") String gameId, @Param("since") LocalDateTime since);
+
+    // ========== 玩家数据删除（GDPR erasure）：不做状态过滤，已删/已合并身份也要被清洗 ==========
+
+    /** 按玩家ID查找（AnyStatus：含 MERGED/DELETED/软删行——erasure 漏掉非活跃行等于没删干净） */
+    @Query("SELECT i FROM IdentityEntity i WHERE i.gameId = :gameId AND i.playerId = :playerId")
+    List<IdentityEntity> findByGameIdAndPlayerIdAnyStatus(@Param("gameId") String gameId, @Param("playerId") String playerId);
+
+    /** 按用户ID查找（AnyStatus） */
+    @Query("SELECT i FROM IdentityEntity i WHERE i.gameId = :gameId AND i.userId = :userId")
+    List<IdentityEntity> findByGameIdAndUserIdAnyStatus(@Param("gameId") String gameId, @Param("userId") String userId);
+
+    /** 按设备ID查找（AnyStatus） */
+    @Query("SELECT i FROM IdentityEntity i WHERE i.gameId = :gameId AND i.deviceId = :deviceId")
+    List<IdentityEntity> findByGameIdAndDeviceIdAnyStatus(@Param("gameId") String gameId, @Param("deviceId") String deviceId);
+
+    /** 物理删除（合规擦除：软删行内标识原值仍可查，物理删才彻底） */
+    @org.springframework.data.jpa.repository.Modifying
+    @Query("DELETE FROM IdentityEntity i WHERE i.id IN :ids")
+    int deleteAllByIdIn(@Param("ids") List<String> ids);
 }

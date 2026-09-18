@@ -111,6 +111,14 @@ oddsmaker:
     enabled: ${ODDSMAKER_METRIC_ALERT_ENABLED:true}
     cron: ${ODDSMAKER_METRIC_ALERT_CRON:0 */10 * * * *}
 
+  # 玩家数据删除请求（GDPR erasure）：标识展开上限、僵尸重置、CH mutation 轮询与重试
+  erasure:
+    identity-expansion-limit: ${ODDSMAKER_ERASURE_EXPANSION_LIMIT:500}
+    processing-timeout-minutes: ${ODDSMAKER_ERASURE_PROCESSING_TIMEOUT_MINUTES:60}
+    mutation-timeout-seconds: ${ODDSMAKER_ERASURE_MUTATION_TIMEOUT_SECONDS:300}
+    mutation-poll-interval-seconds: ${ODDSMAKER_ERASURE_MUTATION_POLL_SECONDS:5}
+    max-ch-retries: ${ODDSMAKER_ERASURE_MAX_CH_RETRIES:8}
+
   # 健康监控的模拟数据开关：@EnableScheduling 激活后默认关闭，
   # 避免 Math.random 假指标/假告警污染真实监控数据（本地演示可显式开启）
   health:

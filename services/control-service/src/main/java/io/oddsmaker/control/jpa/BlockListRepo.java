@@ -104,4 +104,11 @@ public interface BlockListRepo extends JpaRepository<BlockListEntity, String> {
     @Modifying
     @Query("UPDATE BlockListEntity bl SET bl.unblockedAt = :now, bl.unblockReason = 'Expired automatically' WHERE bl.id IN :ids")
     int batchUnblock(@Param("ids") List<String> ids, @Param("now") LocalDateTime now);
+
+    // ========== 玩家数据删除（GDPR erasure）：封禁记录匿名化占位（保留防欺诈审计线索） ==========
+
+    /** 玩家标识类封禁（仅 player_id/user_id/device_id；ip/ip_range/account_id 不属玩家标识不动） */
+    List<BlockListEntity> findByGameIdAndTargetValueInAndTargetTypeIn(String gameId,
+                                                                      List<String> targetValues,
+                                                                      List<String> targetTypes);
 }

@@ -65,4 +65,19 @@ public interface IdentityLinkRepo extends JpaRepository<IdentityLinkEntity, Stri
      */
     @Query("SELECT il FROM IdentityLinkEntity il WHERE il.linkSource = :source AND il.status = 'ACTIVE' AND il.deletedAt IS NULL ORDER BY il.createdAt DESC")
     List<IdentityLinkEntity> findByLinkSource(@Param("source") String source);
+
+    // ========== 玩家数据删除（GDPR erasure）：AnyStatus 反查 + 物理删除 ==========
+
+    /** 根据类型和ID查找关联（AnyStatus：非活跃 link 仍暴露标识关联，须纳入展开） */
+    @Query("SELECT il FROM IdentityLinkEntity il WHERE il.linkedIdentityType = :type AND il.linkedId = :id")
+    List<IdentityLinkEntity> findByTypeAndIdAnyStatus(@Param("type") String type, @Param("id") String id);
+
+    /** 查找身份的所有关联（AnyStatus） */
+    @Query("SELECT il FROM IdentityLinkEntity il WHERE il.identityId = :identityId")
+    List<IdentityLinkEntity> findByIdentityIdAnyStatus(@Param("identityId") String identityId);
+
+    /** 物理删除身份的全部关联（切断删除后再关联） */
+    @org.springframework.data.jpa.repository.Modifying
+    @Query("DELETE FROM IdentityLinkEntity il WHERE il.identityId IN :identityIds")
+    int deleteByIdentityIdIn(@Param("identityIds") List<String> identityIds);
 }

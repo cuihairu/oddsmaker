@@ -94,4 +94,15 @@ public interface RiskCaseRepo extends JpaRepository<RiskCaseEntity, String> {
      */
     @Query("SELECT rc FROM RiskCaseEntity rc WHERE rc.gameId = :gameId AND rc.resolvedAt IS NOT NULL ORDER BY rc.resolvedAt DESC")
     List<RiskCaseEntity> findResolvedByGameId(@Param("gameId") String gameId);
+
+    // ========== 玩家数据删除（GDPR erasure）：定位后 Java 侧匿名化（保留案件记录） ==========
+
+    /** 目标直接命中的案例 */
+    List<RiskCaseEntity> findByGameIdAndTargetIdIn(String gameId, List<String> targetIds);
+
+    /** 证据 JSON 内嵌标识的案例（LIKE 粗筛，精确替换在 Java 侧做） */
+    List<RiskCaseEntity> findByGameIdAndEvidenceDataContaining(String gameId, String probe);
+
+    /** 上下文 JSON 内嵌标识的案例（LIKE 粗筛） */
+    List<RiskCaseEntity> findByGameIdAndContextDataContaining(String gameId, String probe);
 }

@@ -545,6 +545,12 @@ public class PermissionService {
             PermissionEntity.PermissionType.API, "alert", PermissionEntity.PermissionAction.READ, PermissionEntity.PermissionScope.GAME);
         createPermissionIfNotExists("alert:manage", "Manage metric alerts",
             PermissionEntity.PermissionType.API, "alert", PermissionEntity.PermissionAction.UPDATE, PermissionEntity.PermissionScope.GAME);
+
+        // 隐私合规权限（生产种子见 V0.9.2__player_data_erasure.sql）
+        createPermissionIfNotExists("privacy:read", "View privacy compliance",
+            PermissionEntity.PermissionType.API, "privacy", PermissionEntity.PermissionAction.READ, PermissionEntity.PermissionScope.GAME);
+        createPermissionIfNotExists("privacy:manage", "Manage privacy compliance",
+            PermissionEntity.PermissionType.API, "privacy", PermissionEntity.PermissionAction.CREATE, PermissionEntity.PermissionScope.GAME);
     }
 
     /**

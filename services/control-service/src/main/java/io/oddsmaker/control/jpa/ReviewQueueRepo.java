@@ -97,4 +97,9 @@ public interface ReviewQueueRepo extends JpaRepository<ReviewQueueEntity, String
      */
     @Query("SELECT rq FROM ReviewQueueEntity rq WHERE rq.createdAt < :threshold AND rq.reviewStatus IN ('IN_REVIEW', 'CLAIMED') AND rq.escalated = false")
     List<ReviewQueueEntity> findNeedsEscalation(@Param("threshold") LocalDateTime threshold);
+
+    // ========== 玩家数据删除（GDPR erasure）：定位后匿名化占位 ==========
+
+    /** 目标命中的审核项（Java 侧把 target 替换为 erased:&lt;reqId&gt;） */
+    List<ReviewQueueEntity> findByGameIdAndTargetIdIn(String gameId, List<String> targetIds);
 }

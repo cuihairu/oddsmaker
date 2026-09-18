@@ -30,4 +30,10 @@ public interface MailRepo extends JpaRepository<MailEntity, String> {
                                @Param("environmentId") String environmentId,
                                @Param("playerKey") String playerKey,
                                @Param("now") LocalDateTime now);
+
+    /** 玩家数据删除：定位收件人列表含该玩家的个人邮件（LIKE 粗筛，精确 token 摘除在 Java 侧做） */
+    @Query("SELECT m FROM MailEntity m WHERE m.gameId = :gameId AND m.scope = 'INDIVIDUAL' "
+        + "AND m.recipients LIKE %:playerKey%")
+    List<MailEntity> findIndividualByGameIdAndRecipientsContaining(@Param("gameId") String gameId,
+                                                                   @Param("playerKey") String playerKey);
 }
