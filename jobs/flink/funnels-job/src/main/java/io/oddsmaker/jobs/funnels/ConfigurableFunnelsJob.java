@@ -205,12 +205,11 @@ public class ConfigurableFunnelsJob {
     static List<FunnelConfig> loadFunnelConfigs(Connection conn) throws Exception {
         List<FunnelConfig> configs = new ArrayList<>();
 
-        // 查询启用的漏斗配置——适配 control 真实迁移（V0.3.3）建的表：
-        // funnel_analyses（status/deleted_at 表达启用态，funnel_type 是类型，max_completion_time 是总窗口秒数）。
-        // 原来硬编码的 funnel_configs(user_key/time_window_sec/enabled) 在 control 里不存在
-        String sql = "SELECT f.id, f.game_id, f.name, f.funnel_type, f.max_completion_time " +
-                    "FROM funnel_analyses f " +
-                    "WHERE f.status = 'ACTIVE' AND f.deleted_at IS NULL";
+        // 查询启用的漏斗配置——控制面控制台 CRUD 写 funnel_configs（V0.8.8 按实体建）：
+        // enabled/deleted_at 表达启用态，type 是漏斗类型，time_window_sec 是总窗口秒数
+        String sql = "SELECT f.id, f.game_id, f.name, f.type, f.user_key, f.time_window_sec " +
+                    "FROM funnel_configs f " +
+                    "WHERE f.enabled = TRUE AND f.deleted_at IS NULL";
 
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             ResultSet rs = ps.executeQuery();
@@ -220,10 +219,10 @@ public class ConfigurableFunnelsJob {
                 config.id = rs.getString("id");
                 config.gameId = rs.getString("game_id");
                 config.name = rs.getString("name");
-                config.type = rs.getString("funnel_type");
-                config.userKey = "";
-                long maxCompletion = rs.getLong("max_completion_time");
-                config.timeWindowSec = rs.wasNull() || maxCompletion <= 0 ? 24 * 3600 : maxCompletion;
+                config.type = rs.getString("type");
+                config.userKey = rs.getString("user_key");
+                long window = rs.getLong("time_window_sec");
+                config.timeWindowSec = rs.wasNull() || window <= 0 ? 24 * 3600 : window;
                 config.enabled = true;
 
                 // 加载漏斗步骤
@@ -242,11 +241,11 @@ public class ConfigurableFunnelsJob {
     static List<FunnelStep> loadFunnelSteps(Connection conn, String funnelId) throws Exception {
         List<FunnelStep> steps = new ArrayList<>();
         
-        // funnel_steps 同样适配 control 真实迁移：funnel_analysis_id 外键、
-        // time_from_previous（步间窗口秒数）、is_optional
-        String sql = "SELECT id, step_order, name, event_name, event_filter, time_from_previous, is_optional " +
+        // funnel_steps 与控制面 FunnelStepEntity 同表：funnel_id 外键、
+        // time_window_sec（步间窗口秒数，空/0 回落漏斗总窗）、optional
+        String sql = "SELECT id, step_order, name, event_name, event_filter, time_window_sec, optional " +
                     "FROM funnel_steps " +
-                    "WHERE funnel_analysis_id = ? AND deleted_at IS NULL " +
+                    "WHERE funnel_id = ? AND deleted_at IS NULL " +
                     "ORDER BY step_order ASC";
 
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
@@ -260,8 +259,8 @@ public class ConfigurableFunnelsJob {
                 step.name = rs.getString("name");
                 step.eventName = rs.getString("event_name");
                 step.eventFilter = rs.getString("event_filter");
-                step.timeWindowSec = rs.getLong("time_from_previous");
-                step.optional = rs.getBoolean("is_optional");
+                step.timeWindowSec = rs.getLong("time_window_sec");
+                step.optional = rs.getBoolean("optional");
 
                 steps.add(step);
             }

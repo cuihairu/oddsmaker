@@ -77,6 +77,12 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: '/analytics/funnels',
+      name: 'funnels',
+      component: () => import('@/views/FunnelsView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
       path: '/analytics/online',
       name: 'online-monitor',
       component: () => import('@/views/OnlineView.vue'),

@@ -334,7 +334,7 @@ services:
       start_period: 30s
     networks: [e2e]
 
-  # 同一个 funnels fatJar 的第二个 main：从 control PG 加载漏斗配置（funnel_analyses/funnel_steps）
+  # 同一个 funnels fatJar 的第二个 main：从 control PG 加载漏斗配置（funnel_configs/funnel_steps.funnel_id）
   configurable-funnels-job:
     image: eclipse-temurin:21-jre
     container_name: e2e-configurable-funnels

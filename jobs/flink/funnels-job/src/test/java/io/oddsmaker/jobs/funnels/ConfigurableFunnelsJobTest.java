@@ -63,12 +63,12 @@ class ConfigurableFunnelsJobTest {
     @DisplayName("loadWithConnection：成功走完整加载；获取连接抛错安全返回空列表")
     void loadWithConnectionHappyAndFailurePaths() throws Exception {
         ResultSet mainRs = rs(
-                new String[]{"id", "game_id", "name", "funnel_type", "max_completion_time"},
-                new Object[][]{{"fx", "g", "n", "SEQUENTIAL", 30L}});
+                new String[]{"id", "game_id", "name", "type", "user_key", "time_window_sec"},
+                new Object[][]{{"fx", "g", "n", "SEQUENTIAL", "user_id", 30L}});
         ResultSet emptySteps = rs(
-                new String[]{"id", "step_order", "name", "event_name", "event_filter", "time_from_previous", "is_optional"},
+                new String[]{"id", "step_order", "name", "event_name", "event_filter", "time_window_sec", "optional"},
                 new Object[0][]);
-        Connection conn = connRouting(sql -> sql.contains("funnel_analyses") ? psReturning(mainRs) : psReturning(emptySteps));
+        Connection conn = connRouting(sql -> sql.contains("funnel_configs") ? psReturning(mainRs) : psReturning(emptySteps));
 
         List<ConfigurableFunnelsJob.FunnelConfig> loaded = ConfigurableFunnelsJob.loadWithConnection(() -> conn);
         assertEquals(1, loaded.size());
@@ -281,24 +281,24 @@ class ConfigurableFunnelsJobTest {
     }
 
     @Test
-    @DisplayName("loadFunnelConfigs：行映射 + max_completion_time 缺省/非法回退 24h + 步骤装配")
+    @DisplayName("loadFunnelConfigs：行映射 + time_window_sec 缺省/非法回退 24h + 步骤装配")
     void loadFunnelConfigsMapsRowsAndSteps() throws Exception {
-        // 主查询 2 行：显式 100 秒窗口 / wasNull → 24h 默认
+        // 主查询 2 行：显式 100 秒窗口 / wasNull → 24h 默认；0 同样回退默认
         ResultSet mainRs = rs(
-                new String[]{"id", "game_id", "name", "funnel_type", "max_completion_time"},
+                new String[]{"id", "game_id", "name", "type", "user_key", "time_window_sec"},
                 new Object[][]{
-                        {"fa1", "g1", "funnel-a", "SEQUENTIAL", 100L},
-                        {"fa2", "g1", "funnel-b", "STANDARD", null},
+                        {"fa1", "g1", "funnel-a", "SEQUENTIAL", "user_id", 100L},
+                        {"fa2", "g1", "funnel-b", "STANDARD", "device_id", 0L},
                 });
         ResultSet stepsRs = rs(
-                new String[]{"id", "step_order", "name", "event_name", "event_filter", "time_from_previous", "is_optional"},
+                new String[]{"id", "step_order", "name", "event_name", "event_filter", "time_window_sec", "optional"},
                 new Object[][]{
                         {"s1", 1, "First", "e1", null, 10L, false},
                         {"s2", 2, "Second", "e2", null, 20L, true},
                 });
 
         Connection conn = connRouting(sql -> {
-            if (sql.contains("funnel_analyses")) return psReturning(mainRs);
+            if (sql.contains("funnel_configs")) return psReturning(mainRs);
             if (sql.contains("funnel_steps")) return psReturning(stepsRs);
             throw new IllegalArgumentException("unexpected sql: " + sql);
         });
@@ -309,30 +309,36 @@ class ConfigurableFunnelsJobTest {
         assertEquals("fa1", a.id);
         assertEquals("g1", a.gameId);
         assertEquals("SEQUENTIAL", a.type);
+        assertEquals("user_id", a.userKey);
         assertEquals(100L, a.timeWindowSec);
         assertTrue(a.enabled);
         assertEquals(2, a.steps.size());
         assertEquals("e1", a.steps.get(0).eventName);
         assertTrue(a.steps.get(1).optional);
 
-        assertEquals(24 * 3600L, configs.get(1).timeWindowSec);   // wasNull → 默认
+        assertEquals("device_id", configs.get(1).userKey);
+        assertEquals(24 * 3600L, configs.get(1).timeWindowSec);   // 0 → 默认
     }
 
     @Test
-    @DisplayName("loadFunnelSteps：步骤行映射（optional/窗口秒）")
+    @DisplayName("loadFunnelSteps：步骤行映射（optional/窗口秒，NULL 回退 0/false）")
     void loadFunnelStepsMapsRows() throws Exception {
         ResultSet stepsRs = rs(
-                new String[]{"id", "step_order", "name", "event_name", "event_filter", "time_from_previous", "is_optional"},
+                new String[]{"id", "step_order", "name", "event_name", "event_filter", "time_window_sec", "optional"},
                 new Object[][]{
                         {"s1", 1, "Install", "install", "{}", 30L, true},
+                        {"s2", 2, "Open", "open", null, null, null},
                 });
         Connection conn = connRouting(sql -> psReturning(stepsRs));
         List<ConfigurableFunnelsJob.FunnelStep> steps = ConfigurableFunnelsJob.loadFunnelSteps(conn, "fa1");
-        assertEquals(1, steps.size());
+        assertEquals(2, steps.size());
         assertEquals("s1", steps.get(0).id);
         assertEquals("install", steps.get(0).eventName);
         assertEquals(30L, steps.get(0).timeWindowSec);
         assertTrue(steps.get(0).optional);
+        // NULL 窗口 → 0（stepWindowMs 回落漏斗总窗）；NULL optional → false
+        assertEquals(0L, steps.get(1).timeWindowSec);
+        assertFalse(steps.get(1).optional);
     }
 
     // ===== ConfigurableFunnelProcess 直测（内存 MapState） =====
@@ -671,13 +677,14 @@ class ConfigurableFunnelsJobTest {
             envMock.when(org.apache.flink.streaming.api.environment.StreamExecutionEnvironment::getExecutionEnvironment)
                 .thenReturn(env);
 
-            // 漏斗主查询返回 1 行 ACTIVE 配置；步骤查询返回空
+            // 漏斗主查询返回 1 行启用配置；步骤查询返回空
             org.mockito.Mockito.when(rs.next()).thenReturn(true, false, false);
             org.mockito.Mockito.when(rs.getString("id")).thenReturn("f1");
             org.mockito.Mockito.when(rs.getString("game_id")).thenReturn("g");
             org.mockito.Mockito.when(rs.getString("name")).thenReturn("n");
-            org.mockito.Mockito.when(rs.getString("funnel_type")).thenReturn("standard");
-            org.mockito.Mockito.when(rs.getLong("max_completion_time")).thenReturn(0L);
+            org.mockito.Mockito.when(rs.getString("type")).thenReturn("standard");
+            org.mockito.Mockito.when(rs.getString("user_key")).thenReturn("user_id");
+            org.mockito.Mockito.when(rs.getLong("time_window_sec")).thenReturn(0L);
             org.mockito.Mockito.when(rs.wasNull()).thenReturn(true);
             java.sql.PreparedStatement ps = org.mockito.Mockito.mock(java.sql.PreparedStatement.class);
             org.mockito.Mockito.when(ps.executeQuery()).thenReturn(rs);

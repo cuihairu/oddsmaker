@@ -273,16 +273,18 @@ echo "  risk_events offsets after risk-tagged event: ${TAG_TOPIC:-0} (expect ${R
 [ "${TAG_TOPIC:-0}" -eq "${RISK_N:-0}" ] && ok "gateway no longer writes Avro into risk_events" || bad "risk_events grew without a threshold hit (${RISK_N} -> ${TAG_TOPIC})"
 
 section "15. Flink configurable funnels（control PG 配置 → 加载 → funnels_configurable 落库）"
-# 幂等铺配置：control 真实迁移（V0.3.3）建的 funnel_analyses / funnel_steps 表。
+# 幂等铺配置：控制面同款 funnel_configs / funnel_steps(funnel_id)——与 job 的加载 SQL 一致
+# （job 改读 funnel_configs 后 e2e 不再写 funnel_analyses；DELETE 兼容清理老环境残留）。
 # job 启动时一次性加载，所以插完配置要 force-recreate 该容器
 CFG_SEED=$($COMPOSE exec -T postgres psql -U oddsmaker -d oddsmaker -v ON_ERROR_STOP=1 <<'SQL'
-DELETE FROM funnel_steps WHERE funnel_analysis_id = 'e2e_funnel_cfg';
+DELETE FROM funnel_steps WHERE funnel_id = 'e2e_funnel_cfg' OR funnel_analysis_id = 'e2e_funnel_cfg';
+DELETE FROM funnel_configs WHERE id = 'e2e_funnel_cfg';
 DELETE FROM funnel_analyses WHERE id = 'e2e_funnel_cfg';
-INSERT INTO funnel_analyses (id, game_id, name, display_name, funnel_type, window_type, window_size, total_steps, status, enable_auto_calc, max_completion_time)
-VALUES ('e2e_funnel_cfg', 'e2e_game', 'e2e-configurable-funnel', 'E2E Configurable Funnel', 'SEQUENTIAL', 'fixed', 7, 2, 'ACTIVE', FALSE, 86400);
-INSERT INTO funnel_steps (id, funnel_analysis_id, funnel_id, step_order, name, event_name, display_name, status)
-VALUES ('e2e_fs1', 'e2e_funnel_cfg', 'e2e_funnel_cfg', 1, 'Level Start', 'level_start', 'Level Start', 'ACTIVE'),
-       ('e2e_fs2', 'e2e_funnel_cfg', 'e2e_funnel_cfg', 2, 'Level Complete', 'level_complete', 'Level Complete', 'ACTIVE');
+INSERT INTO funnel_configs (id, game_id, user_key, name, description, type, time_window_sec, enabled, created_at, updated_at)
+VALUES ('e2e_funnel_cfg', 'e2e_game', 'user_id', 'e2e-configurable-funnel', 'E2E configurable funnel', 'SEQUENTIAL', 86400, TRUE, now(), now());
+INSERT INTO funnel_steps (id, funnel_id, step_order, name, event_name, time_window_sec, optional)
+VALUES ('e2e_fs1', 'e2e_funnel_cfg', 1, 'Level Start', 'level_start', 3600, FALSE),
+       ('e2e_fs2', 'e2e_funnel_cfg', 2, 'Level Complete', 'level_complete', 3600, FALSE);
 SQL
 ) 2>&1
 if [ $? -eq 0 ]; then

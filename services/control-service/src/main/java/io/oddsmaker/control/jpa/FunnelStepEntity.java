@@ -1,5 +1,6 @@
 package io.oddsmaker.control.jpa;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import java.util.UUID;
 
@@ -24,6 +25,7 @@ public class FunnelStepEntity {
         }
     }
 
+    @JsonIgnore
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "funnel_id", nullable = false)
     public FunnelConfigEntity funnel;
