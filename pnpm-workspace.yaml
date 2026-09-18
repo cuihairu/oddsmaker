@@ -8,3 +8,4 @@ allowBuilds:
 overrides:
   vite: "^6.4.3"
   esbuild: "^0.25.0"
+  postcss: "^8.5.23"   # GHSA-r28c-9q8g-f849 / GHSA-fxqj-rqcc-2cmp（sourceMappingURL 路径穿越）
