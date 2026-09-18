@@ -135,6 +135,12 @@ oddsmaker:
     simulated-metrics-enabled: ${ODDSMAKER_HEALTH_SIMULATED_METRICS:false}
     simulated-checks-enabled: ${ODDSMAKER_HEALTH_SIMULATED_CHECKS:false}
 
+  # Webhook 派发超时：派发同步内联在调用方线程（含 @Scheduled 调度线程），
+  # 必须封顶防一个挂起端点拖死整个调度线程池
+  webhook:
+    connect-timeout-ms: ${ODDSMAKER_WEBHOOK_CONNECT_TIMEOUT_MS:3000}
+    read-timeout-ms: ${ODDSMAKER_WEBHOOK_READ_TIMEOUT_MS:5000}
+
 # 监控和健康检查
 management:
   endpoints:

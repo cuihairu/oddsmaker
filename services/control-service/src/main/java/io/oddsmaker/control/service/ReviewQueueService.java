@@ -31,6 +31,9 @@ public class ReviewQueueService {
     @Autowired
     private AuditLogService auditLogService;
 
+    @Autowired
+    private WebhookService webhookService;
+
     /**
      * 添加案例到审核队列
      */
@@ -323,7 +326,25 @@ public class ReviewQueueService {
 
                     logger.warn("SLA breach detected for review item: {}", item.caseNumber);
 
-                    // TODO: 发送SLA违规告警
+                    Map<String, Object> payload = new LinkedHashMap<>();
+                    payload.put("event_type", WebhookService.EVENT_REVIEW_SLA_BREACH);
+                    payload.put("item_id", item.id);
+                    payload.put("case_number", item.caseNumber);
+                    payload.put("game_id", item.gameId);
+                    payload.put("environment_id", item.environmentId);
+                    payload.put("target_type", item.targetType);
+                    payload.put("target_id", item.targetId);
+                    payload.put("target_name", item.targetName);
+                    payload.put("priority", item.priority);
+                    payload.put("category", item.category);
+                    payload.put("queue_type", item.queueType);
+                    payload.put("sla_due_at", item.slaDueAt != null ? item.slaDueAt.toString() : null);
+                    payload.put("breached_at", LocalDateTime.now().toString());
+                    try {
+                        webhookService.sendCustomWebhook(item.gameId, WebhookService.EVENT_REVIEW_SLA_BREACH, payload);
+                    } catch (Exception e) {
+                        logger.warn("Review SLA breach webhook dispatch failed: {}", e.getMessage());
+                    }
                 }
             }
 
@@ -349,7 +370,35 @@ public class ReviewQueueService {
             for (ReviewQueueEntity item : needsEscalation) {
                 logger.warn("Item {} needs escalation - in review for over 24 hours", item.caseNumber);
 
-                // TODO: 自动升级或发送通知
+                // 置升级标志（不动 reviewStatus，避免把处理中项挪出审核者工作流）；
+                // findNeedsEscalation 过滤 escalated=false，每项至多升级一次
+                item.escalated = true;
+                item.escalatedTo = "system";
+                item.escalationReason = "Auto-escalated: in review for over 24 hours";
+                item.escalatedAt = LocalDateTime.now();
+                reviewQueueRepo.save(item);
+
+                Map<String, Object> payload = new LinkedHashMap<>();
+                payload.put("event_type", WebhookService.EVENT_REVIEW_ESCALATION);
+                payload.put("item_id", item.id);
+                payload.put("case_number", item.caseNumber);
+                payload.put("game_id", item.gameId);
+                payload.put("environment_id", item.environmentId);
+                payload.put("target_type", item.targetType);
+                payload.put("target_id", item.targetId);
+                payload.put("target_name", item.targetName);
+                payload.put("priority", item.priority);
+                payload.put("category", item.category);
+                payload.put("sla_due_at", item.slaDueAt != null ? item.slaDueAt.toString() : null);
+                payload.put("escalated_to", item.escalatedTo);
+                payload.put("escalation_reason", item.escalationReason);
+                payload.put("escalated_at", item.escalatedAt.toString());
+                payload.put("created_at", item.createdAt != null ? item.createdAt.toString() : null);
+                try {
+                    webhookService.sendCustomWebhook(item.gameId, WebhookService.EVENT_REVIEW_ESCALATION, payload);
+                } catch (Exception e) {
+                    logger.warn("Review escalation webhook dispatch failed: {}", e.getMessage());
+                }
             }
 
             if (!needsEscalation.isEmpty()) {

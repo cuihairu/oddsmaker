@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -34,6 +35,9 @@ public class BlockListService {
 
     @Autowired
     private AuditLogService auditLogService;
+
+    @Autowired
+    private WebhookService webhookService;
 
     /**
      * 检查目标是否被封禁
@@ -136,6 +140,31 @@ public class BlockListService {
         );
 
         logger.info("Added block for {}:{} in game {}", targetType, targetValue, gameId);
+
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("event_type", WebhookService.EVENT_BLOCK);
+        payload.put("block_id", block.id);
+        payload.put("game_id", block.gameId);
+        payload.put("environment_id", block.environmentId);
+        payload.put("target", Map.of(
+            "type", block.targetType,
+            "id", block.targetValue,
+            "name", block.targetName != null ? block.targetName : block.targetValue
+        ));
+        payload.put("block_type", block.blockType != null ? block.blockType.name() : null);
+        payload.put("is_permanent", block.isPermanent);
+        payload.put("expires_at", block.expiresAt != null ? block.expiresAt.toString() : null);
+        payload.put("block_reason", block.blockReason);
+        payload.put("block_category", block.blockCategory);
+        payload.put("risk_case_id", block.riskCaseId);
+        payload.put("blocked_by", block.blockedBy);
+        payload.put("blocked_at", block.blockedAt.toString());
+        try {
+            webhookService.sendCustomWebhook(gameId, WebhookService.EVENT_BLOCK, payload);
+        } catch (Exception e) {
+            logger.warn("Block webhook dispatch failed: {}", e.getMessage());
+        }
+
         return block;
     }
 

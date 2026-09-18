@@ -13,6 +13,7 @@ import io.oddsmaker.control.jpa.RiskRuleRepo;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.ArgumentMatchers;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -36,6 +37,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
@@ -43,6 +45,7 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 /**
@@ -226,6 +229,9 @@ class RiskServicesDeepTest {
 
     @Mock
     private RiskCaseRepo riskCaseRepo;
+
+    @Mock
+    private WebhookService webhookService;
 
     @InjectMocks
     private ReviewQueueService reviewQueueService;
@@ -496,6 +502,105 @@ class RiskServicesDeepTest {
         assertNotNull(timed.expiresAt);
         assertEquals("security", timed.blockCategory);
         assertEquals("1.2.3.4", timed.targetName);
+    }
+
+    @Test
+    @DisplayName("Webhook 接线：SLA 违规派发一次、自动升级置位并派发、封禁派发 block 且早退不重发")
+    @SuppressWarnings("unchecked")
+    void webhookDispatchForReviewAndBlock() {
+        // SLA 违规：未 breach 项派发一次，已 breach 项不重发
+        ReviewQueueEntity breach = queueItem("q_wh1", ReviewQueueEntity.ReviewStatus.IN_REVIEW);
+        breach.slaDueAt = LocalDateTime.now().minusHours(2);
+        ReviewQueueEntity already = queueItem("q_wh2", ReviewQueueEntity.ReviewStatus.PENDING);
+        already.slaBreached = true;
+        lenient().when(reviewQueueRepo.findOverdue(any())).thenReturn(List.of(breach, already));
+        reviewQueueService.checkSlaBreaches();
+        assertTrue(breach.slaBreached);
+        verify(reviewQueueRepo).save(breach);
+        verify(reviewQueueRepo, never()).save(already);
+
+        ArgumentCaptor<Map<String, Object>> slaPayload = ArgumentCaptor.forClass(Map.class);
+        verify(webhookService, times(1)).sendCustomWebhook(eq("g"),
+            eq(WebhookService.EVENT_REVIEW_SLA_BREACH), slaPayload.capture());
+        assertEquals("CASE_1", slaPayload.getValue().get("case_number"));
+        assertEquals("q_wh1", slaPayload.getValue().get("item_id"));
+        assertEquals(50, slaPayload.getValue().get("priority"));
+
+        // 自动升级：置位四字段并派发一次（escalated 标志防每小时重复轰炸）
+        ReviewQueueEntity stale = queueItem("q_wh3", ReviewQueueEntity.ReviewStatus.IN_REVIEW);
+        stale.createdAt = LocalDateTime.now().minusHours(30);
+        lenient().when(reviewQueueRepo.findNeedsEscalation(any())).thenReturn(List.of(stale));
+        reviewQueueService.checkEscalations();
+        assertEquals(Boolean.TRUE, stale.escalated);
+        assertEquals("system", stale.escalatedTo);
+        assertEquals("Auto-escalated: in review for over 24 hours", stale.escalationReason);
+        assertNotNull(stale.escalatedAt);
+
+        ArgumentCaptor<Map<String, Object>> escPayload = ArgumentCaptor.forClass(Map.class);
+        verify(webhookService, times(1)).sendCustomWebhook(eq("g"),
+            eq(WebhookService.EVENT_REVIEW_ESCALATION), escPayload.capture());
+        assertEquals("system", escPayload.getValue().get("escalated_to"));
+        assertEquals("CASE_1", escPayload.getValue().get("case_number"));
+    }
+
+    @Test
+    @DisplayName("Webhook 接线：addBlock 新建派发 block 事件（payload 含目标与类型），已封禁早退不派发")
+    @SuppressWarnings("unchecked")
+    void webhookDispatchForBlock() {
+        lenient().when(blockListRepo.findActiveBlock(anyString(), anyString(), anyString(), any()))
+            .thenReturn(Optional.empty());
+        lenient().when(blockListRepo.save(any(BlockListEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+        lenient().doNothing().when(webhookService).sendCustomWebhook(anyString(), anyString(), anyMap());
+
+        blockListService.addBlock("g", "env1", "device", "d_w1", "cheat", "fraud",
+            BlockListEntity.BlockType.HARD, true, null, "op", "rc_9", null);
+
+        ArgumentCaptor<Map<String, Object>> blockPayload = ArgumentCaptor.forClass(Map.class);
+        verify(webhookService, times(1)).sendCustomWebhook(eq("g"),
+            eq(WebhookService.EVENT_BLOCK), blockPayload.capture());
+        assertEquals("device", ((Map<String, Object>) blockPayload.getValue().get("target")).get("type"));
+        assertEquals("d_w1", ((Map<String, Object>) blockPayload.getValue().get("target")).get("id"));
+        assertEquals("HARD", blockPayload.getValue().get("block_type"));
+        assertEquals(Boolean.TRUE, blockPayload.getValue().get("is_permanent"));
+        assertEquals("rc_9", blockPayload.getValue().get("risk_case_id"));
+
+        // 已封禁早退：不重复派发
+        BlockListEntity existing = block("bl_exist", "env1");
+        lenient().when(blockListRepo.findActiveBlock(eq("g"), eq("device"), eq("d_w2"), any()))
+            .thenReturn(Optional.of(existing));
+        blockListService.addBlock("g", "env1", "device", "d_w2", "r", null,
+            BlockListEntity.BlockType.HARD, false, 60, "op", null, null);
+        verify(webhookService, times(1)).sendCustomWebhook(anyString(), anyString(), anyMap());
+    }
+
+    @Test
+    @DisplayName("Webhook 接线：派发异常被吞不阻断主流程（SLA 置位/升级置位/封禁落库照常）")
+    void webhookDispatchFailuresSwallowed() {
+        doThrow(new RuntimeException("wh down")).when(webhookService)
+            .sendCustomWebhook(anyString(), anyString(), anyMap());
+
+        // SLA 违规：派发失败但 slaBreached 置位照常
+        ReviewQueueEntity breach = queueItem("q_wh4", ReviewQueueEntity.ReviewStatus.IN_REVIEW);
+        breach.slaDueAt = LocalDateTime.now().minusHours(2);
+        lenient().when(reviewQueueRepo.findOverdue(any())).thenReturn(List.of(breach));
+        assertDoesNotThrow(() -> reviewQueueService.checkSlaBreaches());
+        assertTrue(breach.slaBreached);
+
+        // 自动升级：派发失败但四字段置位照常
+        ReviewQueueEntity stale = queueItem("q_wh5", ReviewQueueEntity.ReviewStatus.IN_REVIEW);
+        stale.createdAt = LocalDateTime.now().minusHours(30);
+        lenient().when(reviewQueueRepo.findNeedsEscalation(any())).thenReturn(List.of(stale));
+        assertDoesNotThrow(() -> reviewQueueService.checkEscalations());
+        assertEquals(Boolean.TRUE, stale.escalated);
+
+        // 封禁：派发失败但落库照常
+        lenient().when(blockListRepo.findActiveBlock(anyString(), anyString(), anyString(), any()))
+            .thenReturn(Optional.empty());
+        lenient().when(blockListRepo.save(any(BlockListEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+        assertDoesNotThrow(() -> blockListService.addBlock("g", "env1", "device", "d_w3", "cheat", "fraud",
+            BlockListEntity.BlockType.HARD, true, null, "op", null, null));
+
+        verify(webhookService, times(3)).sendCustomWebhook(anyString(), anyString(), anyMap());
     }
 
     @Test

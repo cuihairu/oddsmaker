@@ -110,6 +110,9 @@ public class MaintenanceWindowEntity {
     @Column(name = "notification_sent_at")
     public LocalDateTime notificationSentAt;  // 通知发送时间
 
+    @Column(name = "end_notification_sent", columnDefinition = "BOOLEAN")
+    public Boolean endNotificationSent = false;  // 是否已发送"即将结束"通知（V0.9.5）
+
     @Column(name = "notification_channels", columnDefinition = "TEXT")
     public String notificationChannels;  // JSON格式的通知渠道
 

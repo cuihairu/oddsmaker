@@ -30,6 +30,9 @@ public class ExportService {
     private AuditLogService auditLogService;
 
     @Autowired
+    private WebhookService webhookService;
+
+    @Autowired
     private ObjectMapper objectMapper;
 
     /**
@@ -108,7 +111,24 @@ public class ExportService {
 
             logger.info("Completed export job: {} - {} ({} bytes)", job.id, job.fileName, fileSize);
 
-            // TODO: 发送完成通知
+            // 完成派发（任务状态机保证一次性；notifyOnComplete 是邮件语义，保持独立）
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put("event_type", WebhookService.EVENT_EXPORT_COMPLETE);
+            payload.put("job_id", job.id);
+            payload.put("game_id", job.gameId);
+            payload.put("user_id", job.userId);
+            payload.put("export_type", job.exportType);
+            payload.put("export_format", job.exportFormat);
+            payload.put("total_rows", job.totalRows);
+            payload.put("file_size_bytes", fileSize);
+            payload.put("file_name", job.fileName);
+            payload.put("completed_at", LocalDateTime.now().toString());
+            try {
+                webhookService.sendCustomWebhook(job.gameId, WebhookService.EVENT_EXPORT_COMPLETE, payload);
+            } catch (Exception e) {
+                logger.warn("Export complete webhook dispatch failed: {}", e.getMessage());
+            }
+
             if (Boolean.TRUE.equals(job.notifyOnComplete) && job.notificationEmail != null) {
                 sendCompletionNotification(job);
             }

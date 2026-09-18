@@ -34,6 +34,9 @@ public class RateLimitService {
     @Autowired
     private AuditLogService auditLogService;
 
+    @Autowired
+    private WebhookService webhookService;
+
     // 本地缓存，用于快速检查
     private final Map<String, RateLimitUsageEntity> usageCache = new ConcurrentHashMap<>();
 
@@ -384,7 +387,7 @@ public class RateLimitService {
         logger.warn("Quota warning: game={}, resource={}, usage={}%",
             quota.gameId, quota.resourceType, String.format("%.2f", quota.getUsagePercent()));
 
-        // TODO: 发送通知（通过集成服务）
+        dispatchQuotaWebhook(quota, WebhookService.EVENT_QUOTA_WARNING);
     }
 
     /**
@@ -394,7 +397,30 @@ public class RateLimitService {
         logger.error("Quota alert: game={}, resource={}, usage={}%",
             quota.gameId, quota.resourceType, String.format("%.2f", quota.getUsagePercent()));
 
-        // TODO: 发送告警（通过集成服务）
+        dispatchQuotaWebhook(quota, WebhookService.EVENT_QUOTA_ALERT);
+    }
+
+    /**
+     * 派发配额 webhook（warningSent/alertSent 标志由 checkAndSendAlerts 保证一次性）
+     */
+    private void dispatchQuotaWebhook(QuotaEntity quota, String eventType) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("event_type", eventType);
+        payload.put("game_id", quota.gameId);
+        payload.put("environment_id", quota.environmentId);
+        payload.put("resource_type", quota.resourceType != null ? quota.resourceType.name() : null);
+        payload.put("quota_limit", quota.quotaLimit);
+        payload.put("current_usage", quota.currentUsage);
+        payload.put("usage_percent", quota.getUsagePercent());
+        payload.put("warning_threshold", quota.warningThreshold);
+        payload.put("alert_threshold", quota.alertThreshold);
+        payload.put("hard_limit", quota.hardLimit);
+        payload.put("occurred_at", LocalDateTime.now().toString());
+        try {
+            webhookService.sendCustomWebhook(quota.gameId, eventType, payload);
+        } catch (Exception e) {
+            logger.warn("Quota webhook dispatch failed: {}", e.getMessage());
+        }
     }
 
     /**

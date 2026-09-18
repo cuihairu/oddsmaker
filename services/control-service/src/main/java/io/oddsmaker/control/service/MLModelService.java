@@ -35,6 +35,9 @@ public class MLModelService {
     @Autowired
     private AuditLogService auditLogService;
 
+    @Autowired
+    private WebhookService webhookService;
+
     // ==================== 模型管理 ====================
 
     /**
@@ -894,8 +897,17 @@ public class MLModelService {
                     logger.warn("Model drift detected for model: {} - severity: {}",
                         model.id, driftReport.get("severity"));
 
-                    // 可以在这里触发告警通知
-                    // notificationService.sendDriftAlert(model, driftReport);
+                    Map<String, Object> payload = new LinkedHashMap<>(driftReport);
+                    payload.put("event_type", WebhookService.EVENT_MODEL_DRIFT);
+                    payload.put("model_id", model.id);
+                    payload.put("model_name", model.modelName);
+                    payload.put("game_id", model.gameId);
+                    payload.put("detected_at", LocalDateTime.now().toString());
+                    try {
+                        webhookService.sendCustomWebhook(model.gameId, WebhookService.EVENT_MODEL_DRIFT, payload);
+                    } catch (Exception e) {
+                        logger.warn("Model drift webhook dispatch failed: {}", e.getMessage());
+                    }
                 }
             } catch (Exception e) {
                 logger.error("Failed to detect drift for model: {}", model.id, e);

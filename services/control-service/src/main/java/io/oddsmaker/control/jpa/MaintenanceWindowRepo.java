@@ -18,16 +18,16 @@ public interface MaintenanceWindowRepo extends JpaRepository<MaintenanceWindowEn
     List<MaintenanceWindowEntity> findActive();
 
     /**
-     * 查找待开始的维护窗口
+     * 查找待开始且未发送过即将开始通知的维护窗口（notificationSent 一次性守卫，防每分钟重复派发）
      */
-    @Query("SELECT mw FROM MaintenanceWindowEntity mw WHERE mw.maintenanceStatus = 'PENDING' AND mw.scheduledStart <= :now AND mw.deletedAt IS NULL ORDER BY mw.scheduledStart ASC")
-    List<MaintenanceWindowEntity> findPending(@Param("now") LocalDateTime now);
+    @Query("SELECT mw FROM MaintenanceWindowEntity mw WHERE mw.maintenanceStatus = 'PENDING' AND mw.scheduledStart <= :now AND mw.deletedAt IS NULL AND (mw.notificationSent = false OR mw.notificationSent IS NULL) ORDER BY mw.scheduledStart ASC")
+    List<MaintenanceWindowEntity> findPendingUnnotified(@Param("now") LocalDateTime now);
 
     /**
-     * 查找应该结束的维护窗口
+     * 查找应该结束且未发送过结束通知的维护窗口（endNotificationSent 一次性守卫）
      */
-    @Query("SELECT mw FROM MaintenanceWindowEntity mw WHERE mw.maintenanceStatus = 'IN_PROGRESS' AND mw.scheduledEnd <= :now AND mw.deletedAt IS NULL")
-    List<MaintenanceWindowEntity> findShouldEnd(@Param("now") LocalDateTime now);
+    @Query("SELECT mw FROM MaintenanceWindowEntity mw WHERE mw.maintenanceStatus = 'IN_PROGRESS' AND mw.scheduledEnd <= :now AND mw.deletedAt IS NULL AND (mw.endNotificationSent = false OR mw.endNotificationSent IS NULL)")
+    List<MaintenanceWindowEntity> findShouldEndUnnotified(@Param("now") LocalDateTime now);
 
     /**
      * 查找超期的维护窗口

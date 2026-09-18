@@ -144,9 +144,9 @@ class PlatformServicesTest {
         org.junit.jupiter.api.Assertions.assertEquals("Oddsmaker", configs.get("site.name"));
 
         // 三个定时检查：repo 抛异常各自吞掉
-        lenient().when(maintenanceWindowRepo.findPending(any())).thenThrow(new IllegalStateException("boom"));
+        lenient().when(maintenanceWindowRepo.findPendingUnnotified(any())).thenThrow(new IllegalStateException("boom"));
         org.junit.jupiter.api.Assertions.assertDoesNotThrow(() -> maintenanceService.checkPendingMaintenances());
-        lenient().when(maintenanceWindowRepo.findShouldEnd(any())).thenThrow(new IllegalStateException("boom"));
+        lenient().when(maintenanceWindowRepo.findShouldEndUnnotified(any())).thenThrow(new IllegalStateException("boom"));
         org.junit.jupiter.api.Assertions.assertDoesNotThrow(() -> maintenanceService.checkEndingMaintenances());
         lenient().when(featureFlagRepo.findScheduledToEnable(any())).thenThrow(new IllegalStateException("boom"));
         org.junit.jupiter.api.Assertions.assertDoesNotThrow(() -> maintenanceService.checkScheduledFeatureFlags());

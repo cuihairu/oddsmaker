@@ -49,9 +49,14 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 
 /**
  * 运营域 Service 深度单元测试：报表/导出/Cohort/维护/存储配置/分析（主路径 + 校验分支，纯 Mockito）。
@@ -273,6 +278,8 @@ class OpsServicesDeepTest {
         assertTrue(processed.fileSizeBytes > 0);
         assertEquals(Integer.valueOf(100), processed.progressPercent);
         assertNotNull(processed.expiresAt);
+        // 导出完成派发 export_complete（gameId 取任务归属）
+        verify(webhookService).sendCustomWebhook(eq("g"), eq(WebhookService.EVENT_EXPORT_COMPLETE), anyMap());
 
         assertThrows(IllegalArgumentException.class, () -> exportService.cancelExportJob("none", "why"));
         ExportJobEntity cancelled = exportService.cancelExportJob("e2", "wrong target");
@@ -474,6 +481,9 @@ class OpsServicesDeepTest {
     @Mock
     private FeatureFlagRepo featureFlagRepo;
 
+    @Mock
+    private WebhookService webhookService;
+
     @InjectMocks
     private MaintenanceService maintenanceService;
 
@@ -608,13 +618,21 @@ class OpsServicesDeepTest {
         lenient().when(featureFlagRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         MaintenanceWindowEntity toStart = window(MaintenanceWindowEntity.MaintenanceStatus.SCHEDULED);
-        lenient().when(maintenanceWindowRepo.findPending(any())).thenReturn(List.of(toStart));
+        toStart.gameId = "g1";
+        lenient().when(maintenanceWindowRepo.findPendingUnnotified(any())).thenReturn(List.of(toStart));
         maintenanceService.checkPendingMaintenances();
-        assertEquals(MaintenanceWindowEntity.MaintenanceStatus.PENDING, toStart.maintenanceStatus);
+        // 一次性通知守卫：状态机不动，notificationSent 置位 + 派发一次
+        assertEquals(MaintenanceWindowEntity.MaintenanceStatus.SCHEDULED, toStart.maintenanceStatus);
+        assertEquals(Boolean.TRUE, toStart.notificationSent);
+        assertNotNull(toStart.notificationSentAt);
+        verify(webhookService).sendCustomWebhook(eq("g1"), eq(WebhookService.EVENT_MAINTENANCE_UPCOMING), anyMap());
 
         MaintenanceWindowEntity toEnd = window(MaintenanceWindowEntity.MaintenanceStatus.IN_PROGRESS);
-        lenient().when(maintenanceWindowRepo.findShouldEnd(any())).thenReturn(List.of(toEnd));
+        toEnd.gameId = "g1";
+        lenient().when(maintenanceWindowRepo.findShouldEndUnnotified(any())).thenReturn(List.of(toEnd));
         maintenanceService.checkEndingMaintenances();
+        assertEquals(Boolean.TRUE, toEnd.endNotificationSent);
+        verify(webhookService).sendCustomWebhook(eq("g1"), eq(WebhookService.EVENT_MAINTENANCE_ENDING), anyMap());
 
         FeatureFlagEntity enable = new FeatureFlagEntity();
         enable.flagKey = "f-enable";
@@ -634,6 +652,29 @@ class OpsServicesDeepTest {
         assertEquals("system", enable.lastModifiedBy);
         assertEquals(FeatureFlagEntity.FlagStatus.DISABLED, disable.flagStatus);
         assertEquals(FeatureFlagEntity.FlagStatus.DISABLED, expired.flagStatus);
+    }
+
+    @Test
+    @DisplayName("Webhook 接线：维护窗口派发异常被吞，一次性通知标志照常置位")
+    void webhookDispatchFailureSwallowedForMaintenance() {
+        lenient().when(maintenanceWindowRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        doThrow(new RuntimeException("wh down")).when(webhookService)
+            .sendCustomWebhook(anyString(), anyString(), anyMap());
+
+        MaintenanceWindowEntity toStart = window(MaintenanceWindowEntity.MaintenanceStatus.SCHEDULED);
+        toStart.gameId = "g1";
+        lenient().when(maintenanceWindowRepo.findPendingUnnotified(any())).thenReturn(List.of(toStart));
+        assertDoesNotThrow(() -> maintenanceService.checkPendingMaintenances());
+        assertEquals(Boolean.TRUE, toStart.notificationSent);
+        assertNotNull(toStart.notificationSentAt);
+
+        MaintenanceWindowEntity toEnd = window(MaintenanceWindowEntity.MaintenanceStatus.IN_PROGRESS);
+        toEnd.gameId = "g1";
+        lenient().when(maintenanceWindowRepo.findShouldEndUnnotified(any())).thenReturn(List.of(toEnd));
+        assertDoesNotThrow(() -> maintenanceService.checkEndingMaintenances());
+        assertEquals(Boolean.TRUE, toEnd.endNotificationSent);
+
+        verify(webhookService, times(2)).sendCustomWebhook(eq("g1"), anyString(), anyMap());
     }
 
     // ===== 存储配置 =====

@@ -35,6 +35,7 @@ import io.oddsmaker.control.jpa.UserRoleRepo;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
@@ -119,6 +120,9 @@ class MlExperimentDeepTest {
 
     @Mock
     private UserRoleRepo userRoleRepo;
+
+    @Mock
+    private WebhookService webhookService;
 
     // ==================== 被测服务 ====================
 
@@ -374,6 +378,29 @@ class MlExperimentDeepTest {
         assertThat(report.get("baselineAccuracy")).isEqualTo(0.9);
         assertThat(report.get("severity")).isEqualTo("CRITICAL");
         assertThat((String) report.get("recommendation")).contains("retraining");
+    }
+
+    @Test
+    @DisplayName("scheduledDriftDetection - 检出漂移按 game 维度派发 model_drift webhook")
+    @SuppressWarnings("unchecked")
+    void scheduledDriftDetection_dispatchesWebhook() {
+        MLModelEntity model = mlModel(MLModelEntity.ModelStatus.DEPLOYED);
+        lenient().when(mlModelRepo.findAllDeployed()).thenReturn(List.of(model));
+        lenient().when(mlModelRepo.findById("ml_1")).thenReturn(Optional.of(model));
+        lenient().when(modelPredictionRepo.findByTimeRange(eq("ml_1"), any(LocalDateTime.class), any(LocalDateTime.class)))
+            .thenReturn(List.of(
+                prediction(MLModelPredictionEntity.FeedbackType.INCORRECT),
+                prediction(MLModelPredictionEntity.FeedbackType.INCORRECT)));
+
+        mlModelService.scheduledDriftDetection();
+
+        ArgumentCaptor<Map<String, Object>> payload = ArgumentCaptor.forClass(Map.class);
+        verify(webhookService).sendCustomWebhook(eq("game_1"), eq(WebhookService.EVENT_MODEL_DRIFT), payload.capture());
+        assertThat(payload.getValue().get("model_id")).isEqualTo("ml_1");
+        assertThat(payload.getValue().get("model_name")).isEqualTo("Churn Model");
+        assertThat(payload.getValue().get("game_id")).isEqualTo("game_1");
+        assertThat(payload.getValue().get("severity")).isEqualTo("CRITICAL");
+        assertThat(payload.getValue().get("event_type")).isEqualTo("model_drift");
     }
 
     @Test

@@ -7,6 +7,7 @@ import io.oddsmaker.control.jpa.HealthMetricRepo;
 import io.oddsmaker.control.jpa.IntegrationLogRepo;
 import io.oddsmaker.control.jpa.IntegrationRepo;
 import io.oddsmaker.control.jpa.MFAConfigRepo;
+import io.oddsmaker.control.jpa.QuotaEntity;
 import io.oddsmaker.control.jpa.PipelineJobRepo;
 import io.oddsmaker.control.jpa.PipelineRepo;
 import io.oddsmaker.control.jpa.QuotaRepo;
@@ -16,23 +17,32 @@ import io.oddsmaker.control.jpa.RiskRuleRepo;
 import io.oddsmaker.control.jpa.SSOConfigRepo;
 import io.oddsmaker.control.jpa.SecurityPolicyRepo;
 import io.oddsmaker.control.jpa.SecuritySessionRepo;
+import io.oddsmaker.control.jpa.SystemAlertEntity;
 import io.oddsmaker.control.jpa.SystemAlertRepo;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -137,6 +147,9 @@ class InfraServicesTest {
     @Mock
     private SystemAlertRepo systemAlertRepo;
 
+    @Mock
+    private WebhookService webhookService;
+
     @InjectMocks
     private HealthMonitorService healthMonitorService;
 
@@ -195,6 +208,45 @@ class InfraServicesTest {
         org.junit.jupiter.api.Assertions.assertDoesNotThrow(() -> healthMonitorService.cleanupClosedAlerts());
     }
 
+    @Test
+    @DisplayName("Webhook 接线：告警升级派发 alert_escalation；gameId 空只升级不派发；派发异常被吞")
+    @SuppressWarnings("unchecked")
+    void alertEscalationDispatchesWebhook() {
+        lenient().when(systemAlertRepo.save(any(SystemAlertEntity.class)))
+            .thenAnswer(inv -> inv.getArgument(0));
+
+        SystemAlertEntity biz = new SystemAlertEntity();
+        biz.id = "sa_1";
+        biz.title = "支付成功率骤降";
+        biz.severity = SystemAlertEntity.Severity.CRITICAL;
+        biz.gameId = "g";
+        biz.source = "metric-monitor";
+        biz.affectedResource = "payment-api";
+        SystemAlertEntity platform = new SystemAlertEntity();
+        platform.id = "sa_2";
+        platform.title = "平台级告警";
+        when(systemAlertRepo.findNeedingEscalation()).thenReturn(List.of(biz, platform));
+
+        healthMonitorService.checkAlertEscalations();
+
+        // 平台级（gameId 空）只升级不派发，不伪造路由
+        ArgumentCaptor<Map<String, Object>> payload = ArgumentCaptor.forClass(Map.class);
+        verify(webhookService, times(1)).sendCustomWebhook(anyString(), anyString(), payload.capture());
+        assertEquals("sa_1", payload.getValue().get("alert_id"));
+        assertEquals("CRITICAL", payload.getValue().get("severity"));
+        assertEquals("g", payload.getValue().get("game_id"));
+        assertEquals("metric-monitor", payload.getValue().get("source"));
+        assertEquals(Integer.valueOf(1), biz.escalationLevel);
+        assertEquals(Integer.valueOf(1), platform.escalationLevel);
+
+        // 派发异常被吞：升级照常完成，不向外抛
+        doThrow(new RuntimeException("wh down")).when(webhookService)
+            .sendCustomWebhook(anyString(), anyString(), anyMap());
+        when(systemAlertRepo.findNeedingEscalation()).thenReturn(List.of(biz));
+        assertDoesNotThrow(() -> healthMonitorService.checkAlertEscalations());
+        assertEquals(Integer.valueOf(2), biz.escalationLevel);
+    }
+
     // ===== 限流 =====
 
     @Mock
@@ -219,6 +271,47 @@ class InfraServicesTest {
         rateLimitService.getRateLimits("g");
         assertNotNull(rateLimitService.getRateLimitStats("g"));
         assertNotNull(rateLimitService.getQuotaStats("g"));
+    }
+
+    @Test
+    @DisplayName("Webhook 接线：配额超限派发 quota_warning/quota_alert 各一次；派发异常被吞")
+    @SuppressWarnings("unchecked")
+    void quotaAlertsDispatchWebhook() {
+        QuotaEntity quota = new QuotaEntity();
+        quota.id = "qt_1";
+        quota.gameId = "g";
+        quota.resourceType = QuotaEntity.ResourceType.API_CALLS_PER_DAY;
+        quota.quotaLimit = 100L;
+        quota.currentUsage = 96L;
+        when(quotaRepo.findByGameAndResourceType("g", QuotaEntity.ResourceType.API_CALLS_PER_DAY))
+            .thenReturn(Optional.of(quota));
+
+        // 97% 同时越过 warning(80%) 与 alert(95%) 阈值，各派发一次
+        rateLimitService.updateQuotaUsage("g", null, QuotaEntity.ResourceType.API_CALLS_PER_DAY, 1L);
+
+        ArgumentCaptor<Map<String, Object>> payloads = ArgumentCaptor.forClass(Map.class);
+        verify(webhookService, times(2)).sendCustomWebhook(eq("g"), anyString(), payloads.capture());
+        assertEquals("quota_warning", payloads.getAllValues().get(0).get("event_type"));
+        assertEquals("quota_alert", payloads.getAllValues().get(1).get("event_type"));
+        assertEquals("API_CALLS_PER_DAY", payloads.getAllValues().get(0).get("resource_type"));
+        assertEquals(80.0, payloads.getAllValues().get(0).get("warning_threshold"));
+        assertEquals(Boolean.TRUE, quota.warningSent);
+        assertEquals(Boolean.TRUE, quota.alertSent);
+
+        // 派发异常被吞：新配额同样越限，更新主流程不炸
+        QuotaEntity quota2 = new QuotaEntity();
+        quota2.id = "qt_2";
+        quota2.gameId = "g";
+        quota2.resourceType = QuotaEntity.ResourceType.API_CALLS_PER_DAY;
+        quota2.quotaLimit = 100L;
+        quota2.currentUsage = 96L;
+        when(quotaRepo.findByGameAndResourceType("g", QuotaEntity.ResourceType.API_CALLS_PER_DAY))
+            .thenReturn(Optional.of(quota2));
+        doThrow(new RuntimeException("wh down")).when(webhookService)
+            .sendCustomWebhook(anyString(), anyString(), anyMap());
+        assertDoesNotThrow(() ->
+            rateLimitService.updateQuotaUsage("g", null, QuotaEntity.ResourceType.API_CALLS_PER_DAY, 1L));
+        assertEquals(Boolean.TRUE, quota2.warningSent);
     }
 
     // ===== 数据管线 =====

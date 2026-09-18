@@ -9,22 +9,30 @@ import io.oddsmaker.control.jpa.TelemetryConfigRepo;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyMap;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -45,6 +53,9 @@ class DeveloperPortalServiceTest {
 
     @Mock
     private AuditLogService auditLogService;
+
+    @Mock
+    private WebhookService webhookService;
 
     @InjectMocks
     private DeveloperPortalService service;
@@ -128,6 +139,35 @@ class DeveloperPortalServiceTest {
         service.recordDownload("sv_1");
         service.updateActiveInstallations("sv_1", 100L);
         service.checkRetiringVersions();
+    }
+
+    @Test
+    @DisplayName("Webhook 接线：即将退役版本派发 sdk_version_retiring（DEFAULT 平台级）；派发异常被吞")
+    @SuppressWarnings("unchecked")
+    void checkRetiringVersionsDispatchesWebhook() {
+        SDKVersionEntity retiring = new SDKVersionEntity();
+        retiring.id = "sv_r1";
+        retiring.platform = SDKVersionEntity.SDKPlatform.UNITY;
+        retiring.version = "1.0.0";
+        retiring.versionStatus = SDKVersionEntity.VersionStatus.RELEASED;
+        retiring.retirementDate = LocalDateTime.now().plusDays(10).plusHours(2);
+        when(sdkVersionRepo.findRetiringSoon(any())).thenReturn(List.of(retiring));
+
+        service.checkRetiringVersions();
+
+        ArgumentCaptor<Map<String, Object>> payload = ArgumentCaptor.forClass(Map.class);
+        verify(webhookService).sendCustomWebhook(eq("DEFAULT"),
+            eq(WebhookService.EVENT_SDK_VERSION_RETIRING), payload.capture());
+        assertEquals("1.0.0", payload.getValue().get("version"));
+        assertEquals("UNITY", payload.getValue().get("platform"));
+        assertEquals("RELEASED", payload.getValue().get("version_status"));
+        assertEquals(10L, payload.getValue().get("days_until_retiring"));
+
+        // 派发异常被吞：不中断后续版本的退役检查
+        doThrow(new RuntimeException("wh down")).when(webhookService)
+            .sendCustomWebhook(anyString(), anyString(), anyMap());
+        assertDoesNotThrow(() -> service.checkRetiringVersions());
+        verify(webhookService, times(2)).sendCustomWebhook(anyString(), anyString(), anyMap());
     }
 
     @Test

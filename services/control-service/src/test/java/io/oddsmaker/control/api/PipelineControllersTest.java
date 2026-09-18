@@ -248,11 +248,15 @@ class PipelineControllersTest {
     @Test
     @DisplayName("Webhook：5 个端点委托")
     void webhookEndpoints() {
+        org.mockito.Mockito.when(webhookService.sendTestWebhook("c1", "g"))
+            .thenReturn(java.util.Map.of("status", "success"));
         assertEquals(200, webhookController.getGameConfigs("g").getStatusCode().value());
         assertEquals(200, webhookController.getConfig("c1", "g").getStatusCode().value());
         assertEquals(200, webhookController.getWebhookLogs("c1", "g").getStatusCode().value());
         assertEquals(200, webhookController.getWebhookStats("g").getStatusCode().value());
-        assertEquals(200, webhookController.testWebhook("c1", "g").getStatusCode().value());
+        var testRes = webhookController.testWebhook("c1", "g");
+        assertEquals(200, testRes.getStatusCode().value());
+        assertEquals("success", testRes.getBody().get("status"));
     }
 
     // ===== 限流 =====

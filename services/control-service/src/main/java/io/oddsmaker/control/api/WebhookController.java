@@ -67,14 +67,13 @@ public class WebhookController {
     }
 
     /**
-     * 测试Webhook
+     * 测试Webhook：真实发送一次测试事件并返回投递结果（成功/失败均 200，按 body.status 区分）
      */
     @PostMapping("/test/{configId}")
     @PreAuthorize("hasAuthority('MANAGE_RISK:' + #gameId)")
     public ResponseEntity<Map<String, Object>> testWebhook(
             @PathVariable String configId,
             @RequestParam String gameId) {
-        // TODO: 实现测试Webhook发送
-        return ResponseEntity.ok(Map.of("status", "test_initiated"));
+        return ResponseEntity.ok(webhookService.sendTestWebhook(configId, gameId));
     }
 }

@@ -35,6 +35,9 @@ public class HealthMonitorService {
     @Autowired
     private AuditLogService auditLogService;
 
+    @Autowired
+    private WebhookService webhookService;
+
     // 模拟数据开关：@EnableScheduling 激活前这些 @Scheduled 从未执行，激活后默认关闭
     // 避免 Math.random 假指标/假告警污染真实监控数据
     @Value("${oddsmaker.health.simulated-checks-enabled:false}")
@@ -376,7 +379,24 @@ public class HealthMonitorService {
 
                 logger.warn("Escalated alert: {} - {}", alert.id, alert.title);
 
-                // TODO: 发送升级通知
+                // gameId 为空（平台级告警）只升级不派发，不伪造路由
+                if (alert.gameId != null && !alert.gameId.isBlank()) {
+                    Map<String, Object> payload = new LinkedHashMap<>();
+                    payload.put("event_type", WebhookService.EVENT_ALERT_ESCALATION);
+                    payload.put("alert_id", alert.id);
+                    payload.put("title", alert.title);
+                    payload.put("severity", alert.severity != null ? alert.severity.name() : null);
+                    payload.put("game_id", alert.gameId);
+                    payload.put("escalation_level", alert.escalationLevel);
+                    payload.put("source", alert.source);
+                    payload.put("affected_resource", alert.affectedResource);
+                    payload.put("escalated_at", LocalDateTime.now().toString());
+                    try {
+                        webhookService.sendCustomWebhook(alert.gameId, WebhookService.EVENT_ALERT_ESCALATION, payload);
+                    } catch (Exception e) {
+                        logger.warn("Alert escalation webhook dispatch failed: {}", e.getMessage());
+                    }
+                }
             }
 
             if (!needingEscalation.isEmpty()) {

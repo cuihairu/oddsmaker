@@ -1,5 +1,6 @@
 package io.oddsmaker.control.jpa;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import org.hibernate.annotations.CreationTimestamp;
 
@@ -94,6 +95,7 @@ public class WebhookLogEntity {
     // 关联关系
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "webhook_config_id", insertable = false, updatable = false)
+    @JsonIgnore  // LAZY 代理在事务外（open-in-view: false）序列化必 500，日志响应只输出日志自身字段
     public WebhookConfigEntity webhookConfig;
 
     public enum DeliveryStatus {

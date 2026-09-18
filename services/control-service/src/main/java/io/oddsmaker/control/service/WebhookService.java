@@ -25,6 +25,20 @@ import java.util.stream.Collectors;
 @Transactional
 public class WebhookService {
 
+    /** 派发事件类型（webhook_configs.event_types 按逗号精确匹配；新接线统一用常量） */
+    public static final String EVENT_WEBHOOK_TEST = "webhook_test";
+    public static final String EVENT_BLOCK = "block";
+    public static final String EVENT_REVIEW_SLA_BREACH = "review_sla_breach";
+    public static final String EVENT_REVIEW_ESCALATION = "review_escalation";
+    public static final String EVENT_ALERT_ESCALATION = "alert_escalation";
+    public static final String EVENT_QUOTA_WARNING = "quota_warning";
+    public static final String EVENT_QUOTA_ALERT = "quota_alert";
+    public static final String EVENT_MAINTENANCE_UPCOMING = "maintenance_upcoming";
+    public static final String EVENT_MAINTENANCE_ENDING = "maintenance_ending";
+    public static final String EVENT_EXPORT_COMPLETE = "export_complete";
+    public static final String EVENT_MODEL_DRIFT = "model_drift";
+    public static final String EVENT_SDK_VERSION_RETIRING = "sdk_version_retiring";
+
     private static final Logger logger = LoggerFactory.getLogger(WebhookService.class);
 
     @Autowired
@@ -159,6 +173,74 @@ public class WebhookService {
     @Transactional(readOnly = true)
     public List<WebhookLogEntity> getWebhookLogs(String configId) {
         return webhookLogRepo.findByWebhookConfigId(configId);
+    }
+
+    /**
+     * 测试Webhook配置：同步直发，绕过事件/风险级过滤（测试即验证 URL 可达与鉴权头），
+     * 不进重试队列、不计入配置成功/失败统计；webhook_log 照常落库。
+     * 返回携带投递结果（成功/失败都是有效业务结果，由调用方按 status 渲染）。
+     */
+    public Map<String, Object> sendTestWebhook(String configId, String gameId) {
+        WebhookConfigEntity config = webhookConfigRepo.findById(configId)
+            .orElseThrow(() -> new IllegalArgumentException("Webhook config not found: " + configId));
+        if (config.gameId != null && !config.gameId.equals(gameId)) {
+            throw new IllegalArgumentException(
+                "Webhook config " + configId + " does not belong to game " + gameId);
+        }
+
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("event_type", EVENT_WEBHOOK_TEST);
+        payload.put("test", true);
+        payload.put("config_id", config.id);
+        payload.put("config_name", config.name);
+        payload.put("game_id", gameId);
+        payload.put("message", "Oddsmaker webhook connectivity test");
+        payload.put("sent_at", LocalDateTime.now().toString());
+
+        WebhookLogEntity log = createWebhookLog(config, payload, EVENT_WEBHOOK_TEST, null);
+        webhookLogRepo.save(log);
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("configId", config.id);
+        result.put("name", config.name);
+        result.put("url", config.webhookUrl);
+        result.put("logId", log.id);
+        result.put("sentAt", log.sentAt.toString());
+
+        try {
+            HttpHeaders headers = buildHeaders(config);
+            HttpEntity<String> entity = new HttpEntity<>(serializePayload(payload), headers);
+
+            LocalDateTime startTime = LocalDateTime.now();
+            ResponseEntity<String> response = restTemplate.exchange(
+                config.webhookUrl,
+                HttpMethod.valueOf(config.httpMethod),
+                entity,
+                String.class
+            );
+            long responseTime = java.time.temporal.ChronoUnit.MILLIS.between(startTime, LocalDateTime.now());
+
+            log.markAsSuccess(response.getStatusCode().value(), response.getBody(), responseTime);
+            webhookLogRepo.save(log);
+
+            String responseBody = response.getBody();
+            result.put("status", "success");
+            result.put("httpStatus", response.getStatusCode().value());
+            result.put("responseTimeMs", responseTime);
+            result.put("responseBody",
+                responseBody != null && responseBody.length() > 500 ? responseBody.substring(0, 500) : responseBody);
+            result.put("deliveryStatus", log.deliveryStatus.name());
+        } catch (Exception e) {
+            log.markAsFailed(e.getMessage(), e.getClass().getSimpleName());
+            webhookLogRepo.save(log);
+
+            result.put("status", "failed");
+            result.put("error", e.getMessage());
+            result.put("errorType", e.getClass().getSimpleName());
+            result.put("deliveryStatus", log.deliveryStatus.name());
+        }
+
+        return result;
     }
 
     // 私有辅助方法

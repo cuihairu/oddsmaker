@@ -34,6 +34,9 @@ public class MaintenanceService {
     @Autowired
     private AuditLogService auditLogService;
 
+    @Autowired
+    private WebhookService webhookService;
+
     // ============== Maintenance Window Methods ==============
 
     /**
@@ -302,15 +305,34 @@ public class MaintenanceService {
     public void checkPendingMaintenances() {
         try {
             LocalDateTime now = LocalDateTime.now();
-            List<MaintenanceWindowEntity> pending = maintenanceWindowRepo.findPending(now);
+            List<MaintenanceWindowEntity> pending = maintenanceWindowRepo.findPendingUnnotified(now);
 
             for (MaintenanceWindowEntity window : pending) {
-                window.maintenanceStatus = MaintenanceWindowEntity.MaintenanceStatus.PENDING;
-                maintenanceWindowRepo.save(window);
-
                 logger.info("Maintenance window is pending: {} - {}", window.id, window.title);
 
-                // TODO: 发送即将开始通知
+                if (window.gameId != null && !window.gameId.isBlank()) {
+                    Map<String, Object> payload = new LinkedHashMap<>();
+                    payload.put("event_type", WebhookService.EVENT_MAINTENANCE_UPCOMING);
+                    payload.put("window_id", window.id);
+                    payload.put("title", window.title);
+                    payload.put("description", window.description);
+                    payload.put("maintenance_type", window.maintenanceType != null ? window.maintenanceType.name() : null);
+                    payload.put("impact_scope", window.impactScope != null ? window.impactScope.name() : null);
+                    payload.put("game_id", window.gameId);
+                    payload.put("environment_id", window.environmentId);
+                    payload.put("scheduled_start", window.scheduledStart != null ? window.scheduledStart.toString() : null);
+                    payload.put("scheduled_end", window.scheduledEnd != null ? window.scheduledEnd.toString() : null);
+                    try {
+                        webhookService.sendCustomWebhook(window.gameId, WebhookService.EVENT_MAINTENANCE_UPCOMING, payload);
+                    } catch (Exception e) {
+                        logger.warn("Maintenance upcoming webhook dispatch failed: {}", e.getMessage());
+                    }
+                }
+
+                // 一次性守卫：已通知的窗口不再进入 findPendingUnnotified（状态机不动，窗口仍可手动开始）
+                window.notificationSent = true;
+                window.notificationSentAt = now;
+                maintenanceWindowRepo.save(window);
             }
 
             if (!pending.isEmpty()) {
@@ -328,12 +350,33 @@ public class MaintenanceService {
     public void checkEndingMaintenances() {
         try {
             LocalDateTime now = LocalDateTime.now();
-            List<MaintenanceWindowEntity> shouldEnd = maintenanceWindowRepo.findShouldEnd(now);
+            List<MaintenanceWindowEntity> shouldEnd = maintenanceWindowRepo.findShouldEndUnnotified(now);
 
             for (MaintenanceWindowEntity window : shouldEnd) {
                 logger.warn("Maintenance window should end: {} - {}", window.id, window.title);
 
-                // TODO: 发送超时告警
+                if (window.gameId != null && !window.gameId.isBlank()) {
+                    Map<String, Object> payload = new LinkedHashMap<>();
+                    payload.put("event_type", WebhookService.EVENT_MAINTENANCE_ENDING);
+                    payload.put("window_id", window.id);
+                    payload.put("title", window.title);
+                    payload.put("description", window.description);
+                    payload.put("maintenance_type", window.maintenanceType != null ? window.maintenanceType.name() : null);
+                    payload.put("impact_scope", window.impactScope != null ? window.impactScope.name() : null);
+                    payload.put("game_id", window.gameId);
+                    payload.put("environment_id", window.environmentId);
+                    payload.put("scheduled_start", window.scheduledStart != null ? window.scheduledStart.toString() : null);
+                    payload.put("scheduled_end", window.scheduledEnd != null ? window.scheduledEnd.toString() : null);
+                    payload.put("is_overdue", true);
+                    try {
+                        webhookService.sendCustomWebhook(window.gameId, WebhookService.EVENT_MAINTENANCE_ENDING, payload);
+                    } catch (Exception e) {
+                        logger.warn("Maintenance ending webhook dispatch failed: {}", e.getMessage());
+                    }
+                }
+
+                window.endNotificationSent = true;
+                maintenanceWindowRepo.save(window);
             }
 
             if (!shouldEnd.isEmpty()) {

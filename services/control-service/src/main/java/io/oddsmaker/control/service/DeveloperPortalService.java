@@ -37,6 +37,9 @@ public class DeveloperPortalService {
     @Autowired
     private AuditLogService auditLogService;
 
+    @Autowired
+    private WebhookService webhookService;
+
     // ==================== SDK密钥管理 ====================
 
     /**
@@ -832,7 +835,22 @@ public class DeveloperPortalService {
         for (SDKVersionEntity version : retiringSoon) {
             logger.warn("SDK version retiring soon: {} - {} (platform: {})",
                 version.version, version.retirementDate, version.platform);
-            // 可以在这里发送通知
+
+            // SDK 版本无游戏维度，走 DEFAULT 平台级配置（game 需 V0.4.1 seed 保证 FK）
+            long daysUntilRetiring = version.retirementDate != null
+                ? java.time.temporal.ChronoUnit.DAYS.between(LocalDateTime.now(), version.retirementDate) : -1;
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put("event_type", WebhookService.EVENT_SDK_VERSION_RETIRING);
+            payload.put("version", version.version);
+            payload.put("platform", version.platform != null ? version.platform.name() : null);
+            payload.put("version_status", version.versionStatus != null ? version.versionStatus.name() : null);
+            payload.put("retirement_date", version.retirementDate != null ? version.retirementDate.toString() : null);
+            payload.put("days_until_retiring", daysUntilRetiring);
+            try {
+                webhookService.sendCustomWebhook("DEFAULT", WebhookService.EVENT_SDK_VERSION_RETIRING, payload);
+            } catch (Exception e) {
+                logger.warn("SDK version retiring webhook dispatch failed: {}", e.getMessage());
+            }
         }
     }
 }
