@@ -51,6 +51,12 @@ spring:
       properties:
         max.poll.interval.ms: 300000
 
+  # @EnableScheduling 调度线程池：全部 @Scheduled 方法共享，防慢任务（导出/管道）饿死告警评估
+  task:
+    scheduling:
+      pool:
+        size: ${ODDSMAKER_SCHEDULER_POOL_SIZE:4}
+
 # Oddsmaker 平台配置
 oddsmaker:
   admin:
@@ -99,6 +105,17 @@ oddsmaker:
   player-export:
     storage-dir: ${ODDSMAKER_PLAYER_EXPORT_DIR:data/player-exports}
     retention-hours: ${ODDSMAKER_PLAYER_EXPORT_RETENTION_HOURS:72}
+
+  # 业务指标告警：DAU/收入/崩溃率的阈值或同比偏差规则，定时评估后发站内告警 + Webhook
+  metric-alert:
+    enabled: ${ODDSMAKER_METRIC_ALERT_ENABLED:true}
+    cron: ${ODDSMAKER_METRIC_ALERT_CRON:0 */10 * * * *}
+
+  # 健康监控的模拟数据开关：@EnableScheduling 激活后默认关闭，
+  # 避免 Math.random 假指标/假告警污染真实监控数据（本地演示可显式开启）
+  health:
+    simulated-metrics-enabled: ${ODDSMAKER_HEALTH_SIMULATED_METRICS:false}
+    simulated-checks-enabled: ${ODDSMAKER_HEALTH_SIMULATED_CHECKS:false}
 
 # 监控和健康检查
 management:

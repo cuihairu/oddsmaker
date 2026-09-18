@@ -18,6 +18,7 @@ const navigation = [
   { name: '在线监控', href: '/analytics/online', icon: 'bolt' },
   { name: '财务报表', href: '/analytics/finance', icon: 'dollar' },
   { name: 'Crash 监控', href: '/analytics/crash', icon: 'bug' },
+  { name: '业务告警', href: '/alerts', icon: 'bell' },
   { name: '监控', href: '/monitoring', icon: 'chart' },
 ]
 
@@ -40,6 +41,7 @@ const iconPaths = {
   bolt: 'M13 10V3L4 14h7v7l9-11h-7z',
   dollar: 'M12 2v20m5-17H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6',
   bug: 'M12 14l9-5m-9 5l-6 3m6-3v6m0-6L3 9m9 5l6 3M8 3v2m8-2v2M5 8h14a7 7 0 11-14 0z',
+  bell: 'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9',
 }
 
 function toggleSidebar() {

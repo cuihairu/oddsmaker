@@ -1046,6 +1046,8 @@ class SecurityGameDeepTest {
     @Test
     @DisplayName("performScheduledHealthChecks：到期检查被执行，失败项被吞掉")
     void performScheduledHealthChecksProcessesDueChecks() {
+        org.springframework.test.util.ReflectionTestUtils.setField(
+            healthMonitorService, "simulatedChecksEnabled", true);
         HealthCheckEntity due = new HealthCheckEntity();
         due.checkName = "db";
         due.checkType = HealthCheckEntity.CheckType.DATABASE;
@@ -1069,6 +1071,8 @@ class SecurityGameDeepTest {
     @Test
     @DisplayName("collectSystemMetrics：一次采集五类指标")
     void collectSystemMetricsSavesFiveMetrics() {
+        org.springframework.test.util.ReflectionTestUtils.setField(
+            healthMonitorService, "simulatedMetricsEnabled", true);
         lenient().when(healthMetricRepo.save(any(HealthMetricEntity.class)))
             .thenAnswer(inv -> inv.getArgument(0));
 

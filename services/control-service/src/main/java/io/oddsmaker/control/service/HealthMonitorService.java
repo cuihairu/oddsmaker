@@ -4,6 +4,7 @@ import io.oddsmaker.control.jpa.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,6 +34,14 @@ public class HealthMonitorService {
 
     @Autowired
     private AuditLogService auditLogService;
+
+    // 模拟数据开关：@EnableScheduling 激活前这些 @Scheduled 从未执行，激活后默认关闭
+    // 避免 Math.random 假指标/假告警污染真实监控数据
+    @Value("${oddsmaker.health.simulated-checks-enabled:false}")
+    private boolean simulatedChecksEnabled;
+
+    @Value("${oddsmaker.health.simulated-metrics-enabled:false}")
+    private boolean simulatedMetricsEnabled;
 
     /**
      * 执行健康检查
@@ -308,6 +317,9 @@ public class HealthMonitorService {
      */
     @Scheduled(fixedDelay = 30000)  // 每30秒执行一次
     public void performScheduledHealthChecks() {
+        if (!simulatedChecksEnabled) {
+            return;
+        }
         try {
             LocalDateTime since = LocalDateTime.now().minusMinutes(1);
             List<HealthCheckEntity> dueChecks = healthCheckRepo.findDueChecks(since);
@@ -333,6 +345,9 @@ public class HealthMonitorService {
      */
     @Scheduled(fixedDelay = 60000)  // 每分钟执行一次
     public void collectSystemMetrics() {
+        if (!simulatedMetricsEnabled) {
+            return;
+        }
         try {
             // 模拟收集系统指标
             collectMetric(HealthMetricEntity.MetricType.CPU_USAGE, "system", Math.random() * 100);

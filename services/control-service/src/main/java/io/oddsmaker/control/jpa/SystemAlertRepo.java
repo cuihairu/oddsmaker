@@ -66,6 +66,18 @@ public interface SystemAlertRepo extends JpaRepository<SystemAlertEntity, String
     long countActiveBySeverity(@Param("severity") SystemAlertEntity.Severity severity);
 
     /**
+     * 按规则查找最近的活跃告警（业务指标告警沿触发去重）
+     */
+    @Query("SELECT sa FROM SystemAlertEntity sa WHERE sa.ruleId = :ruleId AND sa.alertStatus IN ('OPEN', 'ACKNOWLEDGED', 'INVESTIGATING', 'SNOOZED') AND sa.deletedAt IS NULL ORDER BY sa.lastOccurredAt DESC")
+    List<SystemAlertEntity> findActiveByRuleId(@Param("ruleId") String ruleId);
+
+    /**
+     * 按游戏查找告警（业务告警历史）
+     */
+    @Query("SELECT sa FROM SystemAlertEntity sa WHERE sa.gameId = :gameId AND sa.deletedAt IS NULL ORDER BY sa.lastOccurredAt DESC")
+    List<SystemAlertEntity> findByGameId(@Param("gameId") String gameId, org.springframework.data.domain.Pageable pageable);
+
+    /**
      * 删除过期告警
      */
     @Query("DELETE FROM SystemAlertEntity sa WHERE sa.alertStatus = 'CLOSED' AND sa.resolvedAt < :expireBefore")

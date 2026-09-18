@@ -73,6 +73,12 @@ public class SystemAlertEntity {
     @Enumerated(EnumType.STRING)
     public AlertStatus alertStatus = AlertStatus.OPEN;
 
+    @Column(name = "game_id", length = 32)
+    public String gameId;  // 归属游戏（业务指标告警）
+
+    @Column(name = "rule_id", length = 32)
+    public String ruleId;  // 触发规则（业务指标告警沿触发去重）
+
     @Column(name = "title", nullable = false, length = 200)
     public String title;  // 告警标题
 

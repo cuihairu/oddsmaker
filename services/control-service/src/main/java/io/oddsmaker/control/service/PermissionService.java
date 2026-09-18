@@ -537,8 +537,14 @@ public class PermissionService {
             PermissionEntity.PermissionType.SYSTEM, "audit_log", PermissionEntity.PermissionAction.READ, PermissionEntity.PermissionScope.GLOBAL);
 
         // 系统管理权限
-        createPermissionIfNotExists("system:manage", "Manage system", 
+        createPermissionIfNotExists("system:manage", "Manage system",
             PermissionEntity.PermissionType.SYSTEM, "system", PermissionEntity.PermissionAction.MANAGE, PermissionEntity.PermissionScope.GLOBAL);
+
+        // 业务指标告警权限（生产种子见 V0.9.1__metric_alerts.sql）
+        createPermissionIfNotExists("alert:read", "Read metric alerts",
+            PermissionEntity.PermissionType.API, "alert", PermissionEntity.PermissionAction.READ, PermissionEntity.PermissionScope.GAME);
+        createPermissionIfNotExists("alert:manage", "Manage metric alerts",
+            PermissionEntity.PermissionType.API, "alert", PermissionEntity.PermissionAction.UPDATE, PermissionEntity.PermissionScope.GAME);
     }
 
     /**

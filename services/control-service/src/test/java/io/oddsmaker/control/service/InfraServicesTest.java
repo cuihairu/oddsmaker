@@ -163,6 +163,11 @@ class InfraServicesTest {
     @Test
     @DisplayName("健康监控：DISK 指标超阈值触发挥盘告警；各定时任务异常被顶层 catch 吞掉")
     void healthResilienceAndDiskAlert() {
+        // 模拟调度默认被 oddsmaker.health.* 门关闭，此处显式开启以验证调度方法行为
+        org.springframework.test.util.ReflectionTestUtils.setField(
+            healthMonitorService, "simulatedChecksEnabled", true);
+        org.springframework.test.util.ReflectionTestUtils.setField(
+            healthMonitorService, "simulatedMetricsEnabled", true);
         // DISK_USAGE 超过 critical 阈值 → isCritical → 创建 HIGH_DISK 告警
         when(healthMetricRepo.save(any(io.oddsmaker.control.jpa.HealthMetricEntity.class)))
             .thenAnswer(inv -> inv.getArgument(0));
