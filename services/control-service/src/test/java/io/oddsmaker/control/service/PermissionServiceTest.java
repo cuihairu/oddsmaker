@@ -444,4 +444,75 @@ class PermissionServiceTest {
 
         assertTrue(permissionService.getEnvironmentPermissions("user_test123", "g1", "prod").isEmpty());
     }
+
+    @Test
+    void hasGamePermission_GameRoleValidButPermissionMissing_ReturnsFalse() {
+        // valid 且 enabled 但不含目标权限的角色走完循环体（continue 短路不经过循环回边）
+        UserRoleEntity valid = new UserRoleEntity();
+        valid.userId = "user_test123";
+        valid.roleId = "viewer";
+        valid.enabled = true;
+
+        RoleEntity roleWithoutPermission = new RoleEntity();
+        roleWithoutPermission.id = "viewer";
+        roleWithoutPermission.enabled = true;
+        roleWithoutPermission.permissions = Collections.emptySet();
+
+        when(userRepo.findById("user_test123")).thenReturn(Optional.of(testUser));
+        when(userRoleRepo.findByUserIdAndGameId("user_test123", "game_123"))
+            .thenReturn(List.of(valid));
+        when(userRoleRepo.findGlobalByUserId("user_test123"))
+            .thenReturn(List.of());
+        when(roleRepo.findById("viewer")).thenReturn(Optional.of(roleWithoutPermission));
+
+        assertFalse(permissionService.hasGamePermission("user_test123", "game_123", "game:read"));
+    }
+
+    @Test
+    void hasGamePermission_GlobalRoleValidButPermissionMissing_ReturnsFalse() {
+        // 游戏角色为空、全局角色 valid 但无权限——覆盖全局角色循环体落空
+        UserRoleEntity valid = new UserRoleEntity();
+        valid.userId = "user_test123";
+        valid.roleId = "viewer";
+        valid.enabled = true;
+
+        RoleEntity roleWithoutPermission = new RoleEntity();
+        roleWithoutPermission.id = "viewer";
+        roleWithoutPermission.enabled = true;
+        roleWithoutPermission.permissions = Collections.emptySet();
+
+        when(userRepo.findById("user_test123")).thenReturn(Optional.of(testUser));
+        when(userRoleRepo.findByUserIdAndGameId("user_test123", "game_123"))
+            .thenReturn(List.of());
+        when(userRoleRepo.findGlobalByUserId("user_test123"))
+            .thenReturn(List.of(valid));
+        when(roleRepo.findById("viewer")).thenReturn(Optional.of(roleWithoutPermission));
+
+        assertFalse(permissionService.hasGamePermission("user_test123", "game_123", "game:read"));
+    }
+
+    @Test
+    void hasEnvironmentPermission_EnvRoleValidButPermissionMissing_ReturnsFalse() {
+        // 环境专属角色 valid 但无权限——覆盖环境角色循环体落空
+        UserRoleEntity valid = new UserRoleEntity();
+        valid.userId = "user_test123";
+        valid.roleId = "viewer";
+        valid.enabled = true;
+
+        RoleEntity roleWithoutPermission = new RoleEntity();
+        roleWithoutPermission.id = "viewer";
+        roleWithoutPermission.enabled = true;
+        roleWithoutPermission.permissions = Collections.emptySet();
+
+        when(userRepo.findById("user_test123")).thenReturn(Optional.of(testUser));
+        when(userRoleRepo.findByUserIdAndGameIdAndEnvironment("user_test123", "g1", "prod"))
+            .thenReturn(List.of(valid));
+        when(userRoleRepo.findByUserIdAndGameId("user_test123", "g1"))
+            .thenReturn(List.of());
+        when(userRoleRepo.findGlobalByUserId("user_test123"))
+            .thenReturn(List.of());
+        when(roleRepo.findById("viewer")).thenReturn(Optional.of(roleWithoutPermission));
+
+        assertFalse(permissionService.hasEnvironmentPermission("user_test123", "g1", "prod", "game:read"));
+    }
 }
