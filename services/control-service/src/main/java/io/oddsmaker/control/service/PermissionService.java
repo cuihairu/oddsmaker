@@ -551,6 +551,12 @@ public class PermissionService {
             PermissionEntity.PermissionType.API, "privacy", PermissionEntity.PermissionAction.READ, PermissionEntity.PermissionScope.GAME);
         createPermissionIfNotExists("privacy:manage", "Manage privacy compliance",
             PermissionEntity.PermissionType.API, "privacy", PermissionEntity.PermissionAction.CREATE, PermissionEntity.PermissionScope.GAME);
+
+        // 数据保留权限（生产种子见 V0.9.3__retention_enforcement.sql）
+        createPermissionIfNotExists("retention:read", "View data retention",
+            PermissionEntity.PermissionType.API, "retention", PermissionEntity.PermissionAction.READ, PermissionEntity.PermissionScope.GAME);
+        createPermissionIfNotExists("retention:manage", "Manage data retention",
+            PermissionEntity.PermissionType.API, "retention", PermissionEntity.PermissionAction.UPDATE, PermissionEntity.PermissionScope.GAME);
     }
 
     /**

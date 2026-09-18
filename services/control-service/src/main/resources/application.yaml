@@ -119,6 +119,16 @@ oddsmaker:
     mutation-poll-interval-seconds: ${ODDSMAKER_ERASURE_MUTATION_POLL_SECONDS:5}
     max-ch-retries: ${ODDSMAKER_ERASURE_MAX_CH_RETRIES:8}
 
+  # 数据保留策略自动化：把 game/environment 的 dataRetentionDays 对账到 ClickHouse 表级 TTL
+  # enabled 默认关闭——首次开启会为 ~17 张无 TTL 表下发 MODIFY TTL，超过保留期的历史数据
+  # 将被 CH 后台清理（不可逆）；建议确认配置后经环境变量显式开启
+  retention:
+    enabled: ${ODDSMAKER_RETENTION_ENABLED:false}
+    cron: ${ODDSMAKER_RETENTION_CRON:0 40 * * * *}   # 每小时 40 分错峰
+    default-days: ${ODDSMAKER_RETENTION_DEFAULT_DAYS:90}   # 游戏/环境均未配置时的兜底
+    min-days: ${ODDSMAKER_RETENTION_MIN_DAYS:7}      # 下限保护：防误配 0 立即清光数据
+    max-days: ${ODDSMAKER_RETENTION_MAX_DAYS:3650}
+
   # 健康监控的模拟数据开关：@EnableScheduling 激活后默认关闭，
   # 避免 Math.random 假指标/假告警污染真实监控数据（本地演示可显式开启）
   health:

@@ -8,7 +8,9 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import io.oddsmaker.control.dto.GameDTO;
+import io.oddsmaker.control.dto.EnvironmentDTO;
 import io.oddsmaker.control.jpa.GameEntity;
+import io.oddsmaker.control.jpa.GameEnvironmentEntity;
 import io.oddsmaker.control.jpa.GameRepo;
 import io.oddsmaker.control.jpa.GameEnvironmentRepo;
 import io.oddsmaker.control.jpa.ApiKeyRepo;
@@ -123,6 +125,53 @@ class GameServiceTest {
     }
 
     @Test
+    @DisplayName("更新游戏：dataRetentionDays 超出 [7,3650] 被拒绝（防误配 0 立即清光数据）")
+    void updateGameRejectsOutOfRangeRetentionDays() {
+        org.springframework.test.util.ReflectionTestUtils.setField(gameService, "retentionMinDays", 7);
+        org.springframework.test.util.ReflectionTestUtils.setField(gameService, "retentionMaxDays", 3650);
+        GameEntity existing = new GameEntity();
+        existing.id = "game_rt";
+        existing.name = "Retention Game";
+        when(gameRepo.findById("game_rt")).thenReturn(Optional.of(existing));
+
+        GameDTO zero = new GameDTO();
+        zero.dataRetentionDays = 0;
+        assertThrows(IllegalArgumentException.class, () -> gameService.updateGame("game_rt", zero));
+
+        GameDTO huge = new GameDTO();
+        huge.dataRetentionDays = 3651;
+        assertThrows(IllegalArgumentException.class, () -> gameService.updateGame("game_rt", huge));
+
+        verify(gameRepo, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("更新环境：dataRetentionDays 超出范围被拒绝，合法值透传")
+    void updateEnvironmentValidatesRetentionDays() {
+        org.springframework.test.util.ReflectionTestUtils.setField(gameService, "retentionMinDays", 7);
+        org.springframework.test.util.ReflectionTestUtils.setField(gameService, "retentionMaxDays", 3650);
+        GameEnvironmentEntity existing = new GameEnvironmentEntity();
+        existing.id = "env_game_1_prod";
+        existing.gameId = "game_1";
+        existing.name = "prod";
+        when(gameEnvironmentRepo.findByGameIdAndNameAndDeletedAtIsNull("game_1", "prod"))
+            .thenReturn(List.of(existing));
+
+        EnvironmentDTO zero = new EnvironmentDTO();
+        zero.name = "prod";
+        zero.dataRetentionDays = 0;
+        assertThrows(IllegalArgumentException.class,
+            () -> gameService.updateEnvironment("game_1", "prod", zero));
+
+        EnvironmentDTO valid = new EnvironmentDTO();
+        valid.name = "prod";
+        valid.dataRetentionDays = 180;
+        when(gameEnvironmentRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        EnvironmentDTO updated = gameService.updateEnvironment("game_1", "prod", valid);
+        assertEquals(180, updated.dataRetentionDays);
+    }
+
+    @Test
     @DisplayName("状态机：DEVELOPMENT 只能转 TESTING")
     void invalidStatusTransitionRejected() {
         GameEntity existing = new GameEntity();
@@ -169,6 +218,43 @@ class GameServiceTest {
         when(gameRepo.findById("game_live")).thenReturn(Optional.of(existing));
 
         assertThrows(IllegalStateException.class, () -> gameService.deleteGame("game_live"));
+    }
+
+    @Test
+    @DisplayName("创建环境：loadtest/staging 环境名映射默认显示名")
+    void createEnvironmentDefaultsDisplayNameForLoadtest() {
+        when(gameRepo.findById("game_env")).thenReturn(Optional.of(new GameEntity()));
+        when(gameEnvironmentRepo.findByGameIdAndNameAndDeletedAtIsNull(any(), any()))
+            .thenReturn(List.of());
+        when(storageProfileRepo.existsById(any())).thenReturn(true);
+        when(gameEnvironmentRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        EnvironmentDTO loadtest = new EnvironmentDTO();
+        loadtest.name = "loadtest";
+        assertEquals("Load Test", gameService.createEnvironment("game_env", loadtest).displayName);
+
+        EnvironmentDTO staging = new EnvironmentDTO();
+        staging.name = "staging";
+        assertEquals("Staging", gameService.createEnvironment("game_env", staging).displayName);
+    }
+
+    @Test
+    @DisplayName("状态机：PUBLISHED 可转 DISCONTINUED 并记录审计")
+    void publishedToDiscontinuedAllowed() {
+        GameEntity existing = new GameEntity();
+        existing.id = "game_pub";
+        existing.name = "Published Game";
+        existing.status = GameEntity.GameStatus.PUBLISHED;
+        existing.platforms = Set.of(GameEntity.GamePlatform.WEB);
+        when(gameRepo.findById("game_pub")).thenReturn(Optional.of(existing));
+        when(gameRepo.save(any())).thenAnswer(inv -> savedGame(inv.getArgument(0)));
+
+        GameDTO dto = new GameDTO();
+        dto.status = GameEntity.GameStatus.DISCONTINUED;
+
+        assertEquals(GameEntity.GameStatus.DISCONTINUED, gameService.updateGame("game_pub", dto).status);
+        verify(auditLog).logUpdate(eq("game"), eq("game_pub"), eq("Published Game"),
+            eq("api"), eq("api"), isNull(), anyMap());
     }
 
     @Test

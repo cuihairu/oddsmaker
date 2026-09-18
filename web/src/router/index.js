@@ -107,6 +107,12 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: '/data-retention',
+      name: 'data-retention',
+      component: () => import('@/views/DataRetentionView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
       path: '/:pathMatch(.*)*',
       name: 'not-found',
       component: () => import('@/views/NotFoundView.vue')

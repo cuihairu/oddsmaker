@@ -6,6 +6,7 @@ import io.oddsmaker.control.jpa.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -44,8 +45,23 @@ public class GameService {
     @Autowired
     private AuditLogService auditLog;
 
+    // dataRetentionDays 保存校验范围与 RetentionEnforcementService 的 clamp 一致（同一配置键）
+    @Value("${oddsmaker.retention.min-days:7}")
+    private int retentionMinDays;
+
+    @Value("${oddsmaker.retention.max-days:3650}")
+    private int retentionMaxDays;
+
     private static final String SHARED_NONPROD_PROFILE_ID = "shared-nonprod";
     private static final String SHARED_PROD_PROFILE_ID = "shared-prod";
+
+    /** dataRetentionDays 非 null 时校验范围，防止误配 0/负数导致 TTL 立即清光数据。 */
+    private void validateRetentionDays(Integer days) {
+        if (days != null && (days < retentionMinDays || days > retentionMaxDays)) {
+            throw new IllegalArgumentException(
+                "dataRetentionDays must be between " + retentionMinDays + " and " + retentionMaxDays);
+        }
+    }
 
     /**
      * 创建新游戏
@@ -97,6 +113,7 @@ public class GameService {
         }
 
         validateTimezone(dto.defaultTimezone);
+        validateRetentionDays(dto.dataRetentionDays);
         String beforeStatus = entity.status.name();
         dto.updateEntity(entity);
         entity = gameRepo.save(entity);
@@ -237,6 +254,7 @@ public class GameService {
         GameEnvironmentEntity entity = findEnvironment(gameId, environmentName)
             .orElseThrow(() -> new IllegalArgumentException("Environment not found: " + environmentName));
         Double sampleRateBefore = entity.sampleRate;
+        validateRetentionDays(dto.dataRetentionDays);
         dto.updateEntity(entity);
         if (entity.storageProfileId != null) {
             validateStorageProfile(entity.storageProfileId);
