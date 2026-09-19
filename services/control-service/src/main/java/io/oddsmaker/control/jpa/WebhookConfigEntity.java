@@ -1,5 +1,6 @@
 package io.oddsmaker.control.jpa;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
@@ -46,7 +47,8 @@ public class WebhookConfigEntity {
     public String authType;  // 鉴权类型：none, basic, bearer, api_key, hmac
 
     @Column(name = "auth_config", columnDefinition = "TEXT")
-    public String authConfig;  // 鉴权配置（JSON格式）
+    @JsonIgnore  // 明文 secret 不经 API 回显；编辑语义为"留空=保留原值"（WebhookService.updateWebhookConfig）
+    public String authConfig;  // 鉴权配置（JSON格式，如 {"token":"..."}）
 
     // 事件类型
     @Column(name = "event_types", columnDefinition = "TEXT")

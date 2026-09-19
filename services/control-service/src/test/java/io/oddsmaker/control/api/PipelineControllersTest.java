@@ -246,10 +246,24 @@ class PipelineControllersTest {
     private WebhookController webhookController;
 
     @Test
-    @DisplayName("Webhook：5 个端点委托")
+    @DisplayName("Webhook：8 个端点委托（含 CRUD 鉴权与 404 分支）")
     void webhookEndpoints() {
         org.mockito.Mockito.when(webhookService.sendTestWebhook("c1", "g"))
             .thenReturn(java.util.Map.of("status", "success"));
+        org.mockito.Mockito.when(webhookService.createWebhookConfig(org.mockito.ArgumentMatchers.eq("g"),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyString()))
+            .thenAnswer(inv -> inv.getArgument(1));
+        org.mockito.Mockito.when(webhookService.updateWebhookConfig(org.mockito.ArgumentMatchers.eq("g"),
+                org.mockito.ArgumentMatchers.eq("c1"), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyString()))
+            .thenAnswer(inv -> inv.getArgument(2));
+        org.mockito.Mockito.when(webhookService.updateWebhookConfig(org.mockito.ArgumentMatchers.eq("g"),
+                org.mockito.ArgumentMatchers.eq("missing"), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyString()))
+            .thenReturn(null);
+        org.mockito.Mockito.when(webhookService.deleteWebhookConfig(org.mockito.ArgumentMatchers.eq("g"),
+                org.mockito.ArgumentMatchers.eq("c1"), org.mockito.ArgumentMatchers.anyString())).thenReturn(true);
+        org.mockito.Mockito.when(webhookService.deleteWebhookConfig(org.mockito.ArgumentMatchers.eq("g"),
+                org.mockito.ArgumentMatchers.eq("missing"), org.mockito.ArgumentMatchers.anyString())).thenReturn(false);
+
         assertEquals(200, webhookController.getGameConfigs("g").getStatusCode().value());
         assertEquals(200, webhookController.getConfig("c1", "g").getStatusCode().value());
         assertEquals(200, webhookController.getWebhookLogs("c1", "g").getStatusCode().value());
@@ -257,6 +271,13 @@ class PipelineControllersTest {
         var testRes = webhookController.testWebhook("c1", "g");
         assertEquals(200, testRes.getStatusCode().value());
         assertEquals("success", testRes.getBody().get("status"));
+
+        assertEquals(201, webhookController.createConfig("g", new io.oddsmaker.control.jpa.WebhookConfigEntity()).getStatusCode().value());
+        assertEquals(200, webhookController.updateConfig("g", "c1", new io.oddsmaker.control.jpa.WebhookConfigEntity()).getStatusCode().value());
+        assertEquals(404, webhookController.updateConfig("g", "missing", new io.oddsmaker.control.jpa.WebhookConfigEntity()).getStatusCode().value());
+        assertEquals(200, webhookController.deleteConfig("g", "c1").getStatusCode().value());
+        assertEquals(404, webhookController.deleteConfig("g", "missing").getStatusCode().value());
+        verify(accessGuard, org.mockito.Mockito.times(5)).requireGamePermission("g", "webhook:manage");
     }
 
     // ===== 限流 =====

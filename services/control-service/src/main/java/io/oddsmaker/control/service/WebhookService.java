@@ -1,5 +1,6 @@
 package io.oddsmaker.control.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.oddsmaker.control.jpa.*;
 import org.slf4j.Logger;
@@ -55,6 +56,13 @@ public class WebhookService {
 
     @Autowired(required = false)
     private Executor asyncExecutor;
+
+    @Autowired
+    private AuditLogService auditLogService;
+
+    /** 发送侧 buildHeaders 仅实现这三种鉴权（hmac/oauth2 无实现，校验拒绝防静默不生效） */
+    private static final Set<String> SUPPORTED_HTTP_METHODS = Set.of("POST", "PUT", "PATCH");
+    private static final Set<String> SUPPORTED_AUTH_TYPES = Set.of("none", "basic", "bearer", "api_key");
 
     /**
      * 发送风险案例Webhook
@@ -173,6 +181,213 @@ public class WebhookService {
     @Transactional(readOnly = true)
     public List<WebhookLogEntity> getWebhookLogs(String configId) {
         return webhookLogRepo.findByWebhookConfigId(configId);
+    }
+
+    // ============== 配置 CRUD ==============
+
+    /**
+     * 创建 Webhook 配置：校验与规范化后落库（(gameId, name) 未删唯一，DB 部分唯一索引兜底）。
+     * 校验失败抛 IllegalArgumentException（GlobalExceptionHandler 映射 400）。
+     */
+    public WebhookConfigEntity createWebhookConfig(String gameId, WebhookConfigEntity req, String operator) {
+        validateBasics(req);
+        String name = req.name.trim();
+        if (webhookConfigRepo.findByGameIdAndName(gameId, name).isPresent()) {
+            throw new IllegalArgumentException("Webhook config name already exists in game " + gameId + ": " + name);
+        }
+        req.id = "wc_" + UUID.randomUUID().toString().replace("-", "").substring(0, 24);
+        req.gameId = gameId;
+        req.name = name;
+        req.webhookUrl = req.webhookUrl.trim();
+        req.eventTypes = normalizeCsv(req.eventTypes);
+        req.riskLevels = normalizeCsv(req.riskLevels);
+        if (req.httpMethod == null) {
+            req.httpMethod = "POST";
+        }
+        if (req.authType == null) {
+            req.authType = "none";
+        }
+        validateAuthConfig(req.authType, req.authConfig);
+        if (req.timeoutSeconds == null) {
+            req.timeoutSeconds = 30;
+        }
+        if (req.maxRetries == null) {
+            req.maxRetries = 3;
+        }
+        if (req.retryBackoffMs == null) {
+            req.retryBackoffMs = 1000;
+        }
+        if (req.status == null) {
+            req.status = WebhookConfigEntity.WebhookStatus.ACTIVE;
+        }
+        req.createdBy = operator;
+        req.updatedBy = operator;
+        WebhookConfigEntity saved = webhookConfigRepo.save(req);
+        auditLogService.log(AuditLogEntity.AuditAction.CREATE, "webhook_config", saved.id, saved.name,
+            null, AuditLogEntity.AuditResult.SUCCESS, operator, null, json(saved), null, null, Map.of("gameId", gameId));
+        return saved;
+    }
+
+    /**
+     * 更新 Webhook 配置：部分更新语义（patch 字段 null=不改）；
+     * authConfig 为 null/空白 = 保留原值（secret 经 @JsonIgnore 不回显，前端无法回传）；
+     * 不存在/已软删/gameId 归属不符返回 null（Controller 映射 404）。
+     */
+    public WebhookConfigEntity updateWebhookConfig(String gameId, String configId, WebhookConfigEntity patch, String operator) {
+        WebhookConfigEntity existing = webhookConfigRepo.findById(configId).orElse(null);
+        if (existing == null || existing.deletedAt != null || !existing.gameId.equals(gameId)) {
+            return null;
+        }
+        validateBasics(patch);
+        String name = patch.name.trim();
+        webhookConfigRepo.findByGameIdAndName(gameId, name)
+            .filter(other -> !other.id.equals(configId))
+            .ifPresent(other -> {
+                throw new IllegalArgumentException("Webhook config name already exists in game " + gameId + ": " + name);
+            });
+        // authType/authConfig 部分更新语义：patch 未带时沿用 existing，按最终生效组合校验
+        String effectiveAuthType = patch.authType != null ? patch.authType : existing.authType;
+        String effectiveAuthConfig = (patch.authConfig != null && !patch.authConfig.isBlank())
+            ? patch.authConfig : existing.authConfig;
+        validateAuthConfig(effectiveAuthType, effectiveAuthConfig);
+        String before = json(existing);
+        existing.name = name;
+        existing.webhookUrl = patch.webhookUrl.trim();
+        existing.displayName = patch.displayName;
+        existing.description = patch.description;
+        existing.eventTypes = normalizeCsv(patch.eventTypes);
+        existing.riskLevels = normalizeCsv(patch.riskLevels);
+        if (patch.httpMethod != null) {
+            existing.httpMethod = patch.httpMethod;
+        }
+        if (patch.authType != null) {
+            existing.authType = patch.authType;
+        }
+        if (patch.authConfig != null && !patch.authConfig.isBlank()) {
+            existing.authConfig = patch.authConfig;
+        }
+        if (patch.timeoutSeconds != null) {
+            existing.timeoutSeconds = patch.timeoutSeconds;
+        }
+        if (patch.maxRetries != null) {
+            existing.maxRetries = patch.maxRetries;
+        }
+        if (patch.retryBackoffMs != null) {
+            existing.retryBackoffMs = patch.retryBackoffMs;
+        }
+        if (patch.status != null) {
+            existing.status = patch.status;
+        }
+        existing.updatedBy = operator;
+        WebhookConfigEntity saved = webhookConfigRepo.save(existing);
+        auditLogService.log(AuditLogEntity.AuditAction.UPDATE, "webhook_config", saved.id, saved.name,
+            null, AuditLogEntity.AuditResult.SUCCESS, operator, before, json(saved), null, null, Map.of("gameId", gameId));
+        return saved;
+    }
+
+    /**
+     * 软删 Webhook 配置（webhook_logs 对配置是无级联裸 FK，只能软删；日志由既有 30 天清理任务回收）。
+     * 同时置 INACTIVE：重试队列只按 isActive 过滤不查 deletedAt，防止在途日志继续轰炸已删端点。
+     * 不存在/已删/gameId 归属不符返回 false（Controller 映射 404）。
+     */
+    public boolean deleteWebhookConfig(String gameId, String configId, String operator) {
+        WebhookConfigEntity existing = webhookConfigRepo.findById(configId).orElse(null);
+        if (existing == null || existing.deletedAt != null || !existing.gameId.equals(gameId)) {
+            return false;
+        }
+        String before = json(existing);
+        existing.deletedAt = LocalDateTime.now();
+        existing.status = WebhookConfigEntity.WebhookStatus.INACTIVE;
+        existing.updatedBy = operator;
+        webhookConfigRepo.save(existing);
+        auditLogService.log(AuditLogEntity.AuditAction.DELETE, "webhook_config", existing.id, existing.name,
+            null, AuditLogEntity.AuditResult.SUCCESS, operator, before, null, null, null, Map.of("gameId", gameId));
+        return true;
+    }
+
+    /**
+     * 基础字段校验与规范化（create/update 共用）：name/url 必填、URL 必须 http(s)、
+     * httpMethod/authType 白名单（hmac/oauth2 发送侧无实现，拒绝配置防"配置成功但鉴权头静默不发"）、
+     * timeout/retries/backoff 钳制范围。就地规范化 name/url trim 与 authType 小写。
+     * authConfig 不在此校验——update 部分更新语义下须按"最终生效组合"校验（见 validateAuthConfig）。
+     */
+    private void validateBasics(WebhookConfigEntity req) {
+        if (req.name == null || req.name.isBlank()) {
+            throw new IllegalArgumentException("name is required");
+        }
+        if (req.name.trim().length() > 100) {
+            throw new IllegalArgumentException("name must be at most 100 characters");
+        }
+        if (req.webhookUrl == null || req.webhookUrl.isBlank()) {
+            throw new IllegalArgumentException("webhookUrl is required");
+        }
+        String url = req.webhookUrl.trim();
+        if (!url.startsWith("http://") && !url.startsWith("https://")) {
+            throw new IllegalArgumentException("webhookUrl must start with http:// or https://");
+        }
+        if (url.length() > 500) {
+            throw new IllegalArgumentException("webhookUrl must be at most 500 characters");
+        }
+        if (req.httpMethod != null && !SUPPORTED_HTTP_METHODS.contains(req.httpMethod)) {
+            throw new IllegalArgumentException("httpMethod must be one of POST/PUT/PATCH");
+        }
+        if (req.authType != null) {
+            req.authType = req.authType.trim().toLowerCase();
+            if (!SUPPORTED_AUTH_TYPES.contains(req.authType)) {
+                throw new IllegalArgumentException("authType must be one of none/basic/bearer/api_key (hmac/oauth2 not supported)");
+            }
+        }
+        if (req.timeoutSeconds != null && (req.timeoutSeconds < 1 || req.timeoutSeconds > 300)) {
+            throw new IllegalArgumentException("timeoutSeconds must be between 1 and 300");
+        }
+        if (req.maxRetries != null && (req.maxRetries < 0 || req.maxRetries > 10)) {
+            throw new IllegalArgumentException("maxRetries must be between 0 and 10");
+        }
+        if (req.retryBackoffMs != null && req.retryBackoffMs < 100) {
+            throw new IllegalArgumentException("retryBackoffMs must be at least 100");
+        }
+    }
+
+    /**
+     * authConfig 组合校验：按最终生效的 authType/authConfig 判定，而非仅看入参——
+     * update 语义下"authType 改为需鉴权类型 + authConfig 留空（保留 existing 旧值）"应合法，
+     * 调用方先算 effective 组合再传入。authType≠none 时 authConfig 必须为非空 JSON object。
+     */
+    private void validateAuthConfig(String authType, String authConfig) {
+        if (authType == null || "none".equals(authType)) {
+            return;
+        }
+        if (authConfig == null || authConfig.isBlank()) {
+            throw new IllegalArgumentException("authConfig is required when authType is " + authType);
+        }
+        try {
+            Map<?, ?> authMap = objectMapper.readValue(authConfig, Map.class);
+            if (authMap == null || authMap.isEmpty()) {
+                throw new IllegalArgumentException("authConfig must be a non-empty JSON object");
+            }
+        } catch (JsonProcessingException e) {
+            throw new IllegalArgumentException("authConfig must be a valid JSON object");
+        }
+    }
+
+    /** 逗号分隔规范化：split → trim → 去空 → join；空白入参归 null */
+    private String normalizeCsv(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return Arrays.stream(value.split(","))
+            .map(String::trim)
+            .filter(s -> !s.isEmpty())
+            .collect(Collectors.joining(","));
+    }
+
+    /** 审计快照：authConfig 带 @JsonIgnore，objectMapper 序列化自动排除，secret 不落审计 */
+    private String json(Object value) {
+        try {
+            return objectMapper.writeValueAsString(value);
+        } catch (JsonProcessingException e) {
+            return null;
+        }
     }
 
     /**
