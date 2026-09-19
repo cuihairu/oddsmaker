@@ -87,8 +87,9 @@ public final class ExperimentSplitter {
     /**
      * 四端 SDK 同款哈希（sdks/web src/index.ts hash32 等）：UTF-16 码元逐位混合，
      * 溢出按 32 位回绕（各端同余）。锚定向量：hash32("a")=0xe40c292c、hash32("foobar")=0xbf9cf968。
+     * 亦供 FeatureFlagEntity 灰度分桶复用（同源算法，保证分桶可独立复算审计）。
      */
-    static int hash32(String s) {
+    public static int hash32(String s) {
         int h = 0x811c9dc5;
         for (int i = 0; i < s.length(); i++) {
             h ^= s.charAt(i);

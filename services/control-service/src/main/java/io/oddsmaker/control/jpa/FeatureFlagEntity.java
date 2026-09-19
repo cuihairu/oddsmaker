@@ -1,7 +1,13 @@
 package io.oddsmaker.control.jpa;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import io.oddsmaker.control.experiment.ExperimentSplitter;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -11,6 +17,8 @@ import java.util.Map;
 @Entity
 @Table(name = "feature_flags")
 public class FeatureFlagEntity {
+
+    private static final ObjectMapper JSON = new ObjectMapper();
 
     /**
      * 开关状态
@@ -192,8 +200,24 @@ public class FeatureFlagEntity {
         }
 
         if (isConditional() || isStagedRollout()) {
-            // TODO: 实现条件检查逻辑
-            return defaultValue;
+            // 白名单先行：灰度/条件态白名单用户恒可用（行为变更，此前回落 defaultValue）
+            if (userId != null && whitelistUsers != null && !whitelistUsers.isEmpty()
+                    && whitelistUsers.contains(userId)) {
+                return true;
+            }
+
+            if (isConditional()) {
+                return evaluateConditions(userId, gameId);
+            }
+
+            // STAGED_ROLLOUT：FNV-1a 确定性分桶（与四端 SDK 同源），曝光率 = percentageValue% 可审计复算。
+            // 灰度态不叠加 conditions。
+            int pct = percentageValue == null ? 0 : percentageValue;
+            if (userId == null || userId.isBlank() || pct <= 0) {
+                return Boolean.TRUE.equals(defaultValue);
+            }
+            long bucket = Integer.toUnsignedLong(ExperimentSplitter.hash32(flagKey + ":" + userId)) % 100;
+            return bucket < pct;
         }
 
         return defaultValue;
@@ -227,13 +251,118 @@ public class FeatureFlagEntity {
     }
 
     /**
-     * 增加上线步骤
+     * 增加上线步骤，并按 rolloutSteps 回写百分比（复用 setPercentage 的钳制与状态联动，
+     * 末步 100 自动转 ENABLED）。步骤列表非法/越界或超出步骤数时仅递增不回写。
      */
     public void advanceRollout() {
         if (isStagedRollout() && rolloutSteps != null) {
             this.currentStep++;
-            // TODO: 根据步骤更新百分比
+            List<Integer> steps = parseRolloutSteps();
+            if (steps != null && currentStep >= 1 && currentStep <= steps.size()) {
+                setPercentage(steps.get(currentStep - 1));
+            }
         }
+    }
+
+    /**
+     * 解析 rolloutSteps 为整数列表；为空/非法 JSON/含越界值（&lt;0 或 &gt;100）时返回 null（仅递增不回写）。
+     */
+    private List<Integer> parseRolloutSteps() {
+        if (rolloutSteps == null || rolloutSteps.isBlank()) {
+            return null;
+        }
+        try {
+            List<Integer> steps = JSON.readValue(rolloutSteps, new TypeReference<List<Integer>>() {});
+            for (Integer step : steps) {
+                if (step == null || step < 0 || step > 100) {
+                    return null;
+                }
+            }
+            return steps;
+        } catch (JsonProcessingException e) {
+            return null;
+        }
+    }
+
+    /**
+     * 最小条件求值：conditions 为 JSON 数组、AND 语义，
+     * 如 [{"attribute":"game_id","op":"in","value":["g1","g2"]}]。
+     * attribute 仅限 user_id/game_id（对齐 check 端点入参）；op 仅限 eq/ne/in/not_in（大小写不敏感）；
+     * value 为标量或数组。conditions 空/null/非法 JSON/空数组 → 回落 defaultValue（保守）；
+     * 未知 attribute/op/value 为空/入参 null → 该条件按 false（明确不放行，不回落）。
+     */
+    private boolean evaluateConditions(String userId, String gameId) {
+        List<Map<String, Object>> list = parseConditions();
+        if (list == null || list.isEmpty()) {
+            return Boolean.TRUE.equals(defaultValue);
+        }
+        for (Map<String, Object> cond : list) {
+            if (!matchCondition(cond, userId, gameId)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** conditions 列表解析；为空/非法 JSON（含对象而非数组）时返回 null（回落 defaultValue）。 */
+    private List<Map<String, Object>> parseConditions() {
+        if (conditions == null || conditions.isBlank()) {
+            return null;
+        }
+        try {
+            return JSON.readValue(conditions, new TypeReference<List<Map<String, Object>>>() {});
+        } catch (JsonProcessingException e) {
+            return null;
+        }
+    }
+
+    /** 单条件判定：attribute 解析主体、op 大小写不敏感地比对 value（标量或数组，统一转字符串列表）。 */
+    private boolean matchCondition(Map<String, Object> cond, String userId, String gameId) {
+        if (cond == null) {
+            return false;
+        }
+        String attribute = cond.get("attribute") instanceof String s ? s : null;
+        String op = cond.get("op") instanceof String o ? o.trim().toLowerCase() : null;
+        if (attribute == null || op == null) {
+            return false;
+        }
+        String actual = switch (attribute) {
+            case "user_id" -> userId;
+            case "game_id" -> gameId;
+            default -> null;
+        };
+        if (actual == null) {
+            return false;
+        }
+        List<String> expected = toValueList(cond.get("value"));
+        if (expected.isEmpty()) {
+            return false;
+        }
+        boolean contains = expected.contains(actual);
+        return switch (op) {
+            case "eq", "in" -> contains;
+            case "ne", "not_in" -> !contains;
+            default -> false;
+        };
+    }
+
+    /** value 归一为字符串列表：String 原样；Number/Boolean 转字符串；数组逐元素展开；其余元素忽略。 */
+    private List<String> toValueList(Object value) {
+        List<String> out = new ArrayList<>();
+        if (value instanceof List<?> list) {
+            for (Object item : list) {
+                if (item instanceof String s) {
+                    out.add(s);
+                } else if (item instanceof Number || item instanceof Boolean) {
+                    out.add(String.valueOf(item));
+                }
+            }
+        } else if (value instanceof String s) {
+            out.add(s);
+        } else if (value instanceof Number || value instanceof Boolean) {
+            out.add(String.valueOf(value));
+        }
+        return out;
     }
 
     @PrePersist

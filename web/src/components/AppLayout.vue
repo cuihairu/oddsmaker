@@ -21,6 +21,7 @@ const navigation = [
   { name: 'Crash 监控', href: '/analytics/crash', icon: 'bug' },
   { name: '业务告警', href: '/alerts', icon: 'bell' },
   { name: 'Webhook 通知', href: '/webhooks', icon: 'link' },
+  { name: '功能开关', href: '/feature-flags', icon: 'flag' },
   { name: '隐私合规', href: '/privacy', icon: 'privacy' },
   { name: '数据保留', href: '/data-retention', icon: 'archive' },
   { name: '监控', href: '/monitoring', icon: 'chart' },
@@ -50,6 +51,7 @@ const iconPaths = {
   privacy: 'M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z',
   archive: 'M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5m16.5 0h-16.5m16.5 0c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125M10 11.25h4',
   link: 'M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244',
+  flag: 'M4 3v18M4 4h12l-2 4 2 4H4',
 }
 
 function toggleSidebar() {

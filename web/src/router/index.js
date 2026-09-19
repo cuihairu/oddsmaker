@@ -113,6 +113,12 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: '/feature-flags',
+      name: 'feature-flags',
+      component: () => import('@/views/FeatureFlagsView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
       path: '/privacy',
       name: 'privacy',
       component: () => import('@/views/PrivacyView.vue'),

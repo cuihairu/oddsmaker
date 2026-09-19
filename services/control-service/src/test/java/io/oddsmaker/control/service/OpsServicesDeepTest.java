@@ -2,6 +2,7 @@ package io.oddsmaker.control.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.oddsmaker.control.dto.StorageProfileDTO;
+import io.oddsmaker.control.experiment.ExperimentSplitter;
 import io.oddsmaker.control.jpa.AdAnalysisRepo;
 import io.oddsmaker.control.jpa.CohortEntity;
 import io.oddsmaker.control.jpa.CohortRepo;
@@ -57,6 +58,7 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 /**
  * 运营域 Service 深度单元测试：报表/导出/Cohort/维护/存储配置/分析（主路径 + 校验分支，纯 Mockito）。
@@ -609,6 +611,50 @@ class OpsServicesDeepTest {
         assertEquals(2L, status.get("enabledFeatures"));
         assertEquals(3L, status.get("totalFeatures"));
         assertEquals(Boolean.TRUE, status.get("maintenanceMode"));
+    }
+
+    @Test
+    @DisplayName("功能开关：check 命中走灰度分桶（FNV-1a 确定性）+ 白名单先行 + userId 空回落")
+    void featureFlagCheckBucketing() {
+        FeatureFlagEntity flag = new FeatureFlagEntity();
+        flag.id = "ff10";
+        flag.flagKey = "rollout-flag";
+        flag.createdBy = "admin";
+        flag.defaultValue = false;
+        flag.setPercentage(50); // 进入 STAGED_ROLLOUT，pct=50
+        when(featureFlagRepo.findByKey("rollout-flag")).thenReturn(Optional.of(flag));
+
+        // FNV-1a 锚定向量：hash32("rollout-flag:r3")=0x68678acc → bucket=4 < 50 命中；
+        // hash32("rollout-flag:r4")=0x67678939 → bucket=85 >= 50 不命中
+        assertTrue(maintenanceService.isFeatureEnabled("rollout-flag", "r3", "g1"));
+        assertFalse(maintenanceService.isFeatureEnabled("rollout-flag", "r4", "g1"));
+        // 重复调用稳定（确定性分桶），且与公式独立复算一致
+        assertTrue(maintenanceService.isFeatureEnabled("rollout-flag", "r3", "g1"));
+        assertFalse(maintenanceService.isFeatureEnabled("rollout-flag", "r4", "g1"));
+        assertEquals(
+            Integer.toUnsignedLong(ExperimentSplitter.hash32("rollout-flag:r3")) % 100 < 50,
+            maintenanceService.isFeatureEnabled("rollout-flag", "r3", "g1"));
+
+        // pct=100 全量放行 / pct=0 全不放行（回落 defaultValue=false）
+        flag.setPercentage(100);
+        assertTrue(maintenanceService.isFeatureEnabled("rollout-flag", "r4", "g1"));
+        flag.setPercentage(0);
+        assertFalse(maintenanceService.isFeatureEnabled("rollout-flag", "r4", "g1"));
+
+        // 白名单先行：5% 灰度下 r4（bucket=85）不命中，白名单透传
+        flag.setPercentage(5);
+        assertFalse(maintenanceService.isFeatureEnabled("rollout-flag", "r4", "g1"));
+        flag.whitelistUsers = "r4";
+        assertTrue(maintenanceService.isFeatureEnabled("rollout-flag", "r4", "g1"));
+
+        // userId null → 回落 defaultValue（不参与分桶）
+        flag.whitelistUsers = null;
+        assertFalse(maintenanceService.isFeatureEnabled("rollout-flag", null, "g1"));
+        flag.defaultValue = true;
+        assertTrue(maintenanceService.isFeatureEnabled("rollout-flag", null, "g1"));
+
+        // 未知 flag → false
+        assertFalse(maintenanceService.isFeatureEnabled("none", "r3", "g1"));
     }
 
     @Test
