@@ -667,7 +667,7 @@ class CoverageTopUpTest {
     // ========== 数据管道：质量规则失败阻断 ==========
 
     @Test
-    @DisplayName("质量规则失败且 actionOnFailure=stop → qualityPassed=false 走 errorRows 分支")
+    @DisplayName("质量门禁：stop 级规则超阈值 → job 诚实 FAILED 且 recordRun(false)")
     void pipelineQualityRuleStopsOnFailure() {
         io.oddsmaker.control.jpa.PipelineRepo pipelineRepo = mock(io.oddsmaker.control.jpa.PipelineRepo.class);
         io.oddsmaker.control.jpa.PipelineJobRepo jobRepo = mock(io.oddsmaker.control.jpa.PipelineJobRepo.class);
@@ -677,6 +677,8 @@ class CoverageTopUpTest {
         ReflectionTestUtils.setField(service, "pipelineJobRepo", jobRepo);
         ReflectionTestUtils.setField(service, "dataQualityRuleRepo", ruleRepo);
         ReflectionTestUtils.setField(service, "auditLogService", mock(AuditLogService.class));
+        io.oddsmaker.control.service.ClickHouseClient ch = mock(io.oddsmaker.control.service.ClickHouseClient.class);
+        ReflectionTestUtils.setField(service, "clickHouse", ch);
 
         io.oddsmaker.control.jpa.PipelineEntity pipeline = new io.oddsmaker.control.jpa.PipelineEntity();
         pipeline.id = "p1";
@@ -687,16 +689,22 @@ class CoverageTopUpTest {
         io.oddsmaker.control.jpa.DataQualityRuleEntity rule = new io.oddsmaker.control.jpa.DataQualityRuleEntity();
         rule.ruleName = "row-count";
         rule.actionOnFailure = "stop";
+        rule.ruleType = io.oddsmaker.control.jpa.DataQualityRuleEntity.RuleType.COMPLETENESS;
+        rule.severity = io.oddsmaker.control.jpa.DataQualityRuleEntity.Severity.ERROR;
+        rule.targetTable = "events";
+        rule.targetColumn = "device_id";
         when(ruleRepo.findByPipelineId("p1")).thenReturn(List.of(rule));
         when(ruleRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        // 注入随机源恒 0.0：规则评估不通过、processedRows=1000、errorRows=0
-        //（不可 mockStatic(Math)：与 JaCoCo agent 对 java.lang 的 retransform 冲突，worker 退出时崩溃丢 exec 数据）
-        ReflectionTestUtils.setField(service, "randomness",
-            (java.util.function.DoubleSupplier) () -> 0.0);
+        // CH 返回 total=100 行、违规 12 行 → gt 0 阈值不通过 → stop → job FAILED
+        when(ch.query(anyString(), any(Object[].class)))
+            .thenReturn(List.of(Map.of("total", 100L, "v", 12L)));
         io.oddsmaker.control.jpa.PipelineJobEntity job = service.executePipeline("p1", "ops");
-        assertEquals(io.oddsmaker.control.jpa.PipelineJobEntity.JobStatus.COMPLETED, job.jobStatus);
-        assertEquals(1000L, job.processedRows);
-        assertEquals(1, rule.lastViolationCount);
+        // fail() 落 FAILED 后满足重试条件 → retry() → RETRYING（与 FinalSweep6 先例一致）
+        assertEquals(io.oddsmaker.control.jpa.PipelineJobEntity.JobStatus.RETRYING, job.jobStatus);
+        assertTrue(job.errorMessage.contains("Quality gate failed"));
+        assertNotNull(pipeline.lastError);
+        assertEquals(1, pipeline.failureCount);
+        assertEquals(0, pipeline.successCount);
     }
 }

@@ -1058,10 +1058,15 @@ class FinalSweep3Test {
         DataQualityRuleEntity active = new DataQualityRuleEntity();
         active.ruleName = "not-null";
         active.actionOnFailure = "stop";
+        active.ruleType = DataQualityRuleEntity.RuleType.COMPLETENESS;
+        active.targetTable = "events";
+        active.targetColumn = "user_id";
         DataQualityRuleEntity inactive = new DataQualityRuleEntity();
         inactive.ruleName = "inactive";
         inactive.ruleStatus = DataQualityRuleEntity.RuleStatus.INACTIVE;
         when(dataQualityRuleRepo.findByPipelineId("p1")).thenReturn(List.of(active, inactive));
+        when(clickHouseClient.query(anyString(), any(Object[].class)))
+            .thenReturn(List.of(Map.of("total", 10L, "v", 0L)));
         when(pipelineJobRepo.save(any(PipelineJobEntity.class))).thenAnswer(inv -> inv.getArgument(0));
         when(pipelineRepo.save(any(PipelineEntity.class))).thenAnswer(inv -> inv.getArgument(0));
 
@@ -1083,6 +1088,7 @@ class FinalSweep3Test {
         when(pipelineJobRepo.save(any(PipelineJobEntity.class))).thenAnswer(inv -> inv.getArgument(0));
         when(pipelineRepo.save(any(PipelineEntity.class))).thenAnswer(inv -> inv.getArgument(0));
         when(dataQualityRuleRepo.findByPipelineId("p1")).thenReturn(List.of());
+        org.springframework.test.util.ReflectionTestUtils.setField(pipelineService, "scheduleEnabled", true);
 
         assertDoesNotThrow(() -> pipelineService.executeScheduledPipelines());
         assertEquals(1, pipeline.runCount);

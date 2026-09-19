@@ -410,6 +410,7 @@ class FinalSweep6Test {
         ReflectionTestUtils.setField(service, "pipelineJobRepo", pipelineJobRepo);
         ReflectionTestUtils.setField(service, "dataQualityRuleRepo", dataQualityRuleRepo);
         ReflectionTestUtils.setField(service, "auditLogService", auditLog);
+        ReflectionTestUtils.setField(service, "scheduleEnabled", true);  // 调度开关默认关闭
 
         PipelineEntity pipeline = activePipeline();
         when(pipelineRepo.findScheduledPipelines(any(LocalDateTime.class))).thenReturn(List.of(pipeline));

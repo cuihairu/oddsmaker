@@ -96,6 +96,9 @@ class SecurityGameDeepTest {
     @Mock
     private DataQualityRuleRepo dataQualityRuleRepo;
 
+    @Mock
+    private ClickHouseClient clickHouseClient;
+
     @InjectMocks
     private PipelineService pipelineService;
 
@@ -1249,7 +1252,12 @@ class SecurityGameDeepTest {
         rule.ruleStatus = DataQualityRuleEntity.RuleStatus.ACTIVE;
         rule.enabled = true;
         rule.actionOnFailure = "stop";
+        rule.ruleType = DataQualityRuleEntity.RuleType.COMPLETENESS;
+        rule.targetTable = "events";
+        rule.targetColumn = "user_id";
         lenient().when(dataQualityRuleRepo.findByPipelineId("p1")).thenReturn(List.of(rule));
+        lenient().when(clickHouseClient.query(anyString(), any(Object[].class)))
+            .thenReturn(List.of(Map.of("total", 5000L, "v", 0L)));
 
         PipelineJobEntity job = pipelineService.executePipeline("p1", "tester");
 
@@ -1328,6 +1336,7 @@ class SecurityGameDeepTest {
             .thenAnswer(inv -> inv.getArgument(0));
         lenient().when(pipelineRepo.save(any(PipelineEntity.class)))
             .thenAnswer(inv -> inv.getArgument(0));
+        org.springframework.test.util.ReflectionTestUtils.setField(pipelineService, "scheduleEnabled", true);
 
         assertDoesNotThrow(() -> pipelineService.executeScheduledPipelines());
 
