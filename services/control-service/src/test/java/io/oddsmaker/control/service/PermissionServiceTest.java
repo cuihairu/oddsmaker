@@ -184,8 +184,7 @@ class PermissionServiceTest {
     void assignRole_Success() {
         when(userRepo.existsById("user_test123")).thenReturn(true);
         when(roleRepo.existsById("viewer")).thenReturn(true);
-        when(userRoleRepo.findByUserIdAndRoleId("user_test123", "viewer"))
-            .thenReturn(Optional.empty());
+        when(userRoleRepo.findByUserId("user_test123")).thenReturn(List.of());
         when(userRoleRepo.save(any(UserRoleEntity.class))).thenReturn(testUserRole);
 
         UserRoleEntity result = permissionService.assignRole("user_test123", "viewer", null, null, "admin");
@@ -200,12 +199,44 @@ class PermissionServiceTest {
     void assignRole_AlreadyAssigned_ThrowsException() {
         when(userRepo.existsById("user_test123")).thenReturn(true);
         when(roleRepo.existsById("viewer")).thenReturn(true);
-        when(userRoleRepo.findByUserIdAndRoleId("user_test123", "viewer"))
-            .thenReturn(Optional.of(testUserRole));
+        when(userRoleRepo.findByUserId("user_test123")).thenReturn(List.of(testUserRole));
 
         assertThrows(IllegalArgumentException.class, () -> {
             permissionService.assignRole("user_test123", "viewer", null, null, "admin");
         });
+    }
+
+    @Test
+    void assignRole_SameRoleDifferentScope_CreatesNewAssignment() {
+        // global 已有 viewer 时，game 级再分 viewer 不受"已分配"检查误伤（scope-aware）
+        when(userRepo.existsById("user_test123")).thenReturn(true);
+        when(roleRepo.existsById("viewer")).thenReturn(true);
+        when(userRoleRepo.findByUserId("user_test123")).thenReturn(List.of(testUserRole));
+        when(userRoleRepo.save(any(UserRoleEntity.class)))
+            .thenAnswer(inv -> inv.getArgument(0));
+
+        UserRoleEntity result = permissionService.assignRole("user_test123", "viewer", "g1", null, "admin");
+
+        assertEquals("g1", result.gameId);
+        verify(userRoleRepo).save(any(UserRoleEntity.class));
+    }
+
+    @Test
+    void assignRole_ExistingInvalidRow_RevivesInsteadOfDuplicating() {
+        // 同 scope 已有失效行 → 复用该行（表无唯一约束，不另起新行防重复堆积）
+        testUserRole.enabled = false;
+        when(userRepo.existsById("user_test123")).thenReturn(true);
+        when(roleRepo.existsById("viewer")).thenReturn(true);
+        when(userRoleRepo.findByUserId("user_test123")).thenReturn(List.of(testUserRole));
+        when(userRoleRepo.save(any(UserRoleEntity.class)))
+            .thenAnswer(inv -> inv.getArgument(0));
+
+        UserRoleEntity result = permissionService.assignRole("user_test123", "viewer", null, null, "admin2");
+
+        assertSame(testUserRole, result);
+        assertTrue(result.isEnabled());
+        assertEquals("admin2", result.assignedBy);
+        verify(userRoleRepo).save(testUserRole);
     }
 
     @Test

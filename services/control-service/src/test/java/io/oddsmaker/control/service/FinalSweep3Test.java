@@ -1785,31 +1785,36 @@ class FinalSweep3Test {
     }
 
     @Test
-    @DisplayName("RoleAssignmentController.validateScope 环境维度缺 gameId 抛异常 / 合法分配")
+    @DisplayName("RoleAssignmentController.validateScope 环境维度缺 gameId 抛异常 / 未知角色拒绝 / 合法分配")
     void testRoleAssignmentValidateScope() {
         PermissionService ps = mock(PermissionService.class);
         AccessGuard guard = mock(AccessGuard.class);
         AuditLogService audit = mock(AuditLogService.class);
-        RoleAssignmentController controller = new RoleAssignmentController(ps, guard, audit);
+        RoleRepo roles = mock(RoleRepo.class);
+        RoleEntity enabledRole = new RoleEntity();
+        enabledRole.id = "role_viewer";
+        when(roles.findByEnabledTrue()).thenReturn(List.of(enabledRole));
+        RoleAssignmentController controller = new RoleAssignmentController(ps, guard, audit, roles);
 
         RoleAssignmentController.AssignReq bad = new RoleAssignmentController.AssignReq();
-        bad.roleId = "viewer";
+        bad.roleId = "role_viewer";
         bad.environment = "prod";
         bad.gameId = null;
         assertThrows(IllegalArgumentException.class, () -> controller.assign("u1", bad));
 
+        // 白名单动态取启用角色：roles 表不存在的 id 拒绝
         RoleAssignmentController.AssignReq badRole = new RoleAssignmentController.AssignReq();
         badRole.roleId = "super_admin";
         assertThrows(IllegalArgumentException.class, () -> controller.assign("u1", badRole));
 
         RoleAssignmentController.AssignReq good = new RoleAssignmentController.AssignReq();
-        good.roleId = "viewer";
+        good.roleId = "role_viewer";
         good.gameId = "g1";
         UserRoleEntity assignment = new UserRoleEntity();
         assignment.userId = "u1";
-        assignment.roleId = "viewer";
+        assignment.roleId = "role_viewer";
         assignment.gameId = "g1";
-        when(ps.assignRole(eq("u1"), eq("viewer"), eq("g1"), isNull(), anyString()))
+        when(ps.assignRole(eq("u1"), eq("role_viewer"), eq("g1"), isNull(), anyString()))
             .thenReturn(assignment);
         ResponseEntity<Map<String, Object>> ok = controller.assign("u1", good);
         assertEquals(200, ok.getStatusCode().value());

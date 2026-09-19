@@ -1682,22 +1682,23 @@ class MlExperimentDeepTest {
     }
 
     @Test
-    @DisplayName("assignRole - 已失效的历史分配允许重新分配")
+    @DisplayName("assignRole - 已失效的历史分配复活该行而非另起新行")
     void assignRole_reassignAfterDisabled() {
         UserRoleEntity disabled = assignment("operator", null, null);
         disabled.enabled = false;
         lenient().when(userRepo.existsById("u1")).thenReturn(true);
         lenient().when(roleRepo.existsById("operator")).thenReturn(true);
-        lenient().when(userRoleRepo.findByUserIdAndRoleId("u1", "operator"))
-            .thenReturn(Optional.of(disabled));
+        lenient().when(userRoleRepo.findByUserId("u1"))
+            .thenReturn(List.of(disabled));
         lenient().when(userRoleRepo.save(any(UserRoleEntity.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        UserRoleEntity saved = permissionService.assignRole("u1", "operator", "g1", "prod", "admin");
+        UserRoleEntity saved = permissionService.assignRole("u1", "operator", null, null, "admin");
 
+        assertThat((Object) saved).isSameAs(disabled);
         assertThat(saved.userId).isEqualTo("u1");
         assertThat(saved.roleId).isEqualTo("operator");
-        assertThat(saved.gameId).isEqualTo("g1");
-        assertThat(saved.environment).isEqualTo("prod");
+        assertThat(saved.gameId).isNull();
+        assertThat(saved.environment).isNull();
         assertThat(saved.assignedBy).isEqualTo("admin");
         assertThat(saved.enabled).isTrue();
         verify(userRoleRepo).save(any(UserRoleEntity.class));

@@ -182,27 +182,61 @@ class PlatformControllersTest {
     @Mock
     private AuditLogService auditLogService;
 
+    @Mock
+    private io.oddsmaker.control.jpa.RoleRepo roleRepo;
+
     @InjectMocks
     private RoleAssignmentController roleAssignmentController;
 
+    @InjectMocks
+    private RoleController roleController;
+
     @Test
-    @DisplayName("角色分配：列表/授予/回收与参数校验")
+    @DisplayName("角色分配：列表/授予（动态白名单）/回收与参数校验")
     void roleAssignmentEndpoints() {
+        io.oddsmaker.control.jpa.RoleEntity role = new io.oddsmaker.control.jpa.RoleEntity();
+        role.id = "role_operator";
+        when(roleRepo.findByEnabledTrue()).thenReturn(List.of(role));
         when(permissionService.listAssignments("u1")).thenReturn(List.of());
         assertEquals(200, roleAssignmentController.list("u1").getStatusCode().value());
 
         RoleAssignmentController.AssignReq assign = new RoleAssignmentController.AssignReq();
-        assign.roleId = "operator";
+        assign.roleId = "role_operator";
         io.oddsmaker.control.jpa.UserRoleEntity assignment = new io.oddsmaker.control.jpa.UserRoleEntity();
         assignment.userId = "u1";
-        assignment.roleId = "operator";
+        assignment.roleId = "role_operator";
         when(permissionService.assignRole(anyString(), anyString(), any(), any(), any()))
             .thenReturn(assignment);
         assertEquals(200, roleAssignmentController.assign("u1", assign).getStatusCode().value());
         // roleId 缺失 400
         org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
             () -> roleAssignmentController.assign("u1", new RoleAssignmentController.AssignReq()));
+        // roles 表不存在的 id 拒绝（白名单动态取启用角色）
+        RoleAssignmentController.AssignReq unknown = new RoleAssignmentController.AssignReq();
+        unknown.roleId = "super_admin";
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+            () -> roleAssignmentController.assign("u1", unknown));
 
         assertEquals(200, roleAssignmentController.revoke("u1", "role_operator", null, null).getStatusCode().value());
+        verify(accessGuard).requirePermission("user:read");
+        verify(accessGuard, org.mockito.Mockito.times(4)).requirePermission("user:update");
+    }
+
+    @Test
+    @DisplayName("角色清单：委托启用角色并只出下拉字段")
+    void roleListEndpoints() {
+        io.oddsmaker.control.jpa.RoleEntity role = new io.oddsmaker.control.jpa.RoleEntity();
+        role.id = "role_operator";
+        role.name = "运营管理员";
+        role.description = "公司级运营管理员，拥有所有权限";
+        role.level = 0;
+        when(roleRepo.findByEnabledTrue()).thenReturn(List.of(role));
+
+        var result = roleController.list();
+
+        assertEquals(1, result.size());
+        assertEquals("role_operator", result.get(0).get("id"));
+        assertEquals("运营管理员", result.get(0).get("name"));
+        verify(accessGuard).requirePermission("user:read");
     }
 }

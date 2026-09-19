@@ -103,4 +103,23 @@ class PermissionSeedCoverageTest {
         assertTrue(sql.contains("('alert:read',"), "V0.9.1 缺 alert:read 种子");
         assertTrue(sql.contains("('alert:manage',"), "V0.9.1 缺 alert:manage 种子");
     }
+
+    @Test
+    @DisplayName("V0.9.9：8 个种子角色 type 修为 SYSTEM 且 enabled/system NULL 修复在位")
+    void v099RolesDataFixPresent() throws IOException {
+        String sql = readMigration("V0.9.9__rbac_roles_data_fix.sql");
+        // type 枚举炸弹修复：8 个 role_* 行必须被 UPDATE 为 SYSTEM（RoleType 枚举合法值）
+        List<String> roleIds = List.of("role_operator", "role_game_admin", "role_analyst",
+            "role_marketing", "role_finance", "role_developer", "role_viewer", "role_qa");
+        List<String> missing = new ArrayList<>();
+        for (String id : roleIds) {
+            if (!sql.contains("'" + id + "'")) {
+                missing.add(id);
+            }
+        }
+        assertTrue(missing.isEmpty(), "V0.9.9 缺角色 id: " + missing);
+        assertTrue(sql.contains("SET type = 'SYSTEM'"), "V0.9.9 缺 type 枚举修复");
+        assertTrue(sql.contains("SET enabled = TRUE WHERE enabled IS NULL"), "V0.9.9 缺 enabled NULL 修复");
+        assertTrue(sql.contains("SET \"system\" = TRUE WHERE \"system\" IS NULL"), "V0.9.9 缺 system NULL 修复");
+    }
 }

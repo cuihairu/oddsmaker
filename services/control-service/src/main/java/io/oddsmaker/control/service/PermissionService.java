@@ -373,13 +373,23 @@ public class PermissionService {
             throw new IllegalArgumentException("Role not found: " + roleId);
         }
 
-        // 检查是否已分配
-        Optional<UserRoleEntity> existing = userRoleRepo.findByUserIdAndRoleId(userId, roleId);
-        if (existing.isPresent()) {
-            UserRoleEntity userRole = existing.get();
-            if (userRole.isValid()) {
-                throw new IllegalArgumentException("Role already assigned to user");
+        // 检查是否已分配（scope-aware：roleId+gameId+environment 三元组精确匹配，与 revokeRole 同语义——
+        // 原 findByUserIdAndRoleId 不带 scope，global 已有时 game 级被误拒）
+        List<UserRoleEntity> sameScope = userRoleRepo.findByUserId(userId).stream()
+            .filter(ur -> roleId.equals(ur.roleId))
+            .filter(ur -> Objects.equals(ur.gameId, gameId))
+            .filter(ur -> Objects.equals(ur.environment, environment))
+            .toList();
+        if (!sameScope.isEmpty()) {
+            UserRoleEntity existing = sameScope.get(0);
+            if (existing.isValid()) {
+                throw new IllegalArgumentException("Role already assigned to user in this scope");
             }
+            // 已有失效行（禁用/过期）则复活该行，不另起新行（表无唯一约束，防重复行堆积）
+            existing.enabled = true;
+            existing.expiresAt = null;
+            existing.assignedBy = assignedBy;
+            return userRoleRepo.save(existing);
         }
 
         // 创建角色分配
