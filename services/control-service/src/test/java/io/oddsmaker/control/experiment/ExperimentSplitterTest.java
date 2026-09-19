@@ -113,6 +113,21 @@ class ExperimentSplitterTest {
     }
 
     @Test
+    @DisplayName("权重和溢出 int：取模不变量破坏后兜底返回最后一个变体（确定、不抛异常）")
+    void weightOverflowFallsBackToLastVariant() {
+        // totalWeight = 2 + Integer.MAX_VALUE = 2^31+1 → int 累加溢出为 -2147483647；
+        // 非负哈希对负模数取余结果落在 [0, |total|) 且 ≥ 前缀和 2（正模数下 "h % total < total"
+        // 的恒真不变量在负模数下不成立），循环无法落位 → 触达末尾兜底返回最后一个变体。
+        // 误配防护语义：病态权重下主体仍被确定性地落位，而非抛异常或返回 null。
+        List<ExperimentSplitter.Variant> variants = List.of(
+            new ExperimentSplitter.Variant("control", 2),
+            new ExperimentSplitter.Variant("treatment", Integer.MAX_VALUE));
+        assertEquals("treatment", ExperimentSplitter.assign("exp", "salt", "u1", variants));
+        // 同主体结果稳定（兜底路径同样确定性）
+        assertEquals("treatment", ExperimentSplitter.assign("exp", "salt", "u1", variants));
+    }
+
+    @Test
     @DisplayName("从配置 JSON 解析变体列表")
     void parsesVariantsFromConfig() throws Exception {
         String json = "{\"variants\":[" +
