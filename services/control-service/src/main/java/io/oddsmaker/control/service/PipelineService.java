@@ -22,6 +22,12 @@ public class PipelineService {
 
     private static final Logger logger = LoggerFactory.getLogger(PipelineService.class);
 
+    /**
+     * 模拟执行的随机源。可注入以便单测复现失败/停止分支——
+     * 不可对 Math 做 mockStatic（与 JaCoCo 对 java.lang 的插桩冲突，VerifyError 打死测试进程）。
+     */
+    java.util.function.DoubleSupplier randomness = Math::random;
+
     @Autowired
     private PipelineRepo pipelineRepo;
 
@@ -135,8 +141,8 @@ public class PipelineService {
                 }
             }
 
-            long processedRows = (long) (Math.random() * 100000) + 1000;
-            long errorRows = qualityPassed ? 0 : (long) (Math.random() * 100);
+            long processedRows = (long) (randomness.getAsDouble() * 100000) + 1000;
+            long errorRows = qualityPassed ? 0 : (long) (randomness.getAsDouble() * 100);
 
             job.complete(processedRows, errorRows);
             pipeline.recordRun(true, null);
@@ -161,8 +167,8 @@ public class PipelineService {
      */
     private boolean evaluateQualityRule(DataQualityRuleEntity rule) {
         // 模拟质量检查
-        boolean passed = Math.random() > 0.1;  // 90%通过率
-        int violationCount = passed ? 0 : (int) (Math.random() * 100) + 1;
+        boolean passed = randomness.getAsDouble() > 0.1;  // 90%通过率
+        int violationCount = passed ? 0 : (int) (randomness.getAsDouble() * 100) + 1;
 
         rule.recordEvaluation(passed, violationCount);
         dataQualityRuleRepo.save(rule);

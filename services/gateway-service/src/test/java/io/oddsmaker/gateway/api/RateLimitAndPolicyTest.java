@@ -92,4 +92,60 @@ class RateLimitAndPolicyTest {
         // ip coarse /24
         assertEquals("1.2.3.0", sent.clientIp);
     }
+
+    @Test
+    void nullPolicySkipsOverrides() {
+        // getPolicy 二次查询不可得（防御分支）：policy==null 时按无策略放行
+        when(policyService.getPolicy("pk_test_example")).thenReturn(null);
+
+        String body = "{" +
+                "\"event_id\":\"01JNULLPOL1\",\"event_name\":\"level_start\",\"game_id\":\"game_demo\",\"environment\":\"prod\",\"device_id\":\"d1\",\"ts_client\":1730000000000}";
+        client.post().uri("/v1/batch")
+                .contentType(MediaType.valueOf("application/x-ndjson"))
+                .header("x-api-key", "pk_test_example")
+                .bodyValue(body)
+                .exchange()
+                .expectStatus().is2xxSuccessful();
+        verify(avroPublisher, atLeastOnce()).publish(any(Event.class));
+    }
+
+    @Test
+    void unknownPiiModeFallsBackToMask() {
+        // parseMode 未识别值回落 MASK：邮箱仍被 ***@ 域名掩码
+        PolicyService.Policy p = new PolicyService.Policy();
+        p.piiEmail = "funky";
+        when(policyService.getPolicy("pk_mask")).thenReturn(p);
+
+        String body = "{" +
+                "\"event_id\":\"01JFUNKYMD1\",\"event_name\":\"level_start\",\"game_id\":\"game_demo\",\"environment\":\"prod\",\"device_id\":\"d1\",\"ts_client\":1730000000000,\"props\":{\"email\":\"u@ex.com\"}}";
+        ArgumentCaptor<Event> cap = ArgumentCaptor.forClass(Event.class);
+
+        client.post().uri("/v1/batch")
+                .contentType(MediaType.valueOf("application/x-ndjson"))
+                .header("x-api-key", "pk_mask")
+                .bodyValue(body)
+                .exchange()
+                .expectStatus().is2xxSuccessful();
+
+        verify(avroPublisher, atLeastOnce()).publish(cap.capture());
+        Object em = cap.getValue().props.get("email");
+        assertInstanceOf(String.class, em);
+        assertTrue(((String) em).startsWith("***@"));
+    }
+
+    @Test
+    void explicitNullTsClientRejectedByDriftCheck() {
+        // ts_client 显式 null：hasNonNull 为 false 不赋值，long 原始类型保持默认 0，
+        // 时间戳信差检查 |now-0| 超窗 → invalid_timestamp 拒绝
+        String body = "{" +
+                "\"event_id\":\"01JNULLTS001\",\"event_name\":\"level_start\",\"game_id\":\"game_demo\",\"environment\":\"prod\",\"device_id\":\"d1\",\"ts_client\":null}";
+        client.post().uri("/v1/batch")
+                .contentType(MediaType.valueOf("application/x-ndjson"))
+                .header("x-api-key", "pk_ipv6")
+                .bodyValue(body)
+                .exchange()
+                .expectStatus().is2xxSuccessful()
+                .expectBody()
+                .jsonPath("$.rejected[0].reason").isEqualTo("invalid_timestamp");
+    }
 }

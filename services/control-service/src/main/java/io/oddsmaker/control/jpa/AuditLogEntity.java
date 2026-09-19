@@ -237,37 +237,36 @@ public class AuditLogEntity {
     }
 
     public String getActionDescription() {
-        switch (action) {
-            case CREATE: return "创建";
-            case READ: return "读取";
-            case UPDATE: return "更新";
-            case DELETE: return "删除";
-            case LOGIN: return "登录";
-            case LOGOUT: return "登出";
-            case LOGIN_FAILED: return "登录失败";
-            case PASSWORD_CHANGE: return "修改密码";
-            case PASSWORD_RESET: return "重置密码";
-            case EXPORT: return "导出";
-            case IMPORT: return "导入";
-            case ARCHIVE: return "归档";
-            case RESTORE: return "恢复";
-            case CONFIGURE: return "配置";
-            case ENABLE: return "启用";
-            case DISABLE: return "禁用";
-            case GRANT_ROLE: return "授予角色";
-            case REVOKE_ROLE: return "撤销角色";
-            case GRANT_PERMISSION: return "授予权限";
-            case REVOKE_PERMISSION: return "撤销权限";
-            case ACTIVATE: return "激活";
-            case DEACTIVATE: return "停用";
-            case BLOCK: return "封禁";
-            case UNBLOCK: return "解封";
-            case SECURITY_ALERT: return "安全告警";
-            case GRANT: return "授权";
-            case SYSTEM_BACKUP: return "系统备份";
-            case SYSTEM_RESTORE: return "系统恢复";
-            case SYSTEM_MAINTENANCE: return "系统维护";
-            default: return action.toString();
-        }
+        return switch (action) {
+            case CREATE -> "创建";
+            case READ -> "读取";
+            case UPDATE -> "更新";
+            case DELETE -> "删除";
+            case LOGIN -> "登录";
+            case LOGOUT -> "登出";
+            case LOGIN_FAILED -> "登录失败";
+            case PASSWORD_CHANGE -> "修改密码";
+            case PASSWORD_RESET -> "重置密码";
+            case EXPORT -> "导出";
+            case IMPORT -> "导入";
+            case ARCHIVE -> "归档";
+            case RESTORE -> "恢复";
+            case CONFIGURE -> "配置";
+            case ENABLE -> "启用";
+            case DISABLE -> "禁用";
+            case GRANT_ROLE -> "授予角色";
+            case REVOKE_ROLE -> "撤销角色";
+            case GRANT_PERMISSION -> "授予权限";
+            case REVOKE_PERMISSION -> "撤销权限";
+            case ACTIVATE -> "激活";
+            case DEACTIVATE -> "停用";
+            case BLOCK -> "封禁";
+            case UNBLOCK -> "解封";
+            case SECURITY_ALERT -> "安全告警";
+            case GRANT -> "授权";
+            case SYSTEM_BACKUP -> "系统备份";
+            case SYSTEM_RESTORE -> "系统恢复";
+            case SYSTEM_MAINTENANCE -> "系统维护";
+        };
     }
 }

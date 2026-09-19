@@ -49,11 +49,8 @@ public class PermissionService {
             return false;
         }
 
-        // 检查用户是否被锁定
-        if (user.isLocked()) {
-            logger.debug("User {} is locked", userId);
-            return false;
-        }
+        // 不再检查 isLocked()：isActive()（status==ACTIVE 且未删除）与 isLocked()（status==LOCKED）
+        // 互斥，LOCKED 用户已在上方 !isActive() 提前返回，此分支不可达。
 
         // 获取用户的有效角色分配
         List<UserRoleEntity> userRoles = userRoleRepo.findValidByUserId(userId, LocalDateTime.now());
@@ -106,10 +103,8 @@ public class PermissionService {
             return false;
         }
 
-        // 检查用户是否被锁定
-        if (user.isLocked()) {
-            return false;
-        }
+        // 不再检查 isLocked()：isActive()（status==ACTIVE 且未删除）与 isLocked()（status==LOCKED）
+        // 互斥，LOCKED 用户已在上方 !isActive() 提前返回，此分支不可达。
 
         // 获取用户在该游戏中的角色分配
         List<UserRoleEntity> userRoles = userRoleRepo.findByUserIdAndGameId(userId, gameId);
@@ -167,10 +162,8 @@ public class PermissionService {
             return false;
         }
 
-        // 检查用户是否被锁定
-        if (user.isLocked()) {
-            return false;
-        }
+        // 不再检查 isLocked()：isActive()（status==ACTIVE 且未删除）与 isLocked()（status==LOCKED）
+        // 互斥，LOCKED 用户已在上方 !isActive() 提前返回，此分支不可达。
 
         // 获取用户在该游戏环境中的角色分配
         List<UserRoleEntity> userRoles = userRoleRepo.findByUserIdAndGameIdAndEnvironment(userId, gameId, environment);

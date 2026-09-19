@@ -111,9 +111,8 @@ public class BatchController {
             BatchResponse resp = new BatchResponse();
             List<Event> validEvents = new ArrayList<>();
             for (Event event : events) {
-                if (event == null) {
-                    continue;
-                }
+                // parseEvents 的 JSON/ndjson 两条路径均已跳过 null（isNull 元素/readCompatEvent 返回 null），
+                // 此处 event 不可能为 null，无需判空
                 normalizeCompatFields(event);
                 if (event.eventId == null || event.eventName == null || event.gameId == null || event.environment == null || event.deviceId == null) {
                     reject(resp, event, "invalid_schema");
@@ -123,9 +122,7 @@ public class BatchController {
                     reject(resp, event, "api_key_scope_mismatch");
                     continue;
                 }
-                if (event.eventType == null || event.eventType.isBlank()) {
-                    event.eventType = inferEventType(event.eventName);
-                }
+                // eventType 兜底已由上方 normalizeCompatFields 完成，此处必非空
                 // 风控前置：事件时间戳信差检查（默认 ±24h，可配 oddsmaker.risk.max-event-ts-drift-ms）
                 if (!replayGuard.isTimestampPlausible(event.tsClient, System.currentTimeMillis())) {
                     reject(resp, event, "invalid_timestamp");
@@ -512,9 +509,7 @@ public class BatchController {
     }
 
     private Long parseEpochMillis(JsonNode node) {
-        if (node == null || node.isNull()) {
-            return null;
-        }
+        // 两个调用点均以 hasNonNull 守卫，node 不可能为 null/isNull，无需防御分支
         if (node.isNumber()) {
             return node.asLong();
         }
@@ -596,9 +591,7 @@ public class BatchController {
     }
 
     private PiiPolicy.Mode parseMode(String s) {
-        if (s == null) {
-            return null;
-        }
+        // 两个调用点均有 policy.piiXxx != null 守卫，s 不可能为 null
         return switch (s.toLowerCase(Locale.ROOT)) {
             case "allow" -> PiiPolicy.Mode.ALLOW;
             case "drop" -> PiiPolicy.Mode.DROP;
@@ -607,9 +600,7 @@ public class BatchController {
     }
 
     private PiiPolicy.IpMode parseIpMode(String s) {
-        if (s == null) {
-            return null;
-        }
+        // 唯一调用点已有 policy.piiIp != null 守卫，s 不可能为 null
         return switch (s.toLowerCase(Locale.ROOT)) {
             case "allow" -> PiiPolicy.IpMode.ALLOW;
             case "drop" -> PiiPolicy.IpMode.DROP;

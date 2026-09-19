@@ -699,4 +699,13 @@ class ConfigurableFunnelsJobTest {
             org.junit.jupiter.api.Assertions.assertDoesNotThrow(() -> ConfigurableFunnelsJob.main(new String[0]));
         }
     }
+
+    @Test
+    @DisplayName("loadFromControlDb：驱动类缺失（SPI 注册兜底分支）返回空列表")
+    void loadFromControlDbReturnsEmptyWhenDriverMissing() {
+        // 不 mock java.lang.Class（mockStatic 对 java.lang 的插桩与 JaCoCo 冲突，同 Math 的坑），
+        // 改传不存在的驱动类名直接走缺失分支
+        assertTrue(ConfigurableFunnelsJob
+            .loadFromControlDb("jdbc:postgresql://127.0.0.1:1/none", "u", "p", "no.such.Driver").isEmpty());
+    }
 }

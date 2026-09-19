@@ -183,38 +183,30 @@ public class WebhookConfigEntity {
     public boolean shouldSendForEvent(String eventType, String riskLevel) {
         if (!isActive()) return false;
 
-        // 检查事件类型匹配
+        // 检查事件类型匹配（split 字面量 regex 不会抛、equalsIgnoreCase null 安全，无需防御 catch）
         if (eventTypes != null && !eventTypes.isEmpty()) {
-            try {
-                String[] types = eventTypes.split(",");
-                boolean typeMatch = false;
-                for (String type : types) {
-                    if (type.trim().equalsIgnoreCase(eventType)) {
-                        typeMatch = true;
-                        break;
-                    }
+            String[] types = eventTypes.split(",");
+            boolean typeMatch = false;
+            for (String type : types) {
+                if (type.trim().equalsIgnoreCase(eventType)) {
+                    typeMatch = true;
+                    break;
                 }
-                if (!typeMatch) return false;
-            } catch (Exception e) {
-                // 解析失败，默认发送
             }
+            if (!typeMatch) return false;
         }
 
         // 检查风险等级匹配
         if (riskLevels != null && !riskLevels.isEmpty()) {
-            try {
-                String[] levels = riskLevels.split(",");
-                boolean levelMatch = false;
-                for (String level : levels) {
-                    if (level.trim().equalsIgnoreCase(riskLevel)) {
-                        levelMatch = true;
-                        break;
-                    }
+            String[] levels = riskLevels.split(",");
+            boolean levelMatch = false;
+            for (String level : levels) {
+                if (level.trim().equalsIgnoreCase(riskLevel)) {
+                    levelMatch = true;
+                    break;
                 }
-                if (!levelMatch) return false;
-            } catch (Exception e) {
-                // 解析失败，默认发送
             }
+            if (!levelMatch) return false;
         }
 
         return true;

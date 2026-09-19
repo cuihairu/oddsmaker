@@ -164,9 +164,13 @@ public class ConfigurableFunnelsJob {
      * 打开控制面库连接并加载漏斗配置。驱动缺失/连接失败均安全返回空列表。
      */
     static List<FunnelConfig> loadFromControlDb(String dbUrl, String dbUser, String dbPass) {
+        return loadFromControlDb(dbUrl, dbUser, dbPass, "org.postgresql.Driver");
+    }
+
+    static List<FunnelConfig> loadFromControlDb(String dbUrl, String dbUser, String dbPass, String driverClass) {
         // fatJar 合并依赖时 META-INF/services 可能被同名文件覆盖，DriverManager SPI
         // 注册不到 PG 驱动（"No suitable driver"），显式加载兜底
-        if (!driverAvailable("org.postgresql.Driver")) {
+        if (!driverAvailable(driverClass)) {
             return new ArrayList<>();
         }
         return loadWithConnection(() -> DriverManager.getConnection(dbUrl, dbUser, dbPass));

@@ -355,12 +355,10 @@ public class ExperimentService {
     }
 
     private String normalizeStatus(String status, String defaultStatus) {
+        // 调用点的 defaultStatus 均非 null（filter 入口已提前拦截 blank），normalized 不会为 null
         String normalized = status == null || status.isBlank()
             ? defaultStatus
             : status.trim().toLowerCase(Locale.ROOT);
-        if (normalized == null) {
-            return null;
-        }
         if (!STATUSES.contains(normalized)) {
             throw new IllegalArgumentException("Unsupported experiment status: " + status);
         }
