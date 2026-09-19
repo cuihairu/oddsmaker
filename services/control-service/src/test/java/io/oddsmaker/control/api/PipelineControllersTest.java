@@ -76,6 +76,17 @@ class PipelineControllersTest {
         assertEquals(200, developerController.archiveTelemetryConfig("t1", new DeveloperController.ArchiveRequest()).getStatusCode().value());
         assertEquals(200, developerController.deleteTelemetryConfig("t1", new DeveloperController.DeleteRequest()).getStatusCode().value());
         assertEquals(200, developerController.getSDKStatistics().getStatusCode().value());
+        // game 级 4（createSDKKey/getGameSDKKeys/createTelemetryConfig/getGameTelemetryConfigs）+ 平台级 21
+        verify(accessGuard, org.mockito.Mockito.times(1)).requireGamePermission(null, "sdkkey:manage");
+        verify(accessGuard, org.mockito.Mockito.times(1)).requireGamePermission("g", "sdkkey:read");
+        verify(accessGuard, org.mockito.Mockito.times(1)).requireGamePermission(null, "telemetry:manage");
+        verify(accessGuard, org.mockito.Mockito.times(1)).requireGamePermission("g", "telemetry:read");
+        verify(accessGuard, org.mockito.Mockito.times(2)).requirePermission("sdkkey:read");
+        verify(accessGuard, org.mockito.Mockito.times(5)).requirePermission("sdkkey:manage");
+        verify(accessGuard, org.mockito.Mockito.times(3)).requirePermission("sdkversion:read");
+        verify(accessGuard, org.mockito.Mockito.times(4)).requirePermission("sdkversion:manage");
+        verify(accessGuard, org.mockito.Mockito.times(2)).requirePermission("telemetry:read");
+        verify(accessGuard, org.mockito.Mockito.times(5)).requirePermission("telemetry:manage");
     }
 
     // ===== ML 模型 =====
@@ -118,6 +129,14 @@ class PipelineControllersTest {
         assertEquals(200, mlModelController.getModelStatistics("m1").getStatusCode().value());
         assertEquals(200, mlModelController.getGlobalStatistics().getStatusCode().value());
         assertEquals(200, mlModelController.detectModelDrift("m1", 6).getStatusCode().value());
+        // game 级 2（createModel/getGameModels）+ 平台级 27
+        verify(accessGuard, org.mockito.Mockito.times(1)).requireGamePermission(null, "ml:manage");
+        verify(accessGuard, org.mockito.Mockito.times(1)).requireGamePermission("g", "ml:read");
+        verify(accessGuard, org.mockito.Mockito.times(10)).requirePermission("ml:read");
+        verify(accessGuard, org.mockito.Mockito.times(5)).requirePermission("ml:manage");
+        verify(accessGuard, org.mockito.Mockito.times(6)).requirePermission("ml:train");
+        verify(accessGuard, org.mockito.Mockito.times(1)).requirePermission("ml:deploy");
+        verify(accessGuard, org.mockito.Mockito.times(4)).requirePermission("ml:use");
     }
 
     // ===== 导出 =====
@@ -139,6 +158,9 @@ class PipelineControllersTest {
         assertEquals(200, exportController.cancelExportJob("e1", "g", new ExportController.CancelRequest()).getStatusCode().value());
         assertEquals(200, exportController.getExportStats("g").getStatusCode().value());
         assertEquals(200, exportController.getUserExportStats("u1", "g").getStatusCode().value());
+        // 8 端点全 export:execute（create 用 request.gameId=null）
+        verify(accessGuard, org.mockito.Mockito.times(7)).requireGamePermission("g", "export:execute");
+        verify(accessGuard, org.mockito.Mockito.times(1)).requireGamePermission(null, "export:execute");
     }
 
     // ===== 报表 =====
@@ -189,6 +211,15 @@ class PipelineControllersTest {
         assertEquals(200, pipelineController.createQualityRule(new PipelineController.QualityRuleRequest()).getStatusCode().value());
         assertEquals(200, pipelineController.getQualityRules("g").getStatusCode().value());
         assertEquals(200, pipelineController.getPipelineQualityRules("p1").getStatusCode().value());
+        // game 级 4（createPipeline/getPipelines/createQualityRule/getQualityRules）+ 平台级 8
+        verify(accessGuard, org.mockito.Mockito.times(1)).requireGamePermission(null, "pipeline:manage");
+        verify(accessGuard, org.mockito.Mockito.times(1)).requireGamePermission("g", "pipeline:read");
+        verify(accessGuard, org.mockito.Mockito.times(1)).requireGamePermission(null, "qualityrule:manage");
+        verify(accessGuard, org.mockito.Mockito.times(1)).requireGamePermission("g", "qualityrule:read");
+        verify(accessGuard, org.mockito.Mockito.times(3)).requirePermission("pipeline:read");
+        verify(accessGuard, org.mockito.Mockito.times(3)).requirePermission("pipeline:manage");
+        verify(accessGuard, org.mockito.Mockito.times(1)).requirePermission("pipeline:execute");
+        verify(accessGuard, org.mockito.Mockito.times(1)).requirePermission("qualityrule:read");
     }
 
     // ===== Flink 作业 =====
@@ -264,6 +295,11 @@ class PipelineControllersTest {
         assertEquals(200, integrationController.getCallStats("i1", "g", null).getStatusCode().value());
         assertEquals(200, integrationController.triggerIntegration("i1", "g", new IntegrationController.TriggerRequest()).getStatusCode().value());
         assertEquals(200, integrationController.triggerIntegrations("g", io.oddsmaker.control.jpa.IntegrationEntity.IntegrationType.WEBHOOK, new IntegrationController.TriggerRequest()).getStatusCode().value());
+        // 14 端点全 game 级：read 6 + manage 6（update/verify/enable/disable/delete/create）+ trigger 2
+        verify(accessGuard, org.mockito.Mockito.times(6)).requireGamePermission("g", "integration:read");
+        verify(accessGuard, org.mockito.Mockito.times(5)).requireGamePermission("g", "integration:manage");
+        verify(accessGuard, org.mockito.Mockito.times(1)).requireGamePermission(null, "integration:manage");
+        verify(accessGuard, org.mockito.Mockito.times(2)).requireGamePermission("g", "integration:trigger");
     }
 
     // ===== Webhook =====
@@ -332,6 +368,13 @@ class PipelineControllersTest {
         assertEquals(200, rateLimitController.checkQuota("g", null, null).getStatusCode().value());
         assertEquals(200, rateLimitController.updateQuotaUsage("g", null, null, 1L).getStatusCode().value());
         assertEquals(200, rateLimitController.getQuotaStats("g").getStatusCode().value());
+        // 10 端点全 game 级：ratelimit read 3/manage 3（update/delete/create）+ quota read 2/manage 2（updateUsage/create）
+        verify(accessGuard, org.mockito.Mockito.times(3)).requireGamePermission("g", "ratelimit:read");
+        verify(accessGuard, org.mockito.Mockito.times(2)).requireGamePermission("g", "ratelimit:manage");
+        verify(accessGuard, org.mockito.Mockito.times(1)).requireGamePermission(null, "ratelimit:manage");
+        verify(accessGuard, org.mockito.Mockito.times(2)).requireGamePermission("g", "quota:read");
+        verify(accessGuard, org.mockito.Mockito.times(1)).requireGamePermission("g", "quota:manage");
+        verify(accessGuard, org.mockito.Mockito.times(1)).requireGamePermission(null, "quota:manage");
     }
 
     // ===== 健康 =====
@@ -356,6 +399,11 @@ class PipelineControllersTest {
         assertEquals(200, healthController.getAlertStats().getStatusCode().value());
         assertEquals(200, healthController.acknowledgeAlert("a1", new HealthController.AcknowledgeRequest()).getStatusCode().value());
         assertEquals(200, healthController.resolveAlert("a1", new HealthController.ResolveRequest()).getStatusCode().value());
+        // checks/metrics → health:read 3；run → health:manage 1；告警复用 alert:read 2 / alert:manage 2；探活 3 个无 guard
+        verify(accessGuard, org.mockito.Mockito.times(3)).requirePermission("health:read");
+        verify(accessGuard, org.mockito.Mockito.times(1)).requirePermission("health:manage");
+        verify(accessGuard, org.mockito.Mockito.times(2)).requirePermission("alert:read");
+        verify(accessGuard, org.mockito.Mockito.times(2)).requirePermission("alert:manage");
     }
 
     // ===== 性能监控 =====
@@ -379,6 +427,9 @@ class PipelineControllersTest {
         assertEquals(200, performanceController.getBusinessMetrics().getStatusCode().value());
         assertEquals(200, performanceController.getHealthMetrics().getStatusCode().value());
         assertEquals(200, performanceController.getPrometheusEndpoint().getStatusCode().value());
+        // overview/api/events/risk/business → metrics:read 5；database/kafka/system → metrics:infra 3；health/prometheus 无 guard
+        verify(accessGuard, org.mockito.Mockito.times(5)).requirePermission("metrics:read");
+        verify(accessGuard, org.mockito.Mockito.times(3)).requirePermission("metrics:infra");
     }
 
     // ===== 埋点方案 =====
@@ -439,5 +490,9 @@ class PipelineControllersTest {
         assertEquals(200, auditLogController.getAuditStatistics(7).getStatusCode().value());
         assertEquals(404, auditLogController.getAuditLog("1").getStatusCode().value());
         assertEquals(200, auditLogController.cleanupOldLogs(90).getStatusCode().value());
+        // 普通查询 9 → audit:read；failed/auth/sensitive/statistics → audit:sensitive 4；cleanup → audit:manage 1
+        verify(accessGuard, org.mockito.Mockito.times(9)).requirePermission("audit:read");
+        verify(accessGuard, org.mockito.Mockito.times(4)).requirePermission("audit:sensitive");
+        verify(accessGuard, org.mockito.Mockito.times(1)).requirePermission("audit:manage");
     }
 }

@@ -1,10 +1,10 @@
 package io.oddsmaker.control.api;
 
 import io.oddsmaker.control.jpa.*;
+import io.oddsmaker.control.security.AccessGuard;
 import io.oddsmaker.control.service.DeveloperPortalService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -12,7 +12,9 @@ import java.util.Map;
 
 /**
  * 开发者门户API控制器
- * 提供SDK管理和开发者工具接口
+ * 提供SDK管理和开发者工具接口；鉴权走 AccessGuard 行内风格（sdkkey / sdkversion / telemetry 各 read/manage）。
+ * 历史形态为 @PreAuthorize hasAuthority('VIEW_SDK_KEYS') 静态式与 'MANAGE_SDK_KEYS:'+gameId 拼接式，
+ * 而全仓只签发 ROLE_* authority，方法安全开启后这些注解恒 403——故换成权限种子（V0.9.8）+ AccessGuard 解析。
  */
 @RestController
 @RequestMapping("/api/developer")
@@ -21,14 +23,17 @@ public class DeveloperController {
     @Autowired
     private DeveloperPortalService developerPortalService;
 
+    @Autowired
+    private AccessGuard accessGuard;
+
     // ==================== SDK密钥管理 ====================
 
     /**
      * 创建SDK密钥
      */
     @PostMapping("/sdk-keys")
-    @PreAuthorize("hasAuthority('MANAGE_SDK_KEYS:' + #request.gameId)")
     public ResponseEntity<SDKKeyEntity> createSDKKey(@RequestBody CreateSDKKeyRequest request) {
+        accessGuard.requireGamePermission(request.gameId, "sdkkey:manage");
         SDKKeyEntity key = developerPortalService.createSDKKey(
             request.gameId,
             request.environment,
@@ -45,8 +50,8 @@ public class DeveloperController {
      * 获取SDK密钥详情
      */
     @GetMapping("/sdk-keys/{keyId}")
-    @PreAuthorize("hasAuthority('VIEW_SDK_KEYS')")
     public ResponseEntity<SDKKeyEntity> getSDKKey(@PathVariable String keyId) {
+        accessGuard.requirePermission("sdkkey:read");
         SDKKeyEntity key = developerPortalService.getSDKKey(keyId);
         return ResponseEntity.ok(key);
     }
@@ -55,10 +60,10 @@ public class DeveloperController {
      * 获取游戏的SDK密钥列表
      */
     @GetMapping("/sdk-keys/game/{gameId}")
-    @PreAuthorize("hasAuthority('VIEW_SDK_KEYS:' + #gameId)")
     public ResponseEntity<List<SDKKeyEntity>> getGameSDKKeys(
             @PathVariable String gameId,
             @RequestParam(required = false) String environment) {
+        accessGuard.requireGamePermission(gameId, "sdkkey:read");
         List<SDKKeyEntity> keys = developerPortalService.getGameSDKKeys(gameId, environment);
         return ResponseEntity.ok(keys);
     }
@@ -67,10 +72,10 @@ public class DeveloperController {
      * 更新SDK密钥配置
      */
     @PutMapping("/sdk-keys/{keyId}")
-    @PreAuthorize("hasAuthority('MANAGE_SDK_KEYS')")
     public ResponseEntity<SDKKeyEntity> updateSDKKey(
             @PathVariable String keyId,
             @RequestBody UpdateSDKKeyRequest request) {
+        accessGuard.requirePermission("sdkkey:manage");
         SDKKeyEntity key = developerPortalService.updateSDKKey(keyId, request.updates, request.updatedBy);
         return ResponseEntity.ok(key);
     }
@@ -79,10 +84,10 @@ public class DeveloperController {
      * 暂停SDK密钥
      */
     @PostMapping("/sdk-keys/{keyId}/suspend")
-    @PreAuthorize("hasAuthority('MANAGE_SDK_KEYS')")
     public ResponseEntity<SDKKeyEntity> suspendSDKKey(
             @PathVariable String keyId,
             @RequestBody SuspendRequest request) {
+        accessGuard.requirePermission("sdkkey:manage");
         SDKKeyEntity key = developerPortalService.suspendSDKKey(keyId, request.suspendedBy);
         return ResponseEntity.ok(key);
     }
@@ -91,10 +96,10 @@ public class DeveloperController {
      * 激活SDK密钥
      */
     @PostMapping("/sdk-keys/{keyId}/activate")
-    @PreAuthorize("hasAuthority('MANAGE_SDK_KEYS')")
     public ResponseEntity<SDKKeyEntity> activateSDKKey(
             @PathVariable String keyId,
             @RequestBody ActivateRequest request) {
+        accessGuard.requirePermission("sdkkey:manage");
         SDKKeyEntity key = developerPortalService.activateSDKKey(keyId, request.activatedBy);
         return ResponseEntity.ok(key);
     }
@@ -103,10 +108,10 @@ public class DeveloperController {
      * 撤销SDK密钥
      */
     @PostMapping("/sdk-keys/{keyId}/revoke")
-    @PreAuthorize("hasAuthority('MANAGE_SDK_KEYS')")
     public ResponseEntity<SDKKeyEntity> revokeSDKKey(
             @PathVariable String keyId,
             @RequestBody RevokeRequest request) {
+        accessGuard.requirePermission("sdkkey:manage");
         SDKKeyEntity key = developerPortalService.revokeSDKKey(keyId, request.revokedBy);
         return ResponseEntity.ok(key);
     }
@@ -115,10 +120,10 @@ public class DeveloperController {
      * 删除SDK密钥
      */
     @DeleteMapping("/sdk-keys/{keyId}")
-    @PreAuthorize("hasAuthority('MANAGE_SDK_KEYS')")
     public ResponseEntity<Void> deleteSDKKey(
             @PathVariable String keyId,
             @RequestBody DeleteRequest request) {
+        accessGuard.requirePermission("sdkkey:manage");
         developerPortalService.deleteSDKKey(keyId, request.deletedBy);
         return ResponseEntity.ok().build();
     }
@@ -141,8 +146,8 @@ public class DeveloperController {
      * 创建SDK版本
      */
     @PostMapping("/sdk-versions")
-    @PreAuthorize("hasAuthority('MANAGE_SDK_VERSIONS')")
     public ResponseEntity<SDKVersionEntity> createSDKVersion(@RequestBody CreateSDKVersionRequest request) {
+        accessGuard.requirePermission("sdkversion:manage");
         SDKVersionEntity version = developerPortalService.createSDKVersion(
             request.platform,
             request.version,
@@ -158,8 +163,8 @@ public class DeveloperController {
      * 获取SDK版本详情
      */
     @GetMapping("/sdk-versions/{versionId}")
-    @PreAuthorize("hasAuthority('VIEW_SDK_VERSIONS')")
     public ResponseEntity<SDKVersionEntity> getSDKVersion(@PathVariable String versionId) {
+        accessGuard.requirePermission("sdkversion:read");
         SDKVersionEntity version = developerPortalService.getSDKVersion(versionId);
         return ResponseEntity.ok(version);
     }
@@ -168,10 +173,10 @@ public class DeveloperController {
      * 获取平台的版本列表
      */
     @GetMapping("/sdk-versions/platform/{platform}")
-    @PreAuthorize("hasAuthority('VIEW_SDK_VERSIONS')")
     public ResponseEntity<List<SDKVersionEntity>> getPlatformVersions(
             @PathVariable SDKVersionEntity.SDKPlatform platform,
             @RequestParam(required = false) String status) {
+        accessGuard.requirePermission("sdkversion:read");
         List<SDKVersionEntity> versions = developerPortalService.getPlatformVersions(platform, status);
         return ResponseEntity.ok(versions);
     }
@@ -180,8 +185,8 @@ public class DeveloperController {
      * 获取最新版本
      */
     @GetMapping("/sdk-versions/platform/{platform}/latest")
-    @PreAuthorize("hasAuthority('VIEW_SDK_VERSIONS')")
     public ResponseEntity<SDKVersionEntity> getLatestVersion(@PathVariable SDKVersionEntity.SDKPlatform platform) {
+        accessGuard.requirePermission("sdkversion:read");
         SDKVersionEntity version = developerPortalService.getLatestVersion(platform);
         return ResponseEntity.ok(version);
     }
@@ -190,10 +195,10 @@ public class DeveloperController {
      * 发布版本
      */
     @PostMapping("/sdk-versions/{versionId}/release")
-    @PreAuthorize("hasAuthority('MANAGE_SDK_VERSIONS')")
     public ResponseEntity<SDKVersionEntity> releaseVersion(
             @PathVariable String versionId,
             @RequestBody ReleaseVersionRequest request) {
+        accessGuard.requirePermission("sdkversion:manage");
         SDKVersionEntity version = developerPortalService.releaseVersion(
             versionId,
             request.downloadUrl,
@@ -210,10 +215,10 @@ public class DeveloperController {
      * 弃用版本
      */
     @PostMapping("/sdk-versions/{versionId}/deprecate")
-    @PreAuthorize("hasAuthority('MANAGE_SDK_VERSIONS')")
     public ResponseEntity<SDKVersionEntity> deprecateVersion(
             @PathVariable String versionId,
             @RequestBody DeprecateVersionRequest request) {
+        accessGuard.requirePermission("sdkversion:manage");
         SDKVersionEntity version = developerPortalService.deprecateVersion(
             versionId,
             request.deprecationNotice,
@@ -226,10 +231,10 @@ public class DeveloperController {
      * 退役版本
      */
     @PostMapping("/sdk-versions/{versionId}/retire")
-    @PreAuthorize("hasAuthority('MANAGE_SDK_VERSIONS')")
     public ResponseEntity<SDKVersionEntity> retireVersion(
             @PathVariable String versionId,
             @RequestBody RetireRequest request) {
+        accessGuard.requirePermission("sdkversion:manage");
         SDKVersionEntity version = developerPortalService.retireVersion(versionId, request.retiredBy);
         return ResponseEntity.ok(version);
     }
@@ -249,8 +254,8 @@ public class DeveloperController {
      * 创建遥测配置
      */
     @PostMapping("/telemetry-configs")
-    @PreAuthorize("hasAuthority('MANAGE_TELEMETRY:' + #request.gameId)")
     public ResponseEntity<TelemetryConfigEntity> createTelemetryConfig(@RequestBody CreateTelemetryConfigRequest request) {
+        accessGuard.requireGamePermission(request.gameId, "telemetry:manage");
         TelemetryConfigEntity config = developerPortalService.createTelemetryConfig(
             request.gameId,
             request.environmentId,
@@ -268,8 +273,8 @@ public class DeveloperController {
      * 获取遥测配置详情
      */
     @GetMapping("/telemetry-configs/{configId}")
-    @PreAuthorize("hasAuthority('VIEW_TELEMETRY')")
     public ResponseEntity<TelemetryConfigEntity> getTelemetryConfig(@PathVariable String configId) {
+        accessGuard.requirePermission("telemetry:read");
         TelemetryConfigEntity config = developerPortalService.getTelemetryConfig(configId);
         return ResponseEntity.ok(config);
     }
@@ -278,10 +283,10 @@ public class DeveloperController {
      * 获取游戏的遥测配置列表
      */
     @GetMapping("/telemetry-configs/game/{gameId}")
-    @PreAuthorize("hasAuthority('VIEW_TELEMETRY:' + #gameId)")
     public ResponseEntity<List<TelemetryConfigEntity>> getGameTelemetryConfigs(
             @PathVariable String gameId,
             @RequestParam(required = false) String environmentId) {
+        accessGuard.requireGamePermission(gameId, "telemetry:read");
         List<TelemetryConfigEntity> configs = developerPortalService.getGameTelemetryConfigs(gameId, environmentId);
         return ResponseEntity.ok(configs);
     }
@@ -290,11 +295,11 @@ public class DeveloperController {
      * 获取有效的遥测配置
      */
     @GetMapping("/telemetry-configs/effective")
-    @PreAuthorize("hasAuthority('VIEW_TELEMETRY')")
     public ResponseEntity<TelemetryConfigEntity> getEffectiveConfig(
             @RequestParam String gameId,
             @RequestParam String environmentId,
             @RequestParam TelemetryConfigEntity.ConfigType configType) {
+        accessGuard.requirePermission("telemetry:read");
         TelemetryConfigEntity config = developerPortalService.getEffectiveConfig(gameId, environmentId, configType);
         return ResponseEntity.ok(config);
     }
@@ -303,10 +308,10 @@ public class DeveloperController {
      * 更新遥测配置
      */
     @PutMapping("/telemetry-configs/{configId}")
-    @PreAuthorize("hasAuthority('MANAGE_TELEMETRY')")
     public ResponseEntity<TelemetryConfigEntity> updateTelemetryConfig(
             @PathVariable String configId,
             @RequestBody UpdateTelemetryConfigRequest request) {
+        accessGuard.requirePermission("telemetry:manage");
         TelemetryConfigEntity config = developerPortalService.updateTelemetryConfig(configId, request.updates, request.updatedBy);
         return ResponseEntity.ok(config);
     }
@@ -315,10 +320,10 @@ public class DeveloperController {
      * 激活遥测配置
      */
     @PostMapping("/telemetry-configs/{configId}/activate")
-    @PreAuthorize("hasAuthority('MANAGE_TELEMETRY')")
     public ResponseEntity<TelemetryConfigEntity> activateTelemetryConfig(
             @PathVariable String configId,
             @RequestBody ActivateRequest request) {
+        accessGuard.requirePermission("telemetry:manage");
         TelemetryConfigEntity config = developerPortalService.activateTelemetryConfig(configId, request.activatedBy);
         return ResponseEntity.ok(config);
     }
@@ -327,10 +332,10 @@ public class DeveloperController {
      * 停用遥测配置
      */
     @PostMapping("/telemetry-configs/{configId}/deactivate")
-    @PreAuthorize("hasAuthority('MANAGE_TELEMETRY')")
     public ResponseEntity<TelemetryConfigEntity> deactivateTelemetryConfig(
             @PathVariable String configId,
             @RequestBody DeactivateRequest request) {
+        accessGuard.requirePermission("telemetry:manage");
         TelemetryConfigEntity config = developerPortalService.deactivateTelemetryConfig(configId, request.deactivatedBy);
         return ResponseEntity.ok(config);
     }
@@ -339,10 +344,10 @@ public class DeveloperController {
      * 归档遥测配置
      */
     @PostMapping("/telemetry-configs/{configId}/archive")
-    @PreAuthorize("hasAuthority('MANAGE_TELEMETRY')")
     public ResponseEntity<TelemetryConfigEntity> archiveTelemetryConfig(
             @PathVariable String configId,
             @RequestBody ArchiveRequest request) {
+        accessGuard.requirePermission("telemetry:manage");
         TelemetryConfigEntity config = developerPortalService.archiveTelemetryConfig(configId, request.archivedBy);
         return ResponseEntity.ok(config);
     }
@@ -351,10 +356,10 @@ public class DeveloperController {
      * 删除遥测配置
      */
     @DeleteMapping("/telemetry-configs/{configId}")
-    @PreAuthorize("hasAuthority('MANAGE_TELEMETRY')")
     public ResponseEntity<Void> deleteTelemetryConfig(
             @PathVariable String configId,
             @RequestBody DeleteRequest request) {
+        accessGuard.requirePermission("telemetry:manage");
         developerPortalService.deleteTelemetryConfig(configId, request.deletedBy);
         return ResponseEntity.ok().build();
     }
@@ -365,8 +370,8 @@ public class DeveloperController {
      * 获取SDK统计信息
      */
     @GetMapping("/stats")
-    @PreAuthorize("hasAuthority('VIEW_SDK_STATS')")
     public ResponseEntity<Map<String, Object>> getSDKStatistics() {
+        accessGuard.requirePermission("sdkkey:read");
         Map<String, Object> stats = developerPortalService.getSDKStatistics();
         return ResponseEntity.ok(stats);
     }

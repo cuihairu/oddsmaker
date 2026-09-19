@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.oddsmaker.control.api.ControlService;
 import io.oddsmaker.control.api.Models;
 import io.oddsmaker.control.api.RiskDashboardController;
+import io.oddsmaker.control.security.AccessGuard;
 import io.oddsmaker.control.dto.IdentityEventDto;
 import io.oddsmaker.control.dto.RiskEventDto;
 import io.oddsmaker.control.jpa.AnnouncementEntity;
@@ -121,6 +122,9 @@ class FinalSweep2Test {
 
     @Mock
     private RiskDashboardService riskDashboardService;
+
+    @Mock
+    private AccessGuard accessGuard;
 
     @Mock
     private RiskRuleRepo riskRuleRepo;
@@ -603,6 +607,9 @@ class FinalSweep2Test {
         riskDashboardController.getDashboard("g", null);
         riskDashboardController.getRecentCases("g", 7);
         riskDashboardController.getReviewQueueStats("g");
+        // 10 端点全 game:read（第二实例化点验证行内鉴权接线）
+        org.mockito.Mockito.verify(accessGuard, org.mockito.Mockito.times(10))
+            .requireGamePermission("g", "game:read");
 
         verify(riskDashboardService).getOverview("g", since);
         verify(riskDashboardService).getRiskTrends("g", since, 12);

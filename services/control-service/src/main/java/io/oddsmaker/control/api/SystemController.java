@@ -1,10 +1,10 @@
 package io.oddsmaker.control.api;
 
 import io.oddsmaker.control.jpa.*;
+import io.oddsmaker.control.security.AccessGuard;
 import io.oddsmaker.control.service.MaintenanceService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
@@ -13,7 +13,9 @@ import java.util.Map;
 
 /**
  * 系统管理API控制器
- * 提供维护模式、功能开关和系统配置管理的接口
+ * 提供维护模式、功能开关和系统配置管理的接口；鉴权走 AccessGuard 行内风格（maintenance / system / featureflag 各 read/manage）。
+ * 历史形态为 @PreAuthorize hasAuthority('VIEW_MAINTENANCE') 等静态式，而全仓只签发 ROLE_* authority，
+ * 方法安全开启后这些注解恒 403——故换成权限种子（V0.9.8）+ AccessGuard 解析。
  */
 @RestController
 @RequestMapping("/api/system")
@@ -22,14 +24,17 @@ public class SystemController {
     @Autowired
     private MaintenanceService maintenanceService;
 
+    @Autowired
+    private AccessGuard accessGuard;
+
     // ============== Maintenance Window Endpoints ==============
 
     /**
      * 创建维护窗口
      */
     @PostMapping("/maintenances")
-    @PreAuthorize("hasAuthority('MANAGE_MAINTENANCE')")
     public ResponseEntity<MaintenanceWindowEntity> createMaintenance(@RequestBody MaintenanceRequest request) {
+        accessGuard.requirePermission("maintenance:manage");
         MaintenanceWindowEntity window = maintenanceService.createMaintenanceWindow(
             request.title,
             request.description,
@@ -48,8 +53,8 @@ public class SystemController {
      * 获取活跃的维护窗口
      */
     @GetMapping("/maintenances/active")
-    @PreAuthorize("hasAuthority('VIEW_MAINTENANCE')")
     public ResponseEntity<List<MaintenanceWindowEntity>> getActiveMaintenances() {
+        accessGuard.requirePermission("maintenance:read");
         List<MaintenanceWindowEntity> windows = maintenanceService.getActiveMaintenances();
         return ResponseEntity.ok(windows);
     }
@@ -58,8 +63,8 @@ public class SystemController {
      * 获取即将到来的维护
      */
     @GetMapping("/maintenances/upcoming")
-    @PreAuthorize("hasAuthority('VIEW_MAINTENANCE')")
     public ResponseEntity<List<MaintenanceWindowEntity>> getUpcomingMaintenances() {
+        accessGuard.requirePermission("maintenance:read");
         List<MaintenanceWindowEntity> windows = maintenanceService.getUpcomingMaintenances();
         return ResponseEntity.ok(windows);
     }
@@ -68,8 +73,8 @@ public class SystemController {
      * 开始维护
      */
     @PostMapping("/maintenances/{windowId}/start")
-    @PreAuthorize("hasAuthority('MANAGE_MAINTENANCE')")
     public ResponseEntity<MaintenanceWindowEntity> startMaintenance(@PathVariable String windowId) {
+        accessGuard.requirePermission("maintenance:manage");
         MaintenanceWindowEntity window = maintenanceService.startMaintenance(windowId);
         return ResponseEntity.ok(window);
     }
@@ -78,10 +83,10 @@ public class SystemController {
      * 完成维护
      */
     @PostMapping("/maintenances/{windowId}/complete")
-    @PreAuthorize("hasAuthority('MANAGE_MAINTENANCE')")
     public ResponseEntity<MaintenanceWindowEntity> completeMaintenance(
             @PathVariable String windowId,
             @RequestBody CompleteRequest request) {
+        accessGuard.requirePermission("maintenance:manage");
         MaintenanceWindowEntity window = maintenanceService.completeMaintenance(windowId, request.notes);
         return ResponseEntity.ok(window);
     }
@@ -90,10 +95,10 @@ public class SystemController {
      * 取消维护
      */
     @PostMapping("/maintenances/{windowId}/cancel")
-    @PreAuthorize("hasAuthority('MANAGE_MAINTENANCE')")
     public ResponseEntity<MaintenanceWindowEntity> cancelMaintenance(
             @PathVariable String windowId,
             @RequestBody CancelRequest request) {
+        accessGuard.requirePermission("maintenance:manage");
         MaintenanceWindowEntity window = maintenanceService.cancelMaintenance(windowId, request.reason);
         return ResponseEntity.ok(window);
     }
@@ -113,8 +118,8 @@ public class SystemController {
      * 获取所有配置
      */
     @GetMapping("/configs")
-    @PreAuthorize("hasAuthority('VIEW_SYSTEM_CONFIGS')")
     public ResponseEntity<List<SystemConfigEntity>> getAllConfigs() {
+        accessGuard.requirePermission("system:read");
         List<SystemConfigEntity> configs = maintenanceService.getAllConfigs();
         return ResponseEntity.ok(configs);
     }
@@ -132,8 +137,8 @@ public class SystemController {
      * 获取配置值
      */
     @GetMapping("/configs/{configKey}")
-    @PreAuthorize("hasAuthority('VIEW_SYSTEM_CONFIGS')")
     public ResponseEntity<String> getConfigValue(@PathVariable String configKey) {
+        accessGuard.requirePermission("system:read");
         String value = maintenanceService.getConfigValue(configKey);
         return ResponseEntity.ok(value);
     }
@@ -142,10 +147,10 @@ public class SystemController {
      * 设置配置值
      */
     @PutMapping("/configs/{configKey}")
-    @PreAuthorize("hasAuthority('MANAGE_SYSTEM_CONFIGS')")
     public ResponseEntity<SystemConfigEntity> setConfigValue(
             @PathVariable String configKey,
             @RequestBody ConfigValueRequest request) {
+        accessGuard.requirePermission("system:manage");
         SystemConfigEntity config = maintenanceService.setConfigValue(configKey, request.value, request.modifiedBy);
         return ResponseEntity.ok(config);
     }
@@ -156,8 +161,8 @@ public class SystemController {
      * 获取所有功能开关
      */
     @GetMapping("/features")
-    @PreAuthorize("hasAuthority('VIEW_FEATURE_FLAGS')")
     public ResponseEntity<List<FeatureFlagEntity>> getAllFeatureFlags() {
+        accessGuard.requirePermission("featureflag:read");
         List<FeatureFlagEntity> flags = maintenanceService.getAllFeatureFlags();
         return ResponseEntity.ok(flags);
     }
@@ -166,8 +171,8 @@ public class SystemController {
      * 获取启用的功能开关
      */
     @GetMapping("/features/enabled")
-    @PreAuthorize("hasAuthority('VIEW_FEATURE_FLAGS')")
     public ResponseEntity<List<FeatureFlagEntity>> getEnabledFeatureFlags() {
+        accessGuard.requirePermission("featureflag:read");
         List<FeatureFlagEntity> flags = maintenanceService.getEnabledFeatureFlags();
         return ResponseEntity.ok(flags);
     }
@@ -188,10 +193,10 @@ public class SystemController {
      * 启用功能
      */
     @PostMapping("/features/{flagKey}/enable")
-    @PreAuthorize("hasAuthority('MANAGE_FEATURE_FLAGS')")
     public ResponseEntity<FeatureFlagEntity> enableFeature(
             @PathVariable String flagKey,
             @RequestBody ModifyRequest request) {
+        accessGuard.requirePermission("featureflag:manage");
         FeatureFlagEntity flag = maintenanceService.enableFeature(flagKey, request.modifiedBy);
         return ResponseEntity.ok(flag);
     }
@@ -200,10 +205,10 @@ public class SystemController {
      * 禁用功能
      */
     @PostMapping("/features/{flagKey}/disable")
-    @PreAuthorize("hasAuthority('MANAGE_FEATURE_FLAGS')")
     public ResponseEntity<FeatureFlagEntity> disableFeature(
             @PathVariable String flagKey,
             @RequestBody ModifyRequest request) {
+        accessGuard.requirePermission("featureflag:manage");
         FeatureFlagEntity flag = maintenanceService.disableFeature(flagKey, request.modifiedBy);
         return ResponseEntity.ok(flag);
     }
@@ -212,10 +217,10 @@ public class SystemController {
      * 设置功能百分比
      */
     @PostMapping("/features/{flagKey}/percentage")
-    @PreAuthorize("hasAuthority('MANAGE_FEATURE_FLAGS')")
     public ResponseEntity<FeatureFlagEntity> setFeaturePercentage(
             @PathVariable String flagKey,
             @RequestBody PercentageRequest request) {
+        accessGuard.requirePermission("featureflag:manage");
         FeatureFlagEntity flag = maintenanceService.setFeaturePercentage(flagKey, request.percentage, request.modifiedBy);
         return ResponseEntity.ok(flag);
     }
@@ -224,8 +229,8 @@ public class SystemController {
      * 获取系统状态
      */
     @GetMapping("/status")
-    @PreAuthorize("hasAuthority('VIEW_SYSTEM_STATUS')")
     public ResponseEntity<Map<String, Object>> getSystemStatus() {
+        accessGuard.requirePermission("system:read");
         Map<String, Object> status = maintenanceService.getSystemStatus();
         return ResponseEntity.ok(status);
     }

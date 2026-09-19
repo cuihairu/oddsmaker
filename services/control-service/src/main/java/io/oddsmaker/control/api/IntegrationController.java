@@ -2,10 +2,10 @@ package io.oddsmaker.control.api;
 
 import io.oddsmaker.control.jpa.IntegrationEntity;
 import io.oddsmaker.control.jpa.IntegrationLogEntity;
+import io.oddsmaker.control.security.AccessGuard;
 import io.oddsmaker.control.service.IntegrationService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
@@ -14,7 +14,9 @@ import java.util.Map;
 
 /**
  * 集成API控制器
- * 提供外部系统集成管理的API接口
+ * 提供外部系统集成管理的API接口；鉴权走 AccessGuard 行内风格（integration:read / manage / trigger，全部 game 级）。
+ * 历史形态为 @PreAuthorize hasAuthority('VIEW_INTEGRATIONS:'+gameId) 拼接式，
+ * 而全仓只签发 ROLE_* authority，方法安全开启后这些注解恒 403——故换成权限种子（V0.9.8）+ AccessGuard 解析。
  */
 @RestController
 @RequestMapping("/api/integrations")
@@ -23,12 +25,15 @@ public class IntegrationController {
     @Autowired
     private IntegrationService integrationService;
 
+    @Autowired
+    private AccessGuard accessGuard;
+
     /**
      * 创建集成
      */
     @PostMapping
-    @PreAuthorize("hasAuthority('MANAGE_INTEGRATIONS:' + #request.gameId)")
     public ResponseEntity<IntegrationEntity> createIntegration(@RequestBody IntegrationRequest request) {
+        accessGuard.requireGamePermission(request.gameId, "integration:manage");
         IntegrationEntity integration = integrationService.createIntegration(
             request.gameId,
             request.name,
@@ -49,10 +54,10 @@ public class IntegrationController {
      * 获取集成详情
      */
     @GetMapping("/{integrationId}")
-    @PreAuthorize("hasAuthority('VIEW_INTEGRATIONS:' + #gameId)")
     public ResponseEntity<IntegrationEntity> getIntegration(
             @PathVariable String integrationId,
             @RequestParam String gameId) {
+        accessGuard.requireGamePermission(gameId, "integration:read");
         IntegrationEntity integration = integrationService.getIntegration(integrationId);
         return ResponseEntity.ok(integration);
     }
@@ -61,8 +66,8 @@ public class IntegrationController {
      * 获取游戏的集成列表
      */
     @GetMapping("/game/{gameId}")
-    @PreAuthorize("hasAuthority('VIEW_INTEGRATIONS:' + #gameId)")
     public ResponseEntity<List<IntegrationEntity>> getIntegrations(@PathVariable String gameId) {
+        accessGuard.requireGamePermission(gameId, "integration:read");
         List<IntegrationEntity> integrations = integrationService.getIntegrations(gameId);
         return ResponseEntity.ok(integrations);
     }
@@ -71,10 +76,10 @@ public class IntegrationController {
      * 根据类型获取集成列表
      */
     @GetMapping("/game/{gameId}/type/{type}")
-    @PreAuthorize("hasAuthority('VIEW_INTEGRATIONS:' + #gameId)")
     public ResponseEntity<List<IntegrationEntity>> getIntegrationsByType(
             @PathVariable String gameId,
             @PathVariable IntegrationEntity.IntegrationType type) {
+        accessGuard.requireGamePermission(gameId, "integration:read");
         List<IntegrationEntity> integrations = integrationService.getIntegrations(gameId).stream()
             .filter(i -> i.integrationType == type)
             .toList();
@@ -85,11 +90,11 @@ public class IntegrationController {
      * 更新集成
      */
     @PutMapping("/{integrationId}")
-    @PreAuthorize("hasAuthority('MANAGE_INTEGRATIONS:' + #gameId)")
     public ResponseEntity<IntegrationEntity> updateIntegration(
             @PathVariable String integrationId,
             @RequestParam String gameId,
             @RequestBody UpdateRequest request) {
+        accessGuard.requireGamePermission(gameId, "integration:manage");
         IntegrationEntity integration = integrationService.updateIntegration(
             integrationId,
             request.name,
@@ -106,10 +111,10 @@ public class IntegrationController {
      * 验证集成连接
      */
     @PostMapping("/{integrationId}/verify")
-    @PreAuthorize("hasAuthority('MANAGE_INTEGRATIONS:' + #gameId)")
     public ResponseEntity<IntegrationEntity> verifyIntegration(
             @PathVariable String integrationId,
             @RequestParam String gameId) {
+        accessGuard.requireGamePermission(gameId, "integration:manage");
         IntegrationEntity integration = integrationService.verifyIntegration(integrationId);
         return ResponseEntity.ok(integration);
     }
@@ -118,10 +123,10 @@ public class IntegrationController {
      * 启用集成
      */
     @PostMapping("/{integrationId}/enable")
-    @PreAuthorize("hasAuthority('MANAGE_INTEGRATIONS:' + #gameId)")
     public ResponseEntity<IntegrationEntity> enableIntegration(
             @PathVariable String integrationId,
             @RequestParam String gameId) {
+        accessGuard.requireGamePermission(gameId, "integration:manage");
         IntegrationEntity integration = integrationService.enableIntegration(integrationId);
         return ResponseEntity.ok(integration);
     }
@@ -130,10 +135,10 @@ public class IntegrationController {
      * 禁用集成
      */
     @PostMapping("/{integrationId}/disable")
-    @PreAuthorize("hasAuthority('MANAGE_INTEGRATIONS:' + #gameId)")
     public ResponseEntity<IntegrationEntity> disableIntegration(
             @PathVariable String integrationId,
             @RequestParam String gameId) {
+        accessGuard.requireGamePermission(gameId, "integration:manage");
         IntegrationEntity integration = integrationService.disableIntegration(integrationId);
         return ResponseEntity.ok(integration);
     }
@@ -142,10 +147,10 @@ public class IntegrationController {
      * 删除集成
      */
     @DeleteMapping("/{integrationId}")
-    @PreAuthorize("hasAuthority('MANAGE_INTEGRATIONS:' + #gameId)")
     public ResponseEntity<Void> deleteIntegration(
             @PathVariable String integrationId,
             @RequestParam String gameId) {
+        accessGuard.requireGamePermission(gameId, "integration:manage");
         integrationService.deleteIntegration(integrationId);
         return ResponseEntity.ok().build();
     }
@@ -154,10 +159,10 @@ public class IntegrationController {
      * 获取集成日志
      */
     @GetMapping("/{integrationId}/logs")
-    @PreAuthorize("hasAuthority('VIEW_INTEGRATIONS:' + #gameId)")
     public ResponseEntity<List<IntegrationLogEntity>> getIntegrationLogs(
             @PathVariable String integrationId,
             @RequestParam String gameId) {
+        accessGuard.requireGamePermission(gameId, "integration:read");
         List<IntegrationLogEntity> logs = integrationService.getIntegrationLogs(integrationId);
         return ResponseEntity.ok(logs);
     }
@@ -166,8 +171,8 @@ public class IntegrationController {
      * 获取集成统计
      */
     @GetMapping("/stats/{gameId}")
-    @PreAuthorize("hasAuthority('VIEW_INTEGRATIONS:' + #gameId)")
     public ResponseEntity<Map<String, Object>> getIntegrationStats(@PathVariable String gameId) {
+        accessGuard.requireGamePermission(gameId, "integration:read");
         Map<String, Object> stats = integrationService.getIntegrationStats(gameId);
         return ResponseEntity.ok(stats);
     }
@@ -176,11 +181,11 @@ public class IntegrationController {
      * 获取集成调用统计
      */
     @GetMapping("/{integrationId}/call-stats")
-    @PreAuthorize("hasAuthority('VIEW_INTEGRATIONS:' + #gameId)")
     public ResponseEntity<Map<String, Object>> getCallStats(
             @PathVariable String integrationId,
             @RequestParam String gameId,
             @RequestParam(required = false) String since) {
+        accessGuard.requireGamePermission(gameId, "integration:read");
         LocalDateTime sinceDate = since != null ? LocalDateTime.parse(since) : LocalDateTime.now().minusDays(7);
         Map<String, Object> stats = integrationService.getCallStats(integrationId, sinceDate);
         return ResponseEntity.ok(stats);
@@ -190,11 +195,11 @@ public class IntegrationController {
      * 触发集成调用
      */
     @PostMapping("/{integrationId}/trigger")
-    @PreAuthorize("hasAuthority('TRIGGER_INTEGRATIONS:' + #gameId)")
     public ResponseEntity<IntegrationLogEntity> triggerIntegration(
             @PathVariable String integrationId,
             @RequestParam String gameId,
             @RequestBody TriggerRequest request) {
+        accessGuard.requireGamePermission(gameId, "integration:trigger");
         IntegrationLogEntity log = integrationService.callIntegration(
             integrationId,
             request.eventType,
@@ -208,11 +213,11 @@ public class IntegrationController {
      * 批量触发集成
      */
     @PostMapping("/game/{gameId}/trigger-batch")
-    @PreAuthorize("hasAuthority('TRIGGER_INTEGRATIONS:' + #gameId)")
     public ResponseEntity<List<IntegrationLogEntity>> triggerIntegrations(
             @PathVariable String gameId,
             @RequestParam IntegrationEntity.IntegrationType type,
             @RequestBody TriggerRequest request) {
+        accessGuard.requireGamePermission(gameId, "integration:trigger");
         List<IntegrationLogEntity> logs = integrationService.callIntegrations(
             gameId,
             type,

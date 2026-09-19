@@ -1,5 +1,6 @@
 package io.oddsmaker.control.api;
 
+import io.oddsmaker.control.jpa.BlockListEntity;
 import io.oddsmaker.control.jpa.RiskRuleEntity;
 import io.oddsmaker.control.jpa.RiskRuleRepo;
 import io.oddsmaker.control.security.AccessGuard;
@@ -106,6 +107,8 @@ class RiskControllersTest {
         assertEquals(200, riskDashboardController.getRecentCases("g", 20).getStatusCode().value());
         assertEquals(200, riskDashboardController.getReviewQueueStats("g").getStatusCode().value());
         verify(riskRuleRepo).findActiveByGameId("g");
+        // 10 端点全 game:read（含原本无注解的 getActiveRules 补齐）
+        verify(accessGuard, org.mockito.Mockito.times(10)).requireGamePermission("g", "game:read");
     }
 
     // ===== 审核队列 =====
@@ -131,6 +134,10 @@ class RiskControllersTest {
         assertEquals(200, reviewQueueController.getReviewerItems("r1", "g").getStatusCode().value());
         assertEquals(200, reviewQueueController.getQueueStats("g").getStatusCode().value());
         verify(reviewQueueService).getGameQueue("g");
+        // 查询 4 → game:read；管理 3（assign/escalate/cancel）→ risk:manage；评审 4 → risk:review
+        verify(accessGuard, org.mockito.Mockito.times(4)).requireGamePermission("g", "game:read");
+        verify(accessGuard, org.mockito.Mockito.times(3)).requireGamePermission("g", "risk:manage");
+        verify(accessGuard, org.mockito.Mockito.times(4)).requireGamePermission("g", "risk:review");
     }
 
     // ===== 黑名单 =====
@@ -148,6 +155,10 @@ class RiskControllersTest {
     @DisplayName("黑名单：10 个运营端点 + 内部批量检查")
     void blockListEndpoints() {
         when(blockListService.isBlocked("g", "device", "d1")).thenReturn(true);
+        // getBlock 反查实体后按其 gameId 鉴权（原注解引用签名中不存在的 #gameId，SpEL 求值即抛）
+        BlockListEntity stored = new BlockListEntity();
+        stored.gameId = "g";
+        when(blockListService.getBlock("b1")).thenReturn(stored);
 
         assertEquals(200, blockListController.checkBlock("g", "device", "d1").getStatusCode().value());
         assertEquals(Boolean.TRUE, blockListController.checkBlock("g", "device", "d1").getBody().get("blocked"));
@@ -170,6 +181,10 @@ class RiskControllersTest {
         assertEquals(200, internalBlockListController.batchCheck(req).getStatusCode().value());
         // 缺参 400
         assertEquals(400, internalBlockListController.batchCheck(new InternalBlockListController.BatchCheckRequest()).getStatusCode().value());
+        // game:read 7（checkBlock×2/active/getBlock/stats/search/byType）+ risk:manage 4（add 为 null gameId + unblock/batch/fromRiskCase）
+        verify(accessGuard, org.mockito.Mockito.times(7)).requireGamePermission("g", "game:read");
+        verify(accessGuard, org.mockito.Mockito.times(3)).requireGamePermission("g", "risk:manage");
+        verify(accessGuard, org.mockito.Mockito.times(1)).requireGamePermission(null, "risk:manage");
     }
 
     // ===== 风控指标 =====

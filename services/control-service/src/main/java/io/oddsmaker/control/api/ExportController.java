@@ -1,10 +1,10 @@
 package io.oddsmaker.control.api;
 
 import io.oddsmaker.control.jpa.ExportJobEntity;
+import io.oddsmaker.control.security.AccessGuard;
 import io.oddsmaker.control.service.ExportService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
@@ -13,7 +13,9 @@ import java.util.Map;
 
 /**
  * 数据导出API控制器
- * 提供数据导出管理的API接口
+ * 提供数据导出管理的API接口；鉴权走 AccessGuard 行内风格（export:execute，全部 game 级）。
+ * 历史形态为 @PreAuthorize hasAuthority('EXPORT_DATA:'+gameId) 拼接式，
+ * 而全仓只签发 ROLE_* authority，方法安全开启后这些注解恒 403——故换成权限种子（V0.9.8）+ AccessGuard 解析。
  */
 @RestController
 @RequestMapping("/api/exports")
@@ -22,12 +24,15 @@ public class ExportController {
     @Autowired
     private ExportService exportService;
 
+    @Autowired
+    private AccessGuard accessGuard;
+
     /**
      * 创建导出任务
      */
     @PostMapping
-    @PreAuthorize("hasAuthority('EXPORT_DATA:' + #request.gameId)")
     public ResponseEntity<ExportJobEntity> createExportJob(@RequestBody ExportRequest request) {
+        accessGuard.requireGamePermission(request.gameId, "export:execute");
         ExportJobEntity job = exportService.createExportJob(
             request.gameId,
             request.environmentId,
@@ -50,10 +55,10 @@ public class ExportController {
      * 获取导出任务详情
      */
     @GetMapping("/{exportJobId}")
-    @PreAuthorize("hasAuthority('EXPORT_DATA:' + #gameId)")
     public ResponseEntity<ExportJobEntity> getExportJob(
             @PathVariable String exportJobId,
             @RequestParam String gameId) {
+        accessGuard.requireGamePermission(gameId, "export:execute");
         ExportJobEntity job = exportService.getExportJob(exportJobId);
         return ResponseEntity.ok(job);
     }
@@ -62,10 +67,10 @@ public class ExportController {
      * 获取用户的导出任务列表
      */
     @GetMapping("/user/{userId}")
-    @PreAuthorize("hasAuthority('EXPORT_DATA:' + #gameId)")
     public ResponseEntity<List<ExportJobEntity>> getUserExports(
             @PathVariable String userId,
             @RequestParam String gameId) {
+        accessGuard.requireGamePermission(gameId, "export:execute");
         List<ExportJobEntity> jobs = exportService.getUserExports(userId);
         return ResponseEntity.ok(jobs);
     }
@@ -74,8 +79,8 @@ public class ExportController {
      * 获取游戏的导出任务列表
      */
     @GetMapping("/game/{gameId}")
-    @PreAuthorize("hasAuthority('EXPORT_DATA:' + #gameId)")
     public ResponseEntity<List<ExportJobEntity>> getGameExports(@PathVariable String gameId) {
+        accessGuard.requireGamePermission(gameId, "export:execute");
         List<ExportJobEntity> jobs = exportService.getGameExports(gameId);
         return ResponseEntity.ok(jobs);
     }
@@ -84,10 +89,10 @@ public class ExportController {
      * 处理导出任务
      */
     @PostMapping("/{exportJobId}/process")
-    @PreAuthorize("hasAuthority('EXPORT_DATA:' + #gameId)")
     public ResponseEntity<ExportJobEntity> processExportJob(
             @PathVariable String exportJobId,
             @RequestParam String gameId) {
+        accessGuard.requireGamePermission(gameId, "export:execute");
         ExportJobEntity job = exportService.processExportJob(exportJobId);
         return ResponseEntity.ok(job);
     }
@@ -96,11 +101,11 @@ public class ExportController {
      * 取消导出任务
      */
     @PostMapping("/{exportJobId}/cancel")
-    @PreAuthorize("hasAuthority('EXPORT_DATA:' + #gameId)")
     public ResponseEntity<ExportJobEntity> cancelExportJob(
             @PathVariable String exportJobId,
             @RequestParam String gameId,
             @RequestBody CancelRequest request) {
+        accessGuard.requireGamePermission(gameId, "export:execute");
         ExportJobEntity job = exportService.cancelExportJob(exportJobId, request.reason);
         return ResponseEntity.ok(job);
     }
@@ -109,8 +114,8 @@ public class ExportController {
      * 获取导出统计
      */
     @GetMapping("/stats/{gameId}")
-    @PreAuthorize("hasAuthority('EXPORT_DATA:' + #gameId)")
     public ResponseEntity<Map<String, Object>> getExportStats(@PathVariable String gameId) {
+        accessGuard.requireGamePermission(gameId, "export:execute");
         Map<String, Object> stats = exportService.getExportStats(gameId);
         return ResponseEntity.ok(stats);
     }
@@ -119,10 +124,10 @@ public class ExportController {
      * 获取用户导出统计
      */
     @GetMapping("/user-stats/{userId}")
-    @PreAuthorize("hasAuthority('EXPORT_DATA:' + #gameId)")
     public ResponseEntity<Map<String, Object>> getUserExportStats(
             @PathVariable String userId,
             @RequestParam String gameId) {
+        accessGuard.requireGamePermission(gameId, "export:execute");
         Map<String, Object> stats = exportService.getUserExportStats(userId);
         return ResponseEntity.ok(stats);
     }

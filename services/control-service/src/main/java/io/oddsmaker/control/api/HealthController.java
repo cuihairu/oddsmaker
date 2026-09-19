@@ -3,10 +3,10 @@ package io.oddsmaker.control.api;
 import io.oddsmaker.control.jpa.HealthCheckEntity;
 import io.oddsmaker.control.jpa.HealthMetricEntity;
 import io.oddsmaker.control.jpa.SystemAlertEntity;
+import io.oddsmaker.control.security.AccessGuard;
 import io.oddsmaker.control.service.HealthMonitorService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
@@ -15,7 +15,10 @@ import java.util.Map;
 
 /**
  * 健康监控API控制器
- * 提供系统健康检查和告警管理的接口
+ * 提供系统健康检查和告警管理的接口；鉴权走 AccessGuard 行内风格（health:read / health:manage，
+ * 告警端点复用已种子的 alert:read / alert:manage），探活 overview/live/ready 保持无 guard。
+ * 历史形态为 @PreAuthorize hasAuthority('VIEW_HEALTH_CHECKS') 静态式，
+ * 而全仓只签发 ROLE_* authority，方法安全开启后这些注解恒 403——故换成权限种子（V0.9.8）+ AccessGuard 解析。
  */
 @RestController
 @RequestMapping("/api/health")
@@ -23,6 +26,9 @@ public class HealthController {
 
     @Autowired
     private HealthMonitorService healthMonitorService;
+
+    @Autowired
+    private AccessGuard accessGuard;
 
     // ============== Health Check Endpoints ==============
 
@@ -39,8 +45,8 @@ public class HealthController {
      * 获取所有健康检查
      */
     @GetMapping("/checks")
-    @PreAuthorize("hasAuthority('VIEW_HEALTH_CHECKS')")
     public ResponseEntity<List<HealthCheckEntity>> getHealthChecks() {
+        accessGuard.requirePermission("health:read");
         List<HealthCheckEntity> checks = healthMonitorService.getHealthChecks();
         return ResponseEntity.ok(checks);
     }
@@ -49,8 +55,8 @@ public class HealthController {
      * 获取健康检查详情
      */
     @GetMapping("/checks/{checkName}")
-    @PreAuthorize("hasAuthority('VIEW_HEALTH_CHECKS')")
     public ResponseEntity<HealthCheckEntity> getHealthCheck(@PathVariable String checkName) {
+        accessGuard.requirePermission("health:read");
         HealthCheckEntity check = healthMonitorService.getHealthCheck(checkName);
         return ResponseEntity.ok(check);
     }
@@ -59,8 +65,8 @@ public class HealthController {
      * 执行健康检查
      */
     @PostMapping("/checks/{checkName}/run")
-    @PreAuthorize("hasAuthority('MANAGE_HEALTH_CHECKS')")
     public ResponseEntity<HealthCheckEntity> runHealthCheck(@PathVariable String checkName) {
+        accessGuard.requirePermission("health:manage");
         HealthCheckEntity result = healthMonitorService.performHealthCheck(checkName);
         return ResponseEntity.ok(result);
     }
@@ -101,10 +107,10 @@ public class HealthController {
      * 获取最近的指标
      */
     @GetMapping("/metrics/{type}")
-    @PreAuthorize("hasAuthority('VIEW_METRICS')")
     public ResponseEntity<List<HealthMetricEntity>> getRecentMetrics(
             @PathVariable HealthMetricEntity.MetricType type,
             @RequestParam(required = false) String since) {
+        accessGuard.requirePermission("health:read");
         LocalDateTime sinceDate = since != null ? LocalDateTime.parse(since) : LocalDateTime.now().minusHours(1);
         List<HealthMetricEntity> metrics = healthMonitorService.getRecentMetrics(type, sinceDate);
         return ResponseEntity.ok(metrics);
@@ -116,8 +122,8 @@ public class HealthController {
      * 获取活跃告警
      */
     @GetMapping("/alerts/active")
-    @PreAuthorize("hasAuthority('VIEW_ALERTS')")
     public ResponseEntity<List<SystemAlertEntity>> getActiveAlerts() {
+        accessGuard.requirePermission("alert:read");
         List<SystemAlertEntity> alerts = healthMonitorService.getActiveAlerts();
         return ResponseEntity.ok(alerts);
     }
@@ -126,8 +132,8 @@ public class HealthController {
      * 获取告警统计
      */
     @GetMapping("/alerts/stats")
-    @PreAuthorize("hasAuthority('VIEW_ALERTS')")
     public ResponseEntity<Map<String, Object>> getAlertStats() {
+        accessGuard.requirePermission("alert:read");
         Map<String, Object> stats = healthMonitorService.getAlertStats();
         return ResponseEntity.ok(stats);
     }
@@ -136,10 +142,10 @@ public class HealthController {
      * 确认告警
      */
     @PostMapping("/alerts/{alertId}/acknowledge")
-    @PreAuthorize("hasAuthority('MANAGE_ALERTS')")
     public ResponseEntity<SystemAlertEntity> acknowledgeAlert(
             @PathVariable String alertId,
             @RequestBody AcknowledgeRequest request) {
+        accessGuard.requirePermission("alert:manage");
         SystemAlertEntity alert = healthMonitorService.acknowledgeAlert(
             alertId,
             request.acknowledgedBy,
@@ -152,10 +158,10 @@ public class HealthController {
      * 解决告警
      */
     @PostMapping("/alerts/{alertId}/resolve")
-    @PreAuthorize("hasAuthority('MANAGE_ALERTS')")
     public ResponseEntity<SystemAlertEntity> resolveAlert(
             @PathVariable String alertId,
             @RequestBody ResolveRequest request) {
+        accessGuard.requirePermission("alert:manage");
         SystemAlertEntity alert = healthMonitorService.resolveAlert(
             alertId,
             request.resolvedBy,

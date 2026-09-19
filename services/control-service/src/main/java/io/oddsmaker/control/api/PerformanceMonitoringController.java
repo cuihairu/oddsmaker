@@ -1,16 +1,18 @@
 package io.oddsmaker.control.api;
 
+import io.oddsmaker.control.security.AccessGuard;
 import io.oddsmaker.control.service.PerformanceMonitorService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
 
 /**
  * 性能监控API控制器
- * 提供系统性能指标的查询接口
+ * 提供系统性能指标的查询接口；鉴权走 AccessGuard 行内风格（metrics:read / metrics:infra 两档分层）。
+ * 历史形态为 @PreAuthorize hasRole('ADMIN') or hasRole('MANAGER') 布尔式，而全仓只签发 ROLE_* authority
+ * 且 ROLE_MANAGER 从未签发，方法安全开启后这些注解仅 ADMIN 可用——故换成权限种子（V0.9.8）+ AccessGuard 解析。
  */
 @RestController
 @RequestMapping("/api/monitoring")
@@ -19,12 +21,15 @@ public class PerformanceMonitoringController {
     @Autowired
     private PerformanceMonitorService performanceMonitorService;
 
+    @Autowired
+    private AccessGuard accessGuard;
+
     /**
      * 获取系统性能概览
      */
     @GetMapping("/overview")
-    @PreAuthorize("hasRole('ADMIN') or hasRole('MANAGER')")
     public ResponseEntity<Map<String, Object>> getSystemOverview() {
+        accessGuard.requirePermission("metrics:read");
         // 这里可以扩展为从数据库或缓存中获取更详细的统计数据
         Map<String, Object> overview = Map.of(
             "status", "healthy",
@@ -42,8 +47,8 @@ public class PerformanceMonitoringController {
      * 获取API性能指标
      */
     @GetMapping("/api")
-    @PreAuthorize("hasRole('ADMIN') or hasRole('MANAGER')")
     public ResponseEntity<Map<String, Object>> getApiMetrics() {
+        accessGuard.requirePermission("metrics:read");
         Map<String, Object> metrics = Map.of(
             "description", "API performance metrics",
             "endpoints", Map.of(
@@ -60,8 +65,8 @@ public class PerformanceMonitoringController {
      * 获取事件处理指标
      */
     @GetMapping("/events")
-    @PreAuthorize("hasRole('ADMIN') or hasRole('MANAGER')")
     public ResponseEntity<Map<String, Object>> getEventMetrics() {
+        accessGuard.requirePermission("metrics:read");
         Map<String, Object> metrics = Map.of(
             "description", "Event processing metrics",
             "endpoints", Map.of(
@@ -78,8 +83,8 @@ public class PerformanceMonitoringController {
      * 获取风控指标
      */
     @GetMapping("/risk")
-    @PreAuthorize("hasRole('ADMIN') or hasRole('MANAGER')")
     public ResponseEntity<Map<String, Object>> getRiskMetrics() {
+        accessGuard.requirePermission("metrics:read");
         Map<String, Object> metrics = Map.of(
             "description", "Risk control metrics",
             "endpoints", Map.of(
@@ -95,8 +100,8 @@ public class PerformanceMonitoringController {
      * 获取数据库指标
      */
     @GetMapping("/database")
-    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Map<String, Object>> getDatabaseMetrics() {
+        accessGuard.requirePermission("metrics:infra");
         Map<String, Object> metrics = Map.of(
             "description", "Database performance metrics",
             "endpoints", Map.of(
@@ -112,8 +117,8 @@ public class PerformanceMonitoringController {
      * 获取Kafka指标
      */
     @GetMapping("/kafka")
-    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Map<String, Object>> getKafkaMetrics() {
+        accessGuard.requirePermission("metrics:infra");
         Map<String, Object> metrics = Map.of(
             "description", "Kafka performance metrics",
             "endpoints", Map.of(
@@ -129,8 +134,8 @@ public class PerformanceMonitoringController {
      * 获取系统资源指标
      */
     @GetMapping("/system")
-    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Map<String, Object>> getSystemMetrics() {
+        accessGuard.requirePermission("metrics:infra");
         Map<String, Object> metrics = Map.of(
             "description", "System resource metrics",
             "endpoints", Map.of(
@@ -148,8 +153,8 @@ public class PerformanceMonitoringController {
      * 获取业务指标
      */
     @GetMapping("/business")
-    @PreAuthorize("hasRole('ADMIN') or hasRole('MANAGER')")
     public ResponseEntity<Map<String, Object>> getBusinessMetrics() {
+        accessGuard.requirePermission("metrics:read");
         Map<String, Object> metrics = Map.of(
             "description", "Business metrics",
             "endpoints", Map.of(

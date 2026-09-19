@@ -1,5 +1,6 @@
 package io.oddsmaker.control.api;
 
+import io.oddsmaker.control.security.AccessGuard;
 import io.oddsmaker.control.service.AnalyticsService;
 import io.oddsmaker.control.service.CohortService;
 import io.oddsmaker.control.service.FunnelConfigService;
@@ -27,6 +28,9 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 @DisplayName("分析域 Controller 测试")
 class AnalyticsControllersTest {
+
+    @Mock
+    private AccessGuard accessGuard;
 
     @Mock
     private AnalyticsService analyticsService;
@@ -76,6 +80,10 @@ class AnalyticsControllersTest {
         assertEquals(200, cohortController.searchCohorts("g", "q").getStatusCode().value());
         assertEquals(200, cohortController.getRecentCohorts("g").getStatusCode().value());
         verify(cohortService).getGameCohorts("g");
+        // create/calculate → cohort:manage；其余 7 查询 → game:read
+        verify(accessGuard, org.mockito.Mockito.times(1)).requireGamePermission(null, "cohort:manage");
+        verify(accessGuard, org.mockito.Mockito.times(1)).requireGamePermission("g", "cohort:manage");
+        verify(accessGuard, org.mockito.Mockito.times(7)).requireGamePermission("g", "game:read");
     }
 
     // ===== 漏斗 =====
@@ -104,6 +112,9 @@ class AnalyticsControllersTest {
         assertEquals(200, funnelController.deleteStep("s1").getStatusCode().value());
         assertEquals(200, funnelController.getFunnelStatistics("g").getStatusCode().value());
         verify(funnelConfigService).findEnabledByGameId("g");
+        // 13 端点全平台级：写 7 → funnel:manage；读 6 → funnel:read
+        verify(accessGuard, org.mockito.Mockito.times(7)).requirePermission("funnel:manage");
+        verify(accessGuard, org.mockito.Mockito.times(6)).requirePermission("funnel:read");
     }
 
     // ===== Identity =====
@@ -124,6 +135,8 @@ class AnalyticsControllersTest {
         assertEquals(0, identityController.findByIdentifier("g", "device", "d1").size());
         assertEquals(0, identityController.getLinks("i1", "g").size());
         verify(identityService).findByPlayer("g", "p1");
+        // 6 端点全 game:read
+        verify(accessGuard, org.mockito.Mockito.times(6)).requireGamePermission("g", "game:read");
     }
 
     // ===== 异常处理 =====

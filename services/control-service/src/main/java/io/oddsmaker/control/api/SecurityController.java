@@ -1,10 +1,10 @@
 package io.oddsmaker.control.api;
 
 import io.oddsmaker.control.jpa.*;
+import io.oddsmaker.control.security.AccessGuard;
 import io.oddsmaker.control.service.SecurityService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -12,7 +12,10 @@ import java.util.Map;
 
 /**
  * 安全API控制器
- * 提供MFA、SSO和安全会话管理的接口
+ * 提供MFA、SSO和安全会话管理的接口；鉴权走 AccessGuard 行内风格（security:read / security:manage），
+ * MFA 自助端点与 SSO 回调/会话创建/校验等运行时口子保持无 guard。
+ * 历史形态为 @PreAuthorize hasAuthority('VIEW_SECURITY_SETTINGS') 静态式与 isAuthenticated() 混合，
+ * 而全仓只签发 ROLE_* authority，方法安全开启后静态式注解恒 403——故换成权限种子（V0.9.8）+ AccessGuard 解析。
  */
 @RestController
 @RequestMapping("/api/security")
@@ -21,13 +24,15 @@ public class SecurityController {
     @Autowired
     private SecurityService securityService;
 
+    @Autowired
+    private AccessGuard accessGuard;
+
     // ============== MFA Endpoints ==============
 
     /**
      * 启用MFA
      */
     @PostMapping("/mfa/enable")
-    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<MFAConfigEntity> enableMFA(@RequestBody MFAEnableRequest request) {
         MFAConfigEntity config = securityService.enableMFA(
             request.userId,
@@ -42,7 +47,6 @@ public class SecurityController {
      * 验证并激活MFA
      */
     @PostMapping("/mfa/verify")
-    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<MFAConfigEntity> verifyMFA(@RequestBody MFAVerifyRequest request) {
         MFAConfigEntity config = securityService.verifyAndActivateMFA(request.configId, request.code);
         return ResponseEntity.ok(config);
@@ -52,7 +56,6 @@ public class SecurityController {
      * 禁用MFA
      */
     @PostMapping("/mfa/disable")
-    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<Void> disableMFA(@RequestBody MFADisableRequest request) {
         securityService.disableMFA(request.configId, request.userId);
         return ResponseEntity.ok().build();
@@ -62,7 +65,6 @@ public class SecurityController {
      * 验证MFA代码
      */
     @PostMapping("/mfa/validate")
-    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<Boolean> validateMFA(@RequestBody MFAValidateRequest request) {
         boolean valid = securityService.verifyMFA(request.userId, request.code);
         return ResponseEntity.ok(valid);
@@ -72,8 +74,8 @@ public class SecurityController {
      * 获取用户的MFA配置
      */
     @GetMapping("/mfa/user/{userId}")
-    @PreAuthorize("hasAuthority('VIEW_SECURITY_SETTINGS')")
     public ResponseEntity<List<MFAConfigEntity>> getUserMFAConfigs(@PathVariable String userId) {
+        accessGuard.requirePermission("security:read");
         List<MFAConfigEntity> configs = securityService.getUserMFAConfigs(userId);
         return ResponseEntity.ok(configs);
     }
@@ -82,8 +84,8 @@ public class SecurityController {
      * 检查用户是否启用了MFA
      */
     @GetMapping("/mfa/user/{userId}/enabled")
-    @PreAuthorize("hasAuthority('VIEW_SECURITY_SETTINGS')")
     public ResponseEntity<Boolean> isUserMFAEnabled(@PathVariable String userId) {
+        accessGuard.requirePermission("security:read");
         boolean enabled = securityService.isUserMFAEnabled(userId);
         return ResponseEntity.ok(enabled);
     }
@@ -94,8 +96,8 @@ public class SecurityController {
      * 创建SSO配置
      */
     @PostMapping("/sso/configs")
-    @PreAuthorize("hasAuthority('MANAGE_SSO')")
     public ResponseEntity<SSOConfigEntity> createSSOConfig(@RequestBody SSOConfigRequest request) {
+        accessGuard.requirePermission("security:manage");
         SSOConfigEntity config = securityService.createSSOConfig(
             request.name,
             request.description,
@@ -119,8 +121,8 @@ public class SecurityController {
      * 激活SSO配置
      */
     @PostMapping("/sso/configs/{configId}/activate")
-    @PreAuthorize("hasAuthority('MANAGE_SSO')")
     public ResponseEntity<SSOConfigEntity> activateSSO(@PathVariable String configId) {
+        accessGuard.requirePermission("security:manage");
         SSOConfigEntity config = securityService.activateSSO(configId);
         return ResponseEntity.ok(config);
     }
@@ -164,7 +166,6 @@ public class SecurityController {
      * 终止会话
      */
     @PostMapping("/sessions/{sessionId}/terminate")
-    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<Void> terminateSession(
             @PathVariable String sessionId,
             @RequestBody TerminateSessionRequest request) {
@@ -176,10 +177,10 @@ public class SecurityController {
      * 终止用户的所有会话
      */
     @PostMapping("/sessions/user/{userId}/terminate-all")
-    @PreAuthorize("hasAuthority('MANAGE_SESSIONS')")
     public ResponseEntity<Void> terminateAllUserSessions(
             @PathVariable String userId,
             @RequestBody TerminateAllSessionsRequest request) {
+        accessGuard.requirePermission("security:manage");
         securityService.terminateAllUserSessions(userId, request.terminatedBy, request.reason);
         return ResponseEntity.ok().build();
     }
@@ -190,8 +191,8 @@ public class SecurityController {
      * 获取密码策略
      */
     @GetMapping("/policies/password")
-    @PreAuthorize("hasAuthority('VIEW_SECURITY_POLICIES')")
     public ResponseEntity<List<SecurityPolicyEntity>> getPasswordPolicies(@RequestParam(required = false) String gameId) {
+        accessGuard.requirePermission("security:read");
         List<SecurityPolicyEntity> policies = securityService.getPasswordPolicies(gameId);
         return ResponseEntity.ok(policies);
     }
@@ -200,8 +201,8 @@ public class SecurityController {
      * 获取会话策略
      */
     @GetMapping("/policies/session")
-    @PreAuthorize("hasAuthority('VIEW_SECURITY_POLICIES')")
     public ResponseEntity<List<SecurityPolicyEntity>> getSessionPolicies(@RequestParam(required = false) String gameId) {
+        accessGuard.requirePermission("security:read");
         List<SecurityPolicyEntity> policies = securityService.getSessionPolicies(gameId);
         return ResponseEntity.ok(policies);
     }
@@ -210,8 +211,8 @@ public class SecurityController {
      * 获取MFA策略
      */
     @GetMapping("/policies/mfa")
-    @PreAuthorize("hasAuthority('VIEW_SECURITY_POLICIES')")
     public ResponseEntity<List<SecurityPolicyEntity>> getMFAPolicies(@RequestParam(required = false) String gameId) {
+        accessGuard.requirePermission("security:read");
         List<SecurityPolicyEntity> policies = securityService.getMFAPolicies(gameId);
         return ResponseEntity.ok(policies);
     }

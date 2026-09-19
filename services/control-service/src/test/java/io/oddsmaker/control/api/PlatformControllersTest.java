@@ -74,6 +74,27 @@ class PlatformControllersTest {
         assertEquals(200, userController.getUserStatistics().getStatusCode().value());
         assertEquals(200, userController.getRecentLogins(10).getStatusCode().value());
         assertEquals(200, userController.getUsersByRole(io.oddsmaker.control.jpa.UserEntity.UserRole.ADMIN).getStatusCode().value());
+        // 读 6 → user:read；写 5 + updateUser/toggleTwoFactor（"u1"≠本人"tester"）→ user:update 7；/me 无 guard
+        verify(accessGuard, org.mockito.Mockito.times(6)).requirePermission("user:read");
+        verify(accessGuard, org.mockito.Mockito.times(7)).requirePermission("user:update");
+    }
+
+    @Test
+    @DisplayName("用户：updateUser/toggleTwoFactor 本人自助放行（不触发 guard）")
+    void userSelfServiceBypassesGuard() {
+        org.springframework.security.core.context.SecurityContextHolder.getContext()
+            .setAuthentication(new org.springframework.security.authentication
+                .UsernamePasswordAuthenticationToken("tester", "pw"));
+        io.oddsmaker.control.jpa.UserEntity current = new io.oddsmaker.control.jpa.UserEntity();
+        when(userService.updateUser(org.mockito.ArgumentMatchers.eq("tester"), any(), org.mockito.ArgumentMatchers.eq("tester")))
+            .thenReturn(current);
+        when(userService.toggleTwoFactor(org.mockito.ArgumentMatchers.eq("tester"), org.mockito.ArgumentMatchers.eq(true), org.mockito.ArgumentMatchers.eq("tester")))
+            .thenReturn(current);
+
+        assertEquals(200, userController.updateUser("tester", new io.oddsmaker.control.jpa.UserEntity()).getStatusCode().value());
+        assertEquals(200, userController.toggleTwoFactor("tester", Map.of("enabled", true)).getStatusCode().value());
+        // 本人操作不触发权限门
+        verify(accessGuard, org.mockito.Mockito.times(0)).requirePermission(anyString());
     }
 
     // ===== 系统配置/维护/功能开关 =====
@@ -106,6 +127,13 @@ class PlatformControllersTest {
         assertEquals(200, systemController.setFeaturePercentage("flag", new SystemController.PercentageRequest()).getStatusCode().value());
         assertEquals(200, systemController.getSystemStatus().getStatusCode().value());
         verify(maintenanceService).getActiveMaintenances();
+        // maintenance manage 4/read 2；system read 3/manage 1；featureflag read 2/manage 3；check/public/checkFeature 无 guard
+        verify(accessGuard, org.mockito.Mockito.times(4)).requirePermission("maintenance:manage");
+        verify(accessGuard, org.mockito.Mockito.times(2)).requirePermission("maintenance:read");
+        verify(accessGuard, org.mockito.Mockito.times(3)).requirePermission("system:read");
+        verify(accessGuard, org.mockito.Mockito.times(1)).requirePermission("system:manage");
+        verify(accessGuard, org.mockito.Mockito.times(2)).requirePermission("featureflag:read");
+        verify(accessGuard, org.mockito.Mockito.times(3)).requirePermission("featureflag:manage");
     }
 
     // ===== 安全（MFA/SSO/会话/策略） =====
@@ -140,6 +168,10 @@ class PlatformControllersTest {
         assertEquals(200, securityController.getMFAPolicies(null).getStatusCode().value());
         assertEquals(200, securityController.isMFARequired("g").getStatusCode().value());
         verify(securityService).getActiveSSOConfigs();
+        // MFA 自助 4 + 会话 create/validate/terminate + SSO active/callback + mfa-required 无 guard；
+        // MFA 配置读 2 + 策略读 3 → security:read；SSO 写 2 + terminateAll → security:manage
+        verify(accessGuard, org.mockito.Mockito.times(5)).requirePermission("security:read");
+        verify(accessGuard, org.mockito.Mockito.times(3)).requirePermission("security:manage");
     }
 
     // ===== 角色分配 =====
