@@ -83,7 +83,11 @@ public class PermissionEntity {
     }
 
     /**
-     * 权限操作枚举
+     * 权限操作枚举。
+     * EXECUTE/DEPLOY/PREDICT/REVIEW/READ_SENSITIVE/READ_INFRA 六值为 V0.9.8 种子
+     * （ml:train、ml:deploy、ml:use、risk:review、audit:sensitive、metrics:infra 等）
+     * 已落库的 action 字面量——{@code roles.permissions} 是 EAGER {@code @ManyToMany}，
+     * 枚举缺值时加载任意绑定角色即水化炸（IllegalArgumentException），扩枚举即修复存量。
      */
     public enum PermissionAction {
         CREATE,
@@ -93,7 +97,13 @@ public class PermissionEntity {
         EXPORT,
         IMPORT,
         MANAGE,
-        ADMIN
+        ADMIN,
+        EXECUTE,        // ml:train / integration:trigger / pipeline:execute / export:execute
+        DEPLOY,         // ml:deploy
+        PREDICT,        // ml:use
+        REVIEW,         // risk:review
+        READ_SENSITIVE, // audit:sensitive
+        READ_INFRA      // metrics:infra
     }
 
     /**

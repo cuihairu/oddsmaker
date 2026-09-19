@@ -1,12 +1,18 @@
 package io.oddsmaker.control.service;
 
+import io.oddsmaker.control.jpa.PermissionEntity;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -121,5 +127,47 @@ class PermissionSeedCoverageTest {
         assertTrue(sql.contains("SET type = 'SYSTEM'"), "V0.9.9 缺 type 枚举修复");
         assertTrue(sql.contains("SET enabled = TRUE WHERE enabled IS NULL"), "V0.9.9 缺 enabled NULL 修复");
         assertTrue(sql.contains("SET \"system\" = TRUE WHERE \"system\" IS NULL"), "V0.9.9 缺 system NULL 修复");
+    }
+
+    @Test
+    @DisplayName("PermissionAction 枚举覆盖 V0.9.8 种子全部 action 字面量（EAGER 水化炸弹防线）")
+    void permissionActionEnumCoversSeedLiterals() throws IOException {
+        String sql = readMigration("V0.9.8__rbac_guard_permission_seeds.sql");
+        // INSERT 行尾形态 …,'resource_type','ACTION','SCOPE',TRUE,TRUE) —— 抽每一行的 action 列字面量。
+        // roles.permissions 是 EAGER @ManyToMany：枚举缺任一落库值 → 加载绑定角色即水化炸（非 admin 鉴权全挂）
+        Matcher m = Pattern.compile("'([a-z_]+)','([A-Z_]+)','(?:GAME|GLOBAL|ENVIRONMENT)',TRUE,TRUE\\)")
+            .matcher(sql);
+        Set<String> constants = Arrays.stream(PermissionEntity.PermissionAction.values())
+            .map(Enum::name).collect(Collectors.toSet());
+        int checked = 0;
+        List<String> illegal = new ArrayList<>();
+        while (m.find()) {
+            checked++;
+            if (!constants.contains(m.group(2))) {
+                illegal.add(m.group(2));
+            }
+        }
+        assertTrue(checked >= 52, "正则仅匹配 " + checked + " 行（种子 ≥52 行）——行尾格式漂移导致测试失灵");
+        assertTrue(illegal.isEmpty(), "permissions.action 枚举外值（水化即炸）: " + illegal);
+    }
+
+    @Test
+    @DisplayName("V0.9.10：枚举漂移数据修复（perm_* 回填/int_1 auth_type/audit status/api_keys 默认值）在位")
+    void v0910EnumDriftFixPresent() throws IOException {
+        String sql = readMigration("V0.9.10__data_enum_drift_fix.sql");
+        // 病例 3：38 行 perm_* 的 type/action/scope 按旧列（operation/applicable_scope）推导回填
+        assertTrue(sql.contains("UPDATE permissions SET"), "V0.9.10 缺 perm_* 回填");
+        assertTrue(sql.contains("CASE operation"), "V0.9.10 缺 operation→action 推导");
+        assertTrue(sql.contains("WHERE type IS NULL AND action IS NULL AND scope IS NULL"),
+            "V0.9.10 缺三列 NULL 守卫");
+        // 病例 4：int_1（SLACK）auth_type WEBHOOK 不在 AuthType 枚举 → NONE
+        assertTrue(sql.contains("UPDATE integrations SET auth_type = 'NONE' WHERE id = 'int_1'"),
+            "V0.9.10 缺 int_1 auth_type 修复");
+        // 病例 5：audit_logs.status 存量 NULL 按 result 对齐回填
+        assertTrue(sql.contains("UPDATE audit_logs SET status = CASE WHEN result = 'FAILURE'"),
+            "V0.9.10 缺 audit status 回填");
+        // 病例 6：api_keys.key_type DDL 默认 'PRODUCTION' 不在 ApiKeyType 枚举 → 防患改 'CLIENT'
+        assertTrue(sql.contains("ALTER TABLE api_keys ALTER COLUMN key_type SET DEFAULT 'CLIENT'"),
+            "V0.9.10 缺 api_keys 默认值修复");
     }
 }

@@ -164,6 +164,22 @@ public class FeatureFlagEntity {
     }
 
     /**
+     * 名单列（黑白名单）是 JSON 数组文本，如 {@code ["u1","u10"]}——成员判断而非子串匹配，
+     * 否则名单含 "u1" 时 "u10" 被误伤（黑名单误拒 / 白名单误放）。
+     * 非 JSON 存量文本保守回退子串匹配（不回归既有行为）。
+     */
+    private static boolean listContains(String json, String value) {
+        if (json == null) {
+            return false;
+        }
+        try {
+            return JSON.readValue(json, new TypeReference<List<String>>() {}).contains(value);
+        } catch (JsonProcessingException e) {
+            return json.contains(value);
+        }
+    }
+
+    /**
      * 检查用户是否可以使用该功能
      */
     public boolean isAvailableForUser(String userId, String gameId) {
@@ -176,24 +192,24 @@ public class FeatureFlagEntity {
         }
 
         // 检查用户黑名单
-        if (userId != null && blacklistUsers != null && blacklistUsers.contains(userId)) {
+        if (userId != null && listContains(blacklistUsers, userId)) {
             return false;
         }
 
         // 检查游戏黑名单
-        if (gameId != null && blacklistGames != null && blacklistGames.contains(gameId)) {
+        if (gameId != null && listContains(blacklistGames, gameId)) {
             return false;
         }
 
         if (isEnabled()) {
             // 检查用户白名单
             if (userId != null && whitelistUsers != null && !whitelistUsers.isEmpty()) {
-                return whitelistUsers.contains(userId);
+                return listContains(whitelistUsers, userId);
             }
 
             // 检查游戏白名单
             if (gameId != null && whitelistGames != null && !whitelistGames.isEmpty()) {
-                return whitelistGames.contains(gameId);
+                return listContains(whitelistGames, gameId);
             }
 
             return true;
@@ -202,7 +218,7 @@ public class FeatureFlagEntity {
         if (isConditional() || isStagedRollout()) {
             // 白名单先行：灰度/条件态白名单用户恒可用（行为变更，此前回落 defaultValue）
             if (userId != null && whitelistUsers != null && !whitelistUsers.isEmpty()
-                    && whitelistUsers.contains(userId)) {
+                    && listContains(whitelistUsers, userId)) {
                 return true;
             }
 

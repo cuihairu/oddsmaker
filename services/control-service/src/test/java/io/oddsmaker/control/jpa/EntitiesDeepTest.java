@@ -281,6 +281,65 @@ class EntitiesDeepTest {
     }
 
     @Test
+    @DisplayName("FeatureFlagEntity：黑白名单 JSON 数组精确成员判断（子串误伤回归）与非 JSON 回退")
+    void featureFlagListMembership() {
+        FeatureFlagEntity f = new FeatureFlagEntity();
+        f.flagKey = "list-flag";
+        f.flagName = "名单开关";
+        f.createdBy = "admin";
+        f.defaultValue = false;
+
+        // 用户黑名单 JSON 数组：["u10"] 含 "u1" 子串但不含成员 "u1" → 不再误拒（回归核心）
+        f.enable();
+        f.blacklistUsers = "[\"u10\"]";
+        assertTrue(f.isAvailableForUser("u1", "g1"));
+        assertFalse(f.isAvailableForUser("u10", "g1"));
+
+        // 多元素名单：u1 命中拒绝、u10 命中拒绝、u2 放行
+        f.blacklistUsers = "[\"u1\",\"u10\"]";
+        assertFalse(f.isAvailableForUser("u1", "g1"));
+        assertFalse(f.isAvailableForUser("u10", "g1"));
+        assertTrue(f.isAvailableForUser("u2", "g1"));
+
+        // 游戏黑名单 JSON 数组：["g10"] 含 "g1" 子串但 "g1" 不是成员 → 不再误拒（回归核心）
+        f.blacklistUsers = null;
+        f.blacklistGames = "[\"g10\"]";
+        assertFalse(f.isAvailableForUser("u1", "g10"));
+        assertTrue(f.isAvailableForUser("u1", "g1"));
+        assertTrue(f.isAvailableForUser("u1", "g2"));
+
+        // ENABLED 态用户白名单：精确命中（u10 在名单、u1 不在——旧子串匹配下 u1 被误放）
+        f.blacklistGames = null;
+        f.whitelistUsers = "[\"u10\"]";
+        assertTrue(f.isAvailableForUser("u10", "g1"));
+        assertFalse(f.isAvailableForUser("u1", "g1"));
+
+        // 游戏白名单
+        f.whitelistUsers = null;
+        f.whitelistGames = "[\"g1\",\"g10\"]";
+        assertTrue(f.isAvailableForUser("u1", "g10"));
+        assertFalse(f.isAvailableForUser("u1", "g9"));
+
+        // 非 JSON 存量文本（逗号分隔）→ 保守回退子串匹配（不回归既有行为）
+        f.whitelistGames = null;
+        f.whitelistUsers = "u1,u2";
+        assertTrue(f.isAvailableForUser("u1", "g1"));
+        assertFalse(f.isAvailableForUser("u3", "g1"));
+
+        // 名单 null → 不在名单（黑名单放行 / 白名单不启用）
+        f.whitelistUsers = null;
+        f.blacklistUsers = null;
+        assertTrue(f.isAvailableForUser("u1", "g1"));
+
+        // 灰度态白名单 JSON 先行透传：u5 分桶 66 > 5 不命中，但白名单 ["u5"] 透传
+        f.setPercentage(5);
+        f.flagStatus = FeatureFlagEntity.FlagStatus.STAGED_ROLLOUT;
+        assertFalse(f.isAvailableForUser("u5", "g1"));
+        f.whitelistUsers = "[\"u5\"]";
+        assertTrue(f.isAvailableForUser("u5", "g1"));
+    }
+
+    @Test
     @DisplayName("PipelineJobEntity：状态判定/生命周期迁移/指标计算分支")
     void pipelineJobEntity() {
         PipelineJobEntity j = new PipelineJobEntity();
