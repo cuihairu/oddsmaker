@@ -54,6 +54,12 @@ public interface FlinkJobRepo extends JpaRepository<FlinkJobEntity, String> {
     List<FlinkJobEntity> findFailedJobs();
 
     /**
+     * 查找指定活动状态的作业（全局，状态对账用）
+     */
+    @Query("SELECT fj FROM FlinkJobEntity fj WHERE fj.status IN :statuses AND fj.deletedAt IS NULL ORDER BY fj.createdAt ASC")
+    List<FlinkJobEntity> findByStatusInAndDeletedAtIsNull(@Param("statuses") List<FlinkJobEntity.JobStatus> statuses);
+
+    /**
      * 统计游戏的运行中作业数
      */
     @Query("SELECT COUNT(fj) FROM FlinkJobEntity fj WHERE fj.gameId = :gameId AND fj.status = 'RUNNING' AND fj.deletedAt IS NULL")

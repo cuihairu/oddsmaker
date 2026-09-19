@@ -8,6 +8,10 @@ dependencies {
   implementation("org.springframework.boot:spring-boot-starter-web")
   implementation("org.springframework.boot:spring-boot-starter-actuator")
 
+  // RestTemplate 的 PATCH 支持（Flink cancel 是 PATCH /jobs/{id}?mode=cancel）：
+  // classpath 有 httpclient5 时 RestTemplateBuilder 自动切换 HttpComponents requestFactory
+  implementation("org.apache.httpcomponents.client5:httpclient5")
+
   // Prometheus 指标暴露（application.yaml 已声明 prometheus 端点，缺此依赖端点 404）
   runtimeOnly("io.micrometer:micrometer-registry-prometheus")
 

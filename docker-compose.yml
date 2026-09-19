@@ -165,8 +165,12 @@ services:
       ODDSMAKER_ADMIN_TOKEN: dev-admin-token
       ODDSMAKER_INTERNAL_TOKEN: dev-internal-token
       ODDSMAKER_PLAYER_EXPORT_DIR: /app/data/player-exports
+      ODDSMAKER_FLINK_JARDIR: /jars
       LOGGING_LEVEL_IO_ODDSMAKER: INFO
       LOGGING_LEVEL_ORG_HIBERNATE_SQL: WARN
+    volumes:
+      # Flink 作业 jar（deploy-rt/jars 需先 build 出 risk-job fat jar，见 deploy-rt/README）
+      - ./deploy-rt/jars:/jars:ro
     depends_on:
       postgres:
         condition: service_healthy

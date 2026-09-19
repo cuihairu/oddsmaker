@@ -34,9 +34,27 @@ public class RiskJob {
 
     static final String JOB_NAME = "oddsmaker-risk-job";
 
-    /** 入口：读配置 → 搭管道 → 触发执行（execute 才真正连接 source/sink）。 */
+    /** 入口：解析程序参数 → 读配置 → 搭管道 → 触发执行（execute 才真正连接 source/sink）。 */
     public static void main(String[] args) throws Exception {
+        parseArgs(args);
         buildPipeline(StreamExecutionEnvironment.getExecutionEnvironment(), config()).getExecutionEnvironment().execute(JOB_NAME);
+    }
+
+    /**
+     * --key=value 程序参数 → System properties（config() 只读系统属性）。
+     * Flink REST /jars/{id}/run 的 programArgs 即走此途径；-D 系统属性途径不受影响，
+     * 且程序参数优先级更高（后 setProperty 覆盖）。非 -- 前缀或无 = 的参数忽略。
+     */
+    static void parseArgs(String[] args) {
+        if (args == null) return;
+        for (String arg : args) {
+            if (arg != null && arg.startsWith("--")) {
+                int eq = arg.indexOf('=');
+                if (eq > 2) {
+                    System.setProperty(arg.substring(2, eq), arg.substring(eq + 1));
+                }
+            }
+        }
     }
 
     /** 配置读取（System properties，单测可 setProperty 后直测）。顺序见 buildPipeline。 */

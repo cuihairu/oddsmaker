@@ -64,6 +64,9 @@ class InfraServicesTest {
     @Mock
     private RiskRuleRepo riskRuleRepo;
 
+    @Mock
+    private io.oddsmaker.control.service.FlinkRestClient flinkRestClient;
+
     @Spy
     private com.fasterxml.jackson.databind.ObjectMapper objectMapper = new com.fasterxml.jackson.databind.ObjectMapper();
 
@@ -73,18 +76,30 @@ class InfraServicesTest {
     @Test
     @DisplayName("Flink 作业：查询/运行中/规则关联主路径")
     void flinkJobMainPaths() {
-        lenient().when(flinkJobRepo.findByGameId("g")).thenReturn(List.of());
-        lenient().when(flinkJobRepo.findRunningJobs("g")).thenReturn(List.of());
+        io.oddsmaker.control.jpa.FlinkJobEntity running = new io.oddsmaker.control.jpa.FlinkJobEntity();
+        running.status = io.oddsmaker.control.jpa.FlinkJobEntity.JobStatus.RUNNING;
+        // 实体字段声明带 0L 初始化器，显式置 null 才能踩到统计兜底分支
+        running.totalEventsProcessed = null;
+        running.totalRiskCasesCreated = null;
+        lenient().when(flinkJobRepo.findByGameId("g")).thenReturn(List.of(running));
+        lenient().when(flinkJobRepo.findRunningJobs("g")).thenReturn(List.of(running));
         lenient().when(riskRuleRepo.findById(anyString())).thenReturn(java.util.Optional.empty());
 
         flinkJobService.getGameJobs("g");
         flinkJobService.getRunningJobs("g");
-        assertNotNull(flinkJobService.getJobStats("g"));
+        // 计数器全 null：统计兜底 0、风险率 0.0
+        Map<String, Object> stats = flinkJobService.getJobStats("g");
+        assertEquals(1, stats.get("totalJobs"));
+        assertEquals(1, stats.get("runningJobs"));
+        assertEquals(0L, stats.get("stoppedJobs"));
+        assertEquals(0L, stats.get("failedJobs"));
+        assertEquals(0L, stats.get("totalEventsProcessed"));
+        assertEquals(0.0, stats.get("overallRiskCaseRate"));
     }
 
     @Test
     @DisplayName("Flink 作业：配置序列化失败抛出；部署时规则ID解析失败不阻塞部署")
-    void flinkJobSerializationAndDeployResilience() {
+    void flinkJobSerializationAndDeployResilience() throws Exception {
         // createJob：jobConfig 不可序列化 → RuntimeException
         java.util.Map<String, Object> bad = new java.util.HashMap<>();
         bad.put("bad", new Object());
@@ -92,11 +107,20 @@ class InfraServicesTest {
             () -> flinkJobService.createJob("g", "env1", "j1", "Job1", "d", null,
                 bad, null, null, null, 1, "op"));
 
-        // deployJob：ruleIds 非法 JSON → buildProgramArgs 内 catch，部署仍成功（模拟集群）
+        // deployJob：ruleIds 非法 JSON → buildProgramArgs 内 catch，部署仍成功（REST 走 mock）
+        java.nio.file.Path jarDir = java.nio.file.Files.createTempDirectory("flink-jars-test");
+        java.nio.file.Files.writeString(jarDir.resolve("risk-job-0.1.0-all.jar"), "fake-jar");
+        java.lang.reflect.Field jarDirField = FlinkJobService.class.getDeclaredField("jarDir");
+        jarDirField.setAccessible(true);
+        jarDirField.set(flinkJobService, jarDir.toString());
+        when(flinkRestClient.uploadJar(any(java.nio.file.Path.class))).thenReturn("jar_1");
+        when(flinkRestClient.launch(anyString(), anyString(), org.mockito.ArgumentMatchers.anyInt(), anyString()))
+            .thenReturn("job-1");
         io.oddsmaker.control.jpa.FlinkJobEntity job = new io.oddsmaker.control.jpa.FlinkJobEntity();
         job.id = "fj1";
         job.gameId = "g";
         job.name = "j1";
+        job.jobType = io.oddsmaker.control.jpa.FlinkJobEntity.JobType.RISK_EVALUATION.name();
         job.status = io.oddsmaker.control.jpa.FlinkJobEntity.JobStatus.DRAFT;
         job.ruleIds = "not-json";
         when(flinkJobRepo.findById("fj1")).thenReturn(java.util.Optional.of(job));

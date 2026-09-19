@@ -70,6 +70,33 @@ class RiskJobTest {
     }
 
     @Test
+    @DisplayName("parseArgs：--key=value 落系统属性（覆盖优先）、非法参数忽略、null 安全")
+    void parseArgsAppliesSystemProperties() {
+        try {
+            // 基本落位（Flink REST programArgs 途径）
+            RiskJob.parseArgs(new String[]{"--control.url=http://control:8085", "--control.gameId=g1"});
+            assertEquals("http://control:8085", System.getProperty("control.url"));
+            assertEquals("g1", System.getProperty("control.gameId"));
+
+            // 程序参数覆盖 -D 已有系统属性（setProperty 后到者胜）
+            System.setProperty("kafka.bootstrap", "from-D:9092");
+            RiskJob.parseArgs(new String[]{"--kafka.bootstrap=from-args:9092"});
+            assertEquals("from-args:9092", System.getProperty("kafka.bootstrap"));
+
+            // 非 -- 前缀 / 缺 = / "--" 裸前缀均忽略，合法参数在混排中仍生效
+            RiskJob.parseArgs(new String[]{"positional", "--noeq", "--", "--testarg.onlyvalid=1"});
+            assertEquals("1", System.getProperty("testarg.onlyvalid"));
+
+            RiskJob.parseArgs(null);
+        } finally {
+            System.clearProperty("control.url");
+            System.clearProperty("control.gameId");
+            System.clearProperty("kafka.bootstrap");
+            System.clearProperty("testarg.onlyvalid");
+        }
+    }
+
+    @Test
     @DisplayName("watermarks/slideMinutes/subject*/str/nz/口径过滤：构件直测")
     void helpers() {
         WatermarkStrategy<RawEvent> wm = RiskJob.watermarks();

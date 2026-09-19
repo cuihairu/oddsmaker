@@ -20,8 +20,12 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.authentication.TestingAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verify;
 
 /**
@@ -196,7 +200,7 @@ class PipelineControllersTest {
     private FlinkJobController flinkJobController;
 
     @Test
-    @DisplayName("Flink 作业：10 个端点委托")
+    @DisplayName("Flink 作业：11 个端点委托（含 AccessGuard 行内鉴权）")
     void flinkJobEndpoints() {
         assertEquals(200, flinkJobController.createJob(new FlinkJobController.FlinkJobRequest()).getStatusCode().value());
         assertEquals(200, flinkJobController.getJob("j1", "g").getStatusCode().value());
@@ -204,10 +208,35 @@ class PipelineControllersTest {
         assertEquals(200, flinkJobController.getRunningJobs("g").getStatusCode().value());
         assertEquals(200, flinkJobController.deployJob("j1", "g", new FlinkJobController.DeployRequest()).getStatusCode().value());
         assertEquals(200, flinkJobController.stopJob("j1", "g", new FlinkJobController.StopRequest()).getStatusCode().value());
+        assertEquals(200, flinkJobController.refreshJob("j1", "g").getStatusCode().value());
         assertEquals(200, flinkJobController.getJobStats("g").getStatusCode().value());
         assertEquals(200, flinkJobController.getJobConfig("j1", "g").getStatusCode().value());
         assertEquals(200, flinkJobController.getJobRules("j1", "g").getStatusCode().value());
         assertEquals(200, flinkJobController.updateMetrics("j1", "g", new FlinkJobController.MetricsUpdateRequest()).getStatusCode().value());
+
+        // 读 6 端点 + 管 4 端点（deploy/stop/refresh/metrics）；createJob 用 request.gameId（此处 null）单独计
+        verify(accessGuard, org.mockito.Mockito.times(6)).requireGamePermission("g", "flink:read");
+        verify(accessGuard, org.mockito.Mockito.times(4)).requireGamePermission("g", "flink:manage");
+        verify(accessGuard).requireGamePermission(null, "flink:manage");
+    }
+
+    @Test
+    @DisplayName("Flink 作业：操作者取认证主体（无认证上下文时兜底 api）")
+    void flinkOperatorFromAuthentication() {
+        // 有认证上下文：createJob 的 createdBy 为认证主体名
+        SecurityContextHolder.getContext().setAuthentication(new TestingAuthenticationToken("op-user", "n/a"));
+        try {
+            assertEquals(200, flinkJobController.createJob(new FlinkJobController.FlinkJobRequest()).getStatusCode().value());
+            verify(flinkJobService).createJob(isNull(), isNull(), isNull(), isNull(), isNull(), isNull(),
+                isNull(), isNull(), isNull(), isNull(), isNull(), eq("op-user"));
+        } finally {
+            SecurityContextHolder.clearContext();
+        }
+
+        // 无认证上下文：兜底 "api"
+        assertEquals(200, flinkJobController.createJob(new FlinkJobController.FlinkJobRequest()).getStatusCode().value());
+        verify(flinkJobService).createJob(isNull(), isNull(), isNull(), isNull(), isNull(), isNull(),
+            isNull(), isNull(), isNull(), isNull(), isNull(), eq("api"));
     }
 
     // ===== 集成 =====
@@ -277,7 +306,9 @@ class PipelineControllersTest {
         assertEquals(404, webhookController.updateConfig("g", "missing", new io.oddsmaker.control.jpa.WebhookConfigEntity()).getStatusCode().value());
         assertEquals(200, webhookController.deleteConfig("g", "c1").getStatusCode().value());
         assertEquals(404, webhookController.deleteConfig("g", "missing").getStatusCode().value());
-        verify(accessGuard, org.mockito.Mockito.times(5)).requireGamePermission("g", "webhook:manage");
+        // GET×4 → webhook:read；test + CRUD×5 → webhook:manage
+        verify(accessGuard, org.mockito.Mockito.times(4)).requireGamePermission("g", "webhook:read");
+        verify(accessGuard, org.mockito.Mockito.times(6)).requireGamePermission("g", "webhook:manage");
     }
 
     // ===== 限流 =====
