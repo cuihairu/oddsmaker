@@ -328,9 +328,16 @@ class FinalSweep6Test {
         pending.gameId = "g";
         pending.name = "p";
         pending.status = CohortEntity.CohortStatus.PENDING;
+        pending.startDate = java.time.LocalDate.now().minusDays(7);
+        pending.endDate = java.time.LocalDate.now();
         when(cohortRepo.findById("c1")).thenReturn(Optional.of(pending));
         when(cohortRepo.save(any(CohortEntity.class))).thenAnswer(inv -> inv.getArgument(0));
         when(cohortRepo.findPending()).thenReturn(List.of(pending));
+        // 真化后计算走 ClickHouse——局部 mock（空数据即 COMPLETED cohortCount=0）
+        ClickHouseClient ch = mock(ClickHouseClient.class);
+        when(ch.isAvailable()).thenReturn(true);
+        when(ch.query(anyString(), any(Object[].class))).thenReturn(List.of());
+        ReflectionTestUtils.setField(service, "clickHouse", ch);
         service.processPendingCohorts();
         assertEquals(CohortEntity.CohortStatus.COMPLETED, pending.status);
 

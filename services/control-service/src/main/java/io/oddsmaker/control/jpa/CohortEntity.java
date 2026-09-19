@@ -171,8 +171,9 @@ public class CohortEntity {
         this.totalCalculations = (this.totalCalculations == null ? 0 : this.totalCalculations) + 1;
     }
 
-    public void markAsFailed() {
+    public void markAsFailed(String reason) {
         this.status = CohortStatus.FAILED;
+        this.resultSummary = reason;  // 失败原因落摘要，详情/列表可见而非只留日志
     }
 
     public List<Integer> getRetentionPeriods() {

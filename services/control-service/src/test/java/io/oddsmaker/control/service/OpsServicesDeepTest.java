@@ -386,8 +386,23 @@ class OpsServicesDeepTest {
     @Mock
     private CohortRepo cohortRepo;
 
+    @Mock
+    private GameEnvironmentRepo gameEnvironmentRepo;
+
     @InjectMocks
     private CohortService cohortService;
+
+    /** 同期群计算 CH stub：桶查询返回单桶 42 人，逐周期回访为空（rate 全 0）。 */
+    private void stubCohortClickHouse() {
+        lenient().when(clickHouse.isAvailable()).thenReturn(true);
+        lenient().when(clickHouse.query(anyString(), any(Object[].class))).thenAnswer(inv -> {
+            String sql = inv.getArgument(0);
+            if (sql.contains("INTERVAL")) {
+                return List.of();
+            }
+            return List.of(Map.of("first_bucket", "2026-09-15 00:00:00", "size", 42L));
+        });
+    }
 
     private CohortEntity cohort(String id, String name, CohortEntity.CohortStatus status) {
         CohortEntity c = new CohortEntity();
@@ -439,9 +454,11 @@ class OpsServicesDeepTest {
         assertThrows(IllegalArgumentException.class, () -> cohortService.calculateCohort("none"));
         assertThrows(IllegalStateException.class, () -> cohortService.calculateCohort("c2"));
 
+        stubCohortClickHouse();
         CohortEntity calculated = cohortService.calculateCohort("c1");
         assertEquals(CohortEntity.CohortStatus.COMPLETED, calculated.status);
-        assertTrue(calculated.cohortCount >= 1000);
+        // 真实查询返回的群体规模（旧实现是 Math.random 下限 1000 的假数）
+        assertEquals(42L, calculated.cohortCount);
         assertNotNull(calculated.resultData);
         assertNotNull(calculated.resultSummary);
         assertEquals(Long.valueOf(1L), calculated.totalCalculations);
@@ -463,6 +480,7 @@ class OpsServicesDeepTest {
         done.analysisType = "retention";
         lenient().when(cohortRepo.findPending()).thenReturn(List.of(p1));
         lenient().when(cohortRepo.findById("c1")).thenReturn(Optional.of(p1));
+        stubCohortClickHouse();
 
         cohortService.processPendingCohorts();
         assertEquals(CohortEntity.CohortStatus.COMPLETED, p1.status);

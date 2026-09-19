@@ -33,6 +33,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -175,11 +176,20 @@ CohortService service = new CohortService();
         cohort.name = "sep-cohort";
         cohort.cohortType = CohortEntity.CohortType.ACQUISITION;
         cohort.status = CohortEntity.CohortStatus.PENDING;
+        cohort.startDate = java.time.LocalDate.now().minusDays(7);
+        cohort.endDate = java.time.LocalDate.now();
         when(cohortRepo.findById("c1")).thenReturn(Optional.of(cohort));
         when(cohortRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        // 真化后计算走 ClickHouse——空数据（无桶）也应是 COMPLETED cohortCount=0 而非假成功
+        ClickHouseClient ch = mock(ClickHouseClient.class);
+        when(ch.isAvailable()).thenReturn(true);
+        when(ch.query(anyString(), any(Object[].class))).thenReturn(List.of());
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "clickHouse", ch);
 
         CohortEntity calculated = service.calculateCohort("c1");
         assertNotNull(calculated);
+        assertEquals(CohortEntity.CohortStatus.COMPLETED, calculated.status);
+        assertEquals(0L, calculated.cohortCount);
         verify(cohortRepo, org.mockito.Mockito.atLeastOnce()).save(any());
     }
 

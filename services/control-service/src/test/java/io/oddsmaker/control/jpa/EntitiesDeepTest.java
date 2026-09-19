@@ -1220,9 +1220,10 @@ class EntitiesDeepTest {
         c.resultData = "";
         assertFalse(c.hasResults());
 
-        // 失败态仍视为活跃
-        c.markAsFailed();
+        // 失败态仍视为活跃（原因落 resultSummary 可见）
+        c.markAsFailed("窗口配置非法");
         assertTrue(c.isActive());
+        assertEquals("窗口配置非法", c.resultSummary);
 
         // 归档/软删除 → 非活跃
         c.status = CohortEntity.CohortStatus.ARCHIVED;

@@ -1270,15 +1270,23 @@ class FinalSweep3Test {
     void testCalculateCohort() {
         CohortEntity cohort = new CohortEntity();
         cohort.id = "ch1";
+        cohort.gameId = "g1";
         cohort.name = "c";
         cohort.retentionPeriods = "[1,7]";
+        cohort.startDate = java.time.LocalDate.now().minusDays(7);
+        cohort.endDate = java.time.LocalDate.now();
         when(cohortRepo.findById("ch1")).thenReturn(Optional.of(cohort));
         when(cohortRepo.save(any(CohortEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+        // 真化后计算走 ClickHouse——局部 mock（避免与 PredictionMetricsService 构造器注入抢候选）
+        ClickHouseClient ch = mock(ClickHouseClient.class);
+        when(ch.isAvailable()).thenReturn(true);
+        when(ch.query(anyString(), any(Object[].class))).thenReturn(List.of());
+        org.springframework.test.util.ReflectionTestUtils.setField(cohortService, "clickHouse", ch);
 
         CohortEntity out = cohortService.calculateCohort("ch1");
         assertEquals(CohortEntity.CohortStatus.COMPLETED, out.status);
         assertNotNull(out.resultData);
-        assertTrue(out.cohortCount >= 1000);
+        assertEquals(0L, out.cohortCount);
 
         CohortEntity failing = new CohortEntity();
         failing.id = "ch2";
@@ -1296,11 +1304,18 @@ class FinalSweep3Test {
     void testProcessPendingCohorts() {
         CohortEntity cohort = new CohortEntity();
         cohort.id = "ch1";
+        cohort.gameId = "g1";
         cohort.name = "c";
         cohort.retentionPeriods = "[1,7]";
+        cohort.startDate = java.time.LocalDate.now().minusDays(7);
+        cohort.endDate = java.time.LocalDate.now();
         when(cohortRepo.findPending()).thenReturn(List.of(cohort));
         when(cohortRepo.findById("ch1")).thenReturn(Optional.of(cohort));
         when(cohortRepo.save(any(CohortEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+        ClickHouseClient ch = mock(ClickHouseClient.class);
+        when(ch.isAvailable()).thenReturn(true);
+        when(ch.query(anyString(), any(Object[].class))).thenReturn(List.of());
+        org.springframework.test.util.ReflectionTestUtils.setField(cohortService, "clickHouse", ch);
 
         assertDoesNotThrow(() -> cohortService.processPendingCohorts());
         assertEquals(CohortEntity.CohortStatus.COMPLETED, cohort.status);
