@@ -620,6 +620,10 @@ class FinalSweep6Test {
         ReflectionTestUtils.setField(service, "executionRepo", reportExecutionRepo);
         ReflectionTestUtils.setField(service, "auditLogService", auditLog);
         ReflectionTestUtils.setField(service, "objectMapper", new ObjectMapper());
+        // 真化后执行依赖 ClickHouse——本用例只测 save 失败分支，CH 置为不可用（诚实 FAILED，不触碰真查询）
+        ClickHouseClient ch = mock(ClickHouseClient.class);
+        when(ch.isAvailable()).thenReturn(false);
+        ReflectionTestUtils.setField(service, "clickHouse", ch);
 
         ReportEntity report = new ReportEntity();
         report.id = "r1";

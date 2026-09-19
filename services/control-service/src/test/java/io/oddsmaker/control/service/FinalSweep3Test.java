@@ -239,6 +239,8 @@ class FinalSweep3Test {
     private ReportRepo reportRepo;
     @Mock
     private ReportExecutionRepo executionRepo;
+    // 注意：不能加字段级 @Mock ClickHouseClient——PredictionMetricsService 走构造器注入且参数名是
+    // client，第二个同类型 mock 会让 Mockito 选错候选（见 testExecuteReportSuccess 内的局部 mock）
     @InjectMocks
     private ReportService reportService;
 
@@ -913,6 +915,12 @@ class FinalSweep3Test {
         when(reportRepo.findById("r1")).thenReturn(Optional.of(report));
         when(executionRepo.save(any(ReportExecutionEntity.class))).thenAnswer(inv -> inv.getArgument(0));
         when(reportRepo.save(any(ReportEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+        // 真化后执行走 ClickHouse——局部 mock（避免与 predictionMetricsService 的构造器注入冲突）+ 单行结果
+        ClickHouseClient ch = mock(ClickHouseClient.class);
+        org.springframework.test.util.ReflectionTestUtils.setField(reportService, "clickHouse", ch);
+        when(ch.isAvailable()).thenReturn(true);
+        when(ch.query(anyString(), any(Object[].class)))
+            .thenReturn(List.of(Map.of("bucket", "2026-09-19", "a_events", 7L, "a_players", 4L)));
 
         ReportExecutionEntity execution = reportService.executeReport(
             "r1", "api", "manual", Map.of("p", "1"), Map.of("f", "2"));

@@ -192,6 +192,12 @@ public class ReportEntity {
         this.lastRunStatus = runStatus;
     }
 
+    /** 执行开始的状态标记：不增加 totalRuns（完成或失败时才记一次运行）。 */
+    public void markRunning() {
+        this.lastRunAt = LocalDateTime.now();
+        this.lastRunStatus = "running";
+    }
+
     public String getReportDescription() {
         return String.format("[%s] %s - %s (%s)",
             reportType.name().toLowerCase(),

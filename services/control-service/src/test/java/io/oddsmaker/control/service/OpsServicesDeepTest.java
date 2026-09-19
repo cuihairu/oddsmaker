@@ -79,6 +79,9 @@ class OpsServicesDeepTest {
     private ReportRepo reportRepo;
 
     @Mock
+    private ClickHouseClient clickHouse;
+
+    @Mock
     private ReportExecutionRepo executionRepo;
 
     @InjectMocks
@@ -145,17 +148,26 @@ class OpsServicesDeepTest {
 
         assertThrows(IllegalArgumentException.class, () -> reportService.executeReport("none", "u", "manual", null, null));
 
+        // 真化后执行走 ClickHouse 白名单聚合——stub 返回单行结果
+        lenient().when(clickHouse.isAvailable()).thenReturn(true);
+        lenient().when(clickHouse.query(anyString(), any(Object[].class)))
+            .thenReturn(List.of(Map.of("bucket", "2026-09-19 00:00:00", "a_events", 5L, "a_players", 3L)));
+
         ReportExecutionEntity execution = reportService.executeReport("r1", "ops", null, Map.of("p", 1), Map.of("f", 2));
         assertEquals("r1", execution.reportId);
         assertEquals("manual", execution.triggerType);
         assertTrue(execution.parameters.contains("\"p\""));
         assertTrue(execution.filters.contains("\"f\""));
         assertEquals(ReportExecutionEntity.ExecutionStatus.COMPLETED, execution.executionStatus);
-        assertTrue(execution.rowCount >= 100);
+        // 行数/结果数据为真实查询返回（旧实现是 Math.random 假行数）
+        assertEquals(Long.valueOf(1L), execution.rowCount);
         assertNotNull(execution.resultSummary);
+        assertNotNull(execution.resultData);
+        assertNotNull(execution.queryTimeMs);
         assertEquals(ReportEntity.ReportStatus.PUBLISHED, r.status);
         assertEquals(Long.valueOf(1L), r.totalRuns);
-        assertEquals("running", r.lastRunStatus);
+        // 成功侧回写完成状态（旧实现只写 running 从不收口）
+        assertEquals("completed", r.lastRunStatus);
 
         ReportExecutionEntity done = new ReportExecutionEntity();
         done.id = "re1";
