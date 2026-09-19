@@ -20,6 +20,10 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 import org.springframework.data.domain.PageImpl;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.client.RestTemplate;
 
@@ -48,7 +52,9 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -436,10 +442,22 @@ class FinalSweep6Test {
         integration.id = "i1";
         integration.gameId = "g";
         integration.integrationType = IntegrationEntity.IntegrationType.WEBHOOK;
+        // 探测 stub 的 anyString() 不匹配 null——实体必须带 endpointUrl
+        integration.endpointUrl = "https://hooks.example.com/x";
         when(integrationRepo.findById("i1")).thenReturn(Optional.of(integration));
         when(integrationRepo.save(any(IntegrationEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+        // 真化后 executeHealthCheck 落库探测日志——不 stub 则 save 返回 null → isSuccess NPE → 误判 FAILED
+        when(integrationLogRepo.save(any(IntegrationLogEntity.class)))
+            .thenAnswer(inv -> inv.getArgument(0));
 
-        IntegrationEntity result = service.verifyIntegration("i1");
+        // 真探测：stub 探测模板成功（不依赖真网络）
+        RestTemplate probe = mock(RestTemplate.class);
+        when(probe.exchange(anyString(), eq(HttpMethod.GET), any(HttpEntity.class), eq(String.class)))
+            .thenReturn(new ResponseEntity<>("ok", HttpStatus.OK));
+        IntegrationService spied = spy(service);
+        doReturn(probe).when(spied).restTemplateFor(any(IntegrationEntity.class));
+
+        IntegrationEntity result = spied.verifyIntegration("i1");
 
         assertEquals(IntegrationEntity.IntegrationStatus.ACTIVE, result.integrationStatus);
     }

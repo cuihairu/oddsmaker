@@ -59,7 +59,11 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.atLeast;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -968,7 +972,7 @@ class InfraServicesDeepTest2 {
 
         // 创建（默认值）
         IntegrationEntity defaulted = integrationService.createIntegration("g1", "empty", null,
-            IntegrationEntity.IntegrationType.WEBHOOK, null, null, null, null, null, null, null);
+            IntegrationEntity.IntegrationType.WEBHOOK, null, "http://unit.test/hook", null, null, null, null, null);
         assertEquals(IntegrationEntity.AuthType.NONE, defaulted.authType);
         assertEquals(30, defaulted.timeoutSeconds);
         assertNull(defaulted.config);
@@ -1029,10 +1033,15 @@ class InfraServicesDeepTest2 {
         lenient().when(integrationRepo.findById("missing")).thenReturn(Optional.empty());
         assertThrows(IllegalArgumentException.class, () -> integrationService.verifyIntegration("missing"));
 
-        // 验证成功（健康检查模拟成功 -> ACTIVE）
+        // 验证成功（真探测 stub 成功 -> ACTIVE）
+        RestTemplate probe = mock(RestTemplate.class);
+        when(probe.exchange(anyString(), eq(HttpMethod.GET), any(HttpEntity.class), eq(String.class)))
+            .thenReturn(new ResponseEntity<>("ok", org.springframework.http.HttpStatus.OK));
+        IntegrationService spied = spy(integrationService);
+        doReturn(probe).when(spied).restTemplateFor(any(IntegrationEntity.class));
         IntegrationEntity entity = integration("i1", IntegrationEntity.IntegrationStatus.INACTIVE, true);
         lenient().when(integrationRepo.findById("i1")).thenReturn(Optional.of(entity));
-        IntegrationEntity verified = integrationService.verifyIntegration("i1");
+        IntegrationEntity verified = spied.verifyIntegration("i1");
         assertEquals(IntegrationEntity.IntegrationStatus.ACTIVE, verified.integrationStatus);
         assertNotNull(verified.lastVerifiedAt);
         assertNull(verified.lastError);

@@ -32,6 +32,7 @@ import io.oddsmaker.control.jpa.IdentityLinkEntity;
 import io.oddsmaker.control.jpa.IdentityLinkRepo;
 import io.oddsmaker.control.jpa.IdentityRepo;
 import io.oddsmaker.control.jpa.IntegrationEntity;
+import io.oddsmaker.control.jpa.IntegrationLogEntity;
 import io.oddsmaker.control.jpa.IntegrationLogRepo;
 import io.oddsmaker.control.jpa.IntegrationRepo;
 import io.oddsmaker.control.jpa.MLModelEntity;
@@ -95,6 +96,11 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.client.RestTemplate;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyBoolean;
@@ -102,7 +108,10 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -1156,11 +1165,22 @@ class ServicesFinalSweepTest {
     @DisplayName("集成：retryFailedIntegrations 对可重试集成触发验证")
     void integrationRetryTriggersVerify() {
         IntegrationEntity retryable = integration("i_retry", IntegrationEntity.IntegrationStatus.FAILED, true);
+        // 探测 stub 的 anyString() 不匹配 null——实体必须带 endpointUrl
+        retryable.endpointUrl = "https://hooks.example.com/x";
         lenient().when(integrationRepo.findRetryable()).thenReturn(List.of(retryable));
         lenient().when(integrationRepo.findById("i_retry")).thenReturn(Optional.of(retryable));
         lenient().when(integrationRepo.save(any(IntegrationEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+        // 真化后 executeHealthCheck 落库探测日志——不 stub 则 save 返回 null → isSuccess NPE → 误判 FAILED
+        lenient().when(integrationLogRepo.save(any(IntegrationLogEntity.class)))
+            .thenAnswer(inv -> inv.getArgument(0));
+        // 真探测：stub 探测模板成功（真化后重试成功 = URL 可达，不再无条件洗白）
+        RestTemplate probe = mock(RestTemplate.class);
+        lenient().when(probe.exchange(anyString(), eq(HttpMethod.GET), any(HttpEntity.class), eq(String.class)))
+            .thenReturn(new ResponseEntity<>("ok", HttpStatus.OK));
+        IntegrationService spied = spy(integrationService);
+        doReturn(probe).when(spied).restTemplateFor(any(IntegrationEntity.class));
 
-        assertDoesNotThrow(() -> integrationService.retryFailedIntegrations());
+        assertDoesNotThrow(() -> spied.retryFailedIntegrations());
 
         // verifyIntegration 内部两次 save（置 VERIFYING + 置 ACTIVE）
         verify(integrationRepo, times(2)).save(retryable);

@@ -117,7 +117,11 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.client.RestTemplate;
 
 import java.sql.Timestamp;
 import java.time.LocalDate;
@@ -147,7 +151,9 @@ import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -753,8 +759,15 @@ class FinalSweep3Test {
         integration.endpointUrl = "http://example/hook";
         when(integrationRepo.findById("i1")).thenReturn(Optional.of(integration));
         when(integrationRepo.save(any(IntegrationEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+        // 真化后 executeHealthCheck 落库探测日志——不 stub 则 save 返回 null → isSuccess NPE → 误判 FAILED
+        when(integrationLogRepo.save(any(IntegrationLogEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+        RestTemplate probe = mock(RestTemplate.class);
+        when(probe.exchange(anyString(), eq(HttpMethod.GET), any(HttpEntity.class), eq(String.class)))
+            .thenReturn(new ResponseEntity<>("ok", HttpStatus.OK));
+        IntegrationService spied = spy(integrationService);
+        doReturn(probe).when(spied).restTemplateFor(any(IntegrationEntity.class));
 
-        IntegrationEntity out = integrationService.verifyIntegration("i1");
+        IntegrationEntity out = spied.verifyIntegration("i1");
         assertTrue(out.isActive());
         verify(integrationRepo, atLeastOnce()).save(any(IntegrationEntity.class));
     }
@@ -769,7 +782,16 @@ class FinalSweep3Test {
         when(integrationRepo.findRetryable()).thenReturn(List.of(integration));
         when(integrationRepo.findById("i1")).thenReturn(Optional.of(integration));
         when(integrationRepo.save(any(IntegrationEntity.class))).thenAnswer(inv -> inv.getArgument(0));
-        assertDoesNotThrow(() -> integrationService.retryFailedIntegrations());
+        // 真化后 executeHealthCheck 落库探测日志——不 stub 则 save 返回 null → isSuccess NPE → 误判 FAILED
+        when(integrationLogRepo.save(any(IntegrationLogEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+        // 探测 stub 的 anyString() 不匹配 null——实体必须带 endpointUrl
+        integration.endpointUrl = "http://example/hook";
+        RestTemplate probe = mock(RestTemplate.class);
+        when(probe.exchange(anyString(), eq(HttpMethod.GET), any(HttpEntity.class), eq(String.class)))
+            .thenReturn(new ResponseEntity<>("ok", HttpStatus.OK));
+        IntegrationService spied = spy(integrationService);
+        doReturn(probe).when(spied).restTemplateFor(any(IntegrationEntity.class));
+        assertDoesNotThrow(() -> spied.retryFailedIntegrations());
         assertTrue(integration.isActive());
     }
 

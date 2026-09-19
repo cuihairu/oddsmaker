@@ -94,6 +94,7 @@ public class IntegrationEntity {
     public String bearerToken;
 
     @Column(name = "username", length = 100)
+    @JsonIgnore
     public String username;
 
     @Column(name = "password", length = 255)

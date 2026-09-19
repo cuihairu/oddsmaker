@@ -6,11 +6,15 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.*;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.client.HttpStatusCodeException;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestTemplate;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -37,7 +41,15 @@ public class IntegrationService {
     @Autowired
     private ObjectMapper objectMapper;
 
-    private final RestTemplate restTemplate = new RestTemplate();
+    /** 通用调用模板（默认 30s 超时——裸 new RestTemplate() 是无限等待，慢 endpoint 会挂死调用方）。 */
+    private final RestTemplate restTemplate = defaultRestTemplate();
+
+    private static RestTemplate defaultRestTemplate() {
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(Duration.ofSeconds(30));
+        factory.setReadTimeout(Duration.ofSeconds(30));
+        return new RestTemplate(factory);
+    }
 
     /**
      * 创建集成
@@ -49,6 +61,8 @@ public class IntegrationService {
                                                Map<String, Object> config, Integer timeoutSeconds,
                                                String createdBy) {
 
+        validateBasics(endpointUrl, authType, timeoutSeconds);
+
         IntegrationEntity integration = new IntegrationEntity();
         integration.id = "int_" + UUID.randomUUID().toString().replace("-", "").substring(0, 24);
         integration.gameId = gameId;
@@ -56,7 +70,7 @@ public class IntegrationService {
         integration.description = description;
         integration.integrationType = type;
         integration.authType = authType != null ? authType : IntegrationEntity.AuthType.NONE;
-        integration.endpointUrl = endpointUrl;
+        integration.endpointUrl = endpointUrl.trim();
         integration.apiKey = apiKey;
         integration.apiSecret = apiSecret;
         integration.timeoutSeconds = timeoutSeconds != null ? timeoutSeconds : 30;
@@ -87,6 +101,10 @@ public class IntegrationService {
         IntegrationEntity integration = integrationRepo.findById(integrationId)
             .orElseThrow(() -> new IllegalArgumentException("Integration not found: " + integrationId));
 
+        if (integration.deletedAt != null) {
+            throw new IllegalArgumentException("Integration is deleted: " + integrationId);
+        }
+
         integration.markAsVerifying();
         integrationRepo.save(integration);
 
@@ -111,7 +129,9 @@ public class IntegrationService {
     }
 
     /**
-     * 执行健康检查
+     * 真可达性探测：GET endpointUrl，收到任何 HTTP 响应（含 4xx/5xx）= 可达 = SUCCESS——
+     * webhook 类 endpoint 多为 POST-only，405/404 同样证明 URL 可达，不判死；
+     * 连接层异常（UnknownHost/连接拒绝/超时/IO）= FAILED。不校验业务语义/凭证有效性。
      */
     private IntegrationLogEntity executeHealthCheck(IntegrationEntity integration) {
         IntegrationLogEntity log = new IntegrationLogEntity();
@@ -122,11 +142,57 @@ public class IntegrationService {
         log.eventType = "health_check";
         log.httpMethod = "GET";
         log.requestUrl = integration.endpointUrl;
-        log.callStatus = IntegrationLogEntity.CallStatus.SUCCESS;
         log.createdAt = LocalDateTime.now();
 
-        // 模拟健康检查成功
-        return log;
+        long startTime = System.currentTimeMillis();
+        try {
+            ResponseEntity<String> response = restTemplateFor(integration).exchange(
+                integration.endpointUrl, HttpMethod.GET, new HttpEntity<>(null, null), String.class);
+            log.responseStatus = response.getStatusCode().value();
+            log.markAsSuccess();
+        } catch (HttpStatusCodeException e) {
+            // 4xx/5xx 说明对端有 HTTP 服务响应——可达性成立，仍判成功但留痕
+            log.responseStatus = e.getStatusCode().value();
+            log.markAsSuccess();
+            log.errorMessage = "reachable, HTTP " + e.getStatusCode().value();
+        } catch (ResourceAccessException e) {
+            log.markAsFailed(e.getMessage());
+        } catch (Exception e) {
+            log.markAsFailed(e.getMessage());
+        }
+        log.durationMs = System.currentTimeMillis() - startTime;
+        return integrationLogRepo.save(log);
+    }
+
+    /** 按集成超时配置现建模板（工厂级超时，Boot 3.3.3 是 setConnectTimeout/setReadTimeout(Duration) 形态）。包级可见供测试 stub。 */
+    RestTemplate restTemplateFor(IntegrationEntity integration) {
+        int timeout = (integration.timeoutSeconds != null ? integration.timeoutSeconds : 30) * 1000;
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(Duration.ofMillis(timeout));
+        factory.setReadTimeout(Duration.ofMillis(timeout));
+        return new RestTemplate(factory);
+    }
+
+    /**
+     * 创建校验：authType 限 {NONE, API_KEY}——BEARER_TOKEN/BASIC_AUTH/OAUTH2/HMAC/MUTUAL_TLS
+     * 在 API 层无凭证写入通道（IntegrationRequest/UpdateRequest 不接收 bearer_token/username/password），
+     * 配置成功但鉴权头静默不发，故拒绝（DB 直写凭证仍可工作，buildHeaders 分支保留）；
+     * endpointUrl 限 http(s)；timeoutSeconds 钳制 1-300（WebhookService 同款）。
+     */
+    private void validateBasics(String endpointUrl, IntegrationEntity.AuthType authType, Integer timeoutSeconds) {
+        if (authType != null && authType != IntegrationEntity.AuthType.NONE
+                && authType != IntegrationEntity.AuthType.API_KEY) {
+            throw new IllegalArgumentException("authType " + authType
+                + " is not supported: the API has no credential channel for it (request would silently go out unauthenticated). Use NONE or API_KEY");
+        }
+        String url = endpointUrl == null ? null : endpointUrl.trim();
+        if (url == null || url.isEmpty()
+                || !(url.startsWith("http://") || url.startsWith("https://"))) {
+            throw new IllegalArgumentException("endpointUrl must be a non-blank http(s) URL");
+        }
+        if (timeoutSeconds != null && (timeoutSeconds < 1 || timeoutSeconds > 300)) {
+            throw new IllegalArgumentException("timeoutSeconds must be between 1 and 300");
+        }
     }
 
     /**
