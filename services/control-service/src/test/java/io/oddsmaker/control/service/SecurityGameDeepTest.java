@@ -11,6 +11,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
@@ -134,8 +135,9 @@ class SecurityGameDeepTest {
         assertEquals(MFAConfigEntity.MFAStatus.PENDING, config.mfaStatus);
         assertEquals("u1@x.io", config.emailAddress);
         assertNotNull(config.secretKey);
-        assertEquals(16, config.secretKey.length());
+        assertTrue(config.secretKey.matches("[A-Z2-7]{32}"), "应为 RFC 4648 Base32 密钥: " + config.secretKey);
         assertTrue(config.qrCodeUrl.startsWith("otpauth://totp/Oddsmaker:u1?"));
+        assertTrue(config.qrCodeUrl.contains("secret=" + config.secretKey));
     }
 
     @Test
@@ -153,23 +155,26 @@ class SecurityGameDeepTest {
     }
 
     @Test
-    @DisplayName("enableMFA：已禁用的历史配置允许重新开通，SMS 不生成密钥")
-    void enableMfaReEnrollsAfterDisableWithoutSecret() {
+    @DisplayName("enableMFA：已禁用的历史配置允许重新开通；SMS 无投递通道拒绝开通（收窄）")
+    void enableMfaRejectsMethodsWithoutDeliveryChannel() {
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+            () -> securityService.enableMFA(
+                "u1", MFAConfigEntity.MFAMethod.SMS, "13800000000", null));
+        assertTrue(ex.getMessage().contains("SMS"), "消息应含被拒方法: " + ex.getMessage());
+        verify(mfaConfigRepo, never()).save(any());
+
+        // TOTP 已禁用的历史配置允许重新开通（复核 existing 分支在收窄后仍生效）
         MFAConfigEntity disabled = new MFAConfigEntity();
-        disabled.mfaMethod = MFAConfigEntity.MFAMethod.SMS;
+        disabled.mfaMethod = MFAConfigEntity.MFAMethod.TOTP;
         disabled.mfaStatus = MFAConfigEntity.MFAStatus.DISABLED;
-        lenient().when(mfaConfigRepo.findByUserIdAndMethod("u1", MFAConfigEntity.MFAMethod.SMS))
+        lenient().when(mfaConfigRepo.findByUserIdAndMethod("u1", MFAConfigEntity.MFAMethod.TOTP))
             .thenReturn(Optional.of(disabled));
         lenient().when(mfaConfigRepo.save(any(MFAConfigEntity.class)))
             .thenAnswer(inv -> inv.getArgument(0));
 
-        MFAConfigEntity config = securityService.enableMFA(
-            "u1", MFAConfigEntity.MFAMethod.SMS, "13800000000", null);
-
-        assertEquals(MFAConfigEntity.MFAStatus.PENDING, config.mfaStatus);
-        assertEquals("13800000000", config.phoneNumber);
-        assertNull(config.secretKey);
-        assertNull(config.qrCodeUrl);
+        MFAConfigEntity reEnrolled = securityService.enableMFA("u1", MFAConfigEntity.MFAMethod.TOTP, null, null);
+        assertEquals(MFAConfigEntity.MFAStatus.PENDING, reEnrolled.mfaStatus);
+        assertNotNull(reEnrolled.secretKey);
     }
 
     @Test
@@ -196,19 +201,21 @@ class SecurityGameDeepTest {
     }
 
     @Test
-    @DisplayName("verifyAndActivateMFA：验证通过后启用并标记为主要方法")
+    @DisplayName("verifyAndActivateMFA：真 TOTP 当前码验证通过后启用并标记为主要方法")
     void verifyAndActivateMfaSuccessMarksPrimary() {
         MFAConfigEntity config = new MFAConfigEntity();
         config.id = "mfa_1";
         config.userId = "u1";
         config.mfaMethod = MFAConfigEntity.MFAMethod.TOTP;
         config.mfaStatus = MFAConfigEntity.MFAStatus.PENDING;
+        config.secretKey = TotpUtil.generateSecret();
         lenient().when(mfaConfigRepo.findById("mfa_1")).thenReturn(Optional.of(config));
         lenient().when(mfaConfigRepo.findByUserId("u1")).thenReturn(List.of(config));
         lenient().when(mfaConfigRepo.save(any(MFAConfigEntity.class)))
             .thenAnswer(inv -> inv.getArgument(0));
 
-        MFAConfigEntity activated = securityService.verifyAndActivateMFA("mfa_1", "123456");
+        String currentCode = TotpUtil.currentCode(config.secretKey, Instant.now());
+        MFAConfigEntity activated = securityService.verifyAndActivateMFA("mfa_1", currentCode);
 
         assertEquals(MFAConfigEntity.MFAStatus.ENABLED, activated.mfaStatus);
         assertTrue(activated.isPrimary());
@@ -239,16 +246,24 @@ class SecurityGameDeepTest {
     }
 
     @Test
-    @DisplayName("verifyMFA：有效六位数字码验证通过并记录使用时间")
-    void verifyMfaSucceedsWithSixDigitCode() {
+    @DisplayName("verifyMFA：真 TOTP 当前码验证通过并记录使用时间；过期窗的码拒绝")
+    void verifyMfaSucceedsWithRealTotpCode() {
         MFAConfigEntity enabled = new MFAConfigEntity();
         enabled.mfaMethod = MFAConfigEntity.MFAMethod.TOTP;
         enabled.mfaStatus = MFAConfigEntity.MFAStatus.ENABLED;
+        enabled.secretKey = TotpUtil.generateSecret();
         lenient().when(mfaConfigRepo.findEnabledByUserId("u1")).thenReturn(List.of(enabled));
         lenient().when(mfaConfigRepo.save(any(MFAConfigEntity.class)))
             .thenAnswer(inv -> inv.getArgument(0));
 
-        assertTrue(securityService.verifyMFA("u1", "654321"));
+        // 任意 6 位数字不再通过（旧实现假成功的复现输入）
+        assertFalse(securityService.verifyMFA("u1", "654321"));
+        // ±2 窗口外的历史码拒绝
+        String stale = TotpUtil.currentCode(enabled.secretKey, Instant.now().minusSeconds(120));
+        assertFalse(securityService.verifyMFA("u1", stale));
+
+        String currentCode = TotpUtil.currentCode(enabled.secretKey, Instant.now());
+        assertTrue(securityService.verifyMFA("u1", currentCode));
         assertNotNull(enabled.lastUsedAt);
         assertNotNull(enabled.lastVerifiedAt);
         verify(mfaConfigRepo).save(enabled);
@@ -377,10 +392,26 @@ class SecurityGameDeepTest {
         assertEquals(64, session.sessionToken.length());
         assertEquals(SecuritySessionEntity.SessionStatus.ACTIVE, session.sessionStatus);
         assertEquals(SecuritySessionEntity.AuthMethod.SSO, session.authMethod);
-        assertNotNull(session.deviceFingerprint);
+        // SHA-256 十六进制：64 位小写 hex 且确定性（替代旧 hashCode 指纹）
+        String fingerprint = session.deviceFingerprint;
+        assertTrue(fingerprint.matches("[0-9a-f]{64}"), "应为 SHA-256 hex: " + fingerprint);
+        assertEquals(fingerprint, org.springframework.test.util.ReflectionTestUtils.invokeMethod(
+            securityService, "generateDeviceFingerprint", "Mozilla/5.0", "10.0.0.1"));
         assertNotNull(session.expiresAt);
         assertTrue(session.expiresAt.isAfter(session.loginAt));
         assertTrue(session.isActive());
+    }
+
+    @Test
+    @DisplayName("generateDeviceFingerprint：SHA-256 异常防御兜底转 IllegalStateException")
+    void deviceFingerprintWrapsDigestFailure() {
+        try (var mockedDigest = org.mockito.Mockito.mockStatic(java.security.MessageDigest.class)) {
+            mockedDigest.when(() -> java.security.MessageDigest.getInstance("SHA-256"))
+                .thenThrow(new java.security.NoSuchAlgorithmException("boom"));
+            assertThrows(IllegalStateException.class,
+                () -> org.springframework.test.util.ReflectionTestUtils.invokeMethod(
+                    securityService, "generateDeviceFingerprint", "ua", "1.2.3.4"));
+        }
     }
 
     @Test

@@ -156,7 +156,8 @@ class PlatformControllersTest {
         assertEquals(200, securityController.createSSOConfig(new SecurityController.SSOConfigRequest()).getStatusCode().value());
         assertEquals(200, securityController.getActiveSSOConfigs().getStatusCode().value());
         assertEquals(200, securityController.activateSSO("c1").getStatusCode().value());
-        assertEquals(200, securityController.ssoCallback(new SecurityController.SSOCallbackRequest()).getStatusCode().value());
+        // 诚实失败：无 IdP 集成，回调 501（不再假成功返回假 userId）
+        assertEquals(501, securityController.ssoCallback(new SecurityController.SSOCallbackRequest()).getStatusCode().value());
         SecurityController.SessionCreateRequest sessionReq = new SecurityController.SessionCreateRequest();
         sessionReq.timeoutMinutes = 30;
         assertEquals(200, securityController.createSession(sessionReq).getStatusCode().value());

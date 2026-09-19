@@ -4,6 +4,7 @@ import io.oddsmaker.control.jpa.*;
 import io.oddsmaker.control.security.AccessGuard;
 import io.oddsmaker.control.service.SecurityService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -128,12 +129,13 @@ public class SecurityController {
     }
 
     /**
-     * SSO登录回调（端点，实际处理在SSO集成中）
+     * SSO登录回调——诚实失败：无 IdP（SAML/OIDC）集成，回调没有可执行的处理逻辑，
+     * 不再返回硬编码假成功+假 userId（全仓无调用方，行为变更无消费方影响）。
      */
     @PostMapping("/sso/callback")
     public ResponseEntity<Map<String, String>> ssoCallback(@RequestBody SSOCallbackRequest request) {
-        // 模拟SSO回调处理
-        return ResponseEntity.ok(Map.of("status", "success", "userId", "user_sso_123"));
+        return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED)
+            .body(Map.of("error", "SSO callback processing is not implemented: no IdP integration (SAML/OIDC) exists"));
     }
 
     // ============== Session Endpoints ==============

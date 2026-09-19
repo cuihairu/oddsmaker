@@ -1412,20 +1412,30 @@ class FinalSweep3Test {
     }
 
     @Test
-    @DisplayName("SecurityService.verifyMFACode TOTP/SMS/EMAIL/HARDWARE 分支")
+    @DisplayName("SecurityService.verifyMFACode TOTP 真验证 + 无投递通道方法一律拒绝")
     void testVerifyMfaCodeBranches() {
-        when(mfaConfigRepo.findEnabledByUserId("u1")).thenReturn(List.of(mfa(MFAConfigEntity.MFAMethod.TOTP)));
-        assertTrue(securityService.verifyMFA("u1", "123456"));
+        // TOTP：当前真码通过（真化后任意 6 位数字不再通过）
+        MFAConfigEntity totp = mfa(MFAConfigEntity.MFAMethod.TOTP);
+        totp.secretKey = TotpUtil.generateSecret();
+        when(mfaConfigRepo.findEnabledByUserId("u1")).thenReturn(List.of(totp));
+        assertTrue(securityService.verifyMFA("u1", TotpUtil.currentCode(totp.secretKey, java.time.Instant.now())));
         verify(mfaConfigRepo).save(any(MFAConfigEntity.class));
 
-        when(mfaConfigRepo.findEnabledByUserId("u1")).thenReturn(List.of(mfa(MFAConfigEntity.MFAMethod.TOTP)));
+        // TOTP：格式错拒绝
+        MFAConfigEntity totp2 = mfa(MFAConfigEntity.MFAMethod.TOTP);
+        totp2.secretKey = TotpUtil.generateSecret();
+        when(mfaConfigRepo.findEnabledByUserId("u1")).thenReturn(List.of(totp2));
         assertFalse(securityService.verifyMFA("u1", "12a456"));
 
+        // TOTP：真码但错位（另一密钥的码）拒绝
+        assertFalse(securityService.verifyMFA("u1", TotpUtil.currentCode(TotpUtil.generateSecret(), java.time.Instant.now())));
+
+        // 无投递通道方法（enableMFA 已收窄，DB 直插的异常配置）一律 false
         when(mfaConfigRepo.findEnabledByUserId("u1")).thenReturn(List.of(mfa(MFAConfigEntity.MFAMethod.SMS)));
-        assertFalse(securityService.verifyMFA("u1", "abc12d"));
+        assertFalse(securityService.verifyMFA("u1", "123456"));
 
         when(mfaConfigRepo.findEnabledByUserId("u1")).thenReturn(List.of(mfa(MFAConfigEntity.MFAMethod.EMAIL)));
-        assertFalse(securityService.verifyMFA("u1", "12345"));
+        assertFalse(securityService.verifyMFA("u1", "123456"));
 
         when(mfaConfigRepo.findEnabledByUserId("u1")).thenReturn(List.of(mfa(MFAConfigEntity.MFAMethod.HARDWARE_TOKEN)));
         assertFalse(securityService.verifyMFA("u1", "123456"));

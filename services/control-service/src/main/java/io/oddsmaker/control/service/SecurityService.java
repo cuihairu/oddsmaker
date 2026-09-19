@@ -8,6 +8,11 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -44,6 +49,14 @@ public class SecurityService {
      */
     public MFAConfigEntity enableMFA(String userId, MFAConfigEntity.MFAMethod method,
                                      String phoneNumber, String emailAddress) {
+        // 收窄：仅 TOTP 可开通——SMS/EMAIL/PUSH 等无投递通道（无短信网关/SMTP/推送服务），
+        // 配置成功也永远收不到验证码；HARDWARE_TOKEN/BIOMETRIC 无登记通道。与 IntegrationService authType 收窄同款逻辑。
+        if (method != MFAConfigEntity.MFAMethod.TOTP) {
+            throw new IllegalArgumentException("MFA method " + method
+                + " is not supported: no delivery/enrollment channel is integrated for it"
+                + " (a code would silently never arrive). Use TOTP");
+        }
+
         // 检查是否已存在相同方法
         Optional<MFAConfigEntity> existing = mfaConfigRepo.findByUserIdAndMethod(userId, method);
         if (existing.isPresent() && existing.get().isEnabled()) {
@@ -58,11 +71,9 @@ public class SecurityService {
         config.emailAddress = emailAddress;
         config.mfaStatus = MFAConfigEntity.MFAStatus.PENDING;
 
-        if (method == MFAConfigEntity.MFAMethod.TOTP) {
-            // 生成TOTP密钥
-            config.secretKey = generateTOTPSecret();
-            config.qrCodeUrl = generateQRCodeUrl(config.secretKey, userId);
-        }
+        // 生成 RFC 6238 TOTP 密钥（Base32，authenticator app 可直接配对）
+        config.secretKey = TotpUtil.generateSecret();
+        config.qrCodeUrl = generateQRCodeUrl(config.secretKey, userId);
 
         config = mfaConfigRepo.save(config);
 
@@ -391,24 +402,17 @@ public class SecurityService {
 
     // 私有辅助方法
 
-    private String generateTOTPSecret() {
-        // 模拟生成TOTP密钥（实际应使用加密库）
-        return UUID.randomUUID().toString().replace("-", "").substring(0, 16).toUpperCase();
-    }
-
     private String generateQRCodeUrl(String secret, String userId) {
-        // 模拟生成二维码URL
         return String.format("otpauth://totp/Oddsmaker:%s?secret=%s&issuer=Oddsmaker", userId, secret);
     }
 
+    /**
+     * TOTP 走 RFC 6238 真验证（±1 窗口、常数时间比较）；
+     * 其他方法无投递通道（enableMFA 已收窄拒绝开通），DB 直插的异常配置一律不通过。
+     */
     private boolean verifyMFACode(MFAConfigEntity config, String code) {
-        // 模拟验证MFA代码（实际应根据方法类型实现）
         if (config.mfaMethod == MFAConfigEntity.MFAMethod.TOTP) {
-            // TOTP验证（模拟）
-            return code != null && code.length() == 6 && code.matches("\\d{6}");
-        } else if (config.mfaMethod == MFAConfigEntity.MFAMethod.SMS || config.mfaMethod == MFAConfigEntity.MFAMethod.EMAIL) {
-            // 验证码验证（模拟）
-            return code != null && code.length() == 6 && code.matches("\\d{6}");
+            return TotpUtil.verify(config.secretKey, code, Instant.now());
         }
         return false;
     }
@@ -418,8 +422,19 @@ public class SecurityService {
     }
 
     private String generateDeviceFingerprint(String userAgent, String ipAddress) {
-        // 模拟生成设备指纹
         String normalizedUA = userAgent != null ? userAgent.replaceAll("\\s+", "") : "";
-        return Integer.toHexString((normalizedUA + ipAddress).hashCode());
+        // SHA-256 + 分隔符（裸拼接有 u1a|b2 与 u1|ab2 歧义碰撞）；hashCode 碰撞面大且跨 JVM 不稳定
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest((normalizedUA + "|" + ipAddress).getBytes(StandardCharsets.UTF_8));
+            StringBuilder hex = new StringBuilder(hash.length * 2);
+            for (byte b : hash) {
+                hex.append(String.format("%02x", b));
+            }
+            return hex.toString();
+        } catch (NoSuchAlgorithmException e) {
+            // SHA-256 每个 JDK 必有——防御兜底，可达性仅存于异常 JVM
+            throw new IllegalStateException("SHA-256 unavailable", e);
+        }
     }
 }
