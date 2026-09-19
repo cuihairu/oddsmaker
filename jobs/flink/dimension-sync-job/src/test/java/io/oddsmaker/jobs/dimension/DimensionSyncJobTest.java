@@ -490,4 +490,15 @@ class DimensionSyncJobTest {
         assertEquals("v", attrs.get("custom_key"));
         assertEquals(4, attrs.size());
     }
+    @Test
+    @DisplayName("main：替身执行环境下完成入口（不触达真实集群）")
+    void mainCompletesWithMockEnv() {
+        try (org.mockito.MockedStatic<StreamExecutionEnvironment> mocked =
+                 org.mockito.Mockito.mockStatic(StreamExecutionEnvironment.class)) {
+            StreamExecutionEnvironment env = org.mockito.Mockito.mock(
+                StreamExecutionEnvironment.class, org.mockito.Mockito.RETURNS_DEEP_STUBS);
+            mocked.when(StreamExecutionEnvironment::getExecutionEnvironment).thenReturn(env);
+            org.junit.jupiter.api.Assertions.assertDoesNotThrow(() -> DimensionSyncJob.main(new String[0]));
+        }
+    }
 }

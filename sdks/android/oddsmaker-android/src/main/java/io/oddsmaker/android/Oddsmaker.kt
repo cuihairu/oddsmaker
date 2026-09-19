@@ -217,7 +217,7 @@ class Oddsmaker(private val ctx: Context, private val opts: Options) {
 
   private fun queueEvent(
     eventName: String,
-    props: Map<String, Any?>? = null,
+    props: Map<String, Any?>?,
     levelId: String? = null,
     gameMode: String? = null,
     orderId: String? = null,

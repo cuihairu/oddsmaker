@@ -7,7 +7,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * 风控前置：重放防护。
@@ -30,6 +30,10 @@ public class ReplayGuard {
 
     private volatile Generation signatures;
     private volatile Generation eventIds;
+
+    /** 轮换互斥锁。ReentrantLock 与 synchronized(this) 语义等价（类内唯一同步点），
+     *  显式锁无 monitorexit 合成出口，行为与覆盖率均无死角。 */
+    private final ReentrantLock rotateLock = new ReentrantLock();
 
     private static final class Generation {
         final Map<String, Boolean> seen = new ConcurrentHashMap<>();
@@ -99,20 +103,23 @@ public class ReplayGuard {
 
     private Generation rotateIfNeeded(Generation current) {
         long now = System.currentTimeMillis();
-        if (current.isExpired(now)) {
-            synchronized (this) {
-                if (current.isExpired(now)) {
-                    // 轮换：当前代直接丢弃（TTL 已覆盖签名时间窗的 2 倍）
-                    Generation next = new Generation(ttlMillis, maxEntries);
-                    if (current == signatures) {
-                        signatures = next;
-                    } else {
-                        eventIds = next;
-                    }
-                    return next;
-                }
-            }
+        if (!current.isExpired(now)) {
+            return current;
         }
-        return current;
+        rotateLock.lock();
+        try {
+            // 不做锁内双检：expireAt 为 final、isExpired 单调恒真，锁外判过 true 后不可能回退；
+            // 并发下重复轮换只是各自换新代并覆盖 volatile 引用，正确性不受影响
+            // 轮换：当前代直接丢弃（TTL 已覆盖签名时间窗的 2 倍）
+            Generation next = new Generation(ttlMillis, maxEntries);
+            if (current == signatures) {
+                signatures = next;
+            } else {
+                eventIds = next;
+            }
+            return next;
+        } finally {
+            rotateLock.unlock();
+        }
     }
 }

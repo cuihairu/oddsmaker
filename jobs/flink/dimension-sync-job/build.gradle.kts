@@ -1,6 +1,7 @@
 plugins { id("java") }
 
 dependencies {
+  testImplementation("org.mockito:mockito-core:5.15.2")
   implementation(project(":jobs:flink:events-enrich-job"))
   implementation("org.apache.flink:flink-streaming-java:1.19.0")
   implementation("org.apache.flink:flink-clients:1.19.0")

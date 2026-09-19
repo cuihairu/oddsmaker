@@ -741,6 +741,38 @@ class OddsmakerJvmTests {
   }
 
   @Test
+  fun convenienceHelpersWorkWithoutProps() {
+    // 不带 props 调用：走 Kotlin 默认参数 $default 桥，同时验证核心字段仍完整
+    val server = ScriptedServer().also { srv ->
+      repeat(3) { srv.enqueue() }
+      servers.add(srv.start())
+    }
+    val sdk = newSdk(endpoint = server.url())
+
+    sdk.levelFail("L3", "timeout")
+    sdk.levelComplete("L4")
+    sdk.adImpression(0.01, "jpy")
+    sdk.flush()
+
+    fun ev(i: Int): JSONObject =
+      server.requests.flatMap { String(gunzip(it.body)).trim().split('\n') }
+        .filter { it.isNotBlank() }
+        .let { lines -> JSONObject(lines[i]) }
+    val fail = ev(0)
+    assertEquals("level_fail", fail.getString("event_name"))
+    assertEquals("L3", fail.getString("level_id"))
+    // Event 契约无 fail_reason 顶层字段，reason 只随 props 透传
+    assertEquals("timeout", fail.getJSONObject("props").getString("fail_reason"))
+    val complete = ev(1)
+    assertEquals("level_complete", complete.getString("event_name"))
+    assertEquals("L4", complete.getString("level_id"))
+    val ad = ev(2)
+    assertEquals("ad_impression", ad.getString("event_name"))
+    assertEquals("JPY", ad.getString("revenue_currency"))
+    assertEquals(0.01, ad.getDouble("revenue_amount"))
+  }
+
+  @Test
   fun typedHelpersFillContractTopLevelFields() {
     val server = ScriptedServer().also { srv ->
       repeat(10) { srv.enqueue() }
