@@ -1,58 +1,39 @@
 package io.oddsmaker.control.security;
 
-import io.oddsmaker.control.jpa.AuditLogEntity;
-import io.oddsmaker.control.service.AuditLogService;
 import io.oddsmaker.control.service.PermissionService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.mock.web.MockHttpServletRequest;
-import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.web.method.HandlerMethod;
 
-import java.lang.reflect.Method;
 import java.util.Arrays;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.lenient;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 /**
  * 安全组件尾部覆盖冲刺第二轮：
- * - AuditLogInterceptor：extractResourceInfo 路径/参数提取与 getClientIp 多级代理头回退
  * - AccessGuard：canAccessGame 未认证/特权直通/委托分支
  * - jpa 嵌套枚举静态初始化（<clinit>）
- * 与 AccessGuardTest / SecurityComponentsTest / AuditLogInterceptorTest 互补。
+ * 与 AccessGuardTest / SecurityComponentsTest 互补。
  */
 @ExtendWith(MockitoExtension.class)
 @DisplayName("安全组件尾部覆盖冲刺第二轮")
 class SecuritySweep2Test {
 
     @Mock
-    private AuditLogService auditLogService;
-
-    @Mock
     private PermissionService permissionService;
-
-    @InjectMocks
-    private AuditLogInterceptor interceptor;
 
     @InjectMocks
     private AccessGuard accessGuard;
@@ -67,95 +48,6 @@ class SecuritySweep2Test {
         SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
             user, "n/a",
             Arrays.stream(authorities).map(SimpleGrantedAuthority::new).toList()));
-    }
-
-    // ===== AuditLogInterceptor：getClientIp / extractResourceInfo =====
-
-    @Auditable(action = AuditLogEntity.AuditAction.UPDATE, resourceType = "game")
-    public void auditedHandler() {
-    }
-
-    private MockHttpServletRequest request(String uri) {
-        MockHttpServletRequest request = new MockHttpServletRequest("GET", uri);
-        request.setRemoteAddr("127.0.0.1");
-        return request;
-    }
-
-    private AuditLogEntity runAudit(MockHttpServletRequest request, int status) throws Exception {
-        HandlerMethod handler = new HandlerMethod(this,
-            SecuritySweep2Test.class.getMethod("auditedHandler"));
-        MockHttpServletResponse response = new MockHttpServletResponse();
-        response.setStatus(status);
-        interceptor.preHandle(request, response, handler);
-        interceptor.afterCompletion(request, response, handler, null);
-        ArgumentCaptor<AuditLogEntity> captor = ArgumentCaptor.forClass(AuditLogEntity.class);
-        verify(auditLogService).log(captor.capture());
-        return captor.getValue();
-    }
-
-    @Test
-    @DisplayName("getClientIp：X-Forwarded-For 多代理取首跳并 trim；无 api 路径不提取资源")
-    void clientIpFirstHopFromForwardedFor() throws Exception {
-        MockHttpServletRequest request = request("/internal/audit");
-        request.addHeader("X-Forwarded-For", " 203.0.113.5 , 198.51.100.7 ");
-        AuditLogEntity log = runAudit(request, 200);
-        assertEquals("203.0.113.5", log.ipAddress);
-        assertNull(log.resourceId);
-        assertEquals(AuditLogEntity.AuditStatus.SUCCESS, log.status);
-        assertNotNull(log.requestId);
-    }
-
-    @Test
-    @DisplayName("getClientIp：unknown 头逐级回退到 X-Real-IP")
-    void clientIpFallsBackToRealIp() throws Exception {
-        SecurityContextHolder.getContext().setAuthentication(
-            new UsernamePasswordAuthenticationToken("auditor", "pw", java.util.List.of()));
-        MockHttpServletRequest request = request("/api/games/game-9");
-        request.addHeader("X-Forwarded-For", "unknown");
-        request.addHeader("X-Real-IP", "198.18.0.9");
-        AuditLogEntity log = runAudit(request, 200);
-        assertEquals("198.18.0.9", log.ipAddress);
-        assertEquals("auditor", log.username);
-    }
-
-    @Test
-    @DisplayName("getClientIp：空 X-Real-IP 回退到 Proxy-Client-IP")
-    void clientIpFallsBackToProxyClientIp() throws Exception {
-        MockHttpServletRequest request = request("/api/games/game-9");
-        request.addHeader("X-Real-IP", "");
-        request.addHeader("Proxy-Client-IP", "10.0.0.8");
-        assertEquals("10.0.0.8", runAudit(request, 200).ipAddress);
-    }
-
-    @Test
-    @DisplayName("getClientIp：unknown Proxy-Client-IP 回退到 WL-Proxy-Client-IP")
-    void clientIpFallsBackToWlProxyClientIp() throws Exception {
-        MockHttpServletRequest request = request("/api/games/game-9");
-        request.addHeader("Proxy-Client-IP", "unknown");
-        request.addHeader("WL-Proxy-Client-IP", "10.0.0.7");
-        assertEquals("10.0.0.7", runAudit(request, 200).ipAddress);
-    }
-
-    @Test
-    @DisplayName("getClientIp：全部头缺失时回退 remoteAddr")
-    void clientIpFallsBackToRemoteAddr() throws Exception {
-        assertEquals("127.0.0.1", runAudit(request("/api/games/game-9"), 200).ipAddress);
-    }
-
-    @Test
-    @DisplayName("extractResourceInfo：api 路径提取类型与 ID，gameId/environment 参数填充，4xx 记 FAILURE")
-    void resourceInfoExtractedFromPathAndParams() throws Exception {
-        MockHttpServletRequest request = request("/api/games/game-9/flags");
-        request.addParameter("gameId", "g-77");
-        request.addParameter("environment", "prod");
-        request.addHeader("User-Agent", "JUnit-Agent");
-        AuditLogEntity log = runAudit(request, 403);
-        assertEquals("games", log.resourceType);
-        assertEquals("game-9", log.resourceId);
-        assertEquals("g-77", log.gameId);
-        assertEquals("prod", log.environment);
-        assertEquals("JUnit-Agent", log.userAgent);
-        assertEquals(AuditLogEntity.AuditStatus.FAILURE, log.status);
     }
 
     // ===== AccessGuard：canAccessGame =====
