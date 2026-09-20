@@ -139,7 +139,7 @@ public class MLModelEntity {
     @Column(name = "serving_endpoint", length = 500)
     public String servingEndpoint;  // 服务端点
 
-    @Column(name = "canaryDeployment", columnDefinition = "BOOLEAN")
+    @Column(name = "canary_deployment", columnDefinition = "BOOLEAN")
     public Boolean canaryDeployment = false;  // 金丝雀部署
 
     @Column(name = "monitoring_config", columnDefinition = "TEXT")
