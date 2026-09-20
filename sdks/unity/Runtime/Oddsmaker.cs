@@ -401,15 +401,18 @@ namespace Oddsmaker
             if (variants == null || variants.Count == 0) return "A";
             int sum = 0;
             foreach (var v in variants) sum += v.Item2 > 0 ? v.Item2 : 1;
-            uint h = Hash32(expId + ":" + (salt ?? "") + ":" + key);
-            int r = (int)(h % (uint)sum);
+            // 与服务端 ExperimentSplitter 同源：无符号哈希对 int32 总权重取模（long 模，sum 符号扩展）。
+            // 原 h % (uint)sum 在 sum 溢出为负时把模数变成 2^32+sum 的无符号值，落位与服务端分裂；
+            // sum 回绕到 0 时 (uint)sum 会除零崩溃。兜底统一为末变体（原 first）
+            if (sum == 0) return variants[variants.Count - 1].Item1;
+            long h = (long)Hash32(expId + ":" + (salt ?? "") + ":" + key) % sum;
             int acc = 0;
             foreach (var v in variants)
             {
                 acc += v.Item2 > 0 ? v.Item2 : 1;
-                if (r < acc) return v.Item1;
+                if (h < acc) return v.Item1;
             }
-            return variants[0].Item1;
+            return variants[variants.Count - 1].Item1;
         }
 
         // 统计信息

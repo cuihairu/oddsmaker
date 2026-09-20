@@ -50,6 +50,10 @@ public final class ExperimentSplitter {
             totalWeight += v.weight;
         }
 
+        if (totalWeight == 0) {
+            // 权重和 int 溢出回绕到 0：取模无定义（ArithmeticException），按溢出兜底语义落在最后一个变体
+            return variants.get(variants.size() - 1).name;
+        }
         long h = Integer.toUnsignedLong(hash32(experimentId + ":" + salt + ":" + subjectId)) % totalWeight;
         int cumulative = 0;
         for (Variant v : variants) {

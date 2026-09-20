@@ -840,12 +840,29 @@ public class OddsmakerSdkTests : IDisposable
     [Fact]
     public void AssignVariantFallsThroughOnOverflow()
     {
-        // 1 + int.MaxValue 溢出为 int.MinValue → (uint) 后取模得 r∈[0,2^31) 非负;
-        // acc2 = 1+MaxValue 再次溢出为负 → r<acc2 恒假 → 循环走空 → 兜底首项
-        var variants = new List<Tuple<string, int>> { Tuple.Create("A", 1), Tuple.Create("B", int.MaxValue) };
+        // 与服务端 ExperimentSplitterTest 同向量（跨端一致锚定）：溢出形态统一为
+        // 无符号取模 + int32 落位 + 兜底末变体
+        // [1, MAX]:sum 溢出为 int.MinValue,h = u mod 2^31 ≥ 1 越过前缀和 → 兜底 last（原实现返回首项）
+        var two = new List<Tuple<string, int>> { Tuple.Create("A", 1), Tuple.Create("B", int.MaxValue) };
         var r = (int)((uint)Invoke("Hash32", null, "e:s:u1") % 2147483648u);
         Assert.True(r >= 1, $"r={r} 意外命中首段");
-        Assert.Equal("A", Oddsmaker.Oddsmaker.AssignVariant("e", "s", variants, "u1"));   // 303 兜底行
+        Assert.Equal("B", Oddsmaker.Oddsmaker.AssignVariant("e", "s", two, "u1"));   // 兜底末变体
+        // [2, MAX]:sum = -2147483647,u1 的 h=507466947 → 兜底 last
+        var twoB = new List<Tuple<string, int>> { Tuple.Create("control", 2), Tuple.Create("treatment", int.MaxValue) };
+        Assert.Equal("treatment", Oddsmaker.Oddsmaker.AssignVariant("exp", "salt", twoB, "u1"));
+        // 3×MAX:sum 回绕 2147483645 > 0（合法可创建形态）,h=507466949 < MAX → control
+        var three = new List<Tuple<string, int>> {
+            Tuple.Create("control", int.MaxValue),
+            Tuple.Create("treat-a", int.MaxValue),
+            Tuple.Create("treat-b", int.MaxValue) };
+        Assert.Equal("control", Oddsmaker.Oddsmaker.AssignVariant("exp", "salt", three, "u1"));
+        Assert.Equal("control", Oddsmaker.Oddsmaker.AssignVariant("exp", "salt", three, "u8"));
+        // [MAX, MAX, 2]:sum 回绕恰为 0,取模无定义 → 兜底 last 不抛 DivideByZeroException（原实现崩溃）
+        var zero = new List<Tuple<string, int>> {
+            Tuple.Create("control", int.MaxValue),
+            Tuple.Create("treat-a", int.MaxValue),
+            Tuple.Create("treat-b", 2) };
+        Assert.Equal("treat-b", Oddsmaker.Oddsmaker.AssignVariant("exp", "salt", zero, "u1"));
     }
 
     [Fact]

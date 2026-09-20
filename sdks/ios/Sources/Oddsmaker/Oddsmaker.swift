@@ -691,9 +691,11 @@ public final class Oddsmaker {
     }
 
     private static func hash32(_ s: String) -> UInt32 {
+        // 遍历 UTF-16 码元（与服务端 charAt/web charCodeAt/unity char 对齐）：
+        // 原 utf8 字节序在非 ASCII 主体（如 emoji）下与其他端哈希分裂
         var h: UInt32 = 0x811c9dc5
-        for b in s.utf8 {
-            h ^= UInt32(b)
+        for u in s.utf16 {
+            h ^= UInt32(u)
             h &+= (h << 1) &+ (h << 4) &+ (h << 7) &+ (h << 8) &+ (h << 24)
         }
         return h
@@ -701,14 +703,18 @@ public final class Oddsmaker {
 
     public static func assignVariant(expId: String, salt: String?, variants: [(name: String, weight: Int)], key: String) -> String {
         if variants.isEmpty { return "A" }
-        let sum = max(1, variants.reduce(0) { $0 + max(1, $1.weight) })
-        let h = Int(hash32("\(expId):\(salt ?? ""):\(key)") % UInt32(sum))
-        var acc = 0
+        // int32 口径（与服务端 ExperimentSplitter 对齐）：Int64 精确求和未折叠，权重和超 2^31 时
+        // 同一主体与服务端落位不同变体；原 UInt32(sum) 截断在 sum≥2^32 时分裂、低 32 位为 0 时除零 trap
+        var sum = Int32(0)
+        for v in variants { sum = sum &+ Int32(clamping: v.weight > 0 ? v.weight : 1) }
+        if sum == 0 { return variants[variants.count - 1].name }  // 权重和回绕到 0：取模无定义，兜底末变体
+        let h = Int64(hash32("\(expId):\(salt ?? ""):\(key)")) % Int64(sum)
+        var acc = Int32(0)
         for v in variants {
-            acc += max(1, v.weight)
-            if h < acc { return v.name }
+            acc = acc &+ Int32(clamping: v.weight > 0 ? v.weight : 1)
+            if h < Int64(acc) { return v.name }
         }
-        return variants[0].name
+        return variants[variants.count - 1].name
     }
 
     public func fetchExperiments(controlURL: URL, gameId: String, environment: String, completion: @escaping (Result<Data, Error>) -> Void) {

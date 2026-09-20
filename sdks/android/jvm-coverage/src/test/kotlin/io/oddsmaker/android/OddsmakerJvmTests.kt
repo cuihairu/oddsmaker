@@ -576,6 +576,29 @@ class OddsmakerJvmTests {
   }
 
   @Test
+  fun assignVariantOverflowMatchesServer() {
+    // 与服务端 ExperimentSplitterTest 同向量（跨端一致锚定）：溢出形态下统一为
+    // 无符号取模 + int32 落位 + 兜底末变体
+    val sdk = newSdk()
+    // [2, MAX]：sum 溢出为负，u1 的 h=507466947 越过前缀和 → 兜底 last（原实现返回 first 漂移）
+    val two = listOf(Variant("control", 2), Variant("treatment", Int.MAX_VALUE))
+    assertEquals("treatment", sdk.assignVariant("exp", "salt", two, "u1"))
+    // 3×MAX：sum 回绕 2147483645 > 0（合法可创建形态），h=507466949 < MAX → control
+    val three = listOf(
+      Variant("control", Int.MAX_VALUE),
+      Variant("treat-a", Int.MAX_VALUE),
+      Variant("treat-b", Int.MAX_VALUE))
+    assertEquals("control", sdk.assignVariant("exp", "salt", three, "u1"))
+    assertEquals("control", sdk.assignVariant("exp", "salt", three, "u8"))
+    // [MAX, MAX, 2]：sum 回绕恰为 0，取模无定义 → 兜底 last 不抛 ArithmeticException（原实现崩溃）
+    val zero = listOf(
+      Variant("control", Int.MAX_VALUE),
+      Variant("treat-a", Int.MAX_VALUE),
+      Variant("treat-b", 2))
+    assertEquals("treat-b", sdk.assignVariant("exp", "salt", zero, "u1"))
+  }
+
+  @Test
   fun uuidv7Layout() {
     val sdk = newSdk()
     val id = call("uuidv7", sdk) as String

@@ -455,6 +455,21 @@ test('2xx 响应逐事件拒绝:kafka_error 回队重发,permanent 丢弃', asyn
   assert.equal(env.queued().length, 0);
 });
 
+test('永久拒绝在 debug 模式输出逐事件丢弃日志', async t => {
+  const env = setup(t, [{ status: 200 }]);
+  const sdk = makeSdk(t, env, { maxBatch: 50, debug: true });
+  const id = sdk.track('permanent_dbg');
+  (env as any).fetchSteps[0].body = JSON.stringify({
+    accepted: [],
+    rejected: [{ event_id: id, reason: 'invalid_schema' }],
+  });
+  await sdk.flush();
+  // debug 分支:永久拒绝(reason 非 kafka_error)输出 event_id 与 reason;kafka_error 不输出
+  assert.ok(env.debugs.some(d => d.includes('event rejected') && d.includes(id) && d.includes('invalid_schema')),
+    `应含丢弃日志,实际 debugs=${JSON.stringify(env.debugs)}`);
+  assert.equal(env.queued().length, 0);   // permanent 不回队
+});
+
 test('2xx 响应体不可解析 → 按全成功(幂等既有行为)', async t => {
   const env = setup(t, [{ status: 200, body: 'not-json' }]);
   const sdk = makeSdk(t, env, { maxBatch: 50 });
@@ -561,13 +576,33 @@ test('hash32:跨端一致性向量', () => {
 
 test('assignVariant:空/权重 0 兜底/确定性', () => {
   assert.equal(assignVariant({ id: 'e', variants: [] }, 'k'), 'A');
-  // weight 全 0:sum=0 → 回落 variants.length;acc 每项按 1 累计
+  // weight 全 0:每项按 1 计入(sum 与 acc 同口径)
   assert.equal(assignVariant({ id: 'e', salt: 's', variants: [{ name: 'B', weight: 0 }] }, 'k'), 'B');
   const exp = { id: 'x', salt: 's', variants: [{ name: 'A', weight: 50 }, { name: 'B', weight: 50 }] };
   const pick = assignVariant(exp, 'u1');
   assert.ok(['A', 'B'].includes(pick));
   assert.equal(assignVariant(exp, 'u1'), pick);   // 确定性
   assert.ok(['A', 'B'].includes(assignVariant({ id: 'x', variants: exp.variants }, 'u2')));   // salt 缺省
+});
+
+test('assignVariant:权重和溢出与服务端 int32 折叠语义一致', () => {
+  // 与服务端 ExperimentSplitterTest 同向量（跨端一致锚定）：JS number 无溢出，
+  // 未折叠 int32 时同一主体与服务端落位不同变体（原实现 3×MAX 下返回 treat-a）
+  const MAX = 2147483647;
+  // [2, MAX]:sum 折叠为负,u1 的 h=507466947 越过前缀和 → 兜底 last（原实现返回 first）
+  assert.equal(assignVariant(
+    { id: 'exp', salt: 'salt', variants: [{ name: 'control', weight: 2 }, { name: 'treatment', weight: MAX }] },
+    'u1'), 'treatment');
+  // 3×MAX:sum 折叠 2147483645 > 0（合法可创建形态）,h=507466949 < MAX → control
+  const three = { id: 'exp', salt: 'salt', variants: [
+    { name: 'control', weight: MAX }, { name: 'treat-a', weight: MAX }, { name: 'treat-b', weight: MAX }] };
+  assert.equal(assignVariant(three, 'u1'), 'control');
+  assert.equal(assignVariant(three, 'u8'), 'control');
+  // [MAX, MAX, 2]:sum 折叠恰为 0,取模无定义 → 兜底 last（原实现返回 treat-a）
+  assert.equal(assignVariant(
+    { id: 'exp', salt: 'salt', variants: [
+      { name: 'control', weight: MAX }, { name: 'treat-a', weight: MAX }, { name: 'treat-b', weight: 2 }] },
+    'u1'), 'treat-b');
 });
 
 test('versionGte/versionLte:数值逐段比较', () => {

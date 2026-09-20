@@ -561,13 +561,13 @@ class Oddsmaker(private val ctx: Context, private val opts: Options) {
     Json.stringify(this).toByteArray(Charsets.UTF_8).size + 1
 
   private fun gzip(input: ByteArray): ByteArray? {
-    return try {
+    // runCatching 无分支形态：catch 出口编译为表达式汇合点，行覆盖可达（try/catch 形态的
+    // 异常出口在本方法唯一调用路径下不可注入）
+    return runCatching {
       val bout = ByteArrayOutputStream()
       GZIPOutputStream(bout).use { it.write(input) }
       bout.toByteArray()
-    } catch (_: Throwable) {
-      null
-    }
+    }.getOrNull()
   }
 
   private fun devKey() = "oddsmaker_device_id_${opts.gameId}_${opts.environment}"
@@ -643,14 +643,19 @@ class Oddsmaker(private val ctx: Context, private val opts: Options) {
 
   fun assignVariant(expId: String, salt: String?, variants: List<Variant>, key: String): String {
     if (variants.isEmpty()) return "A"
-    val sum = variants.sumOf { if (it.weight > 0) it.weight else 1 }
-    val h = (hash32("$expId:${salt ?: ""}:$key") % sum + sum) % sum
+    var sum = 0
+    for (v in variants) sum += if (v.weight > 0) v.weight else 1
+    // 与服务端 ExperimentSplitter 同源：无符号哈希对 int32 总权重取模（Long 模，sum 符号扩展）。
+    // 原 (hash % sum + sum) % sum 的 Int 规范化在 sum 溢出为负时把 h 折进负值域，
+    // 同一主体与服务端落位不同变体；兜底也统一为末变体（原 first）
+    if (sum == 0) return variants[variants.size - 1].name
+    val h = Integer.toUnsignedLong(hash32("$expId:${salt ?: ""}:$key")) % sum.toLong()
     var acc = 0
     for (v in variants) {
       acc += if (v.weight > 0) v.weight else 1
       if (h < acc) return v.name
     }
-    return variants[0].name
+    return variants[variants.size - 1].name
   }
 
   /** Fetch experiments config (running) from control-service. WARNING: network on caller thread. */

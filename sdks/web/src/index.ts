@@ -532,14 +532,19 @@ export function hash32(s: string): number {
 export function assignVariant(exp: { id: string; salt?: string; variants: Variant[] }, key: string): string {
   const vars = exp.variants || [];
   if (!vars.length) return 'A';
-  const sum = vars.reduce((a, v) => a + (v.weight || 0), 0) || vars.length;
-  const h = hash32(exp.id + ':' + (exp.salt || '') + ':' + key) % sum;
+  // int32 口径（与服务端 ExperimentSplitter 对齐）：JS number 无溢出，权重和超 2^31 时
+  // 未折叠会让同一主体与服务端落位不同变体；weight≤0 当 1、超界 clamp 到 MAX（同 Jackson asInt）
+  const w32 = (v: Variant) => (v.weight > 0 ? Math.min(2147483647, Math.trunc(v.weight)) : 1);
+  let sum = 0;
+  for (const v of vars) sum = (sum + w32(v)) | 0;
+  if (sum === 0) return vars[vars.length - 1].name; // 权重和回绕到 0：取模无定义，兜底末变体
+  const h = hash32(exp.id + ':' + (exp.salt || '') + ':' + key) % sum; // hash32 >>>0 非负，负模数下 % 结果仍非负
   let acc = 0;
   for (const v of vars) {
-    acc += (v.weight || 0) || 1;
+    acc = (acc + w32(v)) | 0;
     if (h < acc) return v.name;
   }
-  return vars[0].name;
+  return vars[vars.length - 1].name;
 }
 
 export async function fetchExperiments(controlEndpoint: string, gameId: string, environment: string): Promise<ExperimentCfg[]> {

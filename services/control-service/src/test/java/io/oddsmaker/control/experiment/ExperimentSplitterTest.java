@@ -128,6 +128,34 @@ class ExperimentSplitterTest {
     }
 
     @Test
+    @DisplayName("权重和溢出回绕到 0：取模无定义时兜底返回最后一个变体（不抛 ArithmeticException）")
+    void weightOverflowToZeroFallsBackToLastVariant() {
+        // totalWeight = MAX + MAX + 2 = 2^32 → int 累加回绕恰为 0，取模除零；
+        // 按与溢出负总数一致的兜底语义返回最后一个变体（该形态被 validateConfig 拒绝，
+        // 仅 DB 直写/历史数据可达，纯函数层保持确定性防御）
+        List<ExperimentSplitter.Variant> variants = List.of(
+            new ExperimentSplitter.Variant("control", Integer.MAX_VALUE),
+            new ExperimentSplitter.Variant("treat-a", Integer.MAX_VALUE),
+            new ExperimentSplitter.Variant("treat-b", 2));
+        assertEquals("treat-b", ExperimentSplitter.assign("exp", "salt", "u1", variants));
+    }
+
+    @Test
+    @DisplayName("权重和溢出但回绕后为正：按 int32 折叠语义正常落位（合法可创建形态的跨端锚定向量）")
+    void weightOverflowPositiveTotalLandsByInt32Fold() {
+        // totalWeight = 3×MAX = 6442450941 → int 回绕 2147483645 > 0，validateConfig 放行（合法可达）；
+        // u1 的 u=2654950594，h = u % 2147483645 = 507466949 < 前缀和 MAX → 落 control。
+        // 未折叠 int32 的实现（如 JS number 精确求和）会把 h 折进第二变体 —— web SDK 曾在此分裂
+        List<ExperimentSplitter.Variant> variants = List.of(
+            new ExperimentSplitter.Variant("control", Integer.MAX_VALUE),
+            new ExperimentSplitter.Variant("treat-a", Integer.MAX_VALUE),
+            new ExperimentSplitter.Variant("treat-b", Integer.MAX_VALUE));
+        assertEquals("control", ExperimentSplitter.assign("exp", "salt", "u1", variants));
+        // u≥2^31 的主体同样落 control（h = u - 2147483645 < MAX 恒真，回绕前缀和 -2 拦不住）
+        assertEquals("control", ExperimentSplitter.assign("exp", "salt", "u8", variants));
+    }
+
+    @Test
     @DisplayName("从配置 JSON 解析变体列表")
     void parsesVariantsFromConfig() throws Exception {
         String json = "{\"variants\":[" +
