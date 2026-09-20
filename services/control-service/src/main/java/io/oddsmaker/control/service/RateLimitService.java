@@ -117,6 +117,7 @@ public class RateLimitService {
         rule.enabled = false;
         rateLimitRepo.save(rule);
 
+        auditLogService.logDelete("rate_limit", rule.id, rule.description, "api", "api", null);
         logger.info("Deleted rate limit rule: {}", ruleId);
     }
 

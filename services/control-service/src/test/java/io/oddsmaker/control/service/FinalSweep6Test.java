@@ -852,7 +852,7 @@ class FinalSweep6Test {
     @DisplayName("validateConfig：非对象配置拒绝分支")
     void experimentConfigNotObject() throws Exception {
         ExperimentService service = new ExperimentService(
-            experimentRepo, gameRepo, gameEnvironmentRepo, new ObjectMapper());
+            experimentRepo, gameRepo, gameEnvironmentRepo, new ObjectMapper(), mock(AuditLogService.class));
 
         GameEntity game = new GameEntity();
         game.id = "g1";

@@ -33,6 +33,9 @@ class FunnelConfigServiceTest {
     @Mock
     private FunnelStepRepo funnelStepRepo;
 
+    @Mock
+    private AuditLogService auditLog;
+
     @InjectMocks
     private FunnelConfigService funnelConfigService;
 

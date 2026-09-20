@@ -29,6 +29,10 @@ public class StorageProfileService {
 
     private static final Logger logger = LoggerFactory.getLogger(StorageProfileService.class);
 
+    /** 审计日志：删除属敏感操作必须留痕 */
+    @Autowired
+    private AuditLogService auditLog;
+
     @Autowired
     private StorageProfileRepo storageProfileRepo;
 
@@ -111,6 +115,7 @@ public class StorageProfileService {
         entity.active = false;
         storageProfileRepo.save(entity);
 
+        auditLog.logDelete("storage_profile", entity.id, entity.name, "api", "api", null);
         logger.info("Storage profile deleted successfully: {}", profileId);
     }
 

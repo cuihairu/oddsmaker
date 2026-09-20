@@ -155,6 +155,7 @@ public class TrackingPlanService {
             eventDefinitionRepo.save(ed);
         });
 
+        auditLog.logDelete("tracking_plan", entity.id, entity.name, "api", "api", null);
         logger.info("Tracking plan deleted: {}", trackingPlanId);
     }
 
@@ -279,6 +280,7 @@ public class TrackingPlanService {
         trackingPlan.totalEvents = (int) eventDefinitionRepo.countByTrackingPlanId(trackingPlan.id);
         trackingPlanRepo.save(trackingPlan);
 
+        auditLog.logDelete("event_definition", entity.id, entity.eventName, "api", "api", null);
         logger.info("Event definition deleted: {}", eventDefinitionId);
     }
 

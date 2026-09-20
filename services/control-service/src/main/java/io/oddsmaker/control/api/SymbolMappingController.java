@@ -2,6 +2,7 @@ package io.oddsmaker.control.api;
 
 import io.oddsmaker.control.jpa.SymbolMappingEntity;
 import io.oddsmaker.control.jpa.SymbolMappingRepo;
+import io.oddsmaker.control.service.AuditLogService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -21,6 +22,10 @@ public class SymbolMappingController {
     @Autowired
     private SymbolMappingRepo symbolMappingRepo;
 
+    /** 审计日志：符号文件登记/废弃须留痕 */
+    @Autowired
+    private AuditLogService auditLog;
+
     @PostMapping
     public ResponseEntity<SymbolMappingEntity> register(@RequestBody SymbolMappingEntity body) {
         if (body.id == null || body.id.isEmpty()) {
@@ -28,6 +33,8 @@ public class SymbolMappingController {
         }
         if (body.status == null) body.status = SymbolMappingEntity.MappingStatus.ACTIVE;
         SymbolMappingEntity saved = symbolMappingRepo.save(body);
+        auditLog.logCreate("symbol_mapping", saved.id, saved.platform, "api", "api", null,
+            saved.gameId != null ? Map.of("gameId", saved.gameId) : null);
         return ResponseEntity.ok(saved);
     }
 
@@ -49,6 +56,7 @@ public class SymbolMappingController {
         return symbolMappingRepo.findById(id).map(m -> {
             m.status = SymbolMappingEntity.MappingStatus.DEPRECATED;
             symbolMappingRepo.save(m);
+            auditLog.logDelete("symbol_mapping", m.id, m.platform, "api", "api", null);
             return ResponseEntity.ok(Map.<String, Object>of("id", id, "status", "DEPRECATED"));
         }).orElse(ResponseEntity.notFound().build());
     }

@@ -7,6 +7,7 @@ import io.oddsmaker.control.jpa.RedeemCodeBatchEntity;
 import io.oddsmaker.control.jpa.SymbolMappingEntity;
 import io.oddsmaker.control.security.AccessGuard;
 import io.oddsmaker.control.service.AnnouncementService;
+import io.oddsmaker.control.service.AuditLogService;
 import io.oddsmaker.control.service.MailService;
 import io.oddsmaker.control.service.PlayerDataQueryService;
 import io.oddsmaker.control.service.PlayerExportService;
@@ -252,6 +253,9 @@ class OpsControllersTest {
 
     @Mock
     private SymbolMappingRepo symbolMappingRepo;
+
+    @Mock
+    private AuditLogService auditLog;
 
     @InjectMocks
     private SymbolMappingController symbolMappingController;

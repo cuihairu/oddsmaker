@@ -41,14 +41,19 @@ public class ExperimentService {
     private final GameEnvironmentRepo environmentRepo;
     private final ObjectMapper objectMapper;
 
+    /** 审计日志（构造器注入保持类风格一致；@InjectMocks 场景字段注入会被构造器注入短路） */
+    private final AuditLogService auditLog;
+
     public ExperimentService(ExperimentRepo experimentRepo,
                              GameRepo gameRepo,
                              GameEnvironmentRepo environmentRepo,
-                             ObjectMapper objectMapper) {
+                             ObjectMapper objectMapper,
+                             AuditLogService auditLog) {
         this.experimentRepo = experimentRepo;
         this.gameRepo = gameRepo;
         this.environmentRepo = environmentRepo;
         this.objectMapper = objectMapper;
+        this.auditLog = auditLog;
     }
 
     @Transactional(readOnly = true)
@@ -176,6 +181,7 @@ public class ExperimentService {
             return false;
         }
         experimentRepo.deleteById(id);
+        auditLog.logDelete("experiment", id, id, "api", "api", null);
         return true;
     }
 

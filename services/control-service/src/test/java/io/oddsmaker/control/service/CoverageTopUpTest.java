@@ -452,7 +452,7 @@ class CoverageTopUpTest {
     @DisplayName("变体权重和 int 溢出 → 拒绝（两个 MAX_VALUE 相加为负，校验兜底）")
     void experimentWeightOverflowRejected() {
         ExperimentService service = new ExperimentService(mock(ExperimentRepo.class),
-            gameRepoStub(), envRepoStub(), new ObjectMapper());
+            gameRepoStub(), envRepoStub(), new ObjectMapper(), mock(AuditLogService.class));
         ExperimentDTO dto = dtoWithConfig("""
             {"variants":[
               {"name":"a","weight":2147483647},
@@ -473,7 +473,7 @@ class CoverageTopUpTest {
             }
         };
         ExperimentService service = new ExperimentService(mock(ExperimentRepo.class),
-            gameRepoStub(), envRepoStub(), broken);
+            gameRepoStub(), envRepoStub(), broken, mock(AuditLogService.class));
         ExperimentDTO dto = dtoWithConfig("{}");
 
         IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,

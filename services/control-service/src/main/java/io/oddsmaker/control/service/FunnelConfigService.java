@@ -24,6 +24,10 @@ import java.util.UUID;
 @Transactional
 public class FunnelConfigService {
 
+    /** 审计日志：删除属敏感操作必须留痕 */
+    @Autowired
+    private AuditLogService auditLog;
+
     private static final Logger logger = LoggerFactory.getLogger(FunnelConfigService.class);
 
     @Autowired
@@ -140,6 +144,7 @@ public class FunnelConfigService {
         funnel.deletedAt = LocalDateTime.now();
         funnelConfigRepo.save(funnel);
 
+        auditLog.logDelete("funnel_config", funnel.id, funnel.name, "api", "api", null);
         logger.info("Funnel deleted successfully: {}", funnelId);
     }
 
@@ -265,6 +270,7 @@ public class FunnelConfigService {
 
         funnelStepRepo.delete(step);
 
+        auditLog.logDelete("funnel_step", step.id, step.name, "api", "api", null);
         logger.info("Step deleted successfully: {}", stepId);
     }
 
