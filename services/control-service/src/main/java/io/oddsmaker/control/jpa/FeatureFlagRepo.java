@@ -25,18 +25,6 @@ public interface FeatureFlagRepo extends JpaRepository<FeatureFlagEntity, String
     List<FeatureFlagEntity> findEnabled();
 
     /**
-     * 查找条件开关
-     */
-    @Query("SELECT ff FROM FeatureFlagEntity ff WHERE ff.flagStatus IN ('CONDITIONAL', 'STAGED_ROLLOUT') AND ff.deletedAt IS NULL")
-    List<FeatureFlagEntity> findConditional();
-
-    /**
-     * 根据分类查找
-     */
-    @Query("SELECT ff FROM FeatureFlagEntity ff WHERE ff.category = :category AND ff.deletedAt IS NULL ORDER BY ff.flagKey")
-    List<FeatureFlagEntity> findByCategory(@Param("category") String category);
-
-    /**
      * 查找已过期的开关
      */
     @Query("SELECT ff FROM FeatureFlagEntity ff WHERE ff.expiryDate IS NOT NULL AND ff.expiryDate < :now AND ff.flagStatus = 'ENABLED' AND ff.deletedAt IS NULL")

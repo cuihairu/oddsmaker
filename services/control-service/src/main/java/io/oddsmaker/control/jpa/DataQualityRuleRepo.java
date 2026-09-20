@@ -36,24 +36,6 @@ public interface DataQualityRuleRepo extends JpaRepository<DataQualityRuleEntity
     List<DataQualityRuleEntity> findByType(@Param("type") DataQualityRuleEntity.RuleType type);
 
     /**
-     * 根据目标表查找规则
-     */
-    @Query("SELECT r FROM DataQualityRuleEntity r WHERE r.targetTable = :table AND r.deletedAt IS NULL")
-    List<DataQualityRuleEntity> findByTargetTable(@Param("table") String table);
-
-    /**
-     * 查找严重规则
-     */
-    @Query("SELECT r FROM DataQualityRuleEntity r WHERE r.severity IN ('ERROR', 'CRITICAL') AND r.ruleStatus = 'ACTIVE' AND r.deletedAt IS NULL")
-    List<DataQualityRuleEntity> findCritical();
-
-    /**
-     * 统计活跃规则数量
-     */
-    @Query("SELECT COUNT(r) FROM DataQualityRuleEntity r WHERE r.enabled = true AND r.ruleStatus = 'ACTIVE' AND r.deletedAt IS NULL")
-    long countActive();
-
-    /**
      * 根据名称查找规则
      */
     @Query("SELECT r FROM DataQualityRuleEntity r WHERE r.ruleName = :name AND r.deletedAt IS NULL")

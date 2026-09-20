@@ -24,11 +24,6 @@ public interface GameEnvironmentRepo extends JpaRepository<GameEnvironmentEntity
     List<GameEnvironmentEntity> findByGameIdAndNameAndDeletedAtIsNull(String gameId, String name);
 
     /**
-     * 根据环境类型查找
-     */
-    List<GameEnvironmentEntity> findByTypeAndDeletedAtIsNull(GameEnvironmentEntity.EnvironmentType type);
-
-    /**
      * 根据状态查找环境
      */
     List<GameEnvironmentEntity> findByStatusAndDeletedAtIsNull(GameEnvironmentEntity.EnvironmentStatus status);
@@ -43,14 +38,4 @@ public interface GameEnvironmentRepo extends JpaRepository<GameEnvironmentEntity
      */
     long countByGameIdAndDeletedAtIsNull(String gameId);
 
-    /**
-     * 查找活跃的生产环境
-     */
-    @Query("SELECT e FROM GameEnvironmentEntity e WHERE e.type = 'PRODUCTION' AND e.status = 'ACTIVE' AND e.deletedAt IS NULL")
-    List<GameEnvironmentEntity> findActiveProductionEnvironments();
-
-    /**
-     * 查找启用调试模式的环境
-     */
-    List<GameEnvironmentEntity> findByEnableDebugModeTrueAndDeletedAtIsNull();
 }

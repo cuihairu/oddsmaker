@@ -62,37 +62,6 @@ public interface GameRepo extends JpaRepository<GameEntity, String> {
     long countByStatusAndDeletedAtIsNull(GameEntity.GameStatus status);
 
     /**
-     * 查找多人游戏
-     */
-    List<GameEntity> findByHasMultiplayerTrueAndDeletedAtIsNull();
-
-    /**
-     * 查找支持公会的游戏
-     */
-    List<GameEntity> findByHasGuildsTrueAndDeletedAtIsNull();
-
-    /**
-     * 查找启用实时分析的游戏
-     */
-    List<GameEntity> findByEnableRealTimeAnalyticsTrueAndDeletedAtIsNull();
-
-    /**
-     * 根据虚拟货币查找游戏
-     */
-    @Query("SELECT g FROM GameEntity g WHERE g.virtualCurrencies LIKE CONCAT('%', :currency, '%') AND g.deletedAt IS NULL")
-    List<GameEntity> findByVirtualCurrency(@Param("currency") String currency);
-
-    /**
-     * 查找GDPR合规的游戏
-     */
-    List<GameEntity> findByGdprComplianceTrueAndDeletedAtIsNull();
-
-    /**
-     * 查找COPPA合规的游戏
-     */
-    List<GameEntity> findByCoppaComplianceTrueAndDeletedAtIsNull();
-
-    /**
      * 获取游戏统计信息
      */
     @Query("SELECT new map(" +

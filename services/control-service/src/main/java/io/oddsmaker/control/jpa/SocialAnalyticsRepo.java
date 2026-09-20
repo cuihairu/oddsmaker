@@ -23,13 +23,6 @@ public interface SocialAnalyticsRepo extends JpaRepository<SocialAnalyticsEntity
         @Param("startDate") LocalDate startDate,
         @Param("endDate") LocalDate endDate);
 
-    @Query("SELECT s.socialEventType, COUNT(s) " +
-           "FROM SocialAnalyticsEntity s WHERE s.gameId = :gameId " +
-           "AND s.analysisDate = :date GROUP BY s.socialEventType")
-    List<Object[]> getSocialEventsByType(
-        @Param("gameId") String gameId,
-        @Param("date") LocalDate date);
-
     @Query("SELECT AVG(s.socialUsersRetentionD7), AVG(s.nonSocialUsersRetentionD7) " +
            "FROM SocialAnalyticsEntity s WHERE s.gameId = :gameId " +
            "AND s.analysisDate = :date")

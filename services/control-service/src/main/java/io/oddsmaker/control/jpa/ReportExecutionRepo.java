@@ -30,24 +30,6 @@ public interface ReportExecutionRepo extends JpaRepository<ReportExecutionEntity
     List<ReportExecutionEntity> findPending();
 
     /**
-     * 查找运行中的记录
-     */
-    @Query("SELECT re FROM ReportExecutionEntity re WHERE re.executionStatus = 'RUNNING' ORDER BY re.startTime ASC")
-    List<ReportExecutionEntity> findRunning();
-
-    /**
-     * 查找失败的记录
-     */
-    @Query("SELECT re FROM ReportExecutionEntity re WHERE re.executionStatus IN ('FAILED', 'TIMEOUT') ORDER BY re.createdAt DESC")
-    List<ReportExecutionEntity> findFailed();
-
-    /**
-     * 根据时间范围查找
-     */
-    @Query("SELECT re FROM ReportExecutionEntity re WHERE re.reportId = :reportId AND re.createdAt >= :startTime AND re.createdAt <= :endTime ORDER BY re.createdAt DESC")
-    List<ReportExecutionEntity> findByReportIdAndTimeRange(@Param("reportId") String reportId, @Param("startTime") LocalDateTime startTime, @Param("endTime") LocalDateTime endTime);
-
-    /**
      * 统计报表的执行次数
      */
     @Query("SELECT COUNT(re) FROM ReportExecutionEntity re WHERE re.reportId = :reportId")
@@ -72,12 +54,6 @@ public interface ReportExecutionRepo extends JpaRepository<ReportExecutionEntity
     int deleteExpired(@Param("expireAt") LocalDateTime expireAt);
 
     /**
-     * 查找最近的执行记录
-     */
-    @Query("SELECT re FROM ReportExecutionEntity re WHERE re.gameId = :gameId AND re.executionStatus = 'COMPLETED' ORDER BY re.createdAt DESC")
-    List<ReportExecutionEntity> findRecentCompleted(@Param("gameId") String gameId);
-
-    /**
      * 统计总行数
      */
     @Query("SELECT SUM(re.rowCount) FROM ReportExecutionEntity re WHERE re.reportId = :reportId AND re.executionStatus = 'COMPLETED'")
@@ -89,9 +65,4 @@ public interface ReportExecutionRepo extends JpaRepository<ReportExecutionEntity
     @Query("SELECT re FROM ReportExecutionEntity re WHERE re.executionStatus = 'RUNNING' AND re.startTime < :timeout")
     List<ReportExecutionEntity> findTimeout(@Param("timeout") LocalDateTime timeout);
 
-    /**
-     * 根据触发类型查找
-     */
-    @Query("SELECT re FROM ReportExecutionEntity re WHERE re.reportId = :reportId AND re.triggerType = :triggerType ORDER BY re.createdAt DESC")
-    List<ReportExecutionEntity> findByReportIdAndTriggerType(@Param("reportId") String reportId, @Param("triggerType") String triggerType);
 }

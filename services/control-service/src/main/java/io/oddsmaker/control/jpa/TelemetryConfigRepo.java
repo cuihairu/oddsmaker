@@ -25,40 +25,6 @@ public interface TelemetryConfigRepo extends JpaRepository<TelemetryConfigEntity
     List<TelemetryConfigEntity> findByGameIdAndEnvironmentIdAndDeletedAtIsNull(String gameId, String environmentId);
 
     /**
-     * 根据配置类型查找
-     */
-    List<TelemetryConfigEntity> findByConfigTypeAndDeletedAtIsNull(TelemetryConfigEntity.ConfigType configType);
-
-    /**
-     * 根据状态查找
-     */
-    List<TelemetryConfigEntity> findByConfigStatusAndDeletedAtIsNull(TelemetryConfigEntity.ConfigStatus status);
-
-    /**
-     * 查找活跃的配置
-     */
-    @Query("SELECT c FROM TelemetryConfigEntity c WHERE c.configStatus = 'ACTIVE' AND c.deletedAt IS NULL")
-    List<TelemetryConfigEntity> findAllActive();
-
-    /**
-     * 查找默认配置
-     */
-    @Query("SELECT c FROM TelemetryConfigEntity c WHERE c.isDefault = true AND c.deletedAt IS NULL")
-    List<TelemetryConfigEntity> findAllDefaults();
-
-    /**
-     * 根据游戏ID查找默认配置
-     */
-    @Query("SELECT c FROM TelemetryConfigEntity c WHERE c.gameId = :gameId AND c.isDefault = true AND c.deletedAt IS NULL")
-    List<TelemetryConfigEntity> findDefaultsByGameId(@Param("gameId") String gameId);
-
-    /**
-     * 查找全局配置
-     */
-    @Query("SELECT c FROM TelemetryConfigEntity c WHERE c.gameId IS NULL AND c.deletedAt IS NULL")
-    List<TelemetryConfigEntity> findGlobalConfigs();
-
-    /**
      * 查找活跃的全局配置
      */
     @Query("SELECT c FROM TelemetryConfigEntity c WHERE c.gameId IS NULL AND c.configStatus = 'ACTIVE' AND c.deletedAt IS NULL")
@@ -82,12 +48,6 @@ public interface TelemetryConfigRepo extends JpaRepository<TelemetryConfigEntity
             @Param("configType") TelemetryConfigEntity.ConfigType configType);
 
     /**
-     * 查找高优先级配置
-     */
-    @Query("SELECT c FROM TelemetryConfigEntity c WHERE c.deletedAt IS NULL ORDER BY c.priority ASC")
-    List<TelemetryConfigEntity> findAllByPriority();
-
-    /**
      * 统计各类型配置数量
      */
     @Query("SELECT c.configType, COUNT(c) FROM TelemetryConfigEntity c WHERE c.deletedAt IS NULL GROUP BY c.configType")
@@ -99,13 +59,4 @@ public interface TelemetryConfigRepo extends JpaRepository<TelemetryConfigEntity
     @Query("SELECT c.configStatus, COUNT(c) FROM TelemetryConfigEntity c WHERE c.deletedAt IS NULL GROUP BY c.configStatus")
     List<Object[]> countByStatus();
 
-    /**
-     * 检查配置名称是否存在
-     */
-    boolean existsByConfigNameAndGameIdAndDeletedAtIsNull(String configName, String gameId);
-
-    /**
-     * 根据优先级范围查找
-     */
-    List<TelemetryConfigEntity> findByPriorityBetweenAndDeletedAtIsNull(Integer minPriority, Integer maxPriority);
 }

@@ -24,30 +24,6 @@ public interface IntegrationLogRepo extends JpaRepository<IntegrationLogEntity, 
     List<IntegrationLogEntity> findByGameId(@Param("gameId") String gameId);
 
     /**
-     * 查找失败日志
-     */
-    @Query("SELECT l FROM IntegrationLogEntity l WHERE l.integrationId = :integrationId AND l.callStatus IN ('FAILED', 'TIMEOUT') ORDER BY l.createdAt DESC")
-    List<IntegrationLogEntity> findFailedByIntegrationId(@Param("integrationId") String integrationId);
-
-    /**
-     * 查找最近日志
-     */
-    @Query("SELECT l FROM IntegrationLogEntity l WHERE l.gameId = :gameId ORDER BY l.createdAt DESC LIMIT 100")
-    List<IntegrationLogEntity> findRecentByGameId(@Param("gameId") String gameId);
-
-    /**
-     * 根据事件类型查找
-     */
-    @Query("SELECT l FROM IntegrationLogEntity l WHERE l.gameId = :gameId AND l.eventType = :eventType ORDER BY l.createdAt DESC")
-    List<IntegrationLogEntity> findByGameIdAndEventType(@Param("gameId") String gameId, @Param("eventType") String eventType);
-
-    /**
-     * 根据关联ID查找
-     */
-    @Query("SELECT l FROM IntegrationLogEntity l WHERE l.correlationId = :correlationId ORDER BY l.createdAt DESC")
-    List<IntegrationLogEntity> findByCorrelationId(@Param("correlationId") String correlationId);
-
-    /**
      * 统计调用次数
      */
     @Query("SELECT COUNT(l) FROM IntegrationLogEntity l WHERE l.integrationId = :integrationId AND l.createdAt >= :since")

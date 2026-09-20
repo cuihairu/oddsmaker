@@ -36,12 +36,6 @@ public interface ExportJobRepo extends JpaRepository<ExportJobEntity, String> {
     List<ExportJobEntity> findProcessing();
 
     /**
-     * 查找已完成的任务
-     */
-    @Query("SELECT ej FROM ExportJobEntity ej WHERE ej.exportStatus = 'COMPLETED' AND ej.deletedAt IS NULL ORDER BY ej.completedAt DESC")
-    List<ExportJobEntity> findCompleted();
-
-    /**
      * 查找过期的任务
      */
     @Query("SELECT ej FROM ExportJobEntity ej WHERE ej.expiresAt < :now AND ej.exportStatus = 'COMPLETED'")
@@ -83,15 +77,4 @@ public interface ExportJobRepo extends JpaRepository<ExportJobEntity, String> {
     @Query("DELETE FROM ExportJobEntity ej WHERE ej.expiresAt < :expireAt")
     int deleteExpired(@Param("expireAt") LocalDateTime expireAt);
 
-    /**
-     * 根据状态查找
-     */
-    @Query("SELECT ej FROM ExportJobEntity ej WHERE ej.userId = :userId AND ej.exportStatus = :exportStatus AND ej.deletedAt IS NULL ORDER BY ej.createdAt DESC")
-    List<ExportJobEntity> findByUserIdAndStatus(@Param("userId") String userId, @Param("exportStatus") ExportJobEntity.ExportStatus exportStatus);
-
-    /**
-     * 查找需要通知的已完成任务
-     */
-    @Query("SELECT ej FROM ExportJobEntity ej WHERE ej.exportStatus = 'COMPLETED' AND ej.notifyOnComplete = true AND ej.notificationEmail IS NOT NULL AND ej.deletedAt IS NULL")
-    List<ExportJobEntity> findPendingNotifications();
 }

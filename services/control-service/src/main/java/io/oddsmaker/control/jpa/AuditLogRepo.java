@@ -51,11 +51,6 @@ public interface AuditLogRepo extends JpaRepository<AuditLogEntity, String> {
     Page<AuditLogEntity> findByGameIdOrderByCreatedAtDesc(String gameId, Pageable pageable);
 
     /**
-     * 根据环境查找审计日志
-     */
-    Page<AuditLogEntity> findByEnvironmentOrderByCreatedAtDesc(String environment, Pageable pageable);
-
-    /**
      * 查找失败的审计日志
      */
     @Query("SELECT a FROM AuditLogEntity a WHERE a.status = 'FAILURE' ORDER BY a.createdAt DESC")

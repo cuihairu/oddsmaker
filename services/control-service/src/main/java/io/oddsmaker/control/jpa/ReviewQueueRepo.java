@@ -32,12 +32,6 @@ public interface ReviewQueueRepo extends JpaRepository<ReviewQueueEntity, String
     List<ReviewQueueEntity> findPendingByGameId(@Param("gameId") String gameId);
 
     /**
-     * 查找待分配的审核项
-     */
-    @Query("SELECT rq FROM ReviewQueueEntity rq WHERE rq.reviewStatus = 'PENDING' ORDER BY rq.priority DESC, rq.createdAt ASC")
-    List<ReviewQueueEntity> findUnassigned();
-
-    /**
      * 查找分配给特定审核人的项
      */
     @Query("SELECT rq FROM ReviewQueueEntity rq WHERE rq.assignedTo = :reviewer OR rq.claimedBy = :reviewer ORDER BY rq.priority DESC, rq.createdAt ASC")
@@ -56,41 +50,10 @@ public interface ReviewQueueRepo extends JpaRepository<ReviewQueueEntity, String
     List<ReviewQueueEntity> findOverdue(@Param("now") LocalDateTime now);
 
     /**
-     * 根据队列类型查找
-     */
-    @Query("SELECT rq FROM ReviewQueueEntity rq WHERE rq.queueType = :queueType AND rq.reviewStatus IN ('PENDING', 'ASSIGNED', 'CLAIMED', 'IN_REVIEW') ORDER BY rq.priority DESC, rq.createdAt ASC")
-    List<ReviewQueueEntity> findByQueueType(@Param("queueType") String queueType);
-
-    /**
-     * 根据分类查找
-     */
-    @Query("SELECT rq FROM ReviewQueueEntity rq WHERE rq.gameId = :gameId AND rq.category = :category AND rq.reviewStatus IN ('PENDING', 'ASSIGNED', 'CLAIMED', 'IN_REVIEW') ORDER BY rq.priority DESC, rq.createdAt ASC")
-    List<ReviewQueueEntity> findByGameIdAndCategory(@Param("gameId") String gameId, @Param("category") String category);
-
-    /**
-     * 统计待处理项
-     */
-    @Query("SELECT COUNT(rq) FROM ReviewQueueEntity rq WHERE rq.gameId = :gameId AND rq.reviewStatus IN ('PENDING', 'ASSIGNED', 'CLAIMED', 'IN_REVIEW')")
-    long countPendingByGameId(@Param("gameId") String gameId);
-
-    /**
-     * 统计审核人的工作负载
-     */
-    @Query("SELECT COUNT(rq) FROM ReviewQueueEntity rq WHERE (rq.assignedTo = :reviewer OR rq.claimedBy = :reviewer) AND rq.reviewStatus IN ('ASSIGNED', 'CLAIMED', 'IN_REVIEW')")
-    long countAssignedToReviewer(@Param("reviewer") String reviewer);
-
-    /**
      * 搜索审核队列
      */
     @Query("SELECT rq FROM ReviewQueueEntity rq WHERE rq.gameId = :gameId AND (rq.caseNumber LIKE %:query% OR rq.targetId LIKE %:query% OR rq.targetName LIKE %:query%)")
     List<ReviewQueueEntity> search(@Param("gameId") String gameId, @Param("query") String query);
-
-    /**
-     * 批量更新审核状态
-     */
-    @Modifying
-    @Query("UPDATE ReviewQueueEntity rq SET rq.reviewStatus = :status, rq.resolvedAt = :now WHERE rq.id IN :ids")
-    int batchUpdateStatus(@Param("ids") List<String> ids, @Param("status") ReviewQueueEntity.ReviewStatus status, @Param("now") LocalDateTime now);
 
     /**
      * 查找需要升级的项（处理时间过长）

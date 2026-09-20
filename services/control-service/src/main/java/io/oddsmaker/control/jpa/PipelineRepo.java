@@ -24,22 +24,10 @@ public interface PipelineRepo extends JpaRepository<PipelineEntity, String> {
     List<PipelineEntity> findActive();
 
     /**
-     * 查找游戏的环境管道
-     */
-    @Query("SELECT p FROM PipelineEntity p WHERE p.gameId = :gameId AND p.environmentId = :environmentId AND p.deletedAt IS NULL ORDER BY p.createdAt DESC")
-    List<PipelineEntity> findByGameAndEnvironment(@Param("gameId") String gameId, @Param("environmentId") String environmentId);
-
-    /**
      * 根据类型查找管道
      */
     @Query("SELECT p FROM PipelineEntity p WHERE p.pipelineType = :type AND p.deletedAt IS NULL ORDER BY p.priority DESC")
     List<PipelineEntity> findByType(@Param("type") PipelineEntity.PipelineType type);
-
-    /**
-     * 查找失败的管道
-     */
-    @Query("SELECT p FROM PipelineEntity p WHERE p.pipelineStatus = 'FAILED' AND p.deletedAt IS NULL")
-    List<PipelineEntity> findFailed();
 
     /**
      * 查找需要调度的管道

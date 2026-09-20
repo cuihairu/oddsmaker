@@ -34,21 +34,4 @@ public interface TrackingPlanRepo extends JpaRepository<TrackingPlanEntity, Stri
      */
     Optional<TrackingPlanEntity> findByIdAndDeletedAtIsNull(String id);
 
-    /**
-     * 检查是否存在活跃的追踪计划
-     */
-    @Query("SELECT CASE WHEN COUNT(tp) > 0 THEN true ELSE false END FROM TrackingPlanEntity tp WHERE tp.gameId = :gameId AND tp.status = 'ACTIVE' AND tp.deletedAt IS NULL")
-    boolean existsActiveByGameId(@Param("gameId") String gameId);
-
-    /**
-     * 软删除
-     */
-    @Query("UPDATE TrackingPlanEntity tp SET tp.deletedAt = CURRENT_TIMESTAMP, tp.status = 'DEPRECATED' WHERE tp.id = :id")
-    void softDelete(@Param("id") String id);
-
-    /**
-     * 统计游戏的事件定义数量
-     */
-    @Query("SELECT COUNT(ed) FROM EventDefinitionEntity ed WHERE ed.trackingPlanId IN (SELECT tp.id FROM TrackingPlanEntity tp WHERE tp.gameId = :gameId AND tp.deletedAt IS NULL)")
-    long countEventDefinitionsByGameId(@Param("gameId") String gameId);
 }

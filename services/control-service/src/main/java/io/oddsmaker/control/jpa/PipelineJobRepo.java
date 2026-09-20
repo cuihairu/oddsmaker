@@ -30,18 +30,6 @@ public interface PipelineJobRepo extends JpaRepository<PipelineJobEntity, String
     List<PipelineJobEntity> findPending();
 
     /**
-     * 查找运行中的任务
-     */
-    @Query("SELECT j FROM PipelineJobEntity j WHERE j.jobStatus = 'RUNNING' ORDER BY j.startedAt DESC")
-    List<PipelineJobEntity> findRunning();
-
-    /**
-     * 查找失败的任务
-     */
-    @Query("SELECT j FROM PipelineJobEntity j WHERE j.jobStatus IN ('FAILED', 'TIMEOUT') ORDER BY j.completedAt DESC")
-    List<PipelineJobEntity> findFailed();
-
-    /**
      * 查找超时的任务
      */
     @Query("SELECT j FROM PipelineJobEntity j WHERE j.jobStatus = 'RUNNING' AND j.startedAt < :timeoutSince")
@@ -52,12 +40,6 @@ public interface PipelineJobRepo extends JpaRepository<PipelineJobEntity, String
      */
     @Query("SELECT COUNT(j) FROM PipelineJobEntity j WHERE j.jobStatus = :status")
     long countByStatus(@Param("status") PipelineJobEntity.JobStatus status);
-
-    /**
-     * 统计管道的任务
-     */
-    @Query("SELECT COUNT(j) FROM PipelineJobEntity j WHERE j.pipelineId = :pipelineId")
-    long countByPipelineId(@Param("pipelineId") String pipelineId);
 
     /**
      * 删除旧的任务记录

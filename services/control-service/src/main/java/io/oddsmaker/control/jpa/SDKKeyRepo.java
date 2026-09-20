@@ -26,25 +26,9 @@ public interface SDKKeyRepo extends JpaRepository<SDKKeyEntity, String> {
     List<SDKKeyEntity> findByGameIdAndEnvironmentAndDeletedAtIsNull(String gameId, String environment);
 
     /**
-     * 根据游戏ID和平台查找SDK密钥
-     */
-    List<SDKKeyEntity> findByGameIdAndPlatformAndDeletedAtIsNull(String gameId, SDKKeyEntity.SDKPlatform platform);
-
-    /**
      * 根据公钥查找
      */
     Optional<SDKKeyEntity> findByPublicKeyAndDeletedAtIsNull(String publicKey);
-
-    /**
-     * 根据状态查找
-     */
-    List<SDKKeyEntity> findByKeyStatusAndDeletedAtIsNull(SDKKeyEntity.KeyStatus status);
-
-    /**
-     * 查找活跃的SDK密钥
-     */
-    @Query("SELECT k FROM SDKKeyEntity k WHERE k.keyStatus = 'ACTIVE' AND k.deletedAt IS NULL AND (k.expiresAt IS NULL OR k.expiresAt > CURRENT_TIMESTAMP)")
-    List<SDKKeyEntity> findAllActive();
 
     /**
      * 根据游戏ID查找活跃的SDK密钥
@@ -70,30 +54,4 @@ public interface SDKKeyRepo extends JpaRepository<SDKKeyEntity, String> {
     @Query("SELECT k.keyStatus, COUNT(k) FROM SDKKeyEntity k WHERE k.deletedAt IS NULL GROUP BY k.keyStatus")
     List<Object[]> countByStatus();
 
-    /**
-     * 查找高事件量的SDK密钥
-     */
-    @Query("SELECT k FROM SDKKeyEntity k WHERE k.deletedAt IS NULL AND k.totalEventsSent > :threshold ORDER BY k.totalEventsSent DESC")
-    List<SDKKeyEntity> findHighVolumeKeys(@Param("threshold") Long threshold);
-
-    /**
-     * 查找有错误的SDK密钥
-     */
-    @Query("SELECT k FROM SDKKeyEntity k WHERE k.deletedAt IS NULL AND k.totalErrors > 0 ORDER BY k.totalErrors DESC")
-    List<SDKKeyEntity> findKeysWithErrors();
-
-    /**
-     * 检查公钥是否存在
-     */
-    boolean existsByPublicKeyAndDeletedAtIsNull(String publicKey);
-
-    /**
-     * 根据交付模式查找
-     */
-    List<SDKKeyEntity> findByDeliveryModeAndDeletedAtIsNull(SDKKeyEntity.DeliveryMode deliveryMode);
-
-    /**
-     * 删除指定游戏的所有SDK密钥
-     */
-    void deleteByGameId(String gameId);
 }

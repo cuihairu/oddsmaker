@@ -42,18 +42,6 @@ public interface MaintenanceWindowRepo extends JpaRepository<MaintenanceWindowEn
     List<MaintenanceWindowEntity> findUpcoming(@Param("now") LocalDateTime now);
 
     /**
-     * 查找影响游戏的维护
-     */
-    @Query("SELECT mw FROM MaintenanceWindowEntity mw WHERE (mw.impactScope = 'GLOBAL' OR mw.gameId = :gameId) AND mw.deletedAt IS NULL ORDER BY mw.scheduledStart DESC")
-    List<MaintenanceWindowEntity> findAffectingGame(@Param("gameId") String gameId);
-
-    /**
-     * 查找紧急维护
-     */
-    @Query("SELECT mw FROM MaintenanceWindowEntity mw WHERE mw.maintenanceType = 'EMERGENCY' AND mw.deletedAt IS NULL ORDER BY mw.createdAt DESC")
-    List<MaintenanceWindowEntity> findEmergency();
-
-    /**
      * 统计维护状态
      */
     @Query("SELECT COUNT(mw) FROM MaintenanceWindowEntity mw WHERE mw.maintenanceStatus = :status AND mw.deletedAt IS NULL")

@@ -23,10 +23,4 @@ public interface SessionAnalysisRepo extends JpaRepository<SessionAnalysisEntity
         @Param("startDate") LocalDate startDate,
         @Param("endDate") LocalDate endDate);
 
-    @Query("SELECT s.platform, AVG(s.avgSessionDuration), AVG(s.bounceRate) " +
-           "FROM SessionAnalysisEntity s WHERE s.gameId = :gameId " +
-           "AND s.analysisDate = :date GROUP BY s.platform")
-    List<Object[]> getSessionMetricsByPlatform(
-        @Param("gameId") String gameId,
-        @Param("date") LocalDate date);
 }

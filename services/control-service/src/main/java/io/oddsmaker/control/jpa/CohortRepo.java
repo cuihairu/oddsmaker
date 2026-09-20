@@ -36,22 +36,10 @@ public interface CohortRepo extends JpaRepository<CohortEntity, String> {
     List<CohortEntity> findByGameIdAndType(@Param("gameId") String gameId, @Param("cohortType") CohortEntity.CohortType cohortType);
 
     /**
-     * 根据分析类型查找
-     */
-    @Query("SELECT c FROM CohortEntity c WHERE c.gameId = :gameId AND c.analysisType = :analysisType AND c.deletedAt IS NULL ORDER BY c.createdAt DESC")
-    List<CohortEntity> findByGameIdAndAnalysisType(@Param("gameId") String gameId, @Param("analysisType") String analysisType);
-
-    /**
      * 查找待计算的同期群
      */
     @Query("SELECT c FROM CohortEntity c WHERE c.status = 'PENDING' AND c.deletedAt IS NULL ORDER BY c.createdAt ASC")
     List<CohortEntity> findPending();
-
-    /**
-     * 查找正在计算的同期群
-     */
-    @Query("SELECT c FROM CohortEntity c WHERE c.status = 'CALCULATING' AND c.deletedAt IS NULL")
-    List<CohortEntity> findCalculating();
 
     /**
      * 根据名称查找
@@ -71,15 +59,4 @@ public interface CohortRepo extends JpaRepository<CohortEntity, String> {
     @Query("SELECT c FROM CohortEntity c WHERE c.gameId = :gameId AND c.status = 'COMPLETED' AND c.calculatedAt IS NOT NULL ORDER BY c.calculatedAt DESC")
     List<CohortEntity> findRecent(@Param("gameId") String gameId);
 
-    /**
-     * 统计游戏的总同期群数
-     */
-    @Query("SELECT COUNT(c) FROM CohortEntity c WHERE c.gameId = :gameId AND c.deletedAt IS NULL")
-    long countByGameId(@Param("gameId") String gameId);
-
-    /**
-     * 根据日期范围查找
-     */
-    @Query("SELECT c FROM CohortEntity c WHERE c.gameId = :gameId AND c.startDate >= :startDate AND c.endDate <= :endDate AND c.deletedAt IS NULL ORDER BY c.startDate DESC")
-    List<CohortEntity> findByGameIdAndDateRange(@Param("gameId") String gameId, @Param("startDate") java.time.LocalDate startDate, @Param("endDate") java.time.LocalDate endDate);
 }

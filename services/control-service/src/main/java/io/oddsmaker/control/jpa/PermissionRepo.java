@@ -35,19 +35,9 @@ public interface PermissionRepo extends JpaRepository<PermissionEntity, String> 
     List<PermissionEntity> findByAction(PermissionEntity.PermissionAction action);
 
     /**
-     * 根据范围查找权限
-     */
-    List<PermissionEntity> findByScope(PermissionEntity.PermissionScope scope);
-
-    /**
      * 查找启用的权限
      */
     List<PermissionEntity> findByEnabledTrue();
-
-    /**
-     * 查找系统内置权限
-     */
-    List<PermissionEntity> findBySystemTrue();
 
     /**
      * 根据资源类型和操作查找权限
@@ -55,32 +45,4 @@ public interface PermissionRepo extends JpaRepository<PermissionEntity, String> 
     Optional<PermissionEntity> findByResourceTypeAndAction(
             String resourceType, PermissionEntity.PermissionAction action);
 
-    /**
-     * 检查权限名称是否存在
-     */
-    boolean existsByName(String name);
-
-    /**
-     * 查找全局权限
-     */
-    @Query("SELECT p FROM PermissionEntity p WHERE p.scope = 'GLOBAL' AND p.enabled = true")
-    List<PermissionEntity> findGlobalPermissions();
-
-    /**
-     * 查找游戏级权限
-     */
-    @Query("SELECT p FROM PermissionEntity p WHERE p.scope = 'GAME' AND p.enabled = true")
-    List<PermissionEntity> findGamePermissions();
-
-    /**
-     * 查找环境级权限
-     */
-    @Query("SELECT p FROM PermissionEntity p WHERE p.scope = 'ENVIRONMENT' AND p.enabled = true")
-    List<PermissionEntity> findEnvironmentPermissions();
-
-    /**
-     * 根据资源类型查找启用的权限
-     */
-    @Query("SELECT p FROM PermissionEntity p WHERE p.resourceType = :resourceType AND p.enabled = true")
-    List<PermissionEntity> findByResourceTypeEnabled(@Param("resourceType") String resourceType);
 }

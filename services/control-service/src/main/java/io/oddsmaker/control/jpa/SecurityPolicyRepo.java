@@ -12,28 +12,10 @@ import java.util.Optional;
 public interface SecurityPolicyRepo extends JpaRepository<SecurityPolicyEntity, String> {
 
     /**
-     * 查找全局策略
-     */
-    @Query("SELECT p FROM SecurityPolicyEntity p WHERE p.policyScope = 'GLOBAL' AND p.enabled = true AND p.deletedAt IS NULL ORDER BY p.priority DESC")
-    List<SecurityPolicyEntity> findGlobal();
-
-    /**
-     * 查找游戏策略
-     */
-    @Query("SELECT p FROM SecurityPolicyEntity p WHERE (p.policyScope = 'GLOBAL' OR (p.policyScope = 'GAME' AND p.gameId = :gameId)) AND p.enabled = true AND p.deletedAt IS NULL ORDER BY p.priority DESC")
-    List<SecurityPolicyEntity> findForGame(@Param("gameId") String gameId);
-
-    /**
      * 根据类型查找策略
      */
     @Query("SELECT p FROM SecurityPolicyEntity p WHERE p.policyType = :type AND p.enabled = true AND p.deletedAt IS NULL ORDER BY p.priority DESC")
     List<SecurityPolicyEntity> findByType(@Param("type") SecurityPolicyEntity.PolicyType type);
-
-    /**
-     * 根据类型和范围查找
-     */
-    @Query("SELECT p FROM SecurityPolicyEntity p WHERE p.policyType = :type AND p.policyScope = :scope AND p.enabled = true AND p.deletedAt IS NULL ORDER BY p.priority DESC")
-    List<SecurityPolicyEntity> findByTypeAndScope(@Param("type") SecurityPolicyEntity.PolicyType type, @Param("scope") SecurityPolicyEntity.PolicyScope scope);
 
     /**
      * 查找游戏的密码策略

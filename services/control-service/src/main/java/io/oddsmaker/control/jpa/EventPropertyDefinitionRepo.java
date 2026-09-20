@@ -22,33 +22,4 @@ public interface EventPropertyDefinitionRepo extends JpaRepository<EventProperty
     @Query("SELECT epd FROM EventPropertyDefinitionEntity epd WHERE epd.eventDefinitionId = :eventDefinitionId AND epd.propertyName = :propertyName AND epd.deletedAt IS NULL")
     Optional<EventPropertyDefinitionEntity> findByEventDefinitionIdAndPropertyName(@Param("eventDefinitionId") String eventDefinitionId, @Param("propertyName") String propertyName);
 
-    /**
-     * 查找必需属性
-     */
-    @Query("SELECT epd FROM EventPropertyDefinitionEntity epd WHERE epd.eventDefinitionId = :eventDefinitionId AND epd.required = true AND epd.deletedAt IS NULL")
-    List<EventPropertyDefinitionEntity> findRequiredByEventDefinitionId(@Param("eventDefinitionId") String eventDefinitionId);
-
-    /**
-     * 查找PII属性
-     */
-    @Query("SELECT epd FROM EventPropertyDefinitionEntity epd WHERE epd.eventDefinitionId = :eventDefinitionId AND epd.isPii = true AND epd.deletedAt IS NULL")
-    List<EventPropertyDefinitionEntity> findPiiByEventDefinitionId(@Param("eventDefinitionId") String eventDefinitionId);
-
-    /**
-     * 查找索引属性
-     */
-    @Query("SELECT epd FROM EventPropertyDefinitionEntity epd WHERE epd.eventDefinitionId = :eventDefinitionId AND epd.isIndexed = true AND epd.deletedAt IS NULL")
-    List<EventPropertyDefinitionEntity> findIndexedByEventDefinitionId(@Param("eventDefinitionId") String eventDefinitionId);
-
-    /**
-     * 统计属性数量
-     */
-    @Query("SELECT COUNT(epd) FROM EventPropertyDefinitionEntity epd WHERE epd.eventDefinitionId = :eventDefinitionId AND epd.deletedAt IS NULL")
-    long countByEventDefinitionId(@Param("eventDefinitionId") String eventDefinitionId);
-
-    /**
-     * 软删除
-     */
-    @Query("UPDATE EventPropertyDefinitionEntity epd SET epd.deletedAt = CURRENT_TIMESTAMP WHERE epd.id = :id")
-    void softDelete(@Param("id") String id);
 }

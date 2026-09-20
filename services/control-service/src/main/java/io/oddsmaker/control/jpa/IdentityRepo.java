@@ -42,30 +42,6 @@ public interface IdentityRepo extends JpaRepository<IdentityEntity, String> {
     @Query("SELECT i FROM IdentityEntity i WHERE i.gameId = :gameId AND i.playerId = :playerId AND i.status = 'ACTIVE' AND i.deletedAt IS NULL")
     Optional<IdentityEntity> findByPlayerId(@Param("gameId") String gameId, @Param("playerId") String playerId);
 
-    /**
-     * 查找非活跃身份（超过N天未出现）
-     */
-    @Query("SELECT i FROM IdentityEntity i WHERE i.lastSeenAt < :since AND i.status = 'ACTIVE' AND i.deletedAt IS NULL")
-    List<IdentityEntity> findInactiveSince(@Param("since") LocalDateTime since);
-
-    /**
-     * 查找需要合并的身份（同一设备有多个活跃身份）
-     */
-    @Query("SELECT i FROM IdentityEntity i WHERE i.deviceId IN (SELECT i2.deviceId FROM IdentityEntity i2 WHERE i2.gameId = :gameId AND i2.status = 'ACTIVE' AND i2.deletedAt IS NULL GROUP BY i2.deviceId HAVING COUNT(*) > 1) AND i.gameId = :gameId AND i.status = 'ACTIVE' AND i.deletedAt IS NULL ORDER BY i.deviceId, i.createdAt")
-    List<IdentityEntity> findCandidatesForMerge(@Param("gameId") String gameId);
-
-    /**
-     * 统计游戏的活跃用户数
-     */
-    @Query("SELECT COUNT(DISTINCT i.userId) FROM IdentityEntity i WHERE i.gameId = :gameId AND i.userId IS NOT NULL AND i.status = 'ACTIVE' AND i.deletedAt IS NULL AND i.lastSeenAt >= :since")
-    long countActiveUsersSince(@Param("gameId") String gameId, @Param("since") LocalDateTime since);
-
-    /**
-     * 统计游戏的活跃设备数
-     */
-    @Query("SELECT COUNT(DISTINCT i.deviceId) FROM IdentityEntity i WHERE i.gameId = :gameId AND i.status = 'ACTIVE' AND i.deletedAt IS NULL AND i.lastSeenAt >= :since")
-    long countActiveDevicesSince(@Param("gameId") String gameId, @Param("since") LocalDateTime since);
-
     // ========== 玩家数据删除（GDPR erasure）：不做状态过滤，已删/已合并身份也要被清洗 ==========
 
     /** 按玩家ID查找（AnyStatus：含 MERGED/DELETED/软删行——erasure 漏掉非活跃行等于没删干净） */

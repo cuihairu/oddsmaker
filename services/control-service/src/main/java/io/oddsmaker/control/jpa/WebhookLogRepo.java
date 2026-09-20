@@ -30,12 +30,6 @@ public interface WebhookLogRepo extends JpaRepository<WebhookLogEntity, String> 
     List<WebhookLogEntity> findByRiskCaseId(@Param("riskCaseId") String riskCaseId);
 
     /**
-     * 查找失败的日志
-     */
-    @Query("SELECT wl FROM WebhookLogEntity wl WHERE wl.webhookConfigId = :webhookConfigId AND wl.deliveryStatus IN ('FAILED', 'TIMEOUT') ORDER BY wl.createdAt DESC")
-    List<WebhookLogEntity> findFailedByWebhookConfigId(@Param("webhookConfigId") String webhookConfigId);
-
-    /**
      * 查找待重试的日志
      */
     @Query("SELECT wl FROM WebhookLogEntity wl WHERE wl.deliveryStatus = 'RETRYING' AND wl.nextRetryAt <= :now")
@@ -54,32 +48,9 @@ public interface WebhookLogRepo extends JpaRepository<WebhookLogEntity, String> 
     List<WebhookLogEntity> findByGameIdAndTimeRange(@Param("gameId") String gameId, @Param("startTime") LocalDateTime startTime, @Param("endTime") LocalDateTime endTime);
 
     /**
-     * 统计成功率
-     */
-    @Query("SELECT COUNT(wl) FROM WebhookLogEntity wl WHERE wl.webhookConfigId = :webhookConfigId AND wl.deliveryStatus = 'SUCCESS'")
-    long countSuccessByWebhookConfigId(@Param("webhookConfigId") String webhookConfigId);
-
-    /**
-     * 统计总数
-     */
-    @Query("SELECT COUNT(wl) FROM WebhookLogEntity wl WHERE wl.webhookConfigId = :webhookConfigId")
-    long countByWebhookConfigId(@Param("webhookConfigId") String webhookConfigId);
-
-    /**
      * 删除过期日志
      */
     @Query("DELETE FROM WebhookLogEntity wl WHERE wl.createdAt < :expireAt")
     int deleteExpiredLogs(@Param("expireAt") LocalDateTime expireAt);
 
-    /**
-     * 查找最近的失败日志
-     */
-    @Query("SELECT wl FROM WebhookLogEntity wl WHERE wl.gameId = :gameId AND wl.deliveryStatus IN ('FAILED', 'TIMEOUT') AND wl.createdAt >= :since ORDER BY wl.createdAt DESC")
-    List<WebhookLogEntity> findRecentFailures(@Param("gameId") String gameId, @Param("since") LocalDateTime since);
-
-    /**
-     * 统计Webhook的响应时间
-     */
-    @Query("SELECT AVG(wl.responseTimeMs) FROM WebhookLogEntity wl WHERE wl.webhookConfigId = :webhookConfigId AND wl.responseTimeMs IS NOT NULL")
-    Double averageResponseTime(@Param("webhookConfigId") String webhookConfigId);
 }

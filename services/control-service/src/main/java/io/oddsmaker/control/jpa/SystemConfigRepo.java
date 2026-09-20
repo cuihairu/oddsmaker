@@ -24,22 +24,10 @@ public interface SystemConfigRepo extends JpaRepository<SystemConfigEntity, Stri
     List<SystemConfigEntity> findByType(@Param("type") SystemConfigEntity.ConfigType type);
 
     /**
-     * 根据分类查找
-     */
-    @Query("SELECT sc FROM SystemConfigEntity sc WHERE sc.category = :category AND sc.deletedAt IS NULL ORDER BY sc.configKey")
-    List<SystemConfigEntity> findByCategory(@Param("category") String category);
-
-    /**
      * 查找公开配置
      */
     @Query("SELECT sc FROM SystemConfigEntity sc WHERE sc.isPublic = true AND sc.deletedAt IS NULL")
     List<SystemConfigEntity> findPublic();
-
-    /**
-     * 查找敏感配置
-     */
-    @Query("SELECT sc FROM SystemConfigEntity sc WHERE sc.isSensitive = true AND sc.deletedAt IS NULL")
-    List<SystemConfigEntity> findSensitive();
 
     /**
      * 搜索配置

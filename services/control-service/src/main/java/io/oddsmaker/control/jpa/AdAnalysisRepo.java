@@ -23,10 +23,4 @@ public interface AdAnalysisRepo extends JpaRepository<AdAnalysisEntity, String> 
         @Param("startDate") LocalDate startDate,
         @Param("endDate") LocalDate endDate);
 
-    @Query("SELECT a.adFormat, SUM(a.revenue), AVG(a.ecpm), AVG(a.ctr) " +
-           "FROM AdAnalysisEntity a WHERE a.gameId = :gameId " +
-           "AND a.analysisDate = :date GROUP BY a.adFormat")
-    List<Object[]> getAdPerformanceByFormat(
-        @Param("gameId") String gameId,
-        @Param("date") LocalDate date);
 }

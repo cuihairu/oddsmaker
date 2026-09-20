@@ -30,22 +30,10 @@ public interface ReportRepo extends JpaRepository<ReportEntity, String> {
     List<ReportEntity> findPublishedByGameId(@Param("gameId") String gameId);
 
     /**
-     * 查找公开报表
-     */
-    @Query("SELECT r FROM ReportEntity r WHERE r.gameId = :gameId AND r.isPublic = true AND r.status = 'PUBLISHED' AND r.deletedAt IS NULL")
-    List<ReportEntity> findPublicByGameId(@Param("gameId") String gameId);
-
-    /**
      * 根据报表类型查找
      */
     @Query("SELECT r FROM ReportEntity r WHERE r.gameId = :gameId AND r.reportType = :reportType AND r.deletedAt IS NULL ORDER BY r.createdAt DESC")
     List<ReportEntity> findByGameIdAndType(@Param("gameId") String gameId, @Param("reportType") ReportEntity.ReportType reportType);
-
-    /**
-     * 根据分类查找
-     */
-    @Query("SELECT r FROM ReportEntity r WHERE r.gameId = :gameId AND r.reportCategory = :reportCategory AND r.deletedAt IS NULL ORDER BY r.createdAt DESC")
-    List<ReportEntity> findByGameIdAndCategory(@Param("gameId") String gameId, @Param("reportCategory") String reportCategory);
 
     /**
      * 查找定时报表
@@ -77,9 +65,4 @@ public interface ReportRepo extends JpaRepository<ReportEntity, String> {
     @Query("SELECT r FROM ReportEntity r WHERE r.gameId = :gameId AND r.lastRunAt IS NOT NULL AND r.deletedAt IS NULL ORDER BY r.lastRunAt DESC")
     List<ReportEntity> findRecentlyRun(@Param("gameId") String gameId);
 
-    /**
-     * 统计报表数量
-     */
-    @Query("SELECT COUNT(r) FROM ReportEntity r WHERE r.gameId = :gameId AND r.deletedAt IS NULL")
-    long countByGameId(@Param("gameId") String gameId);
 }

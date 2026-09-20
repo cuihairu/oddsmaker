@@ -25,12 +25,6 @@ public interface MFAConfigRepo extends JpaRepository<MFAConfigEntity, String> {
     List<MFAConfigEntity> findEnabledByUserId(@Param("userId") String userId);
 
     /**
-     * 查找用户的主要MFA方法
-     */
-    @Query("SELECT m FROM MFAConfigEntity m WHERE m.userId = :userId AND m.isPrimary = true AND m.deletedAt IS NULL")
-    Optional<MFAConfigEntity> findPrimaryByUserId(@Param("userId") String userId);
-
-    /**
      * 根据类型查找用户的MFA配置
      */
     @Query("SELECT m FROM MFAConfigEntity m WHERE m.userId = :userId AND m.mfaMethod = :method AND m.deletedAt IS NULL")
@@ -41,12 +35,6 @@ public interface MFAConfigRepo extends JpaRepository<MFAConfigEntity, String> {
      */
     @Query("SELECT m FROM MFAConfigEntity m WHERE m.mfaStatus = 'PENDING' AND m.deletedAt IS NULL")
     List<MFAConfigEntity> findPending();
-
-    /**
-     * 统计用户的MFA方法数量
-     */
-    @Query("SELECT COUNT(m) FROM MFAConfigEntity m WHERE m.userId = :userId AND m.mfaStatus = 'ENABLED' AND m.deletedAt IS NULL")
-    long countEnabledByUserId(@Param("userId") String userId);
 
     /**
      * 检查用户是否启用了MFA

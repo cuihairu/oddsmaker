@@ -13,8 +13,6 @@ public interface AnnouncementRepo extends JpaRepository<AnnouncementEntity, Stri
 
     List<AnnouncementEntity> findByGameIdAndDeletedAtIsNullOrderByPriorityDescCreatedAtDesc(String gameId);
 
-    List<AnnouncementEntity> findByGameIdAndStatusAndDeletedAtIsNull(String gameId, AnnouncementEntity.Status status);
-
     /** 定时发布扫描：到点未发布的 */
     List<AnnouncementEntity> findByStatusAndScheduledAtLessThanEqualAndDeletedAtIsNull(
         AnnouncementEntity.Status status, LocalDateTime now);

@@ -70,18 +70,6 @@ public interface UserRepo extends JpaRepository<UserEntity, String> {
     List<UserEntity> findRecentlyLoggedIn(Pageable pageable);
 
     /**
-     * 查找指定时间后登录的用户
-     */
-    @Query("SELECT u FROM UserEntity u WHERE u.lastLoginAt >= :since AND u.deletedAt IS NULL")
-    List<UserEntity> findLoggedInSince(@Param("since") LocalDateTime since);
-
-    /**
-     * 查找从未登录的用户
-     */
-    @Query("SELECT u FROM UserEntity u WHERE u.lastLoginAt IS NULL AND u.deletedAt IS NULL")
-    List<UserEntity> findNeverLoggedIn();
-
-    /**
      * 检查用户名是否存在
      */
     boolean existsByUsername(String username);
@@ -90,11 +78,6 @@ public interface UserRepo extends JpaRepository<UserEntity, String> {
      * 检查邮箱是否存在
      */
     boolean existsByEmail(String email);
-
-    /**
-     * 检查Keycloak ID是否存在
-     */
-    boolean existsByKeycloakId(String keycloakId);
 
     /**
      * 获取用户统计信息
@@ -108,18 +91,4 @@ public interface UserRepo extends JpaRepository<UserEntity, String> {
            ") FROM UserEntity u WHERE u.deletedAt IS NULL")
     List<Object> getUserStatistics(@Param("since") LocalDateTime since);
 
-    /**
-     * 查找启用双因素认证的用户
-     */
-    List<UserEntity> findByTwoFactorEnabledTrueAndDeletedAtIsNull();
-
-    /**
-     * 根据时区查找用户
-     */
-    List<UserEntity> findByTimeZoneAndDeletedAtIsNull(String timezone);
-
-    /**
-     * 根据语言查找用户
-     */
-    List<UserEntity> findByLanguageAndDeletedAtIsNull(String language);
 }

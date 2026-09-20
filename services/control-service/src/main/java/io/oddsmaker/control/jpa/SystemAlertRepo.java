@@ -12,22 +12,10 @@ import java.util.List;
 public interface SystemAlertRepo extends JpaRepository<SystemAlertEntity, String> {
 
     /**
-     * 查找开放的告警
-     */
-    @Query("SELECT sa FROM SystemAlertEntity sa WHERE sa.alertStatus = 'OPEN' AND sa.deletedAt IS NULL ORDER BY sa.severity DESC, sa.createdAt DESC")
-    List<SystemAlertEntity> findOpen();
-
-    /**
      * 查找活跃的告警
      */
     @Query("SELECT sa FROM SystemAlertEntity sa WHERE sa.alertStatus IN ('OPEN', 'ACKNOWLEDGED', 'INVESTIGATING') AND sa.deletedAt IS NULL ORDER BY sa.severity DESC, sa.createdAt DESC")
     List<SystemAlertEntity> findActive();
-
-    /**
-     * 查找严重告警
-     */
-    @Query("SELECT sa FROM SystemAlertEntity sa WHERE sa.severity IN ('CRITICAL', 'EMERGENCY') AND sa.alertStatus IN ('OPEN', 'ACKNOWLEDGED') AND sa.deletedAt IS NULL ORDER BY sa.createdAt DESC")
-    List<SystemAlertEntity> findCritical();
 
     /**
      * 根据类型查找
@@ -36,22 +24,10 @@ public interface SystemAlertRepo extends JpaRepository<SystemAlertEntity, String
     List<SystemAlertEntity> findByType(@Param("type") SystemAlertEntity.AlertType type);
 
     /**
-     * 根据来源查找
-     */
-    @Query("SELECT sa FROM SystemAlertEntity sa WHERE sa.source = :source AND sa.deletedAt IS NULL ORDER BY sa.createdAt DESC")
-    List<SystemAlertEntity> findBySource(@Param("source") String source);
-
-    /**
      * 查找需要升级的告警
      */
     @Query("SELECT sa FROM SystemAlertEntity sa WHERE sa.severity IN ('CRITICAL', 'EMERGENCY') AND sa.alertStatus = 'OPEN' AND sa.escalationLevel = 0 AND sa.deletedAt IS NULL")
     List<SystemAlertEntity> findNeedingEscalation();
-
-    /**
-     * 查找需要解除暂停的告警
-     */
-    @Query("SELECT sa FROM SystemAlertEntity sa WHERE sa.alertStatus = 'SNOOZED' AND sa.snoozedUntil < :now AND sa.deletedAt IS NULL")
-    List<SystemAlertEntity> findSnoozedExpired(@Param("now") LocalDateTime now);
 
     /**
      * 统计告警数量

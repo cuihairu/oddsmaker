@@ -24,34 +24,10 @@ public interface RiskCaseRepo extends JpaRepository<RiskCaseEntity, String> {
     List<RiskCaseEntity> findByGameId(@Param("gameId") String gameId);
 
     /**
-     * 根据目标查找案例
-     */
-    @Query("SELECT rc FROM RiskCaseEntity rc WHERE rc.targetType = :targetType AND rc.targetId = :targetId ORDER BY rc.createdAt DESC")
-    List<RiskCaseEntity> findByTarget(@Param("targetType") String targetType, @Param("targetId") String targetId);
-
-    /**
-     * 根据风险等级查找案例
-     */
-    @Query("SELECT rc FROM RiskCaseEntity rc WHERE rc.gameId = :gameId AND rc.riskLevel = :riskLevel ORDER BY rc.createdAt DESC")
-    List<RiskCaseEntity> findByGameIdAndRiskLevel(@Param("gameId") String gameId, @Param("riskLevel") RiskCaseEntity.RiskLevel riskLevel);
-
-    /**
-     * 查找高风险案例
-     */
-    @Query("SELECT rc FROM RiskCaseEntity rc WHERE rc.gameId = :gameId AND rc.riskLevel IN ('HIGH', 'CRITICAL') AND rc.executionStatus = 'PENDING' ORDER BY rc.riskScore DESC, rc.createdAt ASC")
-    List<RiskCaseEntity> findHighRiskPending(@Param("gameId") String gameId);
-
-    /**
      * 查找待审核案例
      */
     @Query("SELECT rc FROM RiskCaseEntity rc WHERE rc.gameId = :gameId AND rc.reviewStatus IN ('pending', 'reviewing') ORDER BY rc.createdAt ASC")
     List<RiskCaseEntity> findPendingReview(@Param("gameId") String gameId);
-
-    /**
-     * 查找待执行案例
-     */
-    @Query("SELECT rc FROM RiskCaseEntity rc WHERE rc.executionStatus = 'PENDING' ORDER BY rc.createdAt ASC")
-    List<RiskCaseEntity> findPendingExecution();
 
     /**
      * 查找已封禁但未解除的案例
@@ -66,12 +42,6 @@ public interface RiskCaseRepo extends JpaRepository<RiskCaseEntity, String> {
     List<RiskCaseEntity> findByGameIdAndTimeRange(@Param("gameId") String gameId, @Param("startTime") LocalDateTime startTime, @Param("endTime") LocalDateTime endTime);
 
     /**
-     * 统计规则的触发次数
-     */
-    @Query("SELECT COUNT(rc) FROM RiskCaseEntity rc WHERE rc.riskRuleId = :riskRuleId")
-    long countByRiskRuleId(@Param("riskRuleId") String riskRuleId);
-
-    /**
      * 统计游戏的风险案例数
      */
     @Query("SELECT COUNT(rc) FROM RiskCaseEntity rc WHERE rc.gameId = :gameId AND rc.createdAt >= :since")
@@ -82,18 +52,6 @@ public interface RiskCaseRepo extends JpaRepository<RiskCaseEntity, String> {
      */
     @Query("SELECT rc.targetType, rc.targetId, COUNT(rc) as caseCount FROM RiskCaseEntity rc WHERE rc.createdAt >= :since GROUP BY rc.targetType, rc.targetId HAVING COUNT(rc) >= :threshold ORDER BY caseCount DESC")
     List<Object[]> findFrequentTargets(@Param("since") LocalDateTime since, @Param("threshold") long threshold);
-
-    /**
-     * 根据案例编号查找
-     */
-    @Query("SELECT rc FROM RiskCaseEntity rc WHERE rc.caseNumber = :caseNumber")
-    List<RiskCaseEntity> findByCaseNumber(@Param("caseNumber") String caseNumber);
-
-    /**
-     * 查找已解决的案例
-     */
-    @Query("SELECT rc FROM RiskCaseEntity rc WHERE rc.gameId = :gameId AND rc.resolvedAt IS NOT NULL ORDER BY rc.resolvedAt DESC")
-    List<RiskCaseEntity> findResolvedByGameId(@Param("gameId") String gameId);
 
     // ========== 玩家数据删除（GDPR erasure）：定位后 Java 侧匿名化（保留案件记录） ==========
 

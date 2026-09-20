@@ -36,22 +36,10 @@ public interface WebhookConfigRepo extends JpaRepository<WebhookConfigEntity, St
     Optional<WebhookConfigEntity> findByGameIdAndName(@Param("gameId") String gameId, @Param("name") String name);
 
     /**
-     * 查找失败状态的Webhook配置
-     */
-    @Query("SELECT wc FROM WebhookConfigEntity wc WHERE wc.status = 'FAILED' AND wc.deletedAt IS NULL")
-    List<WebhookConfigEntity> findFailedWebhooks();
-
-    /**
      * 查找需要重试的Webhook日志
      */
     @Query("SELECT wl FROM WebhookLogEntity wl WHERE wl.deliveryStatus = 'RETRYING' AND wl.nextRetryAt <= :now")
     List<WebhookLogEntity> findPendingRetries(@Param("now") java.time.LocalDateTime now);
-
-    /**
-     * 统计Webhook配置的发送次数
-     */
-    @Query("SELECT SUM(wc.totalSent) FROM WebhookConfigEntity wc WHERE wc.gameId = :gameId")
-    Long sumTotalSentByGameId(@Param("gameId") String gameId);
 
     /**
      * 搜索Webhook配置

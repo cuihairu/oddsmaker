@@ -56,36 +56,6 @@ public interface BlockListRepo extends JpaRepository<BlockListEntity, String> {
     List<BlockListEntity> findByGameIdAndTargetType(@Param("gameId") String gameId, @Param("targetType") String targetType);
 
     /**
-     * 查找IP封禁
-     */
-    @Query("SELECT bl FROM BlockListEntity bl WHERE bl.targetType = 'ip' AND bl.targetValue = :ip AND bl.deletedAt IS NULL AND bl.unblockedAt IS NULL AND (bl.isPermanent = true OR bl.expiresAt > :now)")
-    List<BlockListEntity> findActiveIpBlocks(@Param("ip") String ip, @Param("now") LocalDateTime now);
-
-    /**
-     * 查找硬封禁
-     */
-    @Query("SELECT bl FROM BlockListEntity bl WHERE bl.gameId = :gameId AND bl.blockType = 'HARD' AND bl.deletedAt IS NULL AND bl.unblockedAt IS NULL AND (bl.isPermanent = true OR bl.expiresAt > :now) ORDER BY bl.createdAt DESC")
-    List<BlockListEntity> findHardBlocks(@Param("gameId") String gameId, @Param("now") LocalDateTime now);
-
-    /**
-     * 查找影子封禁
-     */
-    @Query("SELECT bl FROM BlockListEntity bl WHERE bl.gameId = :gameId AND bl.blockType = 'SHADOW' AND bl.deletedAt IS NULL AND bl.unblockedAt IS NULL AND (bl.isPermanent = true OR bl.expiresAt > :now) ORDER BY bl.createdAt DESC")
-    List<BlockListEntity> findShadowBlocks(@Param("gameId") String gameId, @Param("now") LocalDateTime now);
-
-    /**
-     * 统计活跃封禁数
-     */
-    @Query("SELECT COUNT(bl) FROM BlockListEntity bl WHERE bl.gameId = :gameId AND bl.deletedAt IS NULL AND bl.unblockedAt IS NULL AND (bl.isPermanent = true OR bl.expiresAt > :now)")
-    long countActiveBlocks(@Param("gameId") String gameId, @Param("now") LocalDateTime now);
-
-    /**
-     * 根据封禁分类查找
-     */
-    @Query("SELECT bl FROM BlockListEntity bl WHERE bl.gameId = :gameId AND bl.blockCategory = :blockCategory AND bl.deletedAt IS NULL AND bl.unblockedAt IS NULL AND (bl.isPermanent = true OR bl.expiresAt > :now) ORDER BY bl.createdAt DESC")
-    List<BlockListEntity> findByGameIdAndBlockCategory(@Param("gameId") String gameId, @Param("blockCategory") String blockCategory, @Param("now") LocalDateTime now);
-
-    /**
      * 搜索封禁
      */
     @Query("SELECT bl FROM BlockListEntity bl WHERE bl.gameId = :gameId AND (bl.targetValue LIKE %:query% OR bl.targetName LIKE %:query% OR bl.blockReason LIKE %:query%) AND bl.deletedAt IS NULL ORDER BY bl.createdAt DESC")

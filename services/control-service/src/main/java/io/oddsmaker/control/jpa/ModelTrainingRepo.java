@@ -26,21 +26,10 @@ public interface ModelTrainingRepo extends JpaRepository<ModelTrainingEntity, St
     List<ModelTrainingEntity> findByGameIdOrderByCreatedAtDesc(String gameId);
 
     /**
-     * 根据状态查找训练任务
-     */
-    List<ModelTrainingEntity> findByTrainingStatus(ModelTrainingEntity.TrainingStatus status);
-
-    /**
      * 查找运行中的训练任务
      */
     @Query("SELECT t FROM ModelTrainingEntity t WHERE t.trainingStatus = 'RUNNING'")
     List<ModelTrainingEntity> findRunningJobs();
-
-    /**
-     * 查找待处理的训练任务
-     */
-    @Query("SELECT t FROM ModelTrainingEntity t WHERE t.trainingStatus = 'PENDING' ORDER BY t.createdAt ASC")
-    List<ModelTrainingEntity> findPendingJobs();
 
     /**
      * 查找超时的训练任务
@@ -67,38 +56,10 @@ public interface ModelTrainingRepo extends JpaRepository<ModelTrainingEntity, St
     long countByModelId(@Param("modelId") String modelId);
 
     /**
-     * 查找成功的训练任务
-     */
-    @Query("SELECT t FROM ModelTrainingEntity t WHERE t.modelId = :modelId AND t.trainingStatus = 'COMPLETED' ORDER BY t.completedAt DESC")
-    List<ModelTrainingEntity> findSuccessfulByModelId(@Param("modelId") String modelId);
-
-    /**
-     * 查找最近失败的训练任务
-     */
-    @Query("SELECT t FROM ModelTrainingEntity t WHERE t.modelId = :modelId AND t.trainingStatus = 'FAILED' ORDER BY t.completedAt DESC")
-    List<ModelTrainingEntity> findFailedByModelId(@Param("modelId") String modelId);
-
-    /**
      * 计算平均训练时长
      */
     @Query("SELECT AVG(t.durationMs) FROM ModelTrainingEntity t WHERE t.modelId = :modelId AND t.trainingStatus = 'COMPLETED'")
     Double calculateAverageDuration(@Param("modelId") String modelId);
-
-    /**
-     * 查找触发者最近的训练任务
-     */
-    List<ModelTrainingEntity> findByTriggeredByOrderByCreatedAtDesc(String triggeredBy);
-
-    /**
-     * 查找自动触发的训练任务
-     */
-    List<ModelTrainingEntity> findByTriggerTypeOrderByCreatedAtDesc(String triggerType);
-
-    /**
-     * 查找有GPU使用的训练任务
-     */
-    @Query("SELECT t FROM ModelTrainingEntity t WHERE t.gpuHours IS NOT NULL AND t.gpuHours > 0 ORDER BY t.gpuHours DESC")
-    List<ModelTrainingEntity> findWithGpuUsage();
 
     /**
      * 计算总GPU使用时长
@@ -112,8 +73,4 @@ public interface ModelTrainingRepo extends JpaRepository<ModelTrainingEntity, St
     @Query("SELECT SUM(t.cpuHours) FROM ModelTrainingEntity t WHERE t.trainingStatus = 'COMPLETED'")
     Double calculateTotalCpuHours();
 
-    /**
-     * 删除指定模型的所有训练任务
-     */
-    void deleteByModelId(String modelId);
 }

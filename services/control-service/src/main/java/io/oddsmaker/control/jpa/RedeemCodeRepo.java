@@ -16,8 +16,6 @@ public interface RedeemCodeRepo extends JpaRepository<RedeemCodeEntity, String> 
 
     List<RedeemCodeEntity> findByBatchId(String batchId);
 
-    long countByBatchIdAndStatus(String batchId, RedeemCodeEntity.Status status);
-
     /**
      * 原子核销唯一码：仅当状态为 AVAILABLE 时更新，返回受影响行数（1=成功）。
      */

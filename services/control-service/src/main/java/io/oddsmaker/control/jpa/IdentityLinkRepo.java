@@ -31,40 +31,10 @@ public interface IdentityLinkRepo extends JpaRepository<IdentityLinkEntity, Stri
     Optional<IdentityLinkEntity> findActiveByIdentityIdAndTypeAndLinkedId(@Param("identityId") String identityId, @Param("type") String type, @Param("linkedId") String linkedId);
 
     /**
-     * 查找已确认的关联
-     */
-    @Query("SELECT il FROM IdentityLinkEntity il WHERE il.identityId = :identityId AND il.verificationStatus = 'CONFIRMED' AND il.status = 'ACTIVE' AND il.deletedAt IS NULL")
-    List<IdentityLinkEntity> findConfirmedByIdentityId(@Param("identityId") String identityId);
-
-    /**
-     * 查找强关联
-     */
-    @Query("SELECT il FROM IdentityLinkEntity il WHERE il.identityId = :identityId AND il.linkStrength >= 0.8 AND il.status = 'ACTIVE' AND il.deletedAt IS NULL")
-    List<IdentityLinkEntity> findStrongLinksByIdentityId(@Param("identityId") String identityId);
-
-    /**
      * 查找已过期的关联
      */
     @Query("SELECT il FROM IdentityLinkEntity il WHERE il.expiredAt < :now AND il.status = 'ACTIVE' AND il.deletedAt IS NULL")
     List<IdentityLinkEntity> findExpired(@Param("now") LocalDateTime now);
-
-    /**
-     * 查找待验证的关联
-     */
-    @Query("SELECT il FROM IdentityLinkEntity il WHERE il.verificationStatus = 'PENDING' AND il.status = 'ACTIVE' AND il.deletedAt IS NULL AND il.createdAt < :before ORDER BY il.createdAt ASC")
-    List<IdentityLinkEntity> findPendingVerification(@Param("before") LocalDateTime before);
-
-    /**
-     * 统计身份的活跃关联数
-     */
-    @Query("SELECT COUNT(il) FROM IdentityLinkEntity il WHERE il.identityId = :identityId AND il.status = 'ACTIVE' AND il.deletedAt IS NULL")
-    long countActiveByIdentityId(@Param("identityId") String identityId);
-
-    /**
-     * 根据来源查找关联
-     */
-    @Query("SELECT il FROM IdentityLinkEntity il WHERE il.linkSource = :source AND il.status = 'ACTIVE' AND il.deletedAt IS NULL ORDER BY il.createdAt DESC")
-    List<IdentityLinkEntity> findByLinkSource(@Param("source") String source);
 
     // ========== 玩家数据删除（GDPR erasure）：AnyStatus 反查 + 物理删除 ==========
 
