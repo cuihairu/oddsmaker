@@ -3,6 +3,7 @@ package io.oddsmaker.control.service;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -37,7 +38,7 @@ public class RetentionMetricsService {
         String sql = "SELECT " + cohortExpr + " AS cohort, d AS d, sum(users) AS users "
                 + "FROM retention_daily WHERE game_id = ?" + envFilter(environment)
                 + " AND cohort_date >= ? AND d IN (0, 1, 7, 30) GROUP BY cohort, d ORDER BY cohort, d";
-        LocalDate since = LocalDate.now().minusDays(d);
+        LocalDate since = LocalDate.now(ZoneOffset.UTC).minusDays(d);
         List<Map<String, Object>> rows = environment == null || environment.isBlank()
                 ? client.query(sql, gameId, since)
                 : client.query(sql, gameId, environment, since);

@@ -3,6 +3,7 @@ package io.oddsmaker.control.service;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -54,7 +55,7 @@ public class FinanceMetricsService {
     }
 
     private List<Map<String, Object>> queryRows(String gameId, String environment, String granularity, int days) {
-        LocalDate since = LocalDate.now().minusDays(days);
+        LocalDate since = LocalDate.now(ZoneOffset.UTC).minusDays(days);
         String bucket = "month".equals(granularity) ? "toStartOfMonth" : "";
 
         String activitySql = "SELECT " + bucketApply(bucket, "event_date") + " AS stat_date, "

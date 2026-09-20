@@ -3,6 +3,7 @@ package io.oddsmaker.control.service;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -31,7 +32,7 @@ public class LtvForecastService {
             resp.put("available", false);
             return resp;
         }
-        LocalDate since = LocalDate.now().minusDays(d);
+        LocalDate since = LocalDate.now(ZoneOffset.UTC).minusDays(d);
 
         String sizeSql = "SELECT cohort_date AS cohort, uniqExact(user_id) AS cohort_size "
                 + "FROM v_user_first_seen WHERE game_id = ?" + envFilter(environment)
@@ -47,7 +48,7 @@ public class LtvForecastService {
                 ? client.query(ltvSql, gameId, since)
                 : client.query(ltvSql, gameId, environment, since);
 
-        resp.putAll(LtvForecastAssembler.forecast(ltvRows, cohortRows, LocalDate.now().toString()));
+        resp.putAll(LtvForecastAssembler.forecast(ltvRows, cohortRows, LocalDate.now(ZoneOffset.UTC).toString()));
         return resp;
     }
 

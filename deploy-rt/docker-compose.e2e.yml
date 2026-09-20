@@ -7,6 +7,7 @@ services:
     image: postgres:16-alpine
     container_name: e2e-postgres
     environment:
+      TZ: UTC
       POSTGRES_DB: oddsmaker
       POSTGRES_USER: oddsmaker
       POSTGRES_PASSWORD: oddsmaker
@@ -78,6 +79,7 @@ services:
     image: clickhouse/clickhouse-server:24.8
     container_name: e2e-clickhouse
     environment:
+      TZ: UTC
       CLICKHOUSE_USER: oddsmaker
       CLICKHOUSE_PASSWORD: oddsmaker
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
@@ -113,12 +115,13 @@ services:
     image: eclipse-temurin:21-jre
     container_name: e2e-control
     working_dir: /app
-    command: ["java", "-XX:MaxRAMPercentage=70.0", "-jar", "/jars/control-service-0.1.0.jar"]
+    command: ["java", "-XX:MaxRAMPercentage=70.0", "-Duser.timezone=UTC", "-jar", "/jars/control-service-0.1.0.jar"]
     volumes:
       - ./jars:/jars:ro
       - e2e_ctrl_data:/app/data
     ports: ["8085:8085", "8086:8086"]
     environment:
+      TZ: UTC
       # 配置已合并为单一 application.yaml（PG 默认）；以下显式声明部署值，与容器内地址对齐
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/oddsmaker
       SPRING_DATASOURCE_USERNAME: oddsmaker
@@ -154,11 +157,12 @@ services:
     image: eclipse-temurin:21-jre
     container_name: e2e-gateway
     working_dir: /app
-    command: ["java", "-XX:MaxRAMPercentage=70.0", "-jar", "/jars/gateway-service-0.1.0.jar"]
+    command: ["java", "-XX:MaxRAMPercentage=70.0", "-Duser.timezone=UTC", "-jar", "/jars/gateway-service-0.1.0.jar"]
     volumes:
       - ./jars:/jars:ro
     ports: ["18080:8080"]
     environment:
+      TZ: UTC
       ODDSMAKER_KAFKA_BOOTSTRAP: kafka:9092
       ODDSMAKER_KAFKA_REGISTRY_URL: http://apicurio:8080/apis/registry/v2
       ODDSMAKER_CONTROL_URL: http://control-service:8085
@@ -183,6 +187,7 @@ services:
     container_name: e2e-enrich
     working_dir: /app
     command: ["java", "-XX:MaxRAMPercentage=70.0",
+    "-Duser.timezone=UTC",
               # Flink 1.19 在 Java 17+ 官方要求的模块开放（local executor 无启动脚本代劳）
               "--add-opens=java.base/java.lang=ALL-UNNAMED",
               "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
@@ -223,6 +228,7 @@ services:
     container_name: e2e-sessions
     working_dir: /app
     command: ["java", "-XX:MaxRAMPercentage=70.0",
+    "-Duser.timezone=UTC",
               # Flink 1.19 在 Java 17+ 官方要求的模块开放（local executor 无启动脚本代劳）
               "--add-opens=java.base/java.lang=ALL-UNNAMED",
               "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
@@ -267,6 +273,7 @@ services:
     container_name: e2e-retention
     working_dir: /app
     command: ["java", "-XX:MaxRAMPercentage=70.0",
+    "-Duser.timezone=UTC",
               "--add-opens=java.base/java.lang=ALL-UNNAMED",
               "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
               "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
@@ -303,6 +310,7 @@ services:
     container_name: e2e-funnels
     working_dir: /app
     command: ["java", "-XX:MaxRAMPercentage=70.0",
+    "-Duser.timezone=UTC",
               "--add-opens=java.base/java.lang=ALL-UNNAMED",
               "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
               "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
@@ -340,6 +348,7 @@ services:
     container_name: e2e-configurable-funnels
     working_dir: /app
     command: ["java", "-XX:MaxRAMPercentage=70.0",
+    "-Duser.timezone=UTC",
               "--add-opens=java.base/java.lang=ALL-UNNAMED",
               "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
               "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
@@ -382,6 +391,7 @@ services:
     container_name: e2e-identity
     working_dir: /app
     command: ["java", "-XX:MaxRAMPercentage=70.0",
+    "-Duser.timezone=UTC",
               "--add-opens=java.base/java.lang=ALL-UNNAMED",
               "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
               "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
@@ -419,6 +429,7 @@ services:
     container_name: e2e-risk
     working_dir: /app
     command: ["java", "-XX:MaxRAMPercentage=70.0",
+    "-Duser.timezone=UTC",
               "--add-opens=java.base/java.lang=ALL-UNNAMED",
               "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
               "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",

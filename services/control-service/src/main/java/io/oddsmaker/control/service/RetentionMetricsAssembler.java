@@ -1,6 +1,7 @@
 package io.oddsmaker.control.service;
 
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.time.LocalDateTime;
 import java.sql.Timestamp;
 import java.util.ArrayList;
@@ -77,7 +78,7 @@ public final class RetentionMetricsAssembler {
         long totalNewUsers = 0;
         double sumD1 = 0, sumD7 = 0, sumD30 = 0;
         int cohortsD1 = 0, cohortsD7 = 0, cohortsD30 = 0;
-        String cutoff = LocalDate.now().minusDays(matureDays).toString();
+        String cutoff = LocalDate.now(ZoneOffset.UTC).minusDays(matureDays).toString();
         for (Map<String, Object> point : points) {
             long newUsers = RiskMetricsAssembler.asLong(point.get("newUsers"));
             if (newUsers <= 0) {

@@ -4,6 +4,7 @@ import io.oddsmaker.control.jpa.FunnelConfigEntity;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -51,7 +52,7 @@ public class FunnelResultsService {
             return resp;
         }
 
-        LocalDate since = LocalDate.now().minusDays(d);
+        LocalDate since = LocalDate.now(ZoneOffset.UTC).minusDays(d);
         String sql = "SELECT step, anyLast(step_name) AS step_name, sum(users) AS users "
                 + "FROM funnels_configurable "
                 + "WHERE funnel_id = ? AND game_id = ?" + envFilter(environment) + " AND event_date >= ? "

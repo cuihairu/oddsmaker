@@ -3,6 +3,7 @@ package io.oddsmaker.control.service;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -31,9 +32,9 @@ public class PaymentFunnelService {
             resp.put("available", false);
             return resp;
         }
-        LocalDate since = LocalDate.now().minusDays(d);
+        LocalDate since = LocalDate.now(ZoneOffset.UTC).minusDays(d);
         // 月留存窗口已关闭的 cohort 截止日（30 天窗口 + 1 天缓冲）
-        String matureCutoff = LocalDate.now().minusDays(31).toString();
+        String matureCutoff = LocalDate.now(ZoneOffset.UTC).minusDays(31).toString();
 
         // 注册/首充/二充：按 cohort 聚合（首充=付费事件≥1，二充=≥2）
         String funnelSql = "SELECT f.cohort_date AS cohort, uniqExact(f.user_id) AS registered, "

@@ -3,6 +3,7 @@ package io.oddsmaker.control.service;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -40,7 +41,7 @@ public class CrashMetricsService {
                 + "min(event_date) AS first_seen, max(event_date) AS last_seen "
                 + "FROM events WHERE event_type = 'error' AND game_id = ?" + envFilter(environment)
                 + " AND event_date >= ? GROUP BY crash_group ORDER BY occurrences DESC) LIMIT " + TOP_GROUPS_LIMIT;
-        LocalDate since = LocalDate.now().minusDays(d);
+        LocalDate since = LocalDate.now(ZoneOffset.UTC).minusDays(d);
         List<Map<String, Object>> rows = environment == null || environment.isBlank()
                 ? client.query(sql, gameId, since)
                 : client.query(sql, gameId, environment, since);
@@ -60,7 +61,7 @@ public class CrashMetricsService {
                 + "uniqExact(device_id) AS affected_devices "
                 + "FROM events WHERE event_type = 'error' AND game_id = ?" + envFilter(environment)
                 + " AND event_date >= ? GROUP BY bucket ORDER BY bucket";
-        LocalDate since = LocalDate.now().minusDays(d);
+        LocalDate since = LocalDate.now(ZoneOffset.UTC).minusDays(d);
         List<Map<String, Object>> rows = environment == null || environment.isBlank()
                 ? client.query(sql, gameId, since)
                 : client.query(sql, gameId, environment, since);
@@ -76,7 +77,7 @@ public class CrashMetricsService {
             resp.put("available", false);
             return resp;
         }
-        LocalDate since = LocalDate.now().minusDays(d);
+        LocalDate since = LocalDate.now(ZoneOffset.UTC).minusDays(d);
         String sql = "SELECT app_version AS app_version, event_date AS event_date, "
                 + "crash_devices AS crash_devices, active_devices AS active_devices, "
                 + "round(crash_devices / active_devices, 6) AS crash_rate "

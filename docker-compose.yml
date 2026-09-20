@@ -21,6 +21,7 @@ services:
     image: postgres:16-alpine
     container_name: oddsmaker-postgres
     environment:
+      TZ: UTC
       POSTGRES_DB: oddsmaker
       POSTGRES_USER: oddsmaker
       POSTGRES_PASSWORD: oddsmaker
@@ -103,6 +104,7 @@ services:
     image: clickhouse/clickhouse-server:24.8
     container_name: oddsmaker-clickhouse
     environment:
+      TZ: UTC
       CLICKHOUSE_USER: oddsmaker
       CLICKHOUSE_PASSWORD: oddsmaker
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
@@ -150,6 +152,7 @@ services:
     ports:
       - "28085:8085"
     environment:
+      TZ: UTC
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/oddsmaker
       SPRING_DATASOURCE_USERNAME: oddsmaker
       SPRING_DATASOURCE_PASSWORD: oddsmaker
@@ -198,6 +201,7 @@ services:
     ports:
       - "28080:8080"
     environment:
+      TZ: UTC
       ODDSMAKER_KAFKA_BOOTSTRAP: kafka:9092
       ODDSMAKER_KAFKA_REGISTRY_URL: http://apicurio:8080/apis/registry/v2
       ODDSMAKER_CONTROL_URL: http://control-service:8085
@@ -231,6 +235,7 @@ services:
     container_name: oddsmaker-enrich
     working_dir: /app
     command: ["java", "-XX:MaxRAMPercentage=70.0",
+    "-Duser.timezone=UTC",
               # Flink 1.19 在 Java 17+ 官方要求的模块开放（local executor 无启动脚本代劳）
               "--add-opens=java.base/java.lang=ALL-UNNAMED",
               "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
@@ -272,6 +277,7 @@ services:
     container_name: oddsmaker-sessions
     working_dir: /app
     command: ["java", "-XX:MaxRAMPercentage=70.0",
+    "-Duser.timezone=UTC",
               "--add-opens=java.base/java.lang=ALL-UNNAMED",
               "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
               "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
@@ -313,6 +319,7 @@ services:
     container_name: oddsmaker-retention
     working_dir: /app
     command: ["java", "-XX:MaxRAMPercentage=70.0",
+    "-Duser.timezone=UTC",
               "--add-opens=java.base/java.lang=ALL-UNNAMED",
               "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
               "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
@@ -350,6 +357,7 @@ services:
     container_name: oddsmaker-funnels
     working_dir: /app
     command: ["java", "-XX:MaxRAMPercentage=70.0",
+    "-Duser.timezone=UTC",
               "--add-opens=java.base/java.lang=ALL-UNNAMED",
               "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
               "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
@@ -389,6 +397,7 @@ services:
     container_name: oddsmaker-configurable-funnels
     working_dir: /app
     command: ["java", "-XX:MaxRAMPercentage=70.0",
+    "-Duser.timezone=UTC",
               "--add-opens=java.base/java.lang=ALL-UNNAMED",
               "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
               "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
@@ -432,6 +441,7 @@ services:
     container_name: oddsmaker-identity
     working_dir: /app
     command: ["java", "-XX:MaxRAMPercentage=70.0",
+    "-Duser.timezone=UTC",
               "--add-opens=java.base/java.lang=ALL-UNNAMED",
               "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
               "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
@@ -470,6 +480,7 @@ services:
     container_name: oddsmaker-risk
     working_dir: /app
     command: ["java", "-XX:MaxRAMPercentage=70.0",
+    "-Duser.timezone=UTC",
               "--add-opens=java.base/java.lang=ALL-UNNAMED",
               "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
               "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
