@@ -223,14 +223,12 @@ public class ExperimentStatsService {
         for (int i = 1; i <= 200; i++) {
             double an = -i * (i - a);
             b += 2.0;
-            d = an * d + b;
-            if (Math.abs(d) < 1e-300) {
-                d = 1e-300;
-            }
-            c = b + an / c;
-            if (Math.abs(c) < 1e-300) {
-                c = 1e-300;
-            }
+            // 下限钳制防后续 1/d 溢出：无分支等价形态（copySign 保符号；分支形态在本方法
+            // 唯一入口 chiSquareSurvival 的半整数参数域下数学不可达，无法用测试覆盖）
+            double dNext = an * d + b;
+            d = Math.copySign(Math.max(Math.abs(dNext), 1e-300), dNext);
+            double cNext = b + an / c;
+            c = Math.copySign(Math.max(Math.abs(cNext), 1e-300), cNext);
             d = 1.0 / d;
             double del = d * c;
             h *= del;
