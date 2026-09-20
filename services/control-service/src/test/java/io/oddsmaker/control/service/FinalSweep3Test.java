@@ -64,7 +64,6 @@ import io.oddsmaker.control.jpa.PlayerExportJobEntity;
 import io.oddsmaker.control.jpa.PlayerExportJobRepo;
 import io.oddsmaker.control.jpa.PlayerLoginLogRepo;
 import io.oddsmaker.control.jpa.PlayerPaymentRepo;
-import io.oddsmaker.control.jpa.RateLimitPolicyEntity;
 import io.oddsmaker.control.jpa.RedeemRecordEntity;
 import io.oddsmaker.control.jpa.RedeemRecordRepo;
 import io.oddsmaker.control.jpa.ReportEntity;
@@ -1604,41 +1603,6 @@ class FinalSweep3Test {
         unknown.lastCalculatedAt = base;
         unknown.calcFrequency = "monthly";
         assertEquals(base.plusDays(1), unknown.calculateNextCalcTime());
-    }
-
-    @Test
-    @DisplayName("RateLimitPolicyEntity.isOverLimit / getLimitPerDay 全分支")
-    void testRateLimitPolicyEntity() {
-        RateLimitPolicyEntity clean = new RateLimitPolicyEntity();
-        assertFalse(clean.isOverLimit());
-
-        RateLimitPolicyEntity noReset = new RateLimitPolicyEntity();
-        noReset.limitExceededAt = LocalDateTime.of(2026, 1, 1, 10, 0);
-        assertTrue(noReset.isOverLimit());
-
-        RateLimitPolicyEntity afterReset = new RateLimitPolicyEntity();
-        afterReset.limitExceededAt = LocalDateTime.of(2026, 1, 1, 10, 0);
-        afterReset.lastResetAt = LocalDateTime.of(2026, 1, 1, 9, 0);
-        assertTrue(afterReset.isOverLimit());
-
-        RateLimitPolicyEntity beforeReset = new RateLimitPolicyEntity();
-        beforeReset.limitExceededAt = LocalDateTime.of(2026, 1, 1, 9, 0);
-        beforeReset.lastResetAt = LocalDateTime.of(2026, 1, 1, 10, 0);
-        assertFalse(beforeReset.isOverLimit());
-
-        RateLimitPolicyEntity perDay = new RateLimitPolicyEntity();
-        perDay.eventsPerDay = 100L;
-        assertEquals(100L, perDay.getLimitPerDay());
-
-        RateLimitPolicyEntity perMinute = new RateLimitPolicyEntity();
-        perMinute.eventsPerMinute = 10;
-        assertEquals(14400L, perMinute.getLimitPerDay());
-
-        RateLimitPolicyEntity perSecond = new RateLimitPolicyEntity();
-        perSecond.eventsPerSecond = 1;
-        assertEquals(86400L, perSecond.getLimitPerDay());
-
-        assertEquals(Long.MAX_VALUE, new RateLimitPolicyEntity().getLimitPerDay());
     }
 
     // ==================== DTO updateEntity ====================

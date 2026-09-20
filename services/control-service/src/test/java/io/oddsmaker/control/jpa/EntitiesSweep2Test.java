@@ -1329,52 +1329,6 @@ class EntitiesSweep2Test {
     }
 
     @Test
-    @DisplayName("RateLimitRuleEntity：条件匹配/触发计数/生效阈值回退")
-    void rateLimitRuleEntity() {
-        RateLimitRuleEntity r = new RateLimitRuleEntity();
-        r.rateLimitPolicyId = "p-1";
-        r.ruleName = "支付事件限流";
-
-        assertTrue(r.isActive());
-        assertTrue(r.matchesCondition("payment", "purchase"));
-
-        r.status = RateLimitRuleEntity.RuleStatus.DISABLED;
-        assertFalse(r.isActive());
-        assertFalse(r.matchesCondition("payment", "purchase"));
-        r.status = RateLimitRuleEntity.RuleStatus.ACTIVE;
-        r.deletedAt = LocalDateTime.now();
-        assertFalse(r.isActive());
-        r.deletedAt = null;
-
-        r.eventType = "payment";
-        assertFalse(r.matchesCondition("ad", "purchase"));
-        assertTrue(r.matchesCondition("payment", "任意"));
-        r.eventName = "purchase";
-        assertFalse(r.matchesCondition("payment", "refund"));
-        assertTrue(r.matchesCondition("payment", "purchase"));
-        r.eventType = null;
-        r.eventName = null;
-        assertTrue(r.matchesCondition("任意类型", "任意名称"));
-
-        r.triggeredCount = null;
-        r.recordTriggered();
-        assertEquals(1L, r.triggeredCount);
-        assertNotNull(r.lastTriggeredAt);
-        r.recordTriggered();
-        assertEquals(2L, r.triggeredCount);
-
-        assertEquals(100, r.getEffectiveRequestsPerSecond(100));
-        r.overrideRequestsPerSecond = 50;
-        assertEquals(50, r.getEffectiveRequestsPerSecond(100));
-        assertEquals(200, r.getEffectiveEventsPerSecond(200));
-        r.overrideEventsPerSecond = 80;
-        assertEquals(80, r.getEffectiveEventsPerSecond(200));
-        assertEquals(1000000L, r.getEffectiveEventsPerDay(1000000L));
-        r.overrideEventsPerDay = 500000L;
-        assertEquals(500000L, r.getEffectiveEventsPerDay(1000000L));
-    }
-
-    @Test
     @DisplayName("RedeemCodeBatchEntity：批次可兑换判定（状态/删除/过期）")
     void redeemCodeBatchEntity() {
         LocalDateTime now = LocalDateTime.now();
@@ -1866,53 +1820,6 @@ class EntitiesSweep2Test {
         assertEquals(SSOConfigEntity.SSOStatus.DISABLED, fresh.ssoStatus);
         fresh.onUpdate();
         assertNotNull(fresh.updatedAt);
-    }
-
-    @DisplayName("SamplingPolicyEntity：策略启用/采样开关/有效采样率与丢弃率")
-    @Test
-    void samplingPolicyEntity() {
-        SamplingPolicyEntity s = new SamplingPolicyEntity();
-        s.gameId = "g1";
-        s.name = "全局采样策略";
-
-        assertTrue(s.isActive());
-        assertTrue(s.isGlobal());
-        assertFalse(s.isDynamicSamplingEnabled());
-        assertFalse(s.isPrioritySamplingEnabled());
-
-        s.deletedAt = LocalDateTime.now();
-        assertFalse(s.isActive());
-        s.deletedAt = null;
-        s.status = SamplingPolicyEntity.PolicyStatus.DISABLED;
-        assertFalse(s.isActive());
-        s.status = SamplingPolicyEntity.PolicyStatus.ACTIVE;
-        s.environmentId = "env-1";
-        assertFalse(s.isGlobal());
-
-        s.enableDynamicSampling = null;
-        assertFalse(s.isDynamicSamplingEnabled());
-        s.enableDynamicSampling = true;
-        assertTrue(s.isDynamicSamplingEnabled());
-        s.enablePrioritySampling = null;
-        assertFalse(s.isPrioritySamplingEnabled());
-        s.enablePrioritySampling = true;
-        assertTrue(s.isPrioritySamplingEnabled());
-
-        s.effectiveSampleRate = null;
-        s.defaultSampleRate = 0.3;
-        assertEquals(0.3, s.getEffectiveSampleRate(), 0.0001);
-        s.effectiveSampleRate = 0.7;
-        assertEquals(0.7, s.getEffectiveSampleRate(), 0.0001);
-        assertEquals(0.0, s.getCurrentDropRate(), 0.0001);
-        s.totalSampledCount = null;
-        s.totalDroppedCount = null;
-        s.incrementSampled();
-        s.incrementSampled();
-        s.incrementSampled();
-        s.incrementDropped();
-        assertEquals(3L, s.totalSampledCount);
-        assertEquals(1L, s.totalDroppedCount);
-        assertEquals(0.25, s.getCurrentDropRate(), 0.0001);
     }
 
     @Test
@@ -2598,39 +2505,6 @@ class EntitiesSweep2Test {
         assertTrue(p.isGlobal());
         p.scope = PermissionEntity.PermissionScope.ENVIRONMENT;
         assertTrue(p.isEnvironmentScoped());
-    }
-
-    @Test
-    @DisplayName("PiiFieldMappingEntity：敏感度分级/加密要求/保留天数回退")
-    void piiFieldMappingEntity() {
-        PiiFieldMappingEntity p = new PiiFieldMappingEntity();
-        p.privacyPolicyId = "pp-1";
-        p.fieldName = "email";
-
-        assertTrue(p.isActive());
-        assertFalse(p.isHighlySensitive());
-        assertFalse(p.requiresEncryption());
-        assertEquals(90, p.getEffectiveRetentionDays(90));
-        p.retentionDays = 30;
-        assertEquals(30, p.getEffectiveRetentionDays(90));
-        p.retentionDays = null;
-
-        p.piiSensitivity = PiiFieldMappingEntity.PiiSensitivity.HIGH;
-        assertTrue(p.isHighlySensitive());
-        p.piiSensitivity = PiiFieldMappingEntity.PiiSensitivity.CRITICAL;
-        assertTrue(p.isHighlySensitive());
-        p.piiSensitivity = PiiFieldMappingEntity.PiiSensitivity.LOW;
-        assertFalse(p.isHighlySensitive());
-
-        p.handling = PiiFieldMappingEntity.PiiHandling.MASK;
-        assertFalse(p.requiresEncryption());
-        p.handling = PiiFieldMappingEntity.PiiHandling.ENCRYPT;
-        assertFalse(p.requiresEncryption());
-        p.piiSensitivity = PiiFieldMappingEntity.PiiSensitivity.HIGH;
-        assertTrue(p.requiresEncryption());
-
-        p.deletedAt = LocalDateTime.now();
-        assertFalse(p.isActive());
     }
 
     @Test

@@ -772,17 +772,7 @@ class EntitiesDeepTest {
         e.dataNamespace = "ns-main";
         assertEquals("ns-main", e.getDataPartition());
 
-        // 采样开关分支
-        e.enableSampling = true;
-        e.sampleRate = 1.0;
-        assertFalse(e.shouldSample());
-        e.sampleRate = 0.5;
-        assertTrue(e.shouldSample());
-        e.enableSampling = false;
-        assertFalse(e.shouldSample());
-        e.enableSampling = true;
-        e.sampleRate = null;
-        assertFalse(e.shouldSample());
+        // 采样判定在 SDK 客户端（enableSampling/sampleRate 经配置端点送达），服务端无 shouldSample
 
         // 专用存储判定
         assertFalse(e.usesDedicatedStorage()); // 无 profile
@@ -1334,10 +1324,5 @@ class EntitiesDeepTest {
         assertTrue(g.isNew);
         g.markNotNew();
         assertFalse(g.isNew);
-
-        // RateLimitPolicyEntity.getUsagePercentage：currentUsage 缺失 → 0.0
-        RateLimitPolicyEntity r = new RateLimitPolicyEntity();
-        r.currentUsage = null;
-        assertEquals(0.0, r.getUsagePercentage());
     }
 }
