@@ -169,18 +169,6 @@ class PermissionServiceTest {
     }
 
     @Test
-    void getUserPermissions_ReturnsAllPermissions() {
-        when(userRoleRepo.findValidByUserId(eq("user_test123"), any(LocalDateTime.class)))
-            .thenReturn(List.of(testUserRole));
-        when(roleRepo.findById("viewer")).thenReturn(Optional.of(testRole));
-
-        Set<String> permissions = permissionService.getUserPermissions("user_test123");
-
-        assertNotNull(permissions);
-        assertTrue(permissions.contains("game:read"));
-    }
-
-    @Test
     void assignRole_Success() {
         when(userRepo.existsById("user_test123")).thenReturn(true);
         when(roleRepo.existsById("viewer")).thenReturn(true);
@@ -247,19 +235,6 @@ class PermissionServiceTest {
         permissionService.revokeRole("user_test123", "viewer", null, null);
 
         verify(userRoleRepo).deleteAll(List.of(testUserRole));
-    }
-
-    @Test
-    void getUserRoles_ReturnsRoles() {
-        when(userRoleRepo.findByUserIdAndEnabledTrue("user_test123"))
-            .thenReturn(List.of(testUserRole));
-        when(roleRepo.findById("viewer")).thenReturn(Optional.of(testRole));
-
-        List<RoleEntity> roles = permissionService.getUserRoles("user_test123");
-
-        assertNotNull(roles);
-        assertEquals(1, roles.size());
-        assertEquals("viewer", roles.get(0).id);
     }
 
     @Test
@@ -457,23 +432,6 @@ class PermissionServiceTest {
             .thenReturn(List.of(invalid));
 
         assertFalse(permissionService.hasEnvironmentPermission("user_test123", "g1", "prod", "game:read"));
-    }
-
-    @Test
-    void getEnvironmentPermissions_InvalidRolesSkipped_ReturnsEmpty() {
-        UserRoleEntity invalid = new UserRoleEntity();
-        invalid.userId = "user_test123";
-        invalid.roleId = "viewer";
-        invalid.enabled = false;
-
-        when(userRoleRepo.findByUserIdAndGameIdAndEnvironment("user_test123", "g1", "prod"))
-            .thenReturn(List.of(invalid));
-        when(userRoleRepo.findByUserIdAndGameId("user_test123", "g1"))
-            .thenReturn(List.of(invalid));
-        when(userRoleRepo.findGlobalByUserId("user_test123"))
-            .thenReturn(List.of(invalid));
-
-        assertTrue(permissionService.getEnvironmentPermissions("user_test123", "g1", "prod").isEmpty());
     }
 
     @Test

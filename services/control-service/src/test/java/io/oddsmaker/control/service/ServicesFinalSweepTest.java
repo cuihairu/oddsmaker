@@ -422,7 +422,6 @@ class ServicesFinalSweepTest {
 
         lenient().when(auditLogRepo.findRecentLogs(pageable)).thenReturn(page);
         lenient().when(auditLogRepo.findByUserIdOrderByCreatedAtDesc("u1", pageable)).thenReturn(page);
-        lenient().when(auditLogRepo.findByResourceTypeAndResourceIdOrderByCreatedAtDesc("game", "g1", pageable)).thenReturn(page);
         lenient().when(auditLogRepo.findByActionOrderByCreatedAtDesc(AuditLogEntity.AuditAction.CREATE, pageable)).thenReturn(page);
         lenient().when(auditLogRepo.findByStatusOrderByCreatedAtDesc(AuditLogEntity.AuditStatus.FAILURE, pageable)).thenReturn(page);
         lenient().when(auditLogRepo.findByGameIdOrderByCreatedAtDesc("g1", pageable)).thenReturn(page);
@@ -433,7 +432,6 @@ class ServicesFinalSweepTest {
 
         assertSame(page, auditLogService.listAuditLogs(pageable));
         assertSame(page, auditLogService.findByUserId("u1", pageable));
-        assertSame(page, auditLogService.findByResource("game", "g1", pageable));
         assertSame(page, auditLogService.findByAction(AuditLogEntity.AuditAction.CREATE, pageable));
         assertSame(page, auditLogService.findByStatus(AuditLogEntity.AuditStatus.FAILURE, pageable));
         assertSame(page, auditLogService.findByGameId("g1", pageable));

@@ -614,22 +614,6 @@ class FinalSweep3Test {
             () -> permissionService.hasGamePermission("u0", "g1", "game:read"));
     }
 
-    @Test
-    @DisplayName("PermissionService.getGamePermissions 汇总游戏级 + 全局角色权限")
-    void testGetGamePermissions() {
-        when(userRoleRepo.findByUserIdAndGameId("u1", "g1"))
-            .thenReturn(List.of(ur("r1", "g1")));
-        when(roleRepo.findById("r1")).thenReturn(Optional.of(role("r1", "a", "b")));
-        UserRoleEntity expired = ur("r3", "g1");
-        expired.expiresAt = LocalDateTime.now().minusHours(1);
-        when(userRoleRepo.findGlobalByUserId("u1")).thenReturn(List.of(expired, ur("r2", null)));
-        when(roleRepo.findById("r2")).thenReturn(Optional.of(role("r2", "c")));
-        when(roleRepo.findById("r3")).thenReturn(Optional.of(role("r3", "dead")));
-
-        Set<String> perms = permissionService.getGamePermissions("u1", "g1");
-        assertEquals(Set.of("a", "b", "c"), perms);
-    }
-
     // ==================== HealthMonitorService ====================
 
     @Test

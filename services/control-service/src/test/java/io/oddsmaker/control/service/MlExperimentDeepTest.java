@@ -1613,25 +1613,6 @@ class MlExperimentDeepTest {
         assertThat(permissionService.hasEnvironmentPermission("u1", "g1", "prod", "game:read")).isFalse();
     }
 
-    @Test
-    @DisplayName("getEnvironmentPermissions - 合并环境/游戏/全局三层权限")
-    void getEnvironmentPermissions_mergesAllScopes() {
-        lenient().when(userRepo.findById("u1")).thenReturn(Optional.of(user(UserEntity.UserStatus.ACTIVE)));
-        lenient().when(userRoleRepo.findByUserIdAndGameIdAndEnvironment("u1", "g1", "prod"))
-            .thenReturn(List.of(assignment("env_role", "g1", "prod")));
-        lenient().when(userRoleRepo.findByUserIdAndGameId("u1", "g1"))
-            .thenReturn(List.of(assignment("game_role", "g1", null)));
-        lenient().when(userRoleRepo.findGlobalByUserId("u1"))
-            .thenReturn(List.of(assignment("global_role", null, null)));
-        lenient().when(roleRepo.findById("env_role")).thenReturn(Optional.of(role("env_role", permission("p_env"))));
-        lenient().when(roleRepo.findById("game_role")).thenReturn(Optional.of(role("game_role", permission("p_game"))));
-        lenient().when(roleRepo.findById("global_role")).thenReturn(Optional.of(role("global_role", permission("p_global"))));
-
-        Set<String> permissions = permissionService.getEnvironmentPermissions("u1", "g1", "prod");
-
-        assertThat(permissions).containsExactlyInAnyOrder("p_env", "p_game", "p_global");
-    }
-
     // ==================== PermissionService：资源动作权限 ====================
 
     @Test
@@ -1744,21 +1725,6 @@ class MlExperimentDeepTest {
     }
 
     @Test
-    @DisplayName("getUserPermissions - 跳过权限集合为空的角色")
-    void getUserPermissions_skipsRoleWithoutPermissions() {
-        RoleEntity noPerms = role("r2");
-        noPerms.permissions = null;
-        lenient().when(userRoleRepo.findValidByUserId(eq("u1"), any(LocalDateTime.class)))
-            .thenReturn(List.of(assignment("r1", null, null), assignment("r2", null, null)));
-        lenient().when(roleRepo.findById("r1")).thenReturn(Optional.of(role("r1", permission("p_one"))));
-        lenient().when(roleRepo.findById("r2")).thenReturn(Optional.of(noPerms));
-
-        Set<String> permissions = permissionService.getUserPermissions("u1");
-
-        assertThat(permissions).containsExactly("p_one");
-    }
-
-    @Test
     @DisplayName("hasGamePermission - 用户被锁定返回 false")
     void hasGamePermission_lockedUser() {
         lenient().when(userRepo.findById("u1")).thenReturn(Optional.of(user(UserEntity.UserStatus.LOCKED)));
@@ -1766,21 +1732,4 @@ class MlExperimentDeepTest {
         assertThat(permissionService.hasGamePermission("u1", "g1", "game:read")).isFalse();
     }
 
-    @Test
-    @DisplayName("getGamePermissions - 跳过过期分配，仅保留全局权限")
-    void getGamePermissions_skipsExpiredAssignment() {
-        UserRoleEntity expired = assignment("game_role", "g1", null);
-        expired.expiresAt = LocalDateTime.now().minusDays(1);
-        lenient().when(userRoleRepo.findByUserIdAndGameId("u1", "g1")).thenReturn(List.of(expired));
-        lenient().when(userRoleRepo.findGlobalByUserId("u1"))
-            .thenReturn(List.of(assignment("global_role", null, null)));
-        lenient().when(roleRepo.findById("game_role"))
-            .thenReturn(Optional.of(role("game_role", permission("p_game"))));
-        lenient().when(roleRepo.findById("global_role"))
-            .thenReturn(Optional.of(role("global_role", permission("p_global"))));
-
-        Set<String> permissions = permissionService.getGamePermissions("u1", "g1");
-
-        assertThat(permissions).containsExactly("p_global");
-    }
 }

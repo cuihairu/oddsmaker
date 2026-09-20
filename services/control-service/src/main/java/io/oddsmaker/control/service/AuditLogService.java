@@ -376,14 +376,6 @@ public class AuditLogService {
     }
 
     /**
-     * 根据资源类型和ID查找审计日志
-     */
-    public Page<AuditLogEntity> findByResource(String resourceType, String resourceId, Pageable pageable) {
-        return auditLogRepo.findByResourceTypeAndResourceIdOrderByCreatedAtDesc(
-            resourceType, resourceId, pageable);
-    }
-
-    /**
      * 根据操作类型查找审计日志
      */
     public Page<AuditLogEntity> findByAction(AuditLogEntity.AuditAction action, Pageable pageable) {
