@@ -148,11 +148,6 @@ public class SamplingPolicyEntity {
         return effectiveSampleRate != null ? effectiveSampleRate : defaultSampleRate;
     }
 
-    public boolean shouldSample(String eventType) {
-        // TODO: 实现基于事件类型的采样逻辑
-        return true;
-    }
-
     public void incrementSampled() {
         totalSampledCount = (totalSampledCount != null ? totalSampledCount : 0) + 1;
     }

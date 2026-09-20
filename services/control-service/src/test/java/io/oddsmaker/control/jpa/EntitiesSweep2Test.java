@@ -1488,8 +1488,6 @@ class EntitiesSweep2Test {
         assertTrue(r.getReportDescription().contains("general"));
         assertTrue(r.getReportDescription().contains("table"));
 
-        assertEquals(0, r.getAverageRunTimeMinutes());
-
         assertTrue(r.getVisualizationConfig().containsKey("chartType"));
         assertEquals("table", r.getVisualizationConfig().get("chartType"));
         r.visualization = "{\"chartType\":\"pie\"}";
@@ -1905,8 +1903,6 @@ class EntitiesSweep2Test {
         assertEquals(0.3, s.getEffectiveSampleRate(), 0.0001);
         s.effectiveSampleRate = 0.7;
         assertEquals(0.7, s.getEffectiveSampleRate(), 0.0001);
-        assertTrue(s.shouldSample("任意事件"));
-
         assertEquals(0.0, s.getCurrentDropRate(), 0.0001);
         s.totalSampledCount = null;
         s.totalDroppedCount = null;

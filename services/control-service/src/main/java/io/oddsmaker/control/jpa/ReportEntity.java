@@ -207,11 +207,6 @@ public class ReportEntity {
         );
     }
 
-    public long getAverageRunTimeMinutes() {
-        // TODO: 实现平均运行时间计算
-        return 0;
-    }
-
     public Map<String, Object> getVisualizationConfig() {
         if (visualization == null) {
             return Map.of(
