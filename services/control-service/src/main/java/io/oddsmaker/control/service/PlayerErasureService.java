@@ -789,7 +789,7 @@ public class PlayerErasureService {
         return nonNull.isEmpty() ? List.of("") : nonNull;
     }
 
-    /** IN 字面量：('a','b')；值来自 PG 内部图谱数据，仍做单引号转义防注入 */
+    /** IN 字面量：('a','b')；值来自 PG 内部图谱数据，仍做单引号+反斜杠转义防注入 */
     static String inList(Collection<String> values) {
         StringBuilder sb = new StringBuilder("(");
         boolean first = true;
@@ -816,8 +816,15 @@ public class PlayerErasureService {
         return sb.append(']').toString();
     }
 
+    /**
+     * CH SQL 字符串字面量转义：单引号翻倍（'' 标准语义）+ 反斜杠翻倍。
+     * 反斜杠必须转义：ClickHouse 字面量里 \' 是转义单引号——值以反斜杠结尾时
+     * 只翻单引号会把闭合引号吃掉（'a\'' 被解析为字符串 a' 而非 a\），后续文本逃逸成 SQL 片段。
+     * 这些值源头是 SDK 事件的 user_id/device_id（外部输入经 resolve 图谱进入 mutation 拼接，
+     * ALTER DELETE 语句无法 ? 参数化，拼接是被迫的），故转义必须完备。
+     */
     private static String escape(String value) {
-        return value == null ? "" : value.replace("'", "''");
+        return value == null ? "" : value.replace("\\", "\\\\").replace("'", "''");
     }
 
     private static String quote(String value) {

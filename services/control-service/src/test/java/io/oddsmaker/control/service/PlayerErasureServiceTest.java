@@ -902,6 +902,17 @@ class PlayerErasureServiceTest {
         assertThat(PlayerErasureService.replaceAll(null, List.of("a"), "erased:r")).isNull();
     }
 
+    @Test
+    @DisplayName("inList 反斜杠转义：CH 字面量 \\' 是转义单引号，反斜杠结尾的值只翻单引号会吃掉闭合引号")
+    void inListEscapesBackslash() {
+        // 值 a\' 逃逸形态：只翻单引号得 'a\''，CH 解析为字符串 a' 后 OR 1=1 逃出字符串
+        assertThat(PlayerErasureService.inList(List.of("a\\' OR 1=1")))
+            .isEqualTo("('a\\\\'' OR 1=1')");
+        // 普通反斜杠值翻倍；反斜杠+单引号组合完整闭合
+        assertThat(PlayerErasureService.inList(List.of("a\\b"))).isEqualTo("('a\\\\b')");
+        assertThat(PlayerErasureService.inList(List.of("\\'"))).isEqualTo("('\\\\''')");
+    }
+
     // ========== 覆盖补强（二）：审计失败 PARTIAL、sweep 防御、坏路径与序列化兜底 ==========
 
     @Test
