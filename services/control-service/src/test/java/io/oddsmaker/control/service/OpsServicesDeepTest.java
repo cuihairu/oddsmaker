@@ -702,6 +702,49 @@ class OpsServicesDeepTest {
     }
 
     @Test
+    @DisplayName("功能开关：advanceFeatureRollout 步进回写/末步全量/非灰度与无步骤拒绝")
+    void featureFlagAdvanceRollout() {
+        lenient().when(featureFlagRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        FeatureFlagEntity flag = new FeatureFlagEntity();
+        flag.id = "ff20";
+        flag.flagKey = "gradual";
+        flag.createdBy = "admin";
+        flag.setPercentage(10); // 进入 STAGED_ROLLOUT，与步骤 [10,50,100] 第 1 步对齐
+        flag.rolloutSteps = "[10,50,100]";
+        flag.currentStep = 1;
+        when(featureFlagRepo.findByKey("gradual")).thenReturn(Optional.of(flag));
+
+        // 步进：第 1 步 → 第 2 步，百分比按步骤回写
+        FeatureFlagEntity advanced = maintenanceService.advanceFeatureRollout("gradual", "ops");
+        assertEquals(2, advanced.currentStep);
+        assertEquals(Integer.valueOf(50), advanced.percentageValue);
+        assertEquals(FeatureFlagEntity.FlagStatus.STAGED_ROLLOUT, advanced.flagStatus);
+        assertEquals("ops", advanced.lastModifiedBy);
+
+        // 末步：回写 100 自动转 ENABLED
+        FeatureFlagEntity done = maintenanceService.advanceFeatureRollout("gradual", "ops");
+        assertEquals(3, done.currentStep);
+        assertEquals(Integer.valueOf(100), done.percentageValue);
+        assertEquals(FeatureFlagEntity.FlagStatus.ENABLED, done.flagStatus);
+
+        // 已非灰度态再推进 → 拒绝
+        assertThrows(IllegalArgumentException.class, () -> maintenanceService.advanceFeatureRollout("gradual", "ops"));
+
+        // 无步骤列表 → 拒绝
+        FeatureFlagEntity bare = new FeatureFlagEntity();
+        bare.id = "ff21";
+        bare.flagKey = "bare";
+        bare.createdBy = "admin";
+        bare.setPercentage(50);
+        when(featureFlagRepo.findByKey("bare")).thenReturn(Optional.of(bare));
+        assertThrows(IllegalArgumentException.class, () -> maintenanceService.advanceFeatureRollout("bare", "ops"));
+
+        // 不存在 → 拒绝
+        assertThrows(IllegalArgumentException.class, () -> maintenanceService.advanceFeatureRollout("none", "ops"));
+    }
+
+    @Test
     @DisplayName("维护：定时任务（待开始/应结束/开关自动启用禁用过期）")
     void maintenanceScheduledTasks() {
         lenient().when(maintenanceWindowRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));

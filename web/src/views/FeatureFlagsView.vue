@@ -65,6 +65,23 @@ async function toggle(flag, action) {
   }
 }
 
+async function advance(flag) {
+  busyId.value = flag.id
+  error.value = ''
+  success.value = ''
+  try {
+    const res = await api.post(`/api/system/features/${flag.flagKey}/advance`, {
+      modifiedBy: authStore.userName || 'console'
+    })
+    replaceRow(res.data)
+    success.value = `灰度已推进：「${res.data.flagName}」步 ${res.data.currentStep ?? 0}，当前 ${res.data.percentageValue ?? 0}%`
+  } catch (e) {
+    error.value = e.response?.data?.message || '推进失败'
+  } finally {
+    busyId.value = null
+  }
+}
+
 function openPct(flag) {
   pctTarget.value = flag
   pctValue.value = flag.percentageValue ?? 0
@@ -189,6 +206,12 @@ onMounted(load)
                 class="text-xs text-red-600 hover:underline"
                 :disabled="busyId === flag.id"
               >禁用</button>
+              <button
+                v-if="flag.flagStatus === 'STAGED_ROLLOUT'"
+                @click="advance(flag)"
+                class="text-xs text-yellow-700 hover:underline"
+                :disabled="busyId === flag.id"
+              >推进</button>
               <button @click="openPct(flag)" class="text-xs text-blue-600 hover:underline">灰度设置</button>
             </td>
           </tr>

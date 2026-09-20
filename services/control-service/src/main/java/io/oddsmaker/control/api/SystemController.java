@@ -226,6 +226,18 @@ public class SystemController {
     }
 
     /**
+     * 推进灰度步骤（按 rolloutSteps 回写百分比，末步自动全量）
+     */
+    @PostMapping("/features/{flagKey}/advance")
+    public ResponseEntity<FeatureFlagEntity> advanceFeatureRollout(
+            @PathVariable String flagKey,
+            @RequestBody ModifyRequest request) {
+        accessGuard.requirePermission("featureflag:manage");
+        FeatureFlagEntity flag = maintenanceService.advanceFeatureRollout(flagKey, request.modifiedBy);
+        return ResponseEntity.ok(flag);
+    }
+
+    /**
      * 获取系统状态
      */
     @GetMapping("/status")

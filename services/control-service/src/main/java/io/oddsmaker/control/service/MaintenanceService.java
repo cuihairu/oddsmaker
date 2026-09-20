@@ -279,6 +279,29 @@ public class MaintenanceService {
     }
 
     /**
+     * 推进灰度：按 rolloutSteps 步进并回写百分比（末步 100 自动转 ENABLED）。
+     * 仅灰度中且有步骤列表的开关可推进；步骤列表非法/越界时按实体契约仅递增不回写。
+     */
+    public FeatureFlagEntity advanceFeatureRollout(String flagKey, String modifiedBy) {
+        FeatureFlagEntity flag = featureFlagRepo.findByKey(flagKey)
+            .orElseThrow(() -> new IllegalArgumentException("Feature flag not found: " + flagKey));
+
+        if (!flag.isStagedRollout()) {
+            throw new IllegalArgumentException("Feature flag is not in staged rollout: " + flagKey);
+        }
+        if (flag.rolloutSteps == null || flag.rolloutSteps.isBlank()) {
+            throw new IllegalArgumentException("Feature flag has no rollout steps: " + flagKey);
+        }
+
+        flag.advanceRollout();
+        flag.lastModifiedBy = modifiedBy;
+        flag = featureFlagRepo.save(flag);
+
+        logger.info("Advanced feature flag rollout: {} -> step {}, {}%", flagKey, flag.currentStep, flag.percentageValue);
+        return flag;
+    }
+
+    /**
      * 获取所有功能开关
      */
     @Transactional(readOnly = true)
