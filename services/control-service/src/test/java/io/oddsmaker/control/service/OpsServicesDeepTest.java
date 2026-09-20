@@ -253,13 +253,19 @@ class OpsServicesDeepTest {
         j.userId = "u1";
         j.exportType = "events";
         j.exportStatus = status;
+        j.fileName = id + ".csv";
         return j;
     }
 
     @Test
     @DisplayName("导出：创建全参/处理全流程/取消与状态校验")
-    void exportCreateProcessCancel() {
+    void exportCreateProcessCancel() throws Exception {
         lenient().when(exportJobRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        String tmpDir = java.nio.file.Files.createTempDirectory("ops-export").toString();
+        org.springframework.test.util.ReflectionTestUtils.setField(exportService, "storageDir", tmpDir);
+        org.springframework.test.util.ReflectionTestUtils.setField(exportService, "maxRows", 1000);
+        lenient().when(clickHouse.query(anyString(), any(Object[].class)))
+            .thenReturn(List.of(Map.of("event_id", "e-1", "event_type", "login")));
         ExportJobEntity pending = exportJob("e1", ExportJobEntity.ExportStatus.PENDING);
         pending.notifyOnComplete = true;
         pending.notificationEmail = "ops@x.io";
@@ -292,6 +298,10 @@ class OpsServicesDeepTest {
         assertTrue(processed.fileSizeBytes > 0);
         assertEquals(Integer.valueOf(100), processed.progressPercent);
         assertNotNull(processed.expiresAt);
+        // 真实落盘：文件存在、行数与大小为实际值
+        assertEquals(1L, processed.totalRows);
+        assertEquals(1L, processed.exportedRows);
+        assertTrue(java.nio.file.Path.of(processed.filePath).toFile().isFile());
         // 导出完成派发 export_complete（gameId 取任务归属）
         verify(webhookService).sendCustomWebhook(eq("g"), eq(WebhookService.EVENT_EXPORT_COMPLETE), anyMap());
 
@@ -305,8 +315,12 @@ class OpsServicesDeepTest {
 
     @Test
     @DisplayName("导出：待处理批量执行、超时标记、统计与用户统计")
-    void exportPendingTimeoutAndStats() {
+    void exportPendingTimeoutAndStats() throws Exception {
         lenient().when(exportJobRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        String tmpDir = java.nio.file.Files.createTempDirectory("ops-export2").toString();
+        org.springframework.test.util.ReflectionTestUtils.setField(exportService, "storageDir", tmpDir);
+        org.springframework.test.util.ReflectionTestUtils.setField(exportService, "maxRows", 1000);
+        lenient().when(clickHouse.query(anyString(), any(Object[].class))).thenReturn(List.of());
         ExportJobEntity pending = exportJob("e1", ExportJobEntity.ExportStatus.PENDING);
         lenient().when(exportJobRepo.findPending()).thenReturn(List.of(pending));
         lenient().when(exportJobRepo.findById("e1")).thenReturn(Optional.of(pending));
@@ -366,13 +380,13 @@ class OpsServicesDeepTest {
             (List) java.util.List.of(new Object()), null, false, null);
         assertNotNull(created);
 
-        // excel 格式 → 150 字节/行系数
+        // excel 无真实导出通道 → 诚实 FAILED（假成功换诚实失败）
         ExportJobEntity excel = exportJob("e_excel", ExportJobEntity.ExportStatus.PENDING);
         excel.exportFormat = "excel";
         lenient().when(exportJobRepo.findById("e_excel")).thenReturn(Optional.of(excel));
-        ExportJobEntity done = exportService.processExportJob("e_excel");
-        assertEquals(ExportJobEntity.ExportStatus.COMPLETED, done.exportStatus);
-        assertTrue(done.fileSizeBytes > 0);
+        assertThrows(RuntimeException.class, () -> exportService.processExportJob("e_excel"));
+        assertEquals(ExportJobEntity.ExportStatus.FAILED, excel.exportStatus);
+        assertTrue(excel.errorMessage.contains("no real export channel"));
 
         // 定时任务：repo 抛异常各自吞掉
         lenient().when(exportJobRepo.deleteExpired(any())).thenThrow(new IllegalStateException("boom"));

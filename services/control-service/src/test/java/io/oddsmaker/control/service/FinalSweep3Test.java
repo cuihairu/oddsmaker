@@ -699,7 +699,12 @@ class FinalSweep3Test {
 
     @Test
     @DisplayName("ExportService.processExportJob 完成导出并触发通知分支")
-    void testProcessExportJob() {
+    void testProcessExportJob() throws Exception {
+        String tmpDir = java.nio.file.Files.createTempDirectory("final3-export").toString();
+        org.springframework.test.util.ReflectionTestUtils.setField(exportService, "storageDir", tmpDir);
+        org.springframework.test.util.ReflectionTestUtils.setField(exportService, "maxRows", 1000);
+        when(clickHouseClient.query(anyString(), any(Object[].class)))
+            .thenReturn(List.of(Map.of("event_id", "e-1"), Map.of("event_id", "e-2")));
         ExportJobEntity job = pendingJob("ex1");
         when(exportJobRepo.findById("ex1")).thenReturn(Optional.of(job));
         when(exportJobRepo.save(any(ExportJobEntity.class))).thenAnswer(inv -> inv.getArgument(0));
@@ -708,6 +713,8 @@ class FinalSweep3Test {
         assertTrue(out.isCompleted());
         assertNotNull(out.filePath);
         assertTrue(out.fileSizeBytes != null && out.fileSizeBytes > 0);
+        assertEquals(2L, out.totalRows);  // 实际查询行数（原 Math.random 假值）
+        assertTrue(java.nio.file.Path.of(out.filePath).toFile().isFile());
 
         ExportJobEntity done = pendingJob("ex2");
         done.exportStatus = ExportJobEntity.ExportStatus.COMPLETED;
@@ -717,7 +724,11 @@ class FinalSweep3Test {
 
     @Test
     @DisplayName("ExportService.processPendingExports 扫描处理 PENDING 任务")
-    void testProcessPendingExports() {
+    void testProcessPendingExports() throws Exception {
+        String tmpDir = java.nio.file.Files.createTempDirectory("final3-export2").toString();
+        org.springframework.test.util.ReflectionTestUtils.setField(exportService, "storageDir", tmpDir);
+        org.springframework.test.util.ReflectionTestUtils.setField(exportService, "maxRows", 1000);
+        when(clickHouseClient.query(anyString(), any(Object[].class))).thenReturn(List.of());
         ExportJobEntity job = pendingJob("ex1");
         when(exportJobRepo.findPending()).thenReturn(List.of(job));
         when(exportJobRepo.findById("ex1")).thenReturn(Optional.of(job));

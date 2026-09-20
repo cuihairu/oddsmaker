@@ -60,11 +60,15 @@ class FinalSweep5Test {
 
     @Test
     @DisplayName("导出处理：完成通知分支触发")
-    void exportCompletionNotification() {
+    void exportCompletionNotification() throws Exception {
         ExportService service = new ExportService();
         ReflectionTestUtils.setField(service, "exportJobRepo", exportJobRepo);
         ReflectionTestUtils.setField(service, "auditLogService", auditLog);
         ReflectionTestUtils.setField(service, "objectMapper", new ObjectMapper());
+        ReflectionTestUtils.setField(service, "clickHouse", mock(ClickHouseClient.class));
+        ReflectionTestUtils.setField(service, "storageDir",
+            java.nio.file.Files.createTempDirectory("final5-export").toString());
+        ReflectionTestUtils.setField(service, "maxRows", 1000);
 
         ExportJobEntity job = new ExportJobEntity();
         job.id = "ex_1";
@@ -72,6 +76,7 @@ class FinalSweep5Test {
         job.exportStatus = ExportJobEntity.ExportStatus.PENDING;
         job.exportType = "events";
         job.exportFormat = "csv";
+        job.fileName = "ex_1.csv";
         job.notifyOnComplete = true;
         job.notificationEmail = "ops@example.com";
         when(exportJobRepo.findById("ex_1")).thenReturn(Optional.of(job));

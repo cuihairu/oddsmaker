@@ -15,13 +15,30 @@ import java.util.stream.Collectors;
 
 /**
  * 数据导出服务
- * 管理用户数据导出请求和文件生成
+ * 管理用户数据导出请求和文件生成。
+ *
+ * <p>导出执行是真实的：按 exportType 白名单映射到 ClickHouse 明细表，
+ * 时间窗/列名白名单校验后参数化查询，逐行写 CSV/JSON 文件落盘，
+ * totalRows/fileSizeBytes 均为实际值；CH 异常诚实 FAILED。
  */
 @Service
 @Transactional
 public class ExportService {
 
     private static final Logger logger = LoggerFactory.getLogger(ExportService.class);
+
+    /** exportType → ClickHouse 明细表与时间列（实体注释枚举的白名单收窄；reports 是聚合产物不直出）。 */
+    private static final Map<String, ExportTable> EXPORT_TABLES = Map.of(
+        "events", new ExportTable("events", "ts_server"),
+        "users", new ExportTable("identities", "first_seen"),
+        "sessions", new ExportTable("sessions", "session_start"),
+        "risk_cases", new ExportTable("risk_events", "ts"));
+
+    /** 列名形态白名单（列无法参数化，只能严格校验后拼接）。 */
+    private static final java.util.regex.Pattern IDENTIFIER =
+        java.util.regex.Pattern.compile("^[a-zA-Z_][a-zA-Z0-9_]{0,63}$");
+
+    private record ExportTable(String table, String timeColumn) {}
 
     @Autowired
     private ExportJobRepo exportJobRepo;
@@ -34,6 +51,17 @@ public class ExportService {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @Autowired
+    private ClickHouseClient clickHouse;
+
+    /** 导出文件落盘根目录。 */
+    @org.springframework.beans.factory.annotation.Value("${oddsmaker.export.storage-dir:data/exports}")
+    private String storageDir;
+
+    /** 单次导出行数上限：结果集全量进内存，防大表 OOM（截断在 statusMessage 标注）。 */
+    @org.springframework.beans.factory.annotation.Value("${oddsmaker.export.max-rows:100000}")
+    private int maxRows;
 
     /**
      * 创建导出任务
@@ -99,12 +127,9 @@ public class ExportService {
         exportJobRepo.save(job);
 
         try {
-            // 模拟导出处理
-            Thread.sleep(100);  // 模拟处理时间
-
-            // 生成模拟文件
-            String filePath = generateFilePath(job);
-            long fileSize = simulateExport(job);
+            // 真实导出：CH 查询 → 文件落盘
+            String filePath = exportToFile(job);
+            long fileSize = java.nio.file.Files.size(java.nio.file.Path.of(filePath));
 
             job.markAsCompleted(filePath, fileSize, job.totalRows);
             exportJobRepo.save(job);
@@ -255,9 +280,19 @@ public class ExportService {
     public void cleanupExpiredExports() {
         try {
             LocalDateTime expireAt = LocalDateTime.now().minusDays(30);  // 保留30天
+            // 先按到期清单删实际文件（deleteExpired 删行后 filePath 不可再得），再删任务记录
+            List<ExportJobEntity> expired = exportJobRepo.findExpired(expireAt);
+            for (ExportJobEntity job : expired) {
+                if (job.filePath == null) {
+                    continue;
+                }
+                try {
+                    java.nio.file.Files.deleteIfExists(java.nio.file.Path.of(job.filePath));
+                } catch (Exception e) {
+                    logger.warn("Failed to delete expired export file {}: {}", job.filePath, e.getMessage());
+                }
+            }
             int deleted = exportJobRepo.deleteExpired(expireAt);
-
-            // TODO: 删除实际文件
 
             if (deleted > 0) {
                 logger.info("Cleaned up {} expired export jobs", deleted);
@@ -301,29 +336,147 @@ public class ExportService {
         );
     }
 
-    private String generateFilePath(ExportJobEntity job) {
-        return String.format("/exports/%s/%s", job.gameId, job.fileName);
+    /**
+     * 真实导出：按 exportType 白名单查 ClickHouse 明细，写 CSV/JSON 文件落盘。
+     * 表名走白名单、列名走标识符正则、值全 ? 参数化；行数达 maxRows 上限截断并标注。
+     * 格式/压缩通道不支持、CH 异常均抛出（processExportJob 诚实 FAILED）。
+     *
+     * @return 落盘文件的绝对路径
+     */
+    private String exportToFile(ExportJobEntity job) throws Exception {
+        ExportTable target = EXPORT_TABLES.get(job.exportType == null ? "" : job.exportType.trim());
+        if (target == null) {
+            throw new IllegalArgumentException(
+                "exportType must be one of " + EXPORT_TABLES.keySet() + ", got: " + job.exportType);
+        }
+
+        String format = job.exportFormat == null ? "csv" : job.exportFormat.toLowerCase(Locale.ROOT).trim();
+        if (!format.equals("csv") && !format.equals("json")) {
+            throw new IllegalArgumentException(
+                "exportFormat '" + job.exportFormat + "' has no real export channel (csv|json only)");
+        }
+
+        String compression = job.compression == null || job.compression.isBlank()
+            ? "none" : job.compression.toLowerCase(Locale.ROOT).trim();
+        boolean gzip;
+        switch (compression) {
+            case "none" -> gzip = false;
+            case "gzip" -> gzip = true;
+            default -> throw new IllegalArgumentException(
+                "compression '" + job.compression + "' not supported for single-file export (none|gzip)");
+        }
+
+        List<String> columns = parseColumns(job.columns);
+
+        StringBuilder sql = new StringBuilder("SELECT ")
+            .append(columns.isEmpty() ? "*" : String.join(", ", columns))
+            .append(" FROM ").append(target.table())
+            .append(" WHERE game_id = ?");
+        List<Object> args = new ArrayList<>();
+        args.add(job.gameId);
+        if (job.startTime != null) {
+            sql.append(" AND ").append(target.timeColumn()).append(" >= ?");
+            args.add(job.startTime);
+        }
+        if (job.endTime != null) {
+            sql.append(" AND ").append(target.timeColumn()).append(" < ?");
+            args.add(job.endTime);
+        }
+        sql.append(" ORDER BY ").append(target.timeColumn()).append(" LIMIT ?");
+        args.add(maxRows);
+
+        List<Map<String, Object>> rows = clickHouse.query(sql.toString(), args.toArray());
+        if (rows.size() >= maxRows) {
+            job.statusMessage = "truncated at max-rows cap (" + maxRows + ")";
+        }
+        job.totalRows = (long) rows.size();
+
+        java.nio.file.Path dir = java.nio.file.Path.of(storageDir, job.gameId);
+        java.nio.file.Files.createDirectories(dir);
+        java.nio.file.Path file = dir.resolve(gzip ? job.fileName + ".gz" : job.fileName);
+
+        try (java.io.OutputStream os = new java.io.FileOutputStream(file.toFile());
+             java.io.Writer writer = new java.io.OutputStreamWriter(
+                 gzip ? new java.util.zip.GZIPOutputStream(os) : os, java.nio.charset.StandardCharsets.UTF_8)) {
+            if (format.equals("json")) {
+                objectMapper.writeValue(writer, rows);
+            } else {
+                writeCsv(writer, rows, columns);
+            }
+        }
+
+        logger.info("Exported {} rows for job: {} -> {}", rows.size(), job.id, file);
+        return file.toString();
     }
 
-    private long simulateExport(ExportJobEntity job) {
-        // 模拟导出数据量
-        long rows = (long) (Math.random() * 100000) + 1000;
-        job.totalRows = rows;
+    /** 解析 columns JSON 数组；null/空白 → 空表（SELECT * 全列）。每项过标识符正则。 */
+    private List<String> parseColumns(String columnsJson) {
+        if (columnsJson == null || columnsJson.isBlank()) {
+            return List.of();
+        }
+        try {
+            com.fasterxml.jackson.databind.JsonNode array = objectMapper.readTree(columnsJson);
+            if (!array.isArray()) {
+                throw new IllegalArgumentException("columns must be a JSON array: " + columnsJson);
+            }
+            List<String> columns = new ArrayList<>();
+            array.forEach(node -> {
+                String col = node.asText();
+                if (!IDENTIFIER.matcher(col).matches()) {
+                    throw new IllegalArgumentException(
+                        "column must match ^[a-zA-Z_][a-zA-Z0-9_]{0,63}$, got: " + col);
+                }
+                columns.add(col);
+            });
+            return columns;
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            throw new IllegalArgumentException("columns is not valid JSON: " + columnsJson, e);
+        }
+    }
 
-        // 根据格式计算文件大小
-        long bytesPerRow = switch (job.exportFormat.toLowerCase()) {
-            case "json" -> 200L;
-            case "excel" -> 150L;
-            case "csv" -> 100L;
-            default -> 100L;
-        };
+    /** RFC 4180 CSV：含逗号/引号/换行的值加引号并将引号翻倍；表头取指定列或首行列集。 */
+    private void writeCsv(java.io.Writer writer, List<Map<String, Object>> rows, List<String> columns)
+            throws java.io.IOException {
+        List<String> header = columns.isEmpty()
+            ? (rows.isEmpty() ? List.of() : new ArrayList<>(rows.get(0).keySet()))
+            : columns;
+        if (!header.isEmpty()) {
+            writer.write(String.join(",", header.stream().map(ExportService::csvEscape).toList()) + "\n");
+        }
+        for (Map<String, Object> row : rows) {
+            List<String> cells = new ArrayList<>();
+            for (String col : header) {
+                cells.add(csvEscape(csvValue(row.get(col))));
+            }
+            writer.write(String.join(",", cells) + "\n");
+        }
+    }
 
-        return rows * bytesPerRow;
+    private String csvValue(Object v) {
+        if (v == null) {
+            return "";
+        }
+        if (v instanceof String || v instanceof Number || v instanceof Boolean) {
+            return String.valueOf(v);
+        }
+        try {
+            return objectMapper.writeValueAsString(v);  // 数组/Map 等复合值序列化为 JSON 字面量
+        } catch (Exception e) {
+            return String.valueOf(v);
+        }
+    }
+
+    private static String csvEscape(String v) {
+        if (v.contains(",") || v.contains("\"") || v.contains("\n") || v.contains("\r")) {
+            return "\"" + v.replace("\"", "\"\"") + "\"";
+        }
+        return v;
     }
 
     private void sendCompletionNotification(ExportJobEntity job) {
-        // TODO: 实现邮件通知
-        logger.info("Export completion notification sent to: {} for job: {}", job.notificationEmail, job.id);
+        // 无邮件投递通道：不假装已发送（对齐 SSO/IntegrationService 诚实化先例）
+        logger.warn("Email delivery channel is not configured; completion notification skipped for job: {} (email: {})",
+            job.id, job.notificationEmail);
     }
 
     /**
