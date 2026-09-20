@@ -34,6 +34,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * 断言方向：实体映射的每个列名都存在于该表的迁移 DDL 列集中（大小写不敏感，对齐 PG 折叠行为）。
  * 只防"实体引用不存在的列"（读写即炸），不断言反向（迁移多余的旧列是历史遗留，见 audit_logs）。
+ *
+ * 第二断言（V0.9.11 病例族）：实体 @Column(length) 不得超过迁移最终 VARCHAR 列宽（含 ALTER TYPE，
+ * 按迁移版本序取最后定义）。实体 length 只影响 H2 建表（test profile），生产 PG 按迁移建列——
+ * 漂移列上超长写入在测试全绿、生产 500（value too long）。V0.9.0 的 staging 环境创建必炸是同族实锤：
+ * env_{gameId}_staging=33 字符 > varchar(32)，dev/prod 恰好存活、e2e 短 id 双盲。
  */
 @DisplayName("实体列映射与迁移建列对齐（防驼峰/拼错列名在生产 PG 上 500）")
 class EntitiesSchemaAlignmentTest {
@@ -46,6 +51,12 @@ class EntitiesSchemaAlignmentTest {
         Pattern.CASE_INSENSITIVE);
     private static final Pattern CONSTRAINT_PREFIX = Pattern.compile(
         "^(PRIMARY|FOREIGN|CONSTRAINT|UNIQUE|CHECK|KEY|INDEX|EXCLUDE)\\b", Pattern.CASE_INSENSITIVE);
+    private static final Pattern ALTER_TYPE_VARCHAR = Pattern.compile(
+        "ALTER\\s+TABLE\\s+(\\w+)\\s+ALTER\\s+COLUMN\\s+(\\w+)\\s+TYPE\\s+VARCHAR\\s*\\((\\d+)\\)",
+        Pattern.CASE_INSENSITIVE);
+    private static final Pattern ADD_COLUMN_VARCHAR = Pattern.compile(
+        "ALTER\\s+TABLE\\s+(?:IF\\s+EXISTS\\s+)?[\\w.\"]*?(\\w+)\\s+ADD\\s+COLUMN\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?(\\w+)\\s+(VARCHAR\\s*\\(\\d+\\))",
+        Pattern.CASE_INSENSITIVE);
 
     @Test
     @DisplayName("全部 @Table 实体的映射列都落在迁移 DDL 列集内")
@@ -80,6 +91,94 @@ class EntitiesSchemaAlignmentTest {
             "实体映射列在迁移 DDL 中不存在（生产 PG 上读写即 500，H2 测试掩盖）: " + violations.entrySet().stream()
                 .map(e -> e.getKey() + " -> " + e.getValue())
                 .collect(Collectors.joining("; ")));
+    }
+
+    @Test
+    @DisplayName("实体 @Column(length) 不超过迁移最终 VARCHAR 列宽")
+    void entityLengthFitsMigrationVarcharWidth() throws IOException {
+        Map<String, Map<String, Integer>> widths = loadMigrationVarcharWidths();
+        Map<String, List<String>> violations = new HashMap<>();
+
+        for (Class<?> entity : scanEntityClasses()) {
+            String tableName = entity.getAnnotation(Table.class).name().toLowerCase();
+            Map<String, Integer> ddlWidths = widths.get(tableName);
+            if (ddlWidths == null) {
+                continue;  // 表级缺失由列存在性测试兜，不在此重复
+            }
+            for (Map.Entry<String, Integer> e : entityDeclaredLengths(entity).entrySet()) {
+                Integer ddl = ddlWidths.get(e.getKey());
+                if (ddl != null && e.getValue() > ddl) {
+                    violations.computeIfAbsent(tableName, k -> new ArrayList<>())
+                        .add(String.format("%s 实体length=%d > 迁移VARCHAR(%d)", e.getKey(), e.getValue(), ddl));
+                }
+            }
+        }
+
+        assertTrue(violations.isEmpty(),
+            "实体声明长度超过迁移列宽（超长写入 H2 放行、生产 PG 500，V0.9.0 staging 病例同族）: "
+                + violations.entrySet().stream()
+                .map(e -> e.getKey() + " -> " + e.getValue())
+                .collect(Collectors.joining("; ")));
+    }
+
+    /** 收集实体侧显式声明的列长度（@Column length），键为列名小写；无 length 的列不参与断言 */
+    private static Map<String, Integer> entityDeclaredLengths(Class<?> entity) {
+        Map<String, Integer> out = new HashMap<>();
+        for (Class<?> c = entity; c != null && c != Object.class; c = c.getSuperclass()) {
+            for (Field f : c.getDeclaredFields()) {
+                if (Modifier.isStatic(f.getModifiers()) || f.isAnnotationPresent(Transient.class)) {
+                    continue;
+                }
+                Column column = f.getAnnotation(Column.class);
+                if (column == null || column.length() == 255) {
+                    continue;  // 未显式声明（默认 255）无对齐依据
+                }
+                String name = !column.name().isEmpty() ? column.name() : toSnake(f.getName());
+                out.put(name.toLowerCase(), column.length());
+            }
+        }
+        return out;
+    }
+
+    /** 迁移最终 VARCHAR 列宽：CREATE/ADD COLUMN 定义按版本序、ALTER TYPE 覆盖（后写胜出） */
+    private static Map<String, Map<String, Integer>> loadMigrationVarcharWidths() throws IOException {
+        Map<String, Map<String, Integer>> out = new HashMap<>();
+        org.springframework.core.io.support.PathMatchingResourcePatternResolver resolver =
+            new org.springframework.core.io.support.PathMatchingResourcePatternResolver();
+        List<org.springframework.core.io.Resource> sqls = new ArrayList<>();
+        for (org.springframework.core.io.Resource r : resolver.getResources("classpath:db/migration/*.sql")) {
+            sqls.add(r);
+        }
+        sqls.sort(java.util.Comparator.comparing(r -> r.getFilename()));
+        Pattern colDef = Pattern.compile("^(\\w+)\\s+VARCHAR\\s*\\((\\d+)\\)", Pattern.CASE_INSENSITIVE);
+        for (org.springframework.core.io.Resource r : sqls) {
+            String sql = new String(r.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+            Matcher ct = CREATE_TABLE.matcher(sql);
+            while (ct.find()) {
+                Map<String, Integer> widths = out.computeIfAbsent(ct.group(1).toLowerCase(), k -> new HashMap<>());
+                for (String line : ct.group(2).split("\n")) {
+                    String trimmed = line.trim().replaceAll(",$", "");
+                    Matcher col = colDef.matcher(trimmed);
+                    if (col.find() && !CONSTRAINT_PREFIX.matcher(trimmed).find()) {
+                        widths.put(col.group(1).toLowerCase(), Integer.parseInt(col.group(2)));
+                    }
+                }
+            }
+            Matcher ac = ADD_COLUMN_VARCHAR.matcher(sql);
+            while (ac.find()) {
+                Matcher vm = Pattern.compile("VARCHAR\\s*\\((\\d+)\\)", Pattern.CASE_INSENSITIVE).matcher(ac.group(3));
+                if (vm.find()) {
+                    out.computeIfAbsent(ac.group(1).toLowerCase(), k -> new HashMap<>())
+                        .put(ac.group(2).toLowerCase(), Integer.parseInt(vm.group(1)));
+                }
+            }
+            Matcher mt = ALTER_TYPE_VARCHAR.matcher(sql);
+            while (mt.find()) {
+                out.computeIfAbsent(mt.group(1).toLowerCase(), k -> new HashMap<>())
+                    .put(mt.group(2).toLowerCase(), Integer.parseInt(mt.group(3)));
+            }
+        }
+        return out;
     }
 
     /** 扫描本包全部 classpath（main 实体 + 目录/jar 两种形态）中的实体类 */
