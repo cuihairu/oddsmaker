@@ -24,24 +24,24 @@ class EntitiesSmokeCoverageTest {
         // jpa 实体
         for (String name : new String[] {
                 "AdAnalysisEntity", "AnnouncementEntity", "ApiKeyEntity", "AuditLogEntity", "BlockListEntity",
-                "CohortEntity", "DataQualityRuleEntity", "EventDefinitionEntity", "EventFieldEntity",
+                "CohortEntity", "DataQualityRuleEntity", "EventDefinitionEntity",
                 "EventPropertyDefinitionEntity", "ExportJobEntity", "FeatureFlagEntity",
-                "FlinkJobEntity", "FunnelAnalysisEntity", "FunnelConfigEntity", "FunnelStepEntity", "GameEntity",
+                "FlinkJobEntity", "FunnelConfigEntity", "FunnelStepEntity", "GameEntity",
                 "GameEnvironmentEntity", "HealthCheckEntity", "HealthMetricEntity", "IdentityEntity",
-                "IdentityLinkEntity", "IntegrationEntity", "IntegrationLogEntity", "LevelProgressionEntity",
+                "IdentityLinkEntity", "IntegrationEntity", "IntegrationLogEntity",
                 "MFAConfigEntity", "MLModelEntity", "MLModelPredictionEntity", "MailClaimEntity", "MailEntity",
                 "MaintenanceWindowEntity", "ModelTrainingEntity", "PerformanceMetricEntity", "PermissionEntity",
                 "PipelineEntity", "PipelineJobEntity", "PlayerExportJobEntity",
                 "PlayerLoginLogEntity", "PlayerPaymentEntity", "QuotaEntity",
                 "RateLimitEntity",
                 "RedeemCodeBatchEntity", "RedeemCodeEntity", "RedeemRecordEntity", "RemoteConfigEntity",
-                "ReportEntity", "ReportExecutionEntity", "RetentionAnalysisEntity", "RevenueAggregationEntity",
+                "ReportEntity", "ReportExecutionEntity",
                 "RevenueAnalysisEntity", "ReviewQueueEntity", "RiskCaseEntity", "RiskRuleEntity", "RoleEntity",
                 "SDKKeyEntity", "SDKVersionEntity", "SSOConfigEntity",
                 "SecurityPolicyEntity", "SecuritySessionEntity", "SessionAnalysisEntity", "SocialAnalyticsEntity",
-                "StandardEventEntity", "StandardEventTypeEntity", "StorageProfileEntity", "SymbolMappingEntity",
+                "StorageProfileEntity", "SymbolMappingEntity",
                 "SystemAlertEntity", "SystemConfigEntity", "TelemetryConfigEntity", "TrackingPlanEntity",
-                "UserEntity", "UserInvitationEntity", "UserRoleEntity", "VirtualEconomyEntity",
+                "UserEntity", "UserRoleEntity",
                 "WebhookConfigEntity", "WebhookLogEntity"}) {
             list.add(load("io.oddsmaker.control.jpa." + name));
         }

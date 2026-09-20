@@ -671,70 +671,6 @@ class EntitiesSweep2Test {
     }
 
     @Test
-    @DisplayName("FunnelAnalysisEntity：漏斗类型判定/计算频率分支/限定名与窗口分钟")
-    void funnelAnalysisEntity() {
-        FunnelAnalysisEntity f = new FunnelAnalysisEntity();
-        f.gameId = "g1";
-        f.name = "新手引导漏斗";
-
-        assertTrue(f.isActive());
-        assertTrue(f.isAutoCalcEnabled());
-        assertTrue(f.isSequential());
-        assertTrue(f.isStrictOrder());
-        assertFalse(f.allowsBacktracking());
-
-        f.status = FunnelAnalysisEntity.AnalysisStatus.PAUSED;
-        assertFalse(f.needsCalculation());
-        f.status = FunnelAnalysisEntity.AnalysisStatus.ACTIVE;
-        f.enableAutoCalc = null;
-        assertFalse(f.isAutoCalcEnabled());
-        assertFalse(f.needsCalculation());
-        f.enableAutoCalc = true;
-
-        assertTrue(f.needsCalculation());
-        f.lastCalculatedAt = LocalDateTime.now().minusHours(1);
-        assertTrue(f.needsCalculation());
-
-        f.calcFrequency = "realtime";
-        assertTrue(f.needsCalculation());
-        f.lastCalculatedAt = LocalDateTime.now().plusMinutes(1);
-        assertFalse(f.needsCalculation());
-        f.lastCalculatedAt = null;
-        assertNotNull(f.calculateNextCalcTime());
-        LocalDateTime base = LocalDateTime.of(2026, 1, 1, 8, 0);
-        f.lastCalculatedAt = base;
-        f.calcFrequency = "hourly";
-        assertEquals(base.plusHours(1), f.calculateNextCalcTime());
-        f.calcFrequency = "daily";
-        assertEquals(base.plusDays(1), f.calculateNextCalcTime());
-        f.calcFrequency = "weekly";
-        assertEquals(base.plusWeeks(1), f.calculateNextCalcTime());
-        f.calcFrequency = "monthly";
-        assertEquals(base.plusDays(1), f.calculateNextCalcTime());
-
-        f.funnelType = FunnelAnalysisEntity.FunnelType.ANY_ORDER;
-        assertFalse(f.isSequential());
-        f.strictOrder = null;
-        assertFalse(f.isStrictOrder());
-        f.allowBacktracking = true;
-        assertTrue(f.allowsBacktracking());
-
-        assertEquals("新手引导漏斗", f.getQualifiedName());
-        GameEntity g = new GameEntity();
-        g.id = "g9";
-        f.game = g;
-        assertEquals("g9_新手引导漏斗", f.getQualifiedName());
-
-        f.windowSize = null;
-        assertEquals(10080, f.getWindowSizeInMinutes());
-        f.windowSize = 2;
-        assertEquals(2880, f.getWindowSizeInMinutes());
-
-        f.deletedAt = LocalDateTime.now();
-        assertFalse(f.isActive());
-    }
-
-    @Test
     @DisplayName("FunnelStepEntity：可选步骤/过滤条件/时间窗口判定")
     void funnelStepEntity() {
         FunnelStepEntity s = new FunnelStepEntity();
@@ -911,40 +847,6 @@ class EntitiesSweep2Test {
         l.onCreate();
         assertEquals(preset, l.createdAt);
         assertEquals(preset, l.expiresAt);
-    }
-
-    @Test
-    @DisplayName("LevelProgressionEntity：活跃判定与追踪开关空值防御")
-    void levelProgressionEntity() {
-        LevelProgressionEntity l = new LevelProgressionEntity();
-        l.gameId = "g1";
-        l.name = "主线关卡进度";
-
-        assertEquals("level_start", l.levelStartEvent);
-        assertEquals("level_complete", l.levelCompleteEvent);
-        assertEquals("level_fail", l.levelFailEvent);
-        assertTrue(l.isActive());
-        assertTrue(l.isAutoCalcEnabled());
-        assertTrue(l.tracksCompletionTime());
-        assertTrue(l.hasAnomalyDetection());
-
-        l.status = LevelProgressionEntity.ProgressionStatus.PAUSED;
-        assertFalse(l.isActive());
-        l.status = LevelProgressionEntity.ProgressionStatus.ACTIVE;
-        l.deletedAt = LocalDateTime.now();
-        assertFalse(l.isActive());
-        l.deletedAt = null;
-
-        l.enableAutoCalc = null;
-        assertFalse(l.isAutoCalcEnabled());
-        l.trackCompletionTime = null;
-        assertFalse(l.tracksCompletionTime());
-        l.enableAnomalyDetection = null;
-        assertFalse(l.hasAnomalyDetection());
-        l.trackCompletionTime = true;
-        l.enableAnomalyDetection = true;
-        assertTrue(l.tracksCompletionTime());
-        assertTrue(l.hasAnomalyDetection());
     }
 
     @Test
@@ -1930,98 +1832,6 @@ class EntitiesSweep2Test {
     }
 
     @Test
-    @DisplayName("StandardEventEntity：重要性/分析用途判定与全名拼接")
-    void standardEventEntity() {
-        StandardEventEntity e = new StandardEventEntity();
-        e.eventTypeId = "et-1";
-        e.eventName = "purchase";
-        e.displayName = "内购完成";
-
-        assertTrue(e.isActive());
-        assertFalse(e.isCritical());
-        assertFalse(e.isImportant());
-        assertFalse(e.supportsFunnel());
-        assertFalse(e.supportsRetention());
-        assertFalse(e.supportsCohort());
-        assertFalse(e.isRevenueEvent());
-        assertEquals("purchase", e.getFullEventName());
-
-        e.importance = StandardEventEntity.EventImportance.CRITICAL;
-        assertTrue(e.isCritical());
-        assertTrue(e.isImportant());
-        e.importance = StandardEventEntity.EventImportance.HIGH;
-        assertFalse(e.isCritical());
-        assertTrue(e.isImportant());
-
-        e.enableFunnel = null;
-        assertFalse(e.supportsFunnel());
-        e.enableFunnel = true;
-        assertTrue(e.supportsFunnel());
-        e.enableRetention = true;
-        assertTrue(e.supportsRetention());
-        e.enableCohort = true;
-        assertTrue(e.supportsCohort());
-        e.enableRevenue = true;
-        assertTrue(e.isRevenueEvent());
-
-        StandardEventTypeEntity type = new StandardEventTypeEntity();
-        type.id = "et-1";
-        type.code = "business";
-        e.eventType = type;
-        assertEquals("business.purchase", e.getFullEventName());
-
-        e.status = StandardEventEntity.EventStatus.DEPRECATED;
-        assertFalse(e.isActive());
-        e.status = StandardEventEntity.EventStatus.ACTIVE;
-        e.deletedAt = LocalDateTime.now();
-        assertFalse(e.isActive());
-    }
-
-    @Test
-    @DisplayName("StandardEventTypeEntity：核心事件/聚合开关与分类推断全分支")
-    void standardEventTypeEntity() {
-        StandardEventTypeEntity t = new StandardEventTypeEntity();
-        t.id = "et-session";
-        t.code = "session";
-        t.name = "会话事件";
-
-        assertTrue(t.isActive());
-        assertFalse(t.isCoreEvent());
-        assertTrue(t.supportsAggregation());
-        assertEquals("lifecycle", t.getCategory());
-
-        t.isCore = null;
-        assertFalse(t.isCoreEvent());
-        t.isCore = true;
-        assertTrue(t.isCoreEvent());
-        t.enableAggregation = null;
-        assertFalse(t.supportsAggregation());
-        t.enableAggregation = true;
-
-        t.category = "自定义分类";
-        assertEquals("自定义分类", t.getCategory());
-        t.category = null;
-
-        t.code = "user";
-        assertEquals("lifecycle", t.getCategory());
-        t.code = "business";
-        assertEquals("monetization", t.getCategory());
-        t.code = "progression";
-        assertEquals("progression", t.getCategory());
-        t.code = "design";
-        assertEquals("progression", t.getCategory());
-        t.code = "error";
-        assertEquals("system", t.getCategory());
-        t.code = "risk";
-        assertEquals("system", t.getCategory());
-        t.code = "ad";
-        assertEquals("engagement", t.getCategory());
-
-        t.deletedAt = LocalDateTime.now();
-        assertFalse(t.isActive());
-    }
-
-    @Test
     @DisplayName("StorageProfileEntity：活跃判定与专用隔离策略")
     void storageProfileEntity() {
         StorageProfileEntity s = new StorageProfileEntity();
@@ -2146,58 +1956,6 @@ class EntitiesSweep2Test {
     }
 
     @Test
-    @DisplayName("UserInvitationEntity：有效/过期判定/接受拒绝取消与范围描述")
-    void userInvitationEntity() {
-        LocalDateTime now = LocalDateTime.now();
-        UserInvitationEntity i = new UserInvitationEntity();
-        i.email = "newbie@oddsmaker.io";
-        i.inviterId = "u-1";
-        i.token = "invite-token-9";
-        i.role = UserRoleEntity.RoleType.ANALYST;
-        i.scope = UserRoleEntity.PermissionScope.GAME;
-        i.expiresAt = now.plusDays(3);
-
-        assertTrue(i.isValid());
-        assertFalse(i.isExpired());
-        assertEquals("https://oddsmaker.io/invitation/accept?token=invite-token-9",
-                i.getInvitationUrl("https://oddsmaker.io"));
-        assertEquals("", i.getScopeDescription());
-
-        i.expiresAt = now.minusMinutes(1);
-        assertFalse(i.isValid());
-        assertTrue(i.isExpired());
-        i.expiresAt = now.plusDays(3);
-
-        GameEntity g = new GameEntity();
-        g.name = "仙侠传说";
-        i.game = g;
-        assertEquals("游戏: 仙侠传说", i.getScopeDescription());
-        i.environmentId = "env-9";
-        assertEquals("游戏: 仙侠传说 > 环境: env-9", i.getScopeDescription());
-        i.game = null;
-        assertEquals("环境: env-9", i.getScopeDescription());
-
-        i.accept("u-99");
-        assertEquals(UserInvitationEntity.InvitationStatus.ACCEPTED, i.status);
-        assertNotNull(i.acceptedAt);
-        assertEquals("u-99", i.createdUserId);
-        assertFalse(i.isValid());
-
-        UserInvitationEntity r = new UserInvitationEntity();
-        r.email = "other@oddsmaker.io";
-        r.inviterId = "u-1";
-        r.token = "invite-token-8";
-        r.role = UserRoleEntity.RoleType.VIEWER;
-        r.scope = UserRoleEntity.PermissionScope.GLOBAL;
-        r.expiresAt = now.plusDays(1);
-        r.reject();
-        assertEquals(UserInvitationEntity.InvitationStatus.REJECTED, r.status);
-        assertNotNull(r.rejectedAt);
-        r.cancel();
-        assertEquals(UserInvitationEntity.InvitationStatus.CANCELED, r.status);
-    }
-
-    @Test
     @DisplayName("UserRoleEntity：启用/过期/有效判定与三种作用域")
     void userRoleEntity() {
         UserRoleEntity u = new UserRoleEntity();
@@ -2232,52 +1990,6 @@ class EntitiesSweep2Test {
         u.environment = "prod";
         assertTrue(u.isEnvironmentScoped());
         assertFalse(u.isGameScoped());
-    }
-
-    @Test
-    @DisplayName("VirtualEconomyEntity：货币类型/通胀流量开关/告警阈值分支")
-    void virtualEconomyEntity() {
-        VirtualEconomyEntity v = new VirtualEconomyEntity();
-        v.gameId = "g1";
-        v.name = "钻石经济监控";
-        v.currencyId = "gem";
-
-        assertTrue(v.isActive());
-        assertTrue(v.isAutoCalcEnabled());
-        assertTrue(v.tracksInflation());
-        assertTrue(v.hasFlowAnalysis());
-        assertTrue(v.isPremiumCurrency());
-
-        v.currencyType = VirtualEconomyEntity.CurrencyType.HARD;
-        assertTrue(v.isPremiumCurrency());
-        v.currencyType = VirtualEconomyEntity.CurrencyType.SOFT;
-        assertFalse(v.isPremiumCurrency());
-
-        v.enableAutoCalc = null;
-        assertFalse(v.isAutoCalcEnabled());
-        v.enableInflationMonitoring = null;
-        assertFalse(v.tracksInflation());
-        v.enableFlowAnalysis = null;
-        assertFalse(v.hasFlowAnalysis());
-
-        assertFalse(v.needsAlert(0.5));
-        v.enableAlerts = false;
-        assertFalse(v.needsAlert(0.1));
-        v.enableAlerts = null;
-        assertFalse(v.needsAlert(0.1));
-        v.enableAlerts = true;
-        assertFalse(v.needsAlert(null));
-        v.alertThresholdLow = 0.2;
-        v.alertThresholdHigh = 0.8;
-        assertTrue(v.needsAlert(0.1));
-        assertTrue(v.needsAlert(0.9));
-        assertFalse(v.needsAlert(0.5));
-        v.alertThresholdLow = null;
-        v.alertThresholdHigh = null;
-        assertFalse(v.needsAlert(0.5));
-
-        v.deletedAt = LocalDateTime.now();
-        assertFalse(v.isActive());
     }
 
     @Test

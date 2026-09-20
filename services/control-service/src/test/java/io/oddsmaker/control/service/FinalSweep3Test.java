@@ -70,7 +70,6 @@ import io.oddsmaker.control.jpa.ReportEntity;
 import io.oddsmaker.control.jpa.ReportExecutionEntity;
 import io.oddsmaker.control.jpa.ReportExecutionRepo;
 import io.oddsmaker.control.jpa.ReportRepo;
-import io.oddsmaker.control.jpa.RetentionAnalysisEntity;
 import io.oddsmaker.control.jpa.RiskCaseRepo;
 import io.oddsmaker.control.jpa.RiskRuleEntity;
 import io.oddsmaker.control.jpa.RiskRuleRepo;
@@ -1576,34 +1575,6 @@ class FinalSweep3Test {
     }
 
     // ==================== JPA 实体 ====================
-
-    @Test
-    @DisplayName("RetentionAnalysisEntity.calculateNextCalcTime 各频率分支")
-    void testCalculateNextCalcTime() {
-        RetentionAnalysisEntity never = new RetentionAnalysisEntity();
-        assertNotNull(never.calculateNextCalcTime());
-
-        LocalDateTime base = LocalDateTime.of(2026, 1, 1, 0, 0);
-        RetentionAnalysisEntity hourly = new RetentionAnalysisEntity();
-        hourly.lastCalculatedAt = base;
-        hourly.calcFrequency = "hourly";
-        assertEquals(base.plusHours(1), hourly.calculateNextCalcTime());
-
-        RetentionAnalysisEntity daily = new RetentionAnalysisEntity();
-        daily.lastCalculatedAt = base;
-        daily.calcFrequency = "daily";
-        assertEquals(base.plusDays(1), daily.calculateNextCalcTime());
-
-        RetentionAnalysisEntity weekly = new RetentionAnalysisEntity();
-        weekly.lastCalculatedAt = base;
-        weekly.calcFrequency = "weekly";
-        assertEquals(base.plusWeeks(1), weekly.calculateNextCalcTime());
-
-        RetentionAnalysisEntity unknown = new RetentionAnalysisEntity();
-        unknown.lastCalculatedAt = base;
-        unknown.calcFrequency = "monthly";
-        assertEquals(base.plusDays(1), unknown.calculateNextCalcTime());
-    }
 
     // ==================== DTO updateEntity ====================
 
