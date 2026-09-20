@@ -311,6 +311,7 @@ public class BlockListService {
      */
     @Scheduled(cron = "0 0 * * * ?")
     @Transactional
+    @Scheduled(fixedDelay = 60000)  // 每分钟检查一次：过期封禁自动解封
     public void cleanupExpiredBlocks() {
         try {
             List<BlockListEntity> expiredBlocks = blockListRepo.findExpiredBlocks(LocalDateTime.now());

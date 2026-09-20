@@ -278,44 +278,12 @@ class UserPortalDeepTest {
     }
 
     @Test
-    @DisplayName("toggleTwoFactor/recordLogin：用户不存在抛异常")
-    void toggleTwoFactorAndRecordLogin_NotFound_Throw() {
+    @DisplayName("toggleTwoFactor：用户不存在抛异常")
+    void toggleTwoFactor_NotFound_Throw() {
         lenient().when(userRepo.findById("ghost")).thenReturn(Optional.empty());
 
         assertThrows(IllegalArgumentException.class,
             () -> userService.toggleTwoFactor("ghost", true, "op_1"));
-        assertThrows(IllegalArgumentException.class,
-            () -> userService.recordLogin("ghost", "1.1.1.1"));
-    }
-
-    @Test
-    @DisplayName("recordLogin：loginCount 从 null 起累加")
-    void recordLogin_NullLoginCountIncrements() {
-        UserEntity existing = user("user_1", "alice");
-        existing.loginCount = null;
-
-        lenient().when(userRepo.findById("user_1")).thenReturn(Optional.of(existing));
-        lenient().when(userRepo.save(any(UserEntity.class))).thenAnswer(inv -> inv.getArgument(0));
-
-        userService.recordLogin("user_1", "10.0.0.1");
-
-        assertEquals(1L, existing.loginCount);
-        assertEquals("10.0.0.1", existing.lastLoginIp);
-        assertNotNull(existing.lastLoginAt);
-        verify(auditLogRepo).save(any(AuditLogEntity.class));
-    }
-
-    @Test
-    @DisplayName("recordLogout：成功记录审计；用户不存在抛异常")
-    void recordLogout_SuccessAndNotFound() {
-        UserEntity existing = user("user_1", "alice");
-        lenient().when(userRepo.findById("user_1")).thenReturn(Optional.of(existing));
-        lenient().when(userRepo.findById("ghost")).thenReturn(Optional.empty());
-
-        userService.recordLogout("user_1", "10.0.0.1");
-        verify(auditLogRepo).save(any(AuditLogEntity.class));
-
-        assertThrows(IllegalArgumentException.class, () -> userService.recordLogout("ghost", "10.0.0.1"));
     }
 
     @Test
@@ -451,37 +419,11 @@ class UserPortalDeepTest {
     }
 
     @Test
-    @DisplayName("recordKeyEvent：带错误与不带错误分支")
-    void recordKeyEvent_WithAndWithoutError() {
-        SDKKeyEntity key = sdkKey("sdk_1", "pk_1");
-        lenient().when(sdkKeyRepo.findByPublicKeyAndDeletedAtIsNull("pk_1")).thenReturn(Optional.of(key));
-        lenient().when(sdkKeyRepo.save(any(SDKKeyEntity.class))).thenAnswer(inv -> inv.getArgument(0));
-
-        developerPortalService.recordKeyEvent("pk_1", 10, true, "boom");
-        assertEquals(10L, key.totalEventsSent);
-        assertEquals(1L, key.totalErrors);
-        assertEquals("boom", key.lastErrorMessage);
-        assertNotNull(key.lastErrorAt);
-
-        developerPortalService.recordKeyEvent("pk_1", 5, true, null);
-        assertEquals(15L, key.totalEventsSent);
-        assertEquals(1L, key.totalErrors);
-
-        developerPortalService.recordKeyEvent("pk_1", 1, false, "ignored");
-        assertEquals(16L, key.totalEventsSent);
-        assertEquals(1L, key.totalErrors);
-        assertEquals("boom", key.lastErrorMessage);
-    }
-
-    @Test
-    @DisplayName("getSDKKey/getSDKKeyByPublicKey：不存在抛异常")
+    @DisplayName("getSDKKey：不存在抛异常")
     void getSDKKey_NotFound_Throws() {
         lenient().when(sdkKeyRepo.findById("ghost")).thenReturn(Optional.empty());
-        lenient().when(sdkKeyRepo.findByPublicKeyAndDeletedAtIsNull("pk_ghost")).thenReturn(Optional.empty());
 
         assertThrows(IllegalArgumentException.class, () -> developerPortalService.getSDKKey("ghost"));
-        assertThrows(IllegalArgumentException.class,
-            () -> developerPortalService.getSDKKeyByPublicKey("pk_ghost"));
     }
 
     @Test

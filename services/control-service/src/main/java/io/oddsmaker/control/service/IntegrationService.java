@@ -109,7 +109,6 @@ public class IntegrationService {
         integrationRepo.save(integration);
 
         try {
-            // 模拟验证
             IntegrationLogEntity log = executeHealthCheck(integration);
 
             if (log.isSuccess()) {

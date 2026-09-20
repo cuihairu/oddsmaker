@@ -12,7 +12,6 @@ import io.oddsmaker.control.jpa.PipelineJobRepo;
 import io.oddsmaker.control.jpa.PipelineRepo;
 import io.oddsmaker.control.jpa.QuotaRepo;
 import io.oddsmaker.control.jpa.RateLimitRepo;
-import io.oddsmaker.control.jpa.RateLimitUsageRepo;
 import io.oddsmaker.control.jpa.RiskRuleRepo;
 import io.oddsmaker.control.jpa.SSOConfigRepo;
 import io.oddsmaker.control.jpa.SecurityPolicyRepo;
@@ -275,9 +274,6 @@ class InfraServicesTest {
 
     @Mock
     private RateLimitRepo rateLimitRepo;
-
-    @Mock
-    private RateLimitUsageRepo rateLimitUsageRepo;
 
     @Mock
     private QuotaRepo quotaRepo;

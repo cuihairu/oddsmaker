@@ -728,15 +728,11 @@ class FinalSweep6Test {
     @Mock
     private QuotaRepo quotaRepo;
 
-    @Mock
-    private RateLimitUsageRepo rateLimitUsageRepo;
-
     @Test
     @DisplayName("getQuotaStats：over/near/normal 三态分类 lambda")
     void rateLimitQuotaStatsClassifier() {
         RateLimitService service = new RateLimitService();
         ReflectionTestUtils.setField(service, "rateLimitRepo", mock(RateLimitRepo.class));
-        ReflectionTestUtils.setField(service, "rateLimitUsageRepo", rateLimitUsageRepo);
         ReflectionTestUtils.setField(service, "quotaRepo", quotaRepo);
         ReflectionTestUtils.setField(service, "auditLogService", auditLog);
 

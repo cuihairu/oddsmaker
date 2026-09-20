@@ -20,9 +20,7 @@ import io.oddsmaker.control.jpa.GameEnvironmentRepo;
 import io.oddsmaker.control.jpa.GameRepo;
 import io.oddsmaker.control.jpa.IdentityLinkRepo;
 import io.oddsmaker.control.jpa.IdentityRepo;
-import io.oddsmaker.control.jpa.RateLimitUsageEntity;
 import io.oddsmaker.control.jpa.QuotaRepo;
-import io.oddsmaker.control.jpa.RateLimitUsageRepo;
 import io.oddsmaker.control.jpa.RedeemCodeBatchEntity;
 import io.oddsmaker.control.jpa.RedeemCodeBatchRepo;
 import io.oddsmaker.control.jpa.RemoteConfigEntity;
@@ -48,7 +46,6 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -347,26 +344,6 @@ class CoverageTopUpTest {
         assertEquals(io.oddsmaker.control.jpa.SystemAlertEntity.AlertType.ANOMALY_DETECTED,
             ReflectionTestUtils.invokeMethod(service, "getAlertTypeFromMetric",
                 io.oddsmaker.control.jpa.HealthMetricEntity.MetricType.NETWORK_IN));
-    }
-
-    @Test
-    @DisplayName("限流窗口清理：过期缓存条目被移除")
-    void rateLimitCleanupRemovesExpiredCache() {
-        RateLimitUsageRepo usageRepo = mock(RateLimitUsageRepo.class);
-        when(usageRepo.deleteExpired(any())).thenReturn(0);
-        RateLimitService service = new RateLimitService();
-        ReflectionTestUtils.setField(service, "rateLimitUsageRepo", usageRepo);
-
-        @SuppressWarnings("unchecked")
-        ConcurrentHashMap<String, RateLimitUsageEntity> cache =
-            (ConcurrentHashMap<String, RateLimitUsageEntity>) ReflectionTestUtils.getField(service, "usageCache");
-        RateLimitUsageEntity stale = new RateLimitUsageEntity();
-        stale.windowEnd = LocalDateTime.now().minusHours(1);
-        cache.put("g1|stale", stale);
-
-        service.cleanupExpiredWindows();
-
-        assertTrue(cache.isEmpty());
     }
 
     @Test

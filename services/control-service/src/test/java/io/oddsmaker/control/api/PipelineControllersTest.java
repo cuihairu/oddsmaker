@@ -7,7 +7,6 @@ import io.oddsmaker.control.service.FlinkJobService;
 import io.oddsmaker.control.service.HealthMonitorService;
 import io.oddsmaker.control.service.IntegrationService;
 import io.oddsmaker.control.service.MLModelService;
-import io.oddsmaker.control.service.PerformanceMonitorService;
 import io.oddsmaker.control.service.PipelineService;
 import io.oddsmaker.control.service.RateLimitService;
 import io.oddsmaker.control.service.ReportService;
@@ -404,32 +403,6 @@ class PipelineControllersTest {
         verify(accessGuard, org.mockito.Mockito.times(1)).requirePermission("health:manage");
         verify(accessGuard, org.mockito.Mockito.times(2)).requirePermission("alert:read");
         verify(accessGuard, org.mockito.Mockito.times(2)).requirePermission("alert:manage");
-    }
-
-    // ===== 性能监控 =====
-
-    @Mock
-    private PerformanceMonitorService performanceMonitorService;
-
-    @InjectMocks
-    private PerformanceMonitoringController performanceController;
-
-    @Test
-    @DisplayName("性能监控：10 个端点委托")
-    void performanceEndpoints() {
-        assertEquals(200, performanceController.getSystemOverview().getStatusCode().value());
-        assertEquals(200, performanceController.getApiMetrics().getStatusCode().value());
-        assertEquals(200, performanceController.getEventMetrics().getStatusCode().value());
-        assertEquals(200, performanceController.getRiskMetrics().getStatusCode().value());
-        assertEquals(200, performanceController.getDatabaseMetrics().getStatusCode().value());
-        assertEquals(200, performanceController.getKafkaMetrics().getStatusCode().value());
-        assertEquals(200, performanceController.getSystemMetrics().getStatusCode().value());
-        assertEquals(200, performanceController.getBusinessMetrics().getStatusCode().value());
-        assertEquals(200, performanceController.getHealthMetrics().getStatusCode().value());
-        assertEquals(200, performanceController.getPrometheusEndpoint().getStatusCode().value());
-        // overview/api/events/risk/business → metrics:read 5；database/kafka/system → metrics:infra 3；health/prometheus 无 guard
-        verify(accessGuard, org.mockito.Mockito.times(5)).requirePermission("metrics:read");
-        verify(accessGuard, org.mockito.Mockito.times(3)).requirePermission("metrics:infra");
     }
 
     // ===== 埋点方案 =====

@@ -222,43 +222,6 @@ public class UserService {
     }
 
     /**
-     * 记录用户登录
-     */
-    public void recordLogin(String userId, String ip) {
-        logger.info("Recording login for user: {} from IP: {}", userId, ip);
-
-        UserEntity user = userRepo.findById(userId)
-            .orElseThrow(() -> new IllegalArgumentException("User not found: " + userId));
-
-        user.recordLogin(ip);
-        userRepo.save(user);
-
-        // 记录审计日志
-        auditLogRepo.save(createAuditLog(
-            userId, user.username, AuditLogEntity.AuditAction.LOGIN,
-            "user", user.id, user.username,
-            null, "Login from " + ip, "SUCCESS", ip
-        ));
-    }
-
-    /**
-     * 记录用户登出
-     */
-    public void recordLogout(String userId, String ip) {
-        logger.info("Recording logout for user: {} from IP: {}", userId, ip);
-
-        UserEntity user = userRepo.findById(userId)
-            .orElseThrow(() -> new IllegalArgumentException("User not found: " + userId));
-
-        // 记录审计日志
-        auditLogRepo.save(createAuditLog(
-            userId, user.username, AuditLogEntity.AuditAction.LOGOUT,
-            "user", user.id, user.username,
-            null, "Logout from " + ip, "SUCCESS", ip
-        ));
-    }
-
-    /**
      * 更新用户角色
      */
     public UserEntity updateRoles(String userId, Set<UserEntity.UserRole> roles, String operatorId) {

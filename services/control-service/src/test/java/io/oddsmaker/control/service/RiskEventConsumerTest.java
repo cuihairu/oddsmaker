@@ -187,11 +187,27 @@ class RiskEventConsumerTest {
             eq(AuditLogEntity.AuditAction.SECURITY_ALERT), any(), any(),
             any(), any(), any(), any(), any(), any(), any(), any(), any());
 
+        // 案例创建即派发 risk_case webhook（第 11 类事件，携带环境与等级）
+        verify(webhookService).sendRiskCaseWebhook(eq("game_demo"), eq("prod"), org.mockito.ArgumentMatchers.same(riskCase));
+
         org.mockito.ArgumentCaptor<java.util.Map<String, Object>> payload =
             org.mockito.ArgumentCaptor.forClass(java.util.Map.class);
         verify(webhookService).sendCustomWebhook(eq("game_demo"), eq("risk_action"), payload.capture());
         assertEquals("review", payload.getValue().get("action"));
         assertEquals("queued", payload.getValue().get("state"));
+    }
+
+    @Test
+    @DisplayName("REVIEW → risk_case webhook 派发失败被吞，案件仍进审核队列")
+    void review_riskCaseWebhookFailureNonFatal() {
+        when(riskCaseRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        org.mockito.Mockito.doThrow(new RuntimeException("hook down")).when(webhookService)
+            .sendRiskCaseWebhook(any(), any(), any());
+
+        consumer.onRiskEvent(riskEventJson("REVIEW", "HIGH", "PLAYER", "user_9", "rr_x"));
+
+        // HIGH → 优先级 2；派发失败不阻断队列与后续流程
+        verify(reviewQueueService).addToQueue(any(), eq(2), eq("risk_automation"), eq("fraud"));
     }
 
     @Test

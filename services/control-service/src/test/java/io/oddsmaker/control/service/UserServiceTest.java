@@ -152,19 +152,6 @@ class UserServiceTest {
         assertEquals("user_test123", result.get().id);
     }
 
-    @Test
-    void recordLogin_Success() {
-        when(userRepo.findById("user_test123")).thenReturn(Optional.of(testUser));
-        when(userRepo.save(any(UserEntity.class))).thenReturn(testUser);
-
-        userService.recordLogin("user_test123", "192.168.1.1");
-
-        assertNotNull(testUser.lastLoginAt);
-        assertEquals("192.168.1.1", testUser.lastLoginIp);
-        assertEquals(1L, testUser.loginCount);
-        verify(userRepo).save(testUser);
-        verify(auditLogRepo).save(any());
-    }
 
     @Test
     void updateRoles_Success() {

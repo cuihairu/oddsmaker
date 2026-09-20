@@ -10,11 +10,14 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 限流服务
  * 管理API限流和资源配额
+ *
+ * <p>限流执行本身在网关（gateway RateLimiterService 内存实现）；
+ * 本服务负责限流/配额规则的管理与配额用量告警。
+ * 历史上的 checkRequest 执行链（含 rate_limit_usage 用量表读写）零调用方，已删除。
  */
 @Service
 @Transactional
@@ -26,9 +29,6 @@ public class RateLimitService {
     private RateLimitRepo rateLimitRepo;
 
     @Autowired
-    private RateLimitUsageRepo rateLimitUsageRepo;
-
-    @Autowired
     private QuotaRepo quotaRepo;
 
     @Autowired
@@ -36,181 +36,6 @@ public class RateLimitService {
 
     @Autowired
     private WebhookService webhookService;
-
-    // 本地缓存，用于快速检查
-    private final Map<String, RateLimitUsageEntity> usageCache = new ConcurrentHashMap<>();
-
-    /**
-     * 检查请求是否允许
-     */
-    public RateLimitCheckResult checkRequest(String gameId, String apiKeyId, String endpoint, String userId) {
-        // 查找适用的限流规则
-        List<RateLimitEntity> rules = findApplicableRules(gameId, apiKeyId, endpoint, userId);
-
-        for (RateLimitEntity rule : rules) {
-            RateLimitCheckResult result = checkRule(rule, gameId, apiKeyId, endpoint, userId);
-            if (!result.allowed) {
-                // 记录被限制的请求
-                logger.warn("Request rate limited: rule={}, game={}, endpoint={}", rule.id, gameId, endpoint);
-                return result;
-            }
-        }
-
-        // 更新使用量
-        incrementUsage(rules, gameId, apiKeyId, endpoint, userId);
-
-        return new RateLimitCheckResult(true, null, -1);
-    }
-
-    /**
-     * 查找适用的限流规则
-     */
-    private List<RateLimitEntity> findApplicableRules(String gameId, String apiKeyId, String endpoint, String userId) {
-        List<RateLimitEntity> rules = new ArrayList<>();
-
-        // 添加全局规则
-        rules.addAll(rateLimitRepo.findGlobal());
-
-        // 添加游戏级别规则
-        if (gameId != null) {
-            rules.addAll(rateLimitRepo.findByGameId(gameId));
-        }
-
-        // 添加API密钥级别规则
-        if (apiKeyId != null) {
-            rules.addAll(rateLimitRepo.findByApiKeyId(apiKeyId));
-        }
-
-        // 添加端点级别规则
-        if (endpoint != null) {
-            rules.addAll(rateLimitRepo.findForEndpoint(endpoint));
-        }
-
-        // 添加用户级别规则
-        if (userId != null) {
-            rules.addAll(rateLimitRepo.findForUser(userId));
-        }
-
-        // 按优先级排序
-        rules.sort((a, b) -> b.priority.compareTo(a.priority));
-
-        return rules;
-    }
-
-    /**
-     * 检查单个规则
-     */
-    private RateLimitCheckResult checkRule(RateLimitEntity rule, String gameId, String apiKeyId,
-                                           String endpoint, String userId) {
-        if (!rule.isEnabled()) {
-            return new RateLimitCheckResult(true, null, -1);
-        }
-
-        LocalDateTime now = LocalDateTime.now();
-        RateLimitUsageEntity usage = getOrCreateUsage(rule, gameId, apiKeyId, endpoint, userId, now);
-
-        if (usage.requestCount >= rule.limit) {
-            long retryAfter = calculateRetryAfter(usage, rule);
-            return new RateLimitCheckResult(false, rule.id, retryAfter);
-        }
-
-        return new RateLimitCheckResult(true, null, -1);
-    }
-
-    /**
-     * 获取或创建使用记录
-     */
-    private RateLimitUsageEntity getOrCreateUsage(RateLimitEntity rule, String gameId, String apiKeyId,
-                                                  String endpoint, String userId, LocalDateTime now) {
-        String cacheKey = buildCacheKey(rule.id, gameId, apiKeyId, endpoint, userId);
-
-        // 检查缓存
-        RateLimitUsageEntity cached = usageCache.get(cacheKey);
-        if (cached != null && cached.windowEnd.isAfter(now)) {
-            return cached;
-        }
-
-        // 从数据库查找
-        Optional<RateLimitUsageEntity> existing = rateLimitUsageRepo.findActiveWindow(rule.id, now);
-        if (existing.isPresent()) {
-            RateLimitUsageEntity usage = existing.get();
-            usageCache.put(cacheKey, usage);
-            return usage;
-        }
-
-        // 创建新的使用窗口
-        RateLimitUsageEntity usage = new RateLimitUsageEntity();
-        usage.id = "rlu_" + UUID.randomUUID().toString().replace("-", "").substring(0, 24);
-        usage.rateLimitId = rule.id;
-        usage.gameId = gameId;
-        usage.apiKeyId = apiKeyId;
-        usage.endpoint = endpoint;
-        usage.userId = userId;
-        usage.windowStart = calculateWindowStart(rule, now);
-        usage.windowEnd = usage.windowStart.plusSeconds(rule.getWindowDurationMs() / 1000);
-        usage.requestCount = 0;
-        usage.blockedCount = 0;
-        usage.createdAt = now;
-
-        usage = rateLimitUsageRepo.save(usage);
-        usageCache.put(cacheKey, usage);
-
-        return usage;
-    }
-
-    /**
-     * 增加使用量
-     */
-    private void incrementUsage(List<RateLimitEntity> rules, String gameId, String apiKeyId,
-                              String endpoint, String userId) {
-        LocalDateTime now = LocalDateTime.now();
-
-        for (RateLimitEntity rule : rules) {
-            if (!rule.isEnabled()) {
-                continue;
-            }
-
-            RateLimitUsageEntity usage = getOrCreateUsage(rule, gameId, apiKeyId, endpoint, userId, now);
-            usage.requestCount++;
-            usage.lastRequestAt = now;
-            rateLimitUsageRepo.save(usage);
-        }
-    }
-
-    /**
-     * 计算窗口开始时间
-     */
-    private LocalDateTime calculateWindowStart(RateLimitEntity rule, LocalDateTime now) {
-        return switch (rule.algorithm) {
-            case FIXED_WINDOW -> {
-                // 固定窗口：对齐到窗口边界
-                long duration = rule.getWindowDurationMs() / 1000;
-                long epochSecond = now.toEpochSecond(java.time.ZoneOffset.UTC);
-                long windowStart = (epochSecond / duration) * duration;
-                yield LocalDateTime.ofEpochSecond(windowStart, 0, java.time.ZoneOffset.UTC);
-            }
-            case SLIDING_WINDOW -> {
-                // 滑动窗口：从现在开始
-                yield now;
-            }
-            case TOKEN_BUCKET, LEAKY_BUCKET -> now;
-        };
-    }
-
-    /**
-     * 计算重试时间
-     */
-    private long calculateRetryAfter(RateLimitUsageEntity usage, RateLimitEntity rule) {
-        long remainingMs = java.time.Duration.between(LocalDateTime.now(), usage.windowEnd).toMillis();
-        return Math.max(0, remainingMs / 1000);
-    }
-
-    /**
-     * 构建缓存键
-     */
-    private String buildCacheKey(String ruleId, String gameId, String apiKeyId, String endpoint, String userId) {
-        return String.format("%s:%s:%s:%s:%s", ruleId, gameId, apiKeyId, endpoint, userId);
-    }
 
     /**
      * 创建限流规则
@@ -449,27 +274,6 @@ public class RateLimitService {
     }
 
     /**
-     * 定期清理过期窗口
-     */
-    @Scheduled(fixedDelay = 300000)  // 每5分钟执行一次
-    public void cleanupExpiredWindows() {
-        try {
-            LocalDateTime expireBefore = LocalDateTime.now().minusDays(7);
-            int deleted = rateLimitUsageRepo.deleteExpired(expireBefore);
-
-            // 清理缓存
-            usageCache.entrySet().removeIf(entry ->
-                entry.getValue().windowEnd.isBefore(LocalDateTime.now()));
-
-            if (deleted > 0) {
-                logger.debug("Cleaned up {} expired rate limit windows", deleted);
-            }
-        } catch (Exception e) {
-            logger.error("Failed to cleanup expired windows", e);
-        }
-    }
-
-    /**
      * 定期检查配额重置
      */
     @Scheduled(fixedDelay = 60000)  // 每分钟执行一次
@@ -532,18 +336,6 @@ public class RateLimitService {
     }
 
     // 结果类
-
-    public static class RateLimitCheckResult {
-        public final boolean allowed;
-        public final String ruleId;
-        public final long retryAfterSeconds;
-
-        public RateLimitCheckResult(boolean allowed, String ruleId, long retryAfterSeconds) {
-            this.allowed = allowed;
-            this.ruleId = ruleId;
-            this.retryAfterSeconds = retryAfterSeconds;
-        }
-    }
 
     public static class QuotaCheckResult {
         public final boolean allowed;

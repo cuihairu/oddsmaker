@@ -82,14 +82,6 @@ public class DeveloperPortalService {
     }
 
     /**
-     * 根据公钥获取SDK密钥
-     */
-    public SDKKeyEntity getSDKKeyByPublicKey(String publicKey) {
-        return sdkKeyRepo.findByPublicKeyAndDeletedAtIsNull(publicKey)
-            .orElseThrow(() -> new IllegalArgumentException("SDK key not found for public key"));
-    }
-
-    /**
      * 获取游戏的SDK密钥
      */
     public List<SDKKeyEntity> getGameSDKKeys(String gameId, String environment) {
@@ -178,21 +170,6 @@ public class DeveloperPortalService {
         auditLogService.logDelete("sdk_key", key.id, key.keyName, deletedBy, deletedBy, null);
 
         logger.info("Deleted SDK key: {}", keyId);
-    }
-
-    /**
-     * 记录SDK事件
-     */
-    public void recordKeyEvent(String publicKey, int eventCount, boolean hasError, String errorMessage) {
-        SDKKeyEntity key = getSDKKeyByPublicKey(publicKey);
-
-        key.recordEvent(eventCount);
-
-        if (hasError && errorMessage != null) {
-            key.recordError(errorMessage);
-        }
-
-        sdkKeyRepo.save(key);
     }
 
     /**

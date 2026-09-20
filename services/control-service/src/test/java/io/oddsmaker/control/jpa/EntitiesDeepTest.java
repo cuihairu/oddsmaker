@@ -889,19 +889,6 @@ class EntitiesDeepTest {
         assertTrue(k.isBatch());
         k.deliveryMode = SDKKeyEntity.DeliveryMode.HYBRID;
         assertTrue(k.isHybrid());
-
-        // 记录方法
-        k.recordEvent(5);
-        assertEquals(5L, k.totalEventsSent);
-        assertNotNull(k.lastEventAt);
-        k.recordEvent(3);
-        assertEquals(8L, k.totalEventsSent);
-        k.recordBatch();
-        assertEquals(1L, k.totalBatchesSent);
-        k.recordError("network");
-        assertEquals(1L, k.totalErrors);
-        assertEquals("network", k.lastErrorMessage);
-        assertNotNull(k.lastErrorAt);
     }
 
     @Test
@@ -1065,33 +1052,6 @@ class EntitiesDeepTest {
         assertFalse(q.warningSent);
         assertFalse(q.alertSent);
         assertNotNull(q.lastCalculatedAt);
-    }
-
-    @Test
-    @DisplayName("RateLimitUsageEntity：字段填充与生命周期回调 onCreate")
-    void rateLimitUsageEntity() {
-        RateLimitUsageEntity r = new RateLimitUsageEntity();
-        r.rateLimitId = "rl-1";
-        r.gameId = "g1";
-        r.apiKeyId = "ak_test";
-        r.endpoint = "/ingest";
-        r.userId = "u1";
-        r.windowStart = LocalDateTime.now().minusMinutes(1);
-        r.windowEnd = LocalDateTime.now().plusMinutes(1);
-        r.requestCount = 42;
-        r.blockedCount = 3;
-        r.lastRequestAt = LocalDateTime.now();
-
-        // 该实体仅有 @PrePersist 回调：同包直接调用验证时间戳填充
-        assertNull(r.createdAt);
-        r.onCreate();
-        assertNotNull(r.createdAt);
-        // 已有值时保留原值
-        RateLimitUsageEntity pre = new RateLimitUsageEntity();
-        pre.createdAt = LocalDateTime.now().minusHours(1);
-        LocalDateTime original = pre.createdAt;
-        pre.onCreate();
-        assertEquals(original, pre.createdAt);
     }
 
     @Test

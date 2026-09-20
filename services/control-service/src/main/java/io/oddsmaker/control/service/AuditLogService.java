@@ -191,26 +191,6 @@ public class AuditLogService {
     }
 
     /**
-     * 记录导出操作
-     */
-    public AuditLogEntity logExport(String userId, String username, String resourceType, 
-            String resourceId, String resourceName, String details, String ip) {
-        
-        AuditLogEntity auditLog = new AuditLogEntity();
-        auditLog.userId = userId;
-        auditLog.username = username;
-        auditLog.action = AuditLogEntity.AuditAction.EXPORT;
-        auditLog.resourceType = resourceType;
-        auditLog.resourceId = resourceId;
-        auditLog.resourceName = resourceName;
-        auditLog.details = details;
-        auditLog.ipAddress = ip;
-        auditLog.status = AuditLogEntity.AuditStatus.SUCCESS;
-        
-        return log(auditLog);
-    }
-
-    /**
      * 记录权限变更
      */
     public AuditLogEntity logPermissionChange(String userId, String username, String targetUserId,
@@ -429,27 +409,6 @@ public class AuditLogService {
      */
     public Page<AuditLogEntity> findByGameId(String gameId, Pageable pageable) {
         return auditLogRepo.findByGameIdOrderByCreatedAtDesc(gameId, pageable);
-    }
-
-    /**
-     * 查找失败的审计日志
-     */
-    public Page<AuditLogEntity> findFailedLogs(Pageable pageable) {
-        return auditLogRepo.findFailedActions(pageable);
-    }
-
-    /**
-     * 查找认证相关的审计日志
-     */
-    public Page<AuditLogEntity> findAuthLogs(Pageable pageable) {
-        return auditLogRepo.findAuthActions(pageable);
-    }
-
-    /**
-     * 查找敏感操作的审计日志
-     */
-    public Page<AuditLogEntity> findSensitiveLogs(Pageable pageable) {
-        return auditLogRepo.findSensitiveActions(pageable);
     }
 
     /**

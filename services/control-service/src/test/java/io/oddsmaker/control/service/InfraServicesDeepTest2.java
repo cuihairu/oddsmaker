@@ -12,8 +12,6 @@ import io.oddsmaker.control.jpa.QuotaEntity;
 import io.oddsmaker.control.jpa.QuotaRepo;
 import io.oddsmaker.control.jpa.RateLimitEntity;
 import io.oddsmaker.control.jpa.RateLimitRepo;
-import io.oddsmaker.control.jpa.RateLimitUsageEntity;
-import io.oddsmaker.control.jpa.RateLimitUsageRepo;
 import io.oddsmaker.control.jpa.RiskCaseEntity;
 import io.oddsmaker.control.jpa.RiskRuleEntity;
 import io.oddsmaker.control.jpa.RiskRuleRepo;
@@ -58,7 +56,6 @@ import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
-import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
@@ -92,9 +89,6 @@ class InfraServicesDeepTest2 {
 
     @Mock
     private RateLimitRepo rateLimitRepo;
-
-    @Mock
-    private RateLimitUsageRepo rateLimitUsageRepo;
 
     @Mock
     private QuotaRepo quotaRepo;
@@ -142,7 +136,6 @@ class InfraServicesDeepTest2 {
     void setUp() throws Exception {
         // 所有 repo.save 直接返回入参（服务内部依赖返回值）
         lenient().when(rateLimitRepo.save(any(RateLimitEntity.class))).thenAnswer(i -> i.getArgument(0));
-        lenient().when(rateLimitUsageRepo.save(any(RateLimitUsageEntity.class))).thenAnswer(i -> i.getArgument(0));
         lenient().when(quotaRepo.save(any(QuotaEntity.class))).thenAnswer(i -> i.getArgument(0));
         lenient().when(flinkJobRepo.save(any(FlinkJobEntity.class))).thenAnswer(i -> i.getArgument(0));
         lenient().when(integrationRepo.save(any(IntegrationEntity.class))).thenAnswer(i -> i.getArgument(0));
@@ -180,19 +173,6 @@ class InfraServicesDeepTest2 {
         rule.description = "test rule";
         rule.createdBy = "admin";
         return rule;
-    }
-
-    private RateLimitUsageEntity rateLimitUsage(String ruleId, int requestCount) {
-        RateLimitUsageEntity usage = new RateLimitUsageEntity();
-        usage.id = "usage-" + ruleId;
-        usage.rateLimitId = ruleId;
-        usage.gameId = "g1";
-        usage.requestCount = requestCount;
-        usage.blockedCount = 0;
-        usage.windowStart = LocalDateTime.now().minusSeconds(30);
-        usage.windowEnd = LocalDateTime.now().plusSeconds(60);
-        usage.createdAt = LocalDateTime.now();
-        return usage;
     }
 
     private QuotaEntity quota(String id, long limit, long usage) {
@@ -279,116 +259,6 @@ class InfraServicesDeepTest2 {
         assertEquals(50, untouched.limit);
         assertEquals(5, untouched.burst);
         assertFalse(untouched.enabled);
-    }
-
-    @Test
-    @DisplayName("限流：checkRequest 允许路径 + 缓存复用")
-    void rateLimitCheckRequestAllowedAndCached() {
-        RateLimitEntity rule = rateLimit("rl-cache", RateLimitEntity.Scope.GAME,
-            RateLimitEntity.Algorithm.SLIDING_WINDOW, 10, true);
-        lenient().when(rateLimitRepo.findGlobal()).thenReturn(List.of());
-        lenient().when(rateLimitRepo.findByGameId("g1")).thenReturn(List.of(rule));
-        lenient().when(rateLimitRepo.findByApiKeyId("key1")).thenReturn(List.of());
-        lenient().when(rateLimitRepo.findForEndpoint("/api")).thenReturn(List.of());
-        lenient().when(rateLimitRepo.findForUser("u1")).thenReturn(List.of());
-        lenient().when(rateLimitUsageRepo.findActiveWindow(anyString(), any(LocalDateTime.class)))
-            .thenReturn(Optional.empty());
-
-        RateLimitService.RateLimitCheckResult first = rateLimitService.checkRequest("g1", "key1", "/api", "u1");
-        assertTrue(first.allowed);
-        assertNull(first.ruleId);
-
-        // 第二次请求命中本地缓存：不再查库，计数累加
-        RateLimitService.RateLimitCheckResult second = rateLimitService.checkRequest("g1", "key1", "/api", "u1");
-        assertTrue(second.allowed);
-
-        verify(rateLimitUsageRepo, times(1)).findActiveWindow(anyString(), any(LocalDateTime.class));
-        ArgumentCaptor<RateLimitUsageEntity> captor = ArgumentCaptor.forClass(RateLimitUsageEntity.class);
-        verify(rateLimitUsageRepo, times(3)).save(captor.capture());
-        RateLimitUsageEntity last = captor.getValue();
-        assertEquals("rl-cache", last.rateLimitId);
-        assertEquals(2, last.requestCount);
-        assertNotNull(last.lastRequestAt);
-    }
-
-    @Test
-    @DisplayName("限流：checkRequest 超限拒绝路径")
-    void rateLimitCheckRequestDenied() {
-        RateLimitEntity rule = rateLimit("rl-deny", RateLimitEntity.Scope.GAME,
-            RateLimitEntity.Algorithm.FIXED_WINDOW, 5, true);
-        RateLimitUsageEntity usedUp = rateLimitUsage("rl-deny", 5);
-        lenient().when(rateLimitRepo.findGlobal()).thenReturn(List.of(rule));
-        lenient().when(rateLimitUsageRepo.findActiveWindow(anyString(), any(LocalDateTime.class)))
-            .thenReturn(Optional.of(usedUp));
-
-        RateLimitService.RateLimitCheckResult result = rateLimitService.checkRequest("g1", null, null, null);
-        assertFalse(result.allowed);
-        assertEquals("rl-deny", result.ruleId);
-        assertTrue(result.retryAfterSeconds >= 55);
-        verify(rateLimitUsageRepo, never()).save(any(RateLimitUsageEntity.class));
-    }
-
-    @Test
-    @DisplayName("限流：checkRequest 为各算法创建新使用窗口")
-    void rateLimitCheckRequestCreatesWindows() {
-        RateLimitEntity fixed = rateLimit("rl-fixed", RateLimitEntity.Scope.GAME,
-            RateLimitEntity.Algorithm.FIXED_WINDOW, 100, true);
-        RateLimitEntity sliding = rateLimit("rl-sliding", RateLimitEntity.Scope.API_KEY,
-            RateLimitEntity.Algorithm.SLIDING_WINDOW, 100, true);
-        sliding.gameId = null;
-        sliding.apiKeyId = "key1";
-        RateLimitEntity token = rateLimit("rl-token", RateLimitEntity.Scope.ENDPOINT,
-            RateLimitEntity.Algorithm.TOKEN_BUCKET, 100, true);
-        token.gameId = null;
-        token.endpoint = "/api";
-        RateLimitEntity leaky = rateLimit("rl-leaky", RateLimitEntity.Scope.USER,
-            RateLimitEntity.Algorithm.LEAKY_BUCKET, 100, true);
-        leaky.gameId = null;
-        leaky.userId = "u1";
-
-        lenient().when(rateLimitRepo.findGlobal()).thenReturn(List.of());
-        lenient().when(rateLimitRepo.findByGameId("g1")).thenReturn(List.of(fixed));
-        lenient().when(rateLimitRepo.findByApiKeyId("key1")).thenReturn(List.of(sliding));
-        lenient().when(rateLimitRepo.findForEndpoint("/api")).thenReturn(List.of(token));
-        lenient().when(rateLimitRepo.findForUser("u1")).thenReturn(List.of(leaky));
-        lenient().when(rateLimitUsageRepo.findActiveWindow(anyString(), any(LocalDateTime.class)))
-            .thenReturn(Optional.empty());
-
-        RateLimitService.RateLimitCheckResult result = rateLimitService.checkRequest("g1", "key1", "/api", "u1");
-        assertTrue(result.allowed);
-
-        // FIXED_WINDOW 窗口按 UTC epoch 对齐，非 UTC 时区下缓存不会命中（多一次建窗），
-        // 因此不断言精确调用次数，只断言每条规则都建窗并完成一次计数自增
-        ArgumentCaptor<RateLimitUsageEntity> captor = ArgumentCaptor.forClass(RateLimitUsageEntity.class);
-        verify(rateLimitUsageRepo, atLeast(8)).save(captor.capture());
-        List<String> ruleIds = captor.getAllValues().stream()
-            .map(u -> u.rateLimitId).distinct().toList();
-        assertEquals(4, ruleIds.size());
-        assertTrue(ruleIds.containsAll(List.of("rl-fixed", "rl-sliding", "rl-token", "rl-leaky")));
-        // 每条规则完成一次自增（计数为 1）的保存，且窗口时间完整
-        List<RateLimitUsageEntity> incremented = captor.getAllValues().stream()
-            .filter(u -> u.requestCount == 1).toList();
-        assertTrue(incremented.size() >= 4);
-        incremented.forEach(u -> {
-            assertNotNull(u.windowStart);
-            assertNotNull(u.windowEnd);
-            assertTrue(u.windowEnd.isAfter(u.windowStart));
-        });
-    }
-
-    @Test
-    @DisplayName("限流：禁用规则被跳过")
-    void rateLimitCheckRequestDisabledRuleSkipped() {
-        RateLimitEntity disabled = rateLimit("rl-off", RateLimitEntity.Scope.GAME,
-            RateLimitEntity.Algorithm.SLIDING_WINDOW, 10, false);
-        lenient().when(rateLimitRepo.findGlobal()).thenReturn(List.of(disabled));
-        lenient().when(rateLimitUsageRepo.findActiveWindow(anyString(), any(LocalDateTime.class)))
-            .thenReturn(Optional.empty());
-
-        RateLimitService.RateLimitCheckResult result = rateLimitService.checkRequest("g1", null, null, null);
-        assertTrue(result.allowed);
-        verify(rateLimitUsageRepo, never()).findActiveWindow(anyString(), any(LocalDateTime.class));
-        verify(rateLimitUsageRepo, never()).save(any(RateLimitUsageEntity.class));
     }
 
     @Test
@@ -492,15 +362,8 @@ class InfraServicesDeepTest2 {
     }
 
     @Test
-    @DisplayName("限流：定时清理/配额重置/配额告警巡检")
+    @DisplayName("限流：定时配额重置/配额告警巡检")
     void rateLimitScheduledJobs() {
-        // 清理过期窗口（含缓存条目清理 + 异常吞掉）
-        lenient().when(rateLimitUsageRepo.deleteExpired(any(LocalDateTime.class)))
-            .thenReturn(2)
-            .thenThrow(new RuntimeException("cleanup boom"));
-        assertDoesNotThrow(() -> rateLimitService.cleanupExpiredWindows());
-        assertDoesNotThrow(() -> rateLimitService.cleanupExpiredWindows());
-
         // 配额重置：resetAt 已过期
         QuotaEntity toReset = quota("qr", 100, 50);
         toReset.resetAt = LocalDateTime.now().minusMinutes(1);

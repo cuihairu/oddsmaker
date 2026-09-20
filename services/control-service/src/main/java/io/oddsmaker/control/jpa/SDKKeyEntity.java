@@ -216,21 +216,6 @@ public class SDKKeyEntity {
         this.keyStatus = KeyStatus.EXPIRED;
     }
 
-    public void recordEvent(int count) {
-        this.totalEventsSent += count;
-        this.lastEventAt = LocalDateTime.now();
-    }
-
-    public void recordBatch() {
-        this.totalBatchesSent++;
-    }
-
-    public void recordError(String errorMessage) {
-        this.totalErrors++;
-        this.lastErrorAt = LocalDateTime.now();
-        this.lastErrorMessage = errorMessage;
-    }
-
     @PrePersist
     protected void onCreate() {
         if (createdAt == null) {

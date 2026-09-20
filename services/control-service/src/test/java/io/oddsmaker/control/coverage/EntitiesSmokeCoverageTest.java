@@ -33,7 +33,7 @@ class EntitiesSmokeCoverageTest {
                 "MaintenanceWindowEntity", "ModelTrainingEntity", "PerformanceMetricEntity", "PermissionEntity",
                 "PiiFieldMappingEntity", "PipelineEntity", "PipelineJobEntity", "PlayerExportJobEntity",
                 "PlayerLoginLogEntity", "PlayerPaymentEntity", "PrivacyPolicyEntity", "QuotaEntity",
-                "RateLimitEntity", "RateLimitPolicyEntity", "RateLimitRuleEntity", "RateLimitUsageEntity",
+                "RateLimitEntity", "RateLimitPolicyEntity", "RateLimitRuleEntity",
                 "RedeemCodeBatchEntity", "RedeemCodeEntity", "RedeemRecordEntity", "RemoteConfigEntity",
                 "ReportEntity", "ReportExecutionEntity", "RetentionAnalysisEntity", "RevenueAggregationEntity",
                 "RevenueAnalysisEntity", "ReviewQueueEntity", "RiskCaseEntity", "RiskRuleEntity", "RoleEntity",

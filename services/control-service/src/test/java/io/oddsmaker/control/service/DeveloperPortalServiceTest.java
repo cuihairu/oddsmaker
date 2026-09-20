@@ -98,7 +98,6 @@ class DeveloperPortalServiceTest {
         assertNotNull(service.revokeSDKKey("sdk_1", "ops1"));
         assertNotNull(service.updateSDKKey("sdk_1", Map.of("keyName", "new-name"), "ops1"));
         service.deleteSDKKey("sdk_1", "ops1");
-        service.recordKeyEvent("pk_sdk_1", 10, false, null);
     }
 
     @Test

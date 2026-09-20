@@ -166,6 +166,13 @@ public class RiskEventConsumer {
         riskCase.executionStatus = RiskCaseEntity.ExecutionStatus.PENDING;
         riskCase = riskCaseRepo.save(riskCase);
 
+        // 风险案例创建派发 risk_case webhook（按环境与风险等级过滤）
+        try {
+            webhookService.sendRiskCaseWebhook(event.gameId, event.environment, riskCase);
+        } catch (Exception e) {
+            logger.warn("risk_case webhook failed (non-fatal): {}", e.getMessage());
+        }
+
         reviewQueueService.addToQueue(riskCase,
             riskCase.riskLevel == RiskCaseEntity.RiskLevel.CRITICAL ? 1 : 2,
             "risk_automation", "fraud");

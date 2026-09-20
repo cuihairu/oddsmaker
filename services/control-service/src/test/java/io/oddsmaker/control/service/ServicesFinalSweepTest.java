@@ -1,7 +1,6 @@
 package io.oddsmaker.control.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.oddsmaker.control.api.ControlService;
 import io.oddsmaker.control.dto.ExperimentDTO;
 import io.oddsmaker.control.dto.GameDTO;
@@ -124,7 +123,7 @@ import static org.mockito.Mockito.when;
  * SecurityGameDeepTest / RiskEventConsumerTest / MLModelServiceTest / MlExperimentDeepTest /
  * ExperimentServiceTest / TrackingPlanServiceTest / DeveloperPortalServiceTest /
  * UserPortalDeepTest / InfraServicesTest / InfraServicesDeepTest2 / RiskServicesDeepTest /
- * FunnelConfigServiceTest / PerformanceMonitorServiceTest / RedeemCodeServiceTest /
+ * FunnelConfigServiceTest / RedeemCodeServiceTest /
  * PlayerExportServiceTest 互补，覆盖各自尚未触及的分支。
  */
 @ExtendWith(MockitoExtension.class)
@@ -293,10 +292,6 @@ class ServicesFinalSweepTest {
 
     private RiskEventConsumer riskEventConsumer;
 
-    private PerformanceMonitorService performanceMonitorService;
-
-    private SimpleMeterRegistry meterRegistry;
-
     @TempDir
     Path tempDir;
 
@@ -311,9 +306,6 @@ class ServicesFinalSweepTest {
         ReflectionTestUtils.setField(riskEventConsumer, "riskCaseRepo", riskCaseRepo);
         ReflectionTestUtils.setField(riskEventConsumer, "reviewQueueService", reviewQueueService);
         ReflectionTestUtils.setField(riskEventConsumer, "riskActionRecorder", riskActionRecorder);
-
-        meterRegistry = new SimpleMeterRegistry();
-        performanceMonitorService = new PerformanceMonitorService(meterRegistry);
 
         ReflectionTestUtils.setField(playerExportService, "storageDir", tempDir.toString());
         ReflectionTestUtils.setField(playerExportService, "retentionHours", 72);
@@ -393,11 +385,6 @@ class ServicesFinalSweepTest {
             "u1", "alice", "report", "r_1", "Daily", "v1", "1.2.3.4");
         assertEquals(AuditLogEntity.AuditAction.DELETE, deleted.action);
         assertEquals("v1", deleted.oldValue);
-
-        AuditLogEntity exported = auditLogService.logExport(
-            "u1", "alice", "player_export", "pex_1", "p1.json", "gdpr", "1.2.3.4");
-        assertEquals(AuditLogEntity.AuditAction.EXPORT, exported.action);
-        assertEquals("gdpr", exported.details);
     }
 
     @Test
@@ -454,19 +441,13 @@ class ServicesFinalSweepTest {
     }
 
     @Test
-    @DisplayName("审计：失败/认证/敏感/搜索四类专用查询")
+    @DisplayName("审计：搜索专用查询")
     void auditLogSpecialQueries() {
         Page<AuditLogEntity> page = new PageImpl<>(List.of(new AuditLogEntity()));
         Pageable pageable = PageRequest.of(0, 5);
 
-        lenient().when(auditLogRepo.findFailedActions(pageable)).thenReturn(page);
-        lenient().when(auditLogRepo.findAuthActions(pageable)).thenReturn(page);
-        lenient().when(auditLogRepo.findSensitiveActions(pageable)).thenReturn(page);
         lenient().when(auditLogRepo.searchLogs("alice", pageable)).thenReturn(page);
 
-        assertSame(page, auditLogService.findFailedLogs(pageable));
-        assertSame(page, auditLogService.findAuthLogs(pageable));
-        assertSame(page, auditLogService.findSensitiveLogs(pageable));
         assertSame(page, auditLogService.searchLogs("alice", pageable));
     }
 
@@ -1310,32 +1291,6 @@ class ServicesFinalSweepTest {
         assertThrows(IllegalArgumentException.class,
             () -> funnelConfigService.updateStep("s99", new FunnelStepEntity()));
         assertThrows(IllegalArgumentException.class, () -> funnelConfigService.deleteStep("s99"));
-    }
-
-    // =========================================================
-    // PerformanceMonitorService：连接池/消费延迟/自定义仪表/漏斗转化
-    // =========================================================
-
-    @Test
-    @DisplayName("性能监控：连接池、Kafka 延迟、自定义仪表与漏斗转化指标")
-    void performancePoolLagCustomGaugeAndFunnel() {
-        performanceMonitorService.recordDatabaseConnectionPool("hikari", 3, 2, 10);
-        assertEquals(3.0, meterRegistry.find("oddsmaker.database.pool.active").tag("pool", "hikari").gauge().value());
-        assertEquals(2.0, meterRegistry.find("oddsmaker.database.pool.idle").tag("pool", "hikari").gauge().value());
-        assertEquals(10.0, meterRegistry.find("oddsmaker.database.pool.total").tag("pool", "hikari").gauge().value());
-
-        performanceMonitorService.recordKafkaConsumerLag("events_raw", "ingest", 42);
-        assertEquals(42.0, meterRegistry.find("oddsmaker.kafka.consumer.lag")
-            .tag("topic", "events_raw").tag("group", "ingest").gauge().value());
-
-        performanceMonitorService.setCustomGauge("custom.biz.gauge", 7);
-        assertEquals(7.0, meterRegistry.find("custom.biz.gauge").gauge().value());
-        performanceMonitorService.setCustomGauge("custom.biz.gauge", 9);
-        assertEquals(9.0, meterRegistry.find("custom.biz.gauge").gauge().value());
-
-        performanceMonitorService.recordFunnelConversion("game_1", "funnel_1", 2, 0.35);
-        assertEquals(0.35, meterRegistry.find("oddsmaker.funnel.conversion")
-            .tag("funnel_id", "funnel_1").tag("step", "2").gauge().value(), 0.0001);
     }
 
     // =========================================================
