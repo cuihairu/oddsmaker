@@ -49,22 +49,11 @@ public class AdminTokenFilter extends OncePerRequestFilter {
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
-        // 如果已经有OAuth2认证，跳过Admin Token检查
-        if (SecurityContextHolder.getContext().getAuthentication() instanceof JwtAuthenticationToken) {
-            filterChain.doFilter(request, response);
-            return;
-        }
-
-        // Bearer 请求（本地登录 JWT / Keycloak）交给 Security 链的 oauth2 filter：
-        // 本过滤器注册在 oauth2 解码之前，此时 SecurityContext 尚无 JwtAuthenticationToken，
-        // 不放行会把合法登录会话误杀成 401。无效 token 由 oauth2 filter 拒绝。
-        String authorization = request.getHeader("Authorization");
-        if (authorization != null && authorization.startsWith("Bearer ")) {
-            filterChain.doFilter(request, response);
-            return;
-        }
-
         String path = request.getRequestURI();
+
+        // /internal/ 只认服务间令牌，必须最先判定：下面的 Bearer 放行分支会给持有效
+        // 登录 JWT 的请求让路（oauth2 链认证通过 + 授权层放行），任何低权限用户都能
+        // 绕过 x-internal-token 直读内部凭据端点（InternalApiKeyResp 含 secret 本体）。
         if (path.startsWith("/internal/")) {
             String suppliedToken = request.getHeader("x-internal-token");
             if (matches(suppliedToken, internalToken)) {
@@ -77,6 +66,21 @@ public class AdminTokenFilter extends OncePerRequestFilter {
                 return;
             }
             unauthorized(response, "missing_or_invalid_internal_token");
+            return;
+        }
+
+        // 如果已经有OAuth2认证，跳过Admin Token检查
+        if (SecurityContextHolder.getContext().getAuthentication() instanceof JwtAuthenticationToken) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
+        // Bearer 请求（本地登录 JWT / Keycloak）交给 Security 链的 oauth2 filter：
+        // 本过滤器注册在 oauth2 解码之前，此时 SecurityContext 尚无 JwtAuthenticationToken，
+        // 不放行会把合法登录会话误杀成 401。无效 token 由 oauth2 filter 拒绝。
+        String authorization = request.getHeader("Authorization");
+        if (authorization != null && authorization.startsWith("Bearer ")) {
+            filterChain.doFilter(request, response);
             return;
         }
 

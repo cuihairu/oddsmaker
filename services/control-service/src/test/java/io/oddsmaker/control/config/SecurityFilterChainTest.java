@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -121,6 +122,59 @@ class SecurityFilterChainTest {
         assertEquals(403, forbidden.getStatus());
         assertEquals("application/json", forbidden.getContentType());
         assertTrue(forbidden.getContentAsString().contains("Access denied"));
+        ctx.close();
+    }
+
+    @Test
+    @DisplayName("/internal/** 授权：仅 ROLE_INTERNAL 放行——管理员/匿名全拒（防挪回 permitAll 回归）")
+    void internalEndpointsRequireInternalRole() throws Exception {
+        SecurityConfig config = new SecurityConfig();
+        ReflectionTestUtils.setField(config, "jwkSetUri", "");
+        ReflectionTestUtils.setField(config, "jwtIssuerUri", "");
+        ReflectionTestUtils.setField(config, "jwtSecret", "");
+
+        ObjectPostProcessor<Object> noop = new ObjectPostProcessor<>() {
+            @Override
+            public <O> O postProcess(O object) {
+                return object;
+            }
+        };
+        AnnotationConfigApplicationContext ctx = new AnnotationConfigApplicationContext();
+        ctx.refresh();
+        ctx.getBeanFactory().registerSingleton("jwtDecoder", (JwtDecoder) token -> null);
+        Map<Class<?>, Object> shared = new HashMap<>();
+        shared.put(ApplicationContext.class, ctx);
+        HttpSecurity http = new HttpSecurity(noop, new AuthenticationManagerBuilder(noop), shared);
+        SecurityFilterChain chain = config.securityFilterChain(http, new AdminTokenFilter(new MockEnvironment()));
+        List<jakarta.servlet.Filter> filters = ((DefaultSecurityFilterChain) chain).getFilters();
+
+        // 从真实链上取授权过滤器的 AuthorizationManager，直接断言 /internal/ 的授权决策
+        org.springframework.security.web.access.intercept.AuthorizationFilter authz =
+            filters.stream()
+                .filter(org.springframework.security.web.access.intercept.AuthorizationFilter.class::isInstance)
+                .map(org.springframework.security.web.access.intercept.AuthorizationFilter.class::cast)
+                .findFirst().orElseThrow();
+        @SuppressWarnings("unchecked")
+        org.springframework.security.authorization.AuthorizationManager<jakarta.servlet.http.HttpServletRequest> manager =
+            (org.springframework.security.authorization.AuthorizationManager<jakarta.servlet.http.HttpServletRequest>)
+                ReflectionTestUtils.getField(authz, "authorizationManager");
+        assertNotNull(manager);
+        // AntPathRequestMatcher 按 servletPath 匹配，MockHttpServletRequest 构造器不设 servletPath
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/internal/api-keys/some-key");
+        request.setServletPath("/internal/api-keys/some-key");
+
+        // ROLE_INTERNAL（AdminTokenFilter 校验 x-internal-token 后设置）→ 放行
+        var internal = new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
+            "internal-gateway", null, List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_INTERNAL")));
+        assertTrue(manager.check(() -> internal, request).isGranted());
+
+        // 登录管理员（ROLE_ADMIN）→ 拒绝：内部端点不接受用户身份，只认服务间令牌
+        var admin = new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
+            "admin", null, List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_ADMIN")));
+        assertFalse(manager.check(() -> admin, request).isGranted());
+
+        // 匿名 → 拒绝
+        assertFalse(manager.check(() -> null, request).isGranted());
         ctx.close();
     }
 

@@ -53,7 +53,6 @@ public class SecurityConfig {
         "/api/config/**",
         "/api/auth/login",
         "/api/auth/logout",
-        "/internal/**",
         "/swagger-ui/**",
         "/swagger-ui.html",
         "/v3/api-docs/**",
@@ -111,6 +110,10 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 // 公开端点
                 .requestMatchers(PUBLIC_ENDPOINTS).permitAll()
+                // 内部端点只认服务间令牌：AdminTokenFilter 校验 x-internal-token 后设
+                // ROLE_INTERNAL，此处要求该角色是第二道防线（登录 JWT/ApiKey 全拒）——
+                // InternalApiKeyResp 返回 secret 本体，绝不能走 permitAll 裸奔。
+                .requestMatchers("/internal/**").hasRole("INTERNAL")
                 // API端点需要认证
                 .requestMatchers(API_ENDPOINTS).authenticated()
                 // 其他请求拒绝

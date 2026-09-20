@@ -101,6 +101,34 @@ class SecurityComponentsTest {
     }
 
     @Test
+    @DisplayName("内部端点绕过封堵：Bearer 头不放行 /internal/（/internal/api-keys 返回 secret 本体，登录 JWT 不得绕过服务间令牌）")
+    void adminFilterInternalEndpointRejectsBearer() throws Exception {
+        AdminTokenFilter f = filter("secret", "internal-secret");
+
+        // 攻击形态：持有效登录 JWT 的低权限用户带 Bearer 访问内部凭据端点。
+        // 旧代码 Bearer 放行分支排在 /internal/ 检查之前 → 绕过 x-internal-token。
+        SecurityContextHolder.clearContext();
+        MockHttpServletRequest bearerReq = new MockHttpServletRequest("GET", "/internal/api-keys/some-key");
+        bearerReq.addHeader("Authorization", "Bearer eyJhbGciOiJIUzI1NiJ9.valid.jwt");
+        MockHttpServletResponse bearerResp = new MockHttpServletResponse();
+        jakarta.servlet.FilterChain chain = mock(jakarta.servlet.FilterChain.class);
+        f.doFilter(bearerReq, bearerResp, chain);
+        assertEquals(401, bearerResp.getStatus());
+        assertTrue(bearerResp.getContentAsString().contains("missing_or_invalid_internal_token"));
+        org.mockito.Mockito.verifyNoInteractions(chain);   // 未透传到业务链
+
+        // Bearer 与正确 x-internal-token 同带：以服务间令牌判定（Bearer 不干扰）
+        SecurityContextHolder.clearContext();
+        MockHttpServletRequest bothReq = new MockHttpServletRequest("GET", "/internal/api-keys/some-key");
+        bothReq.addHeader("Authorization", "Bearer anything");
+        bothReq.addHeader("x-internal-token", "internal-secret");
+        MockHttpServletResponse bothResp = new MockHttpServletResponse();
+        f.doFilter(bothReq, bothResp, chain);
+        assertEquals(200, bothResp.getStatus());
+        assertEquals("internal-gateway", SecurityContextHolder.getContext().getAuthentication().getName());
+    }
+
+    @Test
     @DisplayName("管理令牌：匹配获 ROLE_ADMIN；未配置走开发模式；不匹配 401")
     void adminFilterAdminToken() throws Exception {
         AdminTokenFilter f = filter("secret", "internal-secret");
