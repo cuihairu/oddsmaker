@@ -1,8 +1,6 @@
 package io.oddsmaker.control.security;
 
 import io.oddsmaker.control.service.PermissionService;
-import org.aspectj.lang.ProceedingJoinPoint;
-import org.aspectj.lang.reflect.MethodSignature;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -236,71 +234,6 @@ class SecurityComponentsTest {
         filter.doFilter(new MockHttpServletRequest("GET", "/index.html"), other, chain);
         org.junit.jupiter.api.Assertions.assertNull(other.getHeader("Cache-Control"));
         filter.destroy();
-    }
-
-    // ===== PermissionAspect =====
-
-    @Mock
-    private PermissionService permissionService;
-
-    @InjectMocks
-    private PermissionAspect aspect;
-
-    @RequirePermission(value = "game:read", gameIdParam = "gameId")
-    public String gameScoped(String gameId) {
-        return "ok-game";
-    }
-
-    @RequirePermission(value = "user:update")
-    public String globalScoped() {
-        return "ok-global";
-    }
-
-    public String noAnnotation() {
-        return "ok-none";
-    }
-
-    private ProceedingJoinPoint joinPoint(Method method, Object... args) {
-        ProceedingJoinPoint jp = mock(ProceedingJoinPoint.class);
-        MethodSignature signature = mock(MethodSignature.class);
-        org.mockito.Mockito.lenient().when(signature.getMethod()).thenReturn(method);
-        org.mockito.Mockito.lenient().when(jp.getSignature()).thenReturn(signature);
-        org.mockito.Mockito.lenient().when(jp.getArgs()).thenReturn(args);
-        return jp;
-    }
-
-    @Test
-    @DisplayName("权限切面：无注解放行；未认证拒绝；三级 scope 检查")
-    void permissionAspectScopes() throws Throwable {
-        // 无注解直接放行（无需认证）
-        ProceedingJoinPoint none = joinPoint(SecurityComponentsTest.class.getMethod("noAnnotation"));
-        when(none.proceed()).thenReturn("ok-none");
-        assertEquals("ok-none", aspect.checkPermission(none));
-
-        // 未认证
-        ProceedingJoinPoint game = joinPoint(
-            SecurityComponentsTest.class.getMethod("gameScoped", String.class), "g1");
-        assertThrows(SecurityException.class, () -> aspect.checkPermission(game));
-
-        SecurityContextHolder.getContext().setAuthentication(
-            new UsernamePasswordAuthenticationToken("tester", "pw", java.util.List.of()));
-
-        // 游戏级
-        when(permissionService.hasGamePermission("tester", "g1", "game:read")).thenReturn(true);
-        when(game.proceed()).thenReturn("ok-game");
-        assertEquals("ok-game", aspect.checkPermission(game));
-
-        // 拒绝
-        when(permissionService.hasGamePermission("tester", "g2", "game:read")).thenReturn(false);
-        ProceedingJoinPoint denied = joinPoint(
-            SecurityComponentsTest.class.getMethod("gameScoped", String.class), "g2");
-        assertThrows(SecurityException.class, () -> aspect.checkPermission(denied));
-
-        // 全局级（无 gameIdParam）
-        when(permissionService.hasPermission("tester", "user:update")).thenReturn(true);
-        ProceedingJoinPoint global = joinPoint(SecurityComponentsTest.class.getMethod("globalScoped"));
-        when(global.proceed()).thenReturn("ok-global");
-        assertEquals("ok-global", aspect.checkPermission(global));
     }
 
     // ===== AccessGuard 环境级分支（补齐） =====

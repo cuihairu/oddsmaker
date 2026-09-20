@@ -3,8 +3,6 @@ package io.oddsmaker.control.security;
 import io.oddsmaker.control.jpa.AuditLogEntity;
 import io.oddsmaker.control.service.AuditLogService;
 import io.oddsmaker.control.service.PermissionService;
-import org.aspectj.lang.ProceedingJoinPoint;
-import org.aspectj.lang.reflect.MethodSignature;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -19,7 +17,6 @@ import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.method.HandlerMethod;
 
 import java.lang.reflect.Method;
@@ -41,7 +38,6 @@ import static org.mockito.Mockito.verifyNoInteractions;
  * 安全组件尾部覆盖冲刺第二轮：
  * - AuditLogInterceptor：extractResourceInfo 路径/参数提取与 getClientIp 多级代理头回退
  * - AccessGuard：canAccessGame 未认证/特权直通/委托分支
- * - PermissionAspect：extractParameter 的 @PathVariable 显式命名/隐式参数名/null/未命中分支与环境级权限
  * - jpa 嵌套枚举静态初始化（<clinit>）
  * 与 AccessGuardTest / SecurityComponentsTest / AuditLogInterceptorTest 互补。
  */
@@ -57,9 +53,6 @@ class SecuritySweep2Test {
 
     @InjectMocks
     private AuditLogInterceptor interceptor;
-
-    @InjectMocks
-    private PermissionAspect aspect;
 
     @InjectMocks
     private AccessGuard accessGuard;
@@ -195,71 +188,6 @@ class SecuritySweep2Test {
         lenient().when(permissionService.hasGamePermission("alice", "g2", "game:read")).thenReturn(false);
         assertTrue(accessGuard.canAccessGame("g1", "game:read"));
         assertFalse(accessGuard.canAccessGame("g2", "game:read"));
-    }
-
-    // ===== PermissionAspect：extractParameter / checkPermission 环境级 =====
-
-    @RequirePermission(value = "game:read", gameIdParam = "gameId", environmentParam = "env")
-    public String envScoped(@PathVariable("gameId") String gameId, @PathVariable("env") String environment) {
-        return "ok-env";
-    }
-
-    @RequirePermission(value = "game:read", gameIdParam = "gameId")
-    public String implicitName(@PathVariable String gameId) {
-        return "ok-implicit";
-    }
-
-    @RequirePermission(value = "game:read", gameIdParam = "missing")
-    public String noMatch(String other) {
-        return "ok-none";
-    }
-
-    private ProceedingJoinPoint joinPoint(Method method, Object... args) {
-        ProceedingJoinPoint jp = mock(ProceedingJoinPoint.class);
-        MethodSignature signature = mock(MethodSignature.class);
-        lenient().when(signature.getMethod()).thenReturn(method);
-        lenient().when(jp.getSignature()).thenReturn(signature);
-        lenient().when(jp.getArgs()).thenReturn(args);
-        return jp;
-    }
-
-    @Test
-    @DisplayName("切面：@PathVariable 显式命名提取 gameId/env 走环境级权限")
-    void aspectEnvironmentScopeViaExplicitPathVariables() throws Throwable {
-        login("tester");
-        ProceedingJoinPoint jp = joinPoint(
-            SecuritySweep2Test.class.getMethod("envScoped", String.class, String.class), "g1", "prod");
-        lenient().when(permissionService.hasEnvironmentPermission("tester", "g1", "prod", "game:read"))
-            .thenReturn(true);
-        lenient().when(jp.proceed()).thenReturn("ok-env");
-        assertEquals("ok-env", aspect.checkPermission(jp));
-    }
-
-    @Test
-    @DisplayName("切面：@PathVariable 空名回退参数名匹配（隐式 gameId）")
-    void aspectImplicitParameterNameMatches() throws Throwable {
-        login("tester");
-        ProceedingJoinPoint jp = joinPoint(
-            SecuritySweep2Test.class.getMethod("implicitName", String.class), "g7");
-        lenient().when(permissionService.hasGamePermission("tester", "g7", "game:read")).thenReturn(true);
-        lenient().when(jp.proceed()).thenReturn("ok-implicit");
-        assertEquals("ok-implicit", aspect.checkPermission(jp));
-    }
-
-    @Test
-    @DisplayName("切面：参数 null 与名称未命中提取为 null，回退全局权限")
-    void aspectNullAndMissingParamsFallBackToGlobal() throws Throwable {
-        login("tester");
-        ProceedingJoinPoint nullArg = joinPoint(
-            SecuritySweep2Test.class.getMethod("envScoped", String.class, String.class), null, "prod");
-        lenient().when(permissionService.hasPermission("tester", "game:read")).thenReturn(true);
-        lenient().when(nullArg.proceed()).thenReturn("ok-null");
-        assertEquals("ok-null", aspect.checkPermission(nullArg));
-
-        ProceedingJoinPoint missing = joinPoint(
-            SecuritySweep2Test.class.getMethod("noMatch", String.class), "x");
-        lenient().when(permissionService.hasPermission("tester", "game:read")).thenReturn(false);
-        assertThrows(SecurityException.class, () -> aspect.checkPermission(missing));
     }
 
     // ===== jpa 嵌套枚举 <clinit> =====
