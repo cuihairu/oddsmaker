@@ -5,6 +5,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.env.Environment;
 import org.springframework.http.MediaType;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
@@ -104,6 +105,16 @@ public class BlockListClient {
                     }
                     return result;
                 });
+    }
+
+    /**
+     * 清扫过期缓存条目。targetValue 源自 SDK 事件外部输入（user_id/device_id/ip），
+     * 键空间无界——TTL 过期后条目若只被忽略不清除会永久驻留（慢性内存增长）。
+     */
+    @Scheduled(fixedDelay = 60_000)
+    public void evictExpired() {
+        long now = Instant.now().getEpochSecond();
+        cache.entrySet().removeIf(e -> e.getValue().expireAt <= now);
     }
 
     // ========== 内部 ==========

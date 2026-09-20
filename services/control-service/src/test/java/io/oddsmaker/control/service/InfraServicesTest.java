@@ -305,8 +305,17 @@ class InfraServicesTest {
         quota.currentUsage = 96L;
         when(quotaRepo.findByGameAndResourceType("g", QuotaEntity.ResourceType.API_CALLS_PER_DAY))
             .thenReturn(Optional.of(quota));
+        // 原子自增后重读形态：96+1=97 越过 warning(80%) 与 alert(95%) 两条阈值
+        QuotaEntity after = new QuotaEntity();
+        after.id = "qt_1";
+        after.gameId = "g";
+        after.resourceType = QuotaEntity.ResourceType.API_CALLS_PER_DAY;
+        after.quotaLimit = 100L;
+        after.currentUsage = 97L;
+        after.warningThreshold = 80.0;
+        after.alertThreshold = 95.0;
+        when(quotaRepo.findById("qt_1")).thenReturn(Optional.of(after));
 
-        // 97% 同时越过 warning(80%) 与 alert(95%) 阈值，各派发一次
         rateLimitService.updateQuotaUsage("g", null, QuotaEntity.ResourceType.API_CALLS_PER_DAY, 1L);
 
         ArgumentCaptor<Map<String, Object>> payloads = ArgumentCaptor.forClass(Map.class);
@@ -315,8 +324,9 @@ class InfraServicesTest {
         assertEquals("quota_alert", payloads.getAllValues().get(1).get("event_type"));
         assertEquals("API_CALLS_PER_DAY", payloads.getAllValues().get(0).get("resource_type"));
         assertEquals(80.0, payloads.getAllValues().get(0).get("warning_threshold"));
-        assertEquals(Boolean.TRUE, quota.warningSent);
-        assertEquals(Boolean.TRUE, quota.alertSent);
+        verify(quotaRepo).incrementUsageAtomic("qt_1", 1L);
+        verify(quotaRepo).markWarningSentAtomic("qt_1");
+        verify(quotaRepo).markAlertSentAtomic("qt_1");
 
         // 派发异常被吞：新配额同样越限，更新主流程不炸
         QuotaEntity quota2 = new QuotaEntity();
@@ -327,11 +337,20 @@ class InfraServicesTest {
         quota2.currentUsage = 96L;
         when(quotaRepo.findByGameAndResourceType("g", QuotaEntity.ResourceType.API_CALLS_PER_DAY))
             .thenReturn(Optional.of(quota2));
+        QuotaEntity after2 = new QuotaEntity();
+        after2.id = "qt_2";
+        after2.gameId = "g";
+        after2.resourceType = QuotaEntity.ResourceType.API_CALLS_PER_DAY;
+        after2.quotaLimit = 100L;
+        after2.currentUsage = 97L;
+        after2.warningThreshold = 80.0;
+        after2.alertThreshold = 95.0;
+        when(quotaRepo.findById("qt_2")).thenReturn(Optional.of(after2));
         doThrow(new RuntimeException("wh down")).when(webhookService)
             .sendCustomWebhook(anyString(), anyString(), anyMap());
         assertDoesNotThrow(() ->
             rateLimitService.updateQuotaUsage("g", null, QuotaEntity.ResourceType.API_CALLS_PER_DAY, 1L));
-        assertEquals(Boolean.TRUE, quota2.warningSent);
+        verify(quotaRepo).markWarningSentAtomic("qt_2");
     }
 
     // ===== 数据管线 =====

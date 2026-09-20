@@ -361,4 +361,68 @@ class GatewayConfigComponentsTest {
         scoped.envSampleRate = null;
         assertFalse(scoped.samplingEnabled());
     }
+
+    // ===== 内存态过期清扫（外部键空间无界驻留防护） =====
+
+    @Test
+    @DisplayName("限流：清扫过期限流窗口——旧窗口驱逐、当前窗口保留")
+    void rateLimiterEvictsStaleWindows() {
+        RateLimiterService svc = new RateLimiterService(10, 10);
+        assertTrue(svc.allowIp("1.1.1.1"));
+        ConcurrentHashMap<String, Object> buckets =
+            (ConcurrentHashMap<String, Object>) ReflectionTestUtils.getField(svc, "bucketsIp");
+        assertEquals(1, buckets.size());
+        // 窗口翻为过去分钟 → 清扫驱逐
+        ReflectionTestUtils.setField(buckets.get("1.1.1.1"), "window", 0L);
+        svc.evictStaleWindows();
+        assertTrue(buckets.isEmpty());
+        // 当前分钟窗口 → 清扫保留（正在服务）
+        assertTrue(svc.allowIp("2.2.2.2"));
+        svc.evictStaleWindows();
+        assertEquals(1, buckets.size());
+    }
+
+    @Test
+    @DisplayName("Auth：清扫过期缓存条目——过期驱逐、未过期保留")
+    void authEvictsExpiredCacheEntries() {
+        AuthService service = new AuthService(new MockEnvironment(), new SimpleMeterRegistry());
+        ConcurrentHashMap<String, Object> cache =
+            (ConcurrentHashMap<String, Object>) ReflectionTestUtils.getField(service, "cache");
+        long now = java.time.Instant.now().getEpochSecond();
+        AuthService.CacheEntry fresh = new AuthService.CacheEntry();
+        fresh.context = new AuthService.ApiKeyContext();
+        fresh.expireAt = now + 60;
+        AuthService.CacheEntry stale = new AuthService.CacheEntry();
+        stale.context = new AuthService.ApiKeyContext();
+        stale.expireAt = now - 1;
+        cache.put("fresh", fresh);
+        cache.put("stale", stale);
+
+        service.evictExpired();
+        assertEquals(1, cache.size());
+        assertTrue(cache.containsKey("fresh"));
+    }
+
+    @Test
+    @DisplayName("BlockList：清扫过期缓存条目（targetValue 外部输入，键空间无界）")
+    void blockListEvictsExpiredCacheEntries() {
+        MockEnvironment env = new MockEnvironment()
+            .withProperty("oddsmaker.blocklist.enabled", "false");
+        BlockListClient client = new BlockListClient(env);
+        ConcurrentHashMap<String, Object> cache =
+            (ConcurrentHashMap<String, Object>) ReflectionTestUtils.getField(client, "cache");
+        long now = java.time.Instant.now().getEpochSecond();
+        BlockListClient.CacheEntry fresh = new BlockListClient.CacheEntry();
+        fresh.blocked = false;
+        fresh.expireAt = now + 15;
+        BlockListClient.CacheEntry stale = new BlockListClient.CacheEntry();
+        stale.blocked = true;
+        stale.expireAt = now - 1;
+        cache.put("device_id:fresh", fresh);
+        cache.put("user_id:stale", stale);
+
+        client.evictExpired();
+        assertEquals(1, cache.size());
+        assertTrue(cache.containsKey("device_id:fresh"));
+    }
 }

@@ -179,13 +179,11 @@ public class RateLimitService {
             : quotaRepo.findByGameAndResourceType(gameId, resourceType);
 
         if (quotaOpt.isPresent()) {
-            QuotaEntity quota = quotaOpt.get();
-            quota.incrementUsage(amount);
-            quota.lastCalculatedAt = LocalDateTime.now();
-            quotaRepo.save(quota);
+            // 原子自增：find→mutate→save 在并发请求下丢扣减（配额少计→硬限失效）
+            quotaRepo.incrementUsageAtomic(quotaOpt.get().id, amount);
 
-            // 检查是否需要发送警告或告警
-            checkAndSendAlerts(quota);
+            // 重读最新值做告警检查（标志位原子 UPDATE，不整实体 save 回写）
+            quotaRepo.findById(quotaOpt.get().id).ifPresent(this::checkAndSendAlerts);
         }
     }
 
@@ -194,16 +192,14 @@ public class RateLimitService {
      */
     private void checkAndSendAlerts(QuotaEntity quota) {
         if (quota.shouldSendWarning()) {
-            quota.markWarningSent();
+            quotaRepo.markWarningSentAtomic(quota.id);
             sendQuotaWarning(quota);
         }
 
         if (quota.shouldSendAlert()) {
-            quota.markAlertSent();
+            quotaRepo.markAlertSentAtomic(quota.id);
             sendQuotaAlert(quota);
         }
-
-        quotaRepo.save(quota);
     }
 
     /**

@@ -1,6 +1,7 @@
 package io.oddsmaker.gateway.config;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
@@ -32,6 +33,17 @@ public class RateLimiterService {
             if (w.window != minute) { w.window = minute; w.counter.set(0); }
             return w.counter.incrementAndGet() <= limit;
         }
+    }
+
+    /**
+     * 清扫已翻过去的分钟窗口（保留当前窗口）。IP 键空间外部可伪造，
+     * 只增不清会慢性内存增长。
+     */
+    @Scheduled(fixedDelay = 60_000)
+    public void evictStaleWindows() {
+        long currentMinute = Instant.now().getEpochSecond() / 60L;
+        bucketsApi.entrySet().removeIf(e -> e.getValue().window < currentMinute);
+        bucketsIp.entrySet().removeIf(e -> e.getValue().window < currentMinute);
     }
 
     private static class Window {

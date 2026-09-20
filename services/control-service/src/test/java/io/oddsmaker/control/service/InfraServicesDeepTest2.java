@@ -51,6 +51,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -323,32 +324,33 @@ class InfraServicesDeepTest2 {
     }
 
     @Test
-    @DisplayName("配额：使用量更新触发警告/告警")
+    @DisplayName("配额：使用量更新触发警告/告警（原子自增 + 标志位原子 UPDATE）")
     void quotaUpdateUsageAlerts() {
         // 未配置配额：无操作
         lenient().when(quotaRepo.findByGameEnvironmentAndResourceType("g1", "env1",
             QuotaEntity.ResourceType.EVENTS_PER_DAY)).thenReturn(Optional.empty());
         assertDoesNotThrow(() ->
             rateLimitService.updateQuotaUsage("g1", "env1", QuotaEntity.ResourceType.EVENTS_PER_DAY, 100));
-        verify(quotaRepo, never()).save(any(QuotaEntity.class));
+        verify(quotaRepo, never()).incrementUsageAtomic(anyString(), anyLong());
 
-        // 警告区间（85%）：发送警告不发送告警
+        // 警告区间（85%）：原子自增后重读（85%），发送警告不发送告警
         QuotaEntity warningQuota = quota("qw", 100, 0);
         lenient().when(quotaRepo.findByGameAndResourceType("g1", QuotaEntity.ResourceType.EVENTS_PER_DAY))
             .thenReturn(Optional.of(warningQuota));
+        lenient().when(quotaRepo.findById("qw")).thenReturn(Optional.of(quota("qw", 100, 85)));
         rateLimitService.updateQuotaUsage("g1", null, QuotaEntity.ResourceType.EVENTS_PER_DAY, 85);
-        assertEquals(85L, warningQuota.currentUsage);
-        assertTrue(warningQuota.warningSent);
-        assertFalse(warningQuota.alertSent);
-        assertNotNull(warningQuota.lastCalculatedAt);
+        verify(quotaRepo).incrementUsageAtomic("qw", 85);
+        verify(quotaRepo).markWarningSentAtomic("qw");
+        verify(quotaRepo, never()).markAlertSentAtomic("qw");
 
         // 告警区间（96%）：警告 + 告警
         QuotaEntity alertQuota = quota("qa", 100, 0);
         lenient().when(quotaRepo.findByGameAndResourceType("g1", QuotaEntity.ResourceType.USERS))
             .thenReturn(Optional.of(alertQuota));
+        lenient().when(quotaRepo.findById("qa")).thenReturn(Optional.of(quota("qa", 100, 96)));
         rateLimitService.updateQuotaUsage("g1", null, QuotaEntity.ResourceType.USERS, 96);
-        assertTrue(alertQuota.warningSent);
-        assertTrue(alertQuota.alertSent);
+        verify(quotaRepo).markWarningSentAtomic("qa");
+        verify(quotaRepo).markAlertSentAtomic("qa");
 
         // 已发送过告警：不重复发送
         QuotaEntity sent = quota("qs", 100, 99);
@@ -356,9 +358,11 @@ class InfraServicesDeepTest2 {
         sent.alertSent = true;
         lenient().when(quotaRepo.findByGameAndResourceType("g1", QuotaEntity.ResourceType.INTEGRATIONS))
             .thenReturn(Optional.of(sent));
+        lenient().when(quotaRepo.findById("qs")).thenReturn(Optional.of(sent));
         rateLimitService.updateQuotaUsage("g1", null, QuotaEntity.ResourceType.INTEGRATIONS, 1);
-        assertTrue(sent.warningSent);
-        assertTrue(sent.alertSent);
+        verify(quotaRepo).incrementUsageAtomic("qs", 1);
+        verify(quotaRepo, never()).markWarningSentAtomic("qs");
+        verify(quotaRepo, never()).markAlertSentAtomic("qs");
     }
 
     @Test
@@ -387,8 +391,8 @@ class InfraServicesDeepTest2 {
         deleted.deletedAt = LocalDateTime.now();
         lenient().when(quotaRepo.findAll()).thenReturn(List.of(active, deleted));
         assertDoesNotThrow(() -> rateLimitService.checkQuotaAlerts());
-        assertTrue(active.warningSent);
-        assertFalse(deleted.warningSent);
+        verify(quotaRepo).markWarningSentAtomic("qp");
+        verify(quotaRepo, never()).markWarningSentAtomic("qdel");
     }
 
     // ==================== Flink 作业：FlinkJobService ====================

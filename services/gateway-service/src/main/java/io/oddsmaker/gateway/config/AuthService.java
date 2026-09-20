@@ -5,6 +5,7 @@ import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.core.env.Environment;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
@@ -130,6 +131,15 @@ public class AuthService {
      * WebClient.block() 会被 reactor 禁止（"blocking not supported in thread reactor-http"），
      * 因此这里用 JDK 同步客户端：60s 缓存之下，3s 上限的一次同步调用可接受。
      */
+        /**
+     * 清扫过期缓存条目（键空间=合法 API key 受控，但过期条目若只被忽略不清除仍永久驻留）。
+     */
+    @Scheduled(fixedDelay = 60_000)
+    public void evictExpired() {
+        long now = Instant.now().getEpochSecond();
+        cache.entrySet().removeIf(e -> e.getValue().expireAt <= now);
+    }
+
     private ApiKeyContext fetchRemoteContext(String apiKey) {
         if (controlUrl == null || controlUrl.isBlank() || internalToken == null || internalToken.isBlank()) {
             meters.counter(REMOTE_LOOKUP_METRIC, "outcome", "not_configured", "code", "none").increment();
