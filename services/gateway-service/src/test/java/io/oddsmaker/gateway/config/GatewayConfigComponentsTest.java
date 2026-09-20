@@ -264,6 +264,16 @@ class GatewayConfigComponentsTest {
     // ===== AuthService =====
 
     @Test
+    @DisplayName("Auth：redact 日志脱敏——密钥本体不整段进日志（失败场景任何客户端发错 key 都触发）")
+    void authRedactMasksSecret() {
+        assertEquals("sk_live_…(len=30)", AuthService.redact("sk_live_abcdefghijklmnopqrstuv"));
+        // 短密钥只暴露长度，前缀也不给（≤8 字符前缀可被暴力枚举补全）
+        assertEquals("(len=5)", AuthService.redact("short"));
+        assertEquals("(len=0)", AuthService.redact(""));
+        assertEquals("null", AuthService.redact(null));
+    }
+
+    @Test
     @DisplayName("Auth：空白 key 返回 null；本地密钥回退；缓存命中")
     void authServiceLocalAndCache() {
         MockEnvironment env = new MockEnvironment()

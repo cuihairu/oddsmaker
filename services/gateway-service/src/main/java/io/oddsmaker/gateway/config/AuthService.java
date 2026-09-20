@@ -148,15 +148,27 @@ public class AuthService {
             if (response.statusCode() != 200) {
                 meters.counter(REMOTE_LOOKUP_METRIC,
                     "outcome", "http_error", "code", String.valueOf(response.statusCode())).increment();
-                logger.warn("Remote key lookup failed for {}: HTTP {}", apiKey, response.statusCode());
+                logger.warn("Remote key lookup failed for {}: HTTP {}", redact(apiKey), response.statusCode());
                 return null;
             }
             meters.counter(REMOTE_LOOKUP_METRIC, "outcome", "ok", "code", "200").increment();
             return mapper.readValue(response.body(), ApiKeyContext.class);
         } catch (Exception e) {
             meters.counter(REMOTE_LOOKUP_METRIC, "outcome", "exception", "code", "none").increment();
-            logger.warn("Remote key lookup error for {}: {}", apiKey, e.toString());
+            logger.warn("Remote key lookup error for {}: {}", redact(apiKey), e.toString());
             return null;
         }
+    }
+
+    /**
+     * 日志脱敏：apiKey 是密钥本体（内部接口以密钥作路径标识），失败场景任何客户端
+     * 发错 key 都会触发该日志——明文进日志=凭证泄漏到日志系统，且可被外部灌垃圾。
+     * 只保留前 8 字符与长度，足以区分排查又不暴露完整凭证。
+     */
+    static String redact(String secret) {
+        if (secret == null) {
+            return "null";
+        }
+        return secret.length() <= 8 ? "(len=" + secret.length() + ")" : secret.substring(0, 8) + "…(len=" + secret.length() + ")";
     }
 }
