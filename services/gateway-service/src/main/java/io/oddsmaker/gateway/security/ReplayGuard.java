@@ -97,10 +97,6 @@ public class ReplayGuard {
         return Math.abs(nowMillis - tsClient) <= maxEventDriftMs;
     }
 
-    public long maxEventDriftMillis() {
-        return maxEventDriftMs;
-    }
-
     private Generation rotateIfNeeded(Generation current) {
         long now = System.currentTimeMillis();
         if (!current.isExpired(now)) {

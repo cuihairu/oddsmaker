@@ -136,13 +136,6 @@ class DtosDeepTest {
         fallback.displayName = "   ";
         assertEquals("李四", fallback.getDisplayName());
 
-        dto.roles = List.of(Map.of("role", "ADMIN", "gameId", "g-1"));
-        assertTrue(dto.hasRole("ADMIN"));
-        assertFalse(dto.hasRole("VIEWER"));
-        assertTrue(dto.hasRoleInGame("g-1"));
-        assertFalse(dto.hasRoleInGame("g-2"));
-        assertFalse(new UserDTO().hasRole("ADMIN"));
-        assertFalse(new UserDTO().hasRoleInGame("g-1"));
         assertFalse(new UserDTO().isEmailVerified());
         assertFalse(new UserDTO().isTwoFactorEnabled());
     }
@@ -247,9 +240,6 @@ class DtosDeepTest {
 
         assertTrue(dto.isLive());
         assertTrue(dto.isMultiplayer());
-        assertTrue(dto.supportsPlatform(GameEntity.GamePlatform.PC));
-        assertFalse(dto.supportsPlatform(GameEntity.GamePlatform.VR));
-        assertFalse(new GameDTO().supportsPlatform(GameEntity.GamePlatform.PC));
         assertEquals("星辰物语", dto.getDisplayName());
         assertTrue(dto.isCompliant());
         GameDTO bare = new GameDTO();
@@ -454,18 +444,14 @@ class DtosDeepTest {
 
         assertFalse(dto.isActive());
         assertTrue(dto.isRequired());
-        assertTrue(dto.hasRequiredIdentity());
 
         EventDefinitionDTO plain = new EventDefinitionDTO();
         plain.importance = EventDefinitionEntity.Importance.NORMAL;
         plain.status = EventDefinitionEntity.DefinitionStatus.ACTIVE;
         assertTrue(plain.isActive());
         assertFalse(plain.isRequired());
-        assertFalse(plain.hasRequiredIdentity());
         plain.importance = EventDefinitionEntity.Importance.HIGH;
         assertTrue(plain.isRequired());
-        plain.requireSessionId = true;
-        assertTrue(plain.hasRequiredIdentity());
     }
 
     @Test
@@ -556,15 +542,12 @@ class DtosDeepTest {
 
         assertFalse(dto.isActive());
         assertTrue(dto.isSensitive());
-        assertTrue(dto.hasValidation());
 
         EventPropertyDefinitionDTO plain = new EventPropertyDefinitionDTO();
-        assertFalse(plain.hasValidation());
         assertFalse(plain.isSensitive());
         plain.status = EventPropertyDefinitionEntity.PropertyStatus.ACTIVE;
         plain.minValue = 1.0;
         assertTrue(plain.isActive());
-        assertTrue(plain.hasValidation());
     }
 
     @Test
@@ -847,10 +830,6 @@ class DtosDeepTest {
         assertEquals(6, page.pageInfo.totalPages);
         assertEquals(0, new ApiResponse.PageInfo(100, 0, 0).totalPages);
         assertEquals(1, new ApiResponse.PageInfo(1, 1, 5).totalPages);
-
-        ApiResponse<String> traced = ApiResponse.success("d");
-        assertSame(traced, traced.withTraceId("t-1"));
-        assertEquals("t-1", traced.traceId);
 
         ApiResponse<Void> empty = new ApiResponse<>(201, "Created");
         assertEquals(201, empty.code);

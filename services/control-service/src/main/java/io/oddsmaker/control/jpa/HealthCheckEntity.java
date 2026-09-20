@@ -143,21 +143,8 @@ public class HealthCheckEntity {
         this.consecutiveFailures = 0;
     }
 
-    public void markAsDegraded(String message) {
-        this.healthStatus = HealthStatus.DEGRADED;
-        this.statusMessage = message;
-        this.consecutiveFailures = 0;
-    }
-
     public void markAsUnhealthy(String message) {
         this.healthStatus = HealthStatus.UNHEALTHY;
-        this.statusMessage = message;
-        this.lastUnhealthyAt = LocalDateTime.now();
-        this.consecutiveFailures++;
-    }
-
-    public void markAsDown(String message) {
-        this.healthStatus = HealthStatus.DOWN;
         this.statusMessage = message;
         this.lastUnhealthyAt = LocalDateTime.now();
         this.consecutiveFailures++;

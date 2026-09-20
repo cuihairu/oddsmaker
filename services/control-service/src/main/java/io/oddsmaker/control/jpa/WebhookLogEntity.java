@@ -142,12 +142,6 @@ public class WebhookLogEntity {
         this.errorType = errorType;
     }
 
-    public void markAsTimeout() {
-        this.deliveryStatus = DeliveryStatus.TIMEOUT;
-        this.errorMessage = "Request timeout";
-        this.errorType = "TIMEOUT";
-    }
-
     public void scheduleRetry(LocalDateTime nextRetryAt) {
         this.deliveryStatus = DeliveryStatus.RETRYING;
         this.nextRetryAt = nextRetryAt;

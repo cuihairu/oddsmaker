@@ -130,10 +130,4 @@ public class EventPropertyDefinitionDTO {
         return Boolean.TRUE.equals(isPii);
     }
 
-    public boolean hasValidation() {
-        return minValue != null || maxValue != null ||
-               minLength != null || maxLength != null ||
-               regexPattern != null || allowedValues != null ||
-               cardinalityLimit != null;
-    }
 }

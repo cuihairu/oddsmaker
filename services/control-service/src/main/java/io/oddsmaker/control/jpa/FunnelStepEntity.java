@@ -89,11 +89,4 @@ public class FunnelStepEntity {
         return optional != null && optional;
     }
 
-    public boolean hasFilter() {
-        return eventFilter != null && !eventFilter.isEmpty();
-    }
-
-    public boolean hasTimeWindow() {
-        return timeWindowSec != null && timeWindowSec > 0;
-    }
 }

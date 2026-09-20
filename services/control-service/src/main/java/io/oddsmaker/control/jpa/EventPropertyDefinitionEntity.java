@@ -145,13 +145,6 @@ public class EventPropertyDefinitionEntity {
         return type == PropertyType.STRING || type == PropertyType.ENUM;
     }
 
-    public boolean hasValidation() {
-        return minValue != null || maxValue != null ||
-               minLength != null || maxLength != null ||
-               regexPattern != null || allowedValues != null ||
-               cardinalityLimit != null;
-    }
-
     public String getValidationDescription() {
         StringBuilder sb = new StringBuilder();
         if (required) sb.append("Required");

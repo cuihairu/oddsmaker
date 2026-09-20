@@ -182,10 +182,6 @@ public class ReportEntity {
         this.status = ReportStatus.PUBLISHED;
     }
 
-    public void markAsArchived() {
-        this.status = ReportStatus.ARCHIVED;
-    }
-
     public void recordRun(String runStatus) {
         this.totalRuns = (this.totalRuns == null ? 0 : this.totalRuns) + 1;
         this.lastRunAt = LocalDateTime.now();

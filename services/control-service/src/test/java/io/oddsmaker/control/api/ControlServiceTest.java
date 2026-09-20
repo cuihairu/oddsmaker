@@ -119,11 +119,9 @@ class ControlServiceTest {
     void storageProfileCrud() {
         StorageProfileEntity profile = new StorageProfileEntity();
         profile.id = "sp_1";
-        when(storageProfileRepo.findAll()).thenReturn(List.of(profile));
         when(storageProfileRepo.findById("sp_1")).thenReturn(Optional.of(profile));
         when(storageProfileRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
         
-        assertEquals(1, service.listStorageProfiles().size());
         assertNotNull(service.getStorageProfile("sp_1"));
         Models.CreateStorageProfileReq req = new Models.CreateStorageProfileReq();
         req.name = "default-profile";

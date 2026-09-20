@@ -195,11 +195,6 @@ public class RiskCaseEntity {
         return resolvedAt != null || isConfirmedBenign();
     }
 
-    public void markAsExecuted() {
-        executionStatus = ExecutionStatus.EXECUTED;
-        executedAt = LocalDateTime.now();
-    }
-
     public void markAsFailed(String error) {
         executionStatus = ExecutionStatus.FAILED;
         executionError = error;

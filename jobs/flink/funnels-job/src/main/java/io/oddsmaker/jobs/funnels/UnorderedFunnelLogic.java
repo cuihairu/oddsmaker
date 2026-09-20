@@ -47,14 +47,4 @@ public final class UnorderedFunnelLogic {
         return allStepsDone(stepCount, stepFirstTs) && spanMs(stepFirstTs) <= windowMs;
     }
 
-    /**
-     * 超窗重置：保留触发重估的当前事件，丢弃其余状态，作为新一轮起点。
-     *
-     * @return 重置后的状态（仅含 currentStep）
-     */
-    public static Map<Integer, Long> reset(int currentStep, long currentTs) {
-        Map<Integer, Long> out = new HashMap<>();
-        out.put(currentStep, currentTs);
-        return out;
-    }
 }

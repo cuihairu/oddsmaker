@@ -80,14 +80,6 @@ class AccessGuardTest {
     }
 
     @Test
-    @DisplayName("environment scope 走三级检查")
-    void environmentScopedChecked() {
-        login("carol");
-        when(permissionService.hasEnvironmentPermission("carol", "game_1", "prod", "api_key:update")).thenReturn(true);
-        assertDoesNotThrow(() -> accessGuard.requireEnvironmentPermission("game_1", "prod", "api_key:update"));
-    }
-
-    @Test
     @DisplayName("全局权限走 hasPermission")
     void globalPermissionChecked() {
         login("dave");

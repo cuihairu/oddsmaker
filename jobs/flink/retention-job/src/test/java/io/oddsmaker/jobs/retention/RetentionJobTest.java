@@ -341,7 +341,8 @@ class RetentionJobTest {
     @Test
     @DisplayName("RetentionProcess.open：经 RuntimeContext 声明并接线 MapState")
     void openWiresStateViaRuntimeContext() throws Exception {
-        RetentionJob.RetentionProcess fn = new RetentionJob.RetentionProcess(RetentionPolicy.defaults());
+        RetentionJob.RetentionProcess fn = new RetentionJob.RetentionProcess(
+            new RetentionPolicy(new int[]{1, 7, 30}, new int[]{1, 3, 7, 14, 30}));
         TestMapState state = new TestMapState();
         fn.setRuntimeContext(runtimeContextWith(state));
         fn.open(new org.apache.flink.configuration.Configuration());

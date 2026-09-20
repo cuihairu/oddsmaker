@@ -188,15 +188,6 @@ public class ControlService {
     }
 
     @Transactional(readOnly = true)
-    public List<Models.StorageProfileResp> listStorageProfiles() {
-        return storageProfileRepo.findAll().stream()
-            .filter(profile -> profile.deletedAt == null)
-            .sorted(Comparator.comparing(profile -> profile.name))
-            .map(this::toStorageProfile)
-            .collect(Collectors.toList());
-    }
-
-    @Transactional(readOnly = true)
     public Models.StorageProfileResp getStorageProfile(String profileId) {
         return storageProfileRepo.findById(profileId)
             .filter(profile -> profile.deletedAt == null)

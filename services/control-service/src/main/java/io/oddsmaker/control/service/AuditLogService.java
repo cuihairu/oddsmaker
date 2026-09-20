@@ -362,13 +362,6 @@ public class AuditLogService {
     }
 
     /**
-     * 分页查询审计日志
-     */
-    public Page<AuditLogEntity> listAuditLogs(Pageable pageable) {
-        return auditLogRepo.findRecentLogs(pageable);
-    }
-
-    /**
      * 根据用户ID查找审计日志
      */
     public Page<AuditLogEntity> findByUserId(String userId, Pageable pageable) {
@@ -425,14 +418,4 @@ public class AuditLogService {
         );
     }
 
-    /**
-     * 清理旧的审计日志
-     */
-    @Transactional
-    public int cleanupOldLogs(int daysToKeep) {
-        LocalDateTime before = LocalDateTime.now().minusDays(daysToKeep);
-        int deleted = auditLogRepo.deleteLogsBefore(before);
-        logger.info("Cleaned up {} audit logs older than {}", deleted, before);
-        return deleted;
-    }
 }

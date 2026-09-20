@@ -83,18 +83,6 @@ class EntitiesDeepTest {
         f.defaultValue = false;
         assertFalse(f.isAvailableForUser("u1", "g1"));
 
-        // 计划启用/禁用时间分支
-        f.scheduledEnableAt = LocalDateTime.now().minusMinutes(1);
-        assertTrue(f.shouldEnable());
-        f.scheduledEnableAt = null;
-        f.scheduledDisableAt = LocalDateTime.now().minusMinutes(1);
-        assertFalse(f.shouldEnable());
-        f.scheduledDisableAt = LocalDateTime.now().plusHours(1);
-        assertFalse(f.shouldEnable()); // 仍回落到 isEnabled()=false
-        f.enable();
-        assertTrue(f.shouldEnable());
-        f.disable();
-        assertTrue(f.isDisabled());
 
         // 百分比设置：边界钳制与状态联动
         f.setPercentage(150);
@@ -445,7 +433,6 @@ class EntitiesDeepTest {
         assertEquals(100, e.progressPercent);
         assertNotNull(e.executionTimeMs);
         assertTrue(e.expiresAt.isAfter(LocalDateTime.now().plusDays(6)));
-        assertTrue(e.hasDownloadableFile());
         assertEquals("2.0 KB", e.getFileSizeDisplay());
 
         // 文件大小各级展示
@@ -462,7 +449,6 @@ class EntitiesDeepTest {
         e.fileSizeBytes = 2048L;
         e.expiresAt = LocalDateTime.now().minusMinutes(1);
         assertTrue(e.isExpired());
-        assertFalse(e.hasDownloadableFile());
         // 状态过期 → isExpired 直接成立
         e.exportStatus = ExportJobEntity.ExportStatus.EXPIRED;
         assertTrue(e.isExpired());
@@ -470,7 +456,6 @@ class EntitiesDeepTest {
         e.exportStatus = ExportJobEntity.ExportStatus.COMPLETED;
         e.expiresAt = LocalDateTime.now().plusDays(1);
         assertFalse(e.isExpired());
-        assertTrue(e.hasDownloadableFile());
 
         // 失败/取消
         e.markAsFailed("disk full");
@@ -535,8 +520,8 @@ class EntitiesDeepTest {
         assertNotNull(h.lastHealthyAt);
         assertEquals(0, h.consecutiveFailures);
 
-        // 标记降级
-        h.markAsDegraded("slow");
+        // 降级态判定
+        h.healthStatus = HealthCheckEntity.HealthStatus.DEGRADED;
         assertTrue(h.isDegraded());
         assertFalse(h.isHealthy());
 
@@ -545,9 +530,9 @@ class EntitiesDeepTest {
         assertTrue(h.isUnhealthy());
         assertEquals(1, h.consecutiveFailures);
         assertNotNull(h.lastUnhealthyAt);
-        h.markAsDown("refused");
+        h.healthStatus = HealthCheckEntity.HealthStatus.DOWN;
+        h.consecutiveFailures = 2;
         assertTrue(h.isUnhealthy()); // DOWN 同样计入不健康
-        assertEquals(2, h.consecutiveFailures);
 
         // 计数方法
         int beforeChecks = h.totalChecks;
@@ -584,35 +569,14 @@ class EntitiesDeepTest {
         assertTrue(s.isExpired());
         s.sessionStatus = SecuritySessionEntity.SessionStatus.ACTIVE;
 
-        // MFA
-        s.mfaVerified = false;
-        assertTrue(s.needsMFA());
-        s.mfaVerified = true;
-        assertFalse(s.needsMFA());
-
-        // 续期：受次数限制
+        // 续期上限判定（renew 本体零生产调用方已删，canRenew 保留）
         s.maxRenewalTimes = 2;
         s.renewalCount = 0;
         assertTrue(s.canRenew());
-        LocalDateTime before = s.expiresAt;
-        s.renew(30);
-        assertEquals(1, s.renewalCount);
-        assertEquals(before.plusMinutes(30), s.expiresAt);
-        s.renew(30);
-        assertEquals(2, s.renewalCount);
+        s.renewalCount = 2;
         assertFalse(s.canRenew());
-        LocalDateTime noMore = s.expiresAt;
-        s.renew(30); // 达到上限不再续期
-        assertEquals(2, s.renewalCount);
-        assertEquals(noMore, s.expiresAt);
-        // maxRenewalTimes 为空 → 不限次
         s.maxRenewalTimes = null;
         assertTrue(s.canRenew());
-        // expiresAt 为空时续期从当前时间起算
-        s.expiresAt = null;
-        s.renew(15);
-        assertNotNull(s.expiresAt);
-        assertTrue(s.expiresAt.isAfter(LocalDateTime.now()));
 
         // 活动更新与会话时长
         s.lastActivityAt = LocalDateTime.now().minusHours(1);
@@ -663,38 +627,12 @@ class EntitiesDeepTest {
         assertFalse(k.isActive());
         assertTrue(k.isExpired());
 
-        // 轮换需求：未开启自动轮换
-        assertFalse(k.needsRotation());
-        // 开启但未到周期
-        k.autoRotate = true;
-        k.rotationDays = 90;
-        k.createdAt = LocalDateTime.now().minusDays(10);
-        assertFalse(k.needsRotation());
-        // 超过周期
-        k.createdAt = LocalDateTime.now().minusDays(100);
-        assertTrue(k.needsRotation());
-        // 周期为空
-        k.rotationDays = null;
-        assertFalse(k.needsRotation());
-
         // 吊销
         k.revoke();
         assertEquals(ApiKeyEntity.ApiKeyStatus.REVOKED, k.status);
         assertNotNull(k.revokedAt);
         assertFalse(k.isActive());
 
-        // 用量记录
-        ApiKeyEntity u = new ApiKeyEntity();
-        u.totalRequests = 0L;
-        u.totalEvents = null;
-        u.recordUsage("10.0.0.1");
-        assertEquals(1L, u.totalRequests);
-        assertEquals("10.0.0.1", u.lastUsedIp);
-        assertNotNull(u.lastUsedAt);
-        u.recordEvents(5L);
-        assertEquals(5L, u.totalEvents);
-        u.recordEvents(2L);
-        assertEquals(7L, u.totalEvents);
     }
 
     @Test
@@ -712,12 +650,6 @@ class EntitiesDeepTest {
         g.deletedAt = LocalDateTime.now();
         assertFalse(g.isLive());
         g.deletedAt = null;
-
-        // 平台支持
-        assertFalse(g.supportsPlatform(GameEntity.GamePlatform.WEB)); // platforms 为空
-        g.platforms = EnumSet.of(GameEntity.GamePlatform.WEB, GameEntity.GamePlatform.MOBILE);
-        assertTrue(g.supportsPlatform(GameEntity.GamePlatform.WEB));
-        assertFalse(g.supportsPlatform(GameEntity.GamePlatform.PC));
 
         // 多人标识
         g.hasMultiplayer = null;
@@ -774,14 +706,6 @@ class EntitiesDeepTest {
 
         // 采样判定在 SDK 客户端（enableSampling/sampleRate 经配置端点送达），服务端无 shouldSample
 
-        // 专用存储判定
-        assertFalse(e.usesDedicatedStorage()); // 无 profile
-        StorageProfileEntity sp = new StorageProfileEntity();
-        sp.isolationStrategy = StorageProfileEntity.IsolationStrategy.SHARED;
-        e.storageProfile = sp;
-        assertFalse(e.usesDedicatedStorage());
-        sp.isolationStrategy = StorageProfileEntity.IsolationStrategy.DEDICATED;
-        assertTrue(e.usesDedicatedStorage());
     }
 
     @Test
@@ -1027,14 +951,6 @@ class EntitiesDeepTest {
         q.markAlertSent();
         assertFalse(q.shouldSendAlert());
 
-        // 重置时间
-        q.resetAt = LocalDateTime.now().plusDays(1);
-        assertFalse(q.needsReset());
-        q.resetAt = LocalDateTime.now().minusMinutes(1);
-        assertTrue(q.needsReset());
-        q.resetAt = null;
-        assertFalse(q.needsReset());
-
         // 重置用量
         q.resetUsage();
         assertEquals(0L, q.currentUsage);
@@ -1058,7 +974,6 @@ class EntitiesDeepTest {
 
         // 初始待处理
         assertTrue(r.isPending());
-        assertTrue(r.needsAction());
         assertFalse(r.isAssigned());
         assertFalse(r.isInReview());
         assertFalse(r.isCompleted());
@@ -1076,7 +991,6 @@ class EntitiesDeepTest {
         assertEquals("alice", r.assignedTo);
         assertNotNull(r.assignedAt);
         assertTrue(r.isOverdue());
-        assertTrue(r.needsAction());
 
         // 认领（CLAIMED 同样计入 isAssigned）
         r.claim("bob");
@@ -1090,7 +1004,6 @@ class EntitiesDeepTest {
         assertTrue(r.isInReview());
         assertEquals("bob", r.reviewedBy);
         assertNotNull(r.reviewedAt);
-        assertTrue(r.needsAction());
 
         // 完成：不再逾期、不再需要动作、可计算解决时长
         r.complete("bob", "确认欺诈", "confirmed_fraud", "封禁账号");
@@ -1098,7 +1011,6 @@ class EntitiesDeepTest {
         assertNotNull(r.resolvedAt);
         assertEquals("confirmed_fraud", r.disposition);
         assertFalse(r.isOverdue());
-        assertFalse(r.needsAction());
         assertTrue(r.getResolutionTimeMinutes() >= 119);
 
         // 年龄计算
@@ -1222,18 +1134,6 @@ class EntitiesDeepTest {
         u.status = UserEntity.UserStatus.LOCKED;
         assertTrue(u.isLocked());
         u.status = UserEntity.UserStatus.ACTIVE;
-
-        // 角色判定：空集合防御
-        assertFalse(u.hasRole(UserEntity.UserRole.ADMIN));
-        u.roles = new HashSet<>(Arrays.asList(UserEntity.UserRole.ADMIN, UserEntity.UserRole.ANALYST));
-        assertTrue(u.hasRole(UserEntity.UserRole.ADMIN));
-        assertFalse(u.hasRole(UserEntity.UserRole.VIEWER));
-
-        // 权限范围
-        assertFalse(u.hasScope("read"));
-        u.scopes = new HashSet<>(Arrays.asList("read", "write"));
-        assertTrue(u.hasScope("read"));
-        assertFalse(u.hasScope("export"));
 
         // 全名回退
         assertEquals("alice", u.getFullName());

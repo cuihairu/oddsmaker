@@ -165,22 +165,4 @@ public class UserDTO {
         return twoFactorEnabled != null && twoFactorEnabled;
     }
 
-    /**
-     * 检查是否有指定角色
-     */
-    public boolean hasRole(String roleName) {
-        if (roles == null) return false;
-        return roles.stream()
-            .anyMatch(role -> roleName.equals(role.get("role")));
-    }
-
-    /**
-     * 检查是否在指定游戏有角色
-     */
-    public boolean hasRoleInGame(String gameId) {
-        if (roles == null) return false;
-        return roles.stream()
-            .anyMatch(role -> gameId.equals(role.get("gameId")));
-    }
-
 }

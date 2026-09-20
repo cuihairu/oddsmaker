@@ -96,9 +96,4 @@ public class AnnouncementEntity {
     }
 
     /** 当前时间是否在展示窗口内 */
-    public boolean inWindow(LocalDateTime now) {
-        if (!isActive()) return false;
-        if (autoOfflineAt == null) return true;
-        return now.isBefore(autoOfflineAt);
-    }
 }

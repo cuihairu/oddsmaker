@@ -217,14 +217,6 @@ class GatewayConfigComponentsTest {
         assertNull(v.validate(withNull));
     }
 
-    @Test
-    @DisplayName("Schema：schemaSummary 输出")
-    void schemaSummaryOutputs() {
-        Map<String, Object> summary = validator().schemaSummary();
-        assertNotNull(summary.get("id"));
-        assertNotNull(summary.get("title"));
-    }
-
     // ===== PropsPolicy =====
 
     private PropsPolicy propsPolicy(String allowlist) {

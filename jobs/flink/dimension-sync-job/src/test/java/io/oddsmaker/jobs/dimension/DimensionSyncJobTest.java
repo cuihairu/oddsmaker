@@ -50,70 +50,6 @@ class DimensionSyncJobTest {
         assertTrue(rec.isCurrent);
     }
 
-    @Test
-    void parseDebeziumUsesAfterForUpsert() {
-        String json = """
-                {
-                  "payload": {
-                    "op": "u",
-                    "ts_ms": 1782813600000,
-                    "source": {
-                      "table": "items"
-                    },
-                    "after": {
-                      "item_code": "sword_001",
-                      "display_name": "Iron Sword",
-                      "quality": "rare"
-                    }
-                  }
-                }
-                """;
-
-        DimensionSyncJob.DimRecord rec = DimensionSyncJob.parseDebezium(json, "game_demo", "prod", "item");
-
-        assertNotNull(rec);
-        assertEquals("game_demo", rec.gameId);
-        assertEquals("prod", rec.environment);
-        assertEquals("item", rec.dimType);
-        assertEquals("sword_001", rec.id);
-        assertEquals("Iron Sword", rec.attributes.get("name"));
-        assertEquals("rare", rec.attributes.get("rarity"));
-        assertTrue(rec.isCurrent);
-    }
-
-    @Test
-    void parseDebeziumUsesBeforeForDelete() {
-        String json = """
-                {
-                  "payload": {
-                    "op": "d",
-                    "ts_ms": 1782813600000,
-                    "source": {
-                      "table": "levels",
-                      "game_id": "game_demo",
-                      "environment": "staging"
-                    },
-                    "before": {
-                      "level_id": "level_10",
-                      "level_name": "Frozen Gate",
-                      "level_difficulty": "hard"
-                    }
-                  }
-                }
-                """;
-
-        DimensionSyncJob.DimRecord rec = DimensionSyncJob.parseDebezium(json, "", "", "");
-
-        assertNotNull(rec);
-        assertEquals("game_demo", rec.gameId);
-        assertEquals("staging", rec.environment);
-        assertEquals("level", rec.dimType);
-        assertEquals("level_10", rec.id);
-        assertEquals("Frozen Gate", rec.attributes.get("name"));
-        assertEquals("hard", rec.attributes.get("difficulty"));
-        assertFalse(rec.isCurrent);
-    }
-
     // ===== 管道搭建（惰性，本地环境不 execute） =====
 
     @Test
@@ -423,37 +359,6 @@ class DimensionSyncJobTest {
         DimensionSyncJob.DimRecord rec2 = DimensionSyncJob.parseProps("g", "dev",
                 "{\"dim_type\":\"item\",\"id\":\"x\",\"version_ts\":1782813600000}");
         assertEquals(1782813600000L, rec2.versionTs.getTime());
-    }
-
-    @Test
-    @DisplayName("parseDebezium：非对象 payload/data、缺关键字段、坏 JSON 均返回 null")
-    void parseDebeziumInvalidEnvelopes() {
-        assertNull(DimensionSyncJob.parseDebezium("[]", "g", "dev", "item"));          // payload 非 object
-        assertNull(DimensionSyncJob.parseDebezium("{\"payload\":{\"op\":\"u\"}}", "g", "dev", "item")); // after 缺失
-        assertNull(DimensionSyncJob.parseDebezium("nope", "g", "dev", "item"));         // 坏 JSON
-        // 缺 game_id/environment（参数与 source 均空）
-        assertNull(DimensionSyncJob.parseDebezium(
-                "{\"payload\":{\"op\":\"u\",\"after\":{\"id\":\"x\"},\"source\":{\"table\":\"items\"}}}",
-                "", "", "item"));
-        // 空 id
-        assertNull(DimensionSyncJob.parseDebezium(
-                "{\"payload\":{\"op\":\"u\",\"after\":{},\"source\":{\"game_id\":\"g\",\"environment\":\"dev\",\"table\":\"items\"}}}",
-                "", "", ""));
-    }
-
-    @Test
-    @DisplayName("parseDebezium：op=r 读 after；ts_ms 缺省用当前时间")
-    void parseDebeziumReadsAfterForReadOp() {
-        String json = """
-                {"payload":{"op":"r","after":{"id":"starter_pack"},"source":{"game_id":"g","environment":"production","table":"items"}}}
-                """;
-        long before = System.currentTimeMillis();
-        DimensionSyncJob.DimRecord rec = DimensionSyncJob.parseDebezium(json, "", "", "");
-        long after = System.currentTimeMillis();
-        assertNotNull(rec);
-        assertEquals("item", rec.dimType);
-        assertEquals("prod", rec.environment);
-        assertTrue(rec.versionTs.getTime() >= before && rec.versionTs.getTime() <= after);
     }
 
     // ===== 纯函数直测 =====

@@ -147,10 +147,6 @@ public class ExportJobEntity {
                (expiresAt != null && LocalDateTime.now().isAfter(expiresAt));
     }
 
-    public boolean hasDownloadableFile() {
-        return isCompleted() && filePath != null && !isExpired();
-    }
-
     public void markAsProcessing() {
         this.exportStatus = ExportStatus.PROCESSING;
         this.startedAt = LocalDateTime.now();

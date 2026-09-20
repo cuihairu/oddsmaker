@@ -87,21 +87,4 @@ public class SymbolicationService {
     }
 
     /** 堆栈概要：首行异常信息 + 前几帧（列表展示用） */
-    public static Map<String, Object> stackSummary(String stackTrace, int frames) {
-        Map<String, Object> out = new LinkedHashMap<>();
-        String[] lines = stackTrace == null ? new String[0] : stackTrace.split("\\r?\\n");
-        List<String> top = new ArrayList<>();
-        for (String line : lines) {
-            if (line.isBlank() || line.startsWith("...")) {
-                continue;
-            }
-            top.add(line.trim());
-            if (top.size() >= frames) {
-                break;
-            }
-        }
-        out.put("exception", top.isEmpty() ? "" : top.get(0));
-        out.put("frames", top);
-        return out;
-    }
 }

@@ -146,10 +146,4 @@ public class JsonSchemaValidator {
         return null;
     }
 
-    public Map<String, Object> schemaSummary() {
-        Map<String, Object> summary = new LinkedHashMap<>();
-        summary.put("id", schema.path("$id").asText());
-        summary.put("title", schema.path("title").asText());
-        return summary;
-    }
 }

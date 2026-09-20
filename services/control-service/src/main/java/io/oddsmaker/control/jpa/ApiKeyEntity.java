@@ -172,25 +172,9 @@ public class ApiKeyEntity {
         return expiresAt != null && expiresAt.isBefore(LocalDateTime.now());
     }
 
-    public boolean needsRotation() {
-        if (!autoRotate || rotationDays == null) {
-            return false;
-        }
-        return createdAt.plusDays(rotationDays).isBefore(LocalDateTime.now());
-    }
-
     public void revoke() {
         this.status = ApiKeyStatus.REVOKED;
         this.revokedAt = LocalDateTime.now();
     }
 
-    public void recordUsage(String ip) {
-        this.totalRequests = (totalRequests == null ? 0L : totalRequests) + 1;
-        this.lastUsedAt = LocalDateTime.now();
-        this.lastUsedIp = ip;
-    }
-
-    public void recordEvents(long eventCount) {
-        this.totalEvents = (totalEvents == null ? 0L : totalEvents) + eventCount;
-    }
 }

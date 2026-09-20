@@ -184,10 +184,6 @@ public class SystemAlertEntity {
         return severity == Severity.WARNING || severity == Severity.INFO;
     }
 
-    public boolean needsEscalation() {
-        return isCritical() && !isResolved() && escalationLevel == 0;
-    }
-
     public void acknowledge(String acknowledgedBy, String comment) {
         this.alertStatus = AlertStatus.ACKNOWLEDGED;
         this.acknowledgedBy = acknowledgedBy;
@@ -205,18 +201,6 @@ public class SystemAlertEntity {
     public void escalate() {
         this.escalationLevel++;
         this.escalatedAt = LocalDateTime.now();
-    }
-
-    public void snooze(LocalDateTime until) {
-        this.alertStatus = AlertStatus.SNOOZED;
-        this.snoozedUntil = until;
-    }
-
-    public void unsnooze() {
-        if (alertStatus == AlertStatus.SNOOZED) {
-            this.alertStatus = AlertStatus.OPEN;
-            this.snoozedUntil = null;
-        }
     }
 
     public long getDurationMinutes() {

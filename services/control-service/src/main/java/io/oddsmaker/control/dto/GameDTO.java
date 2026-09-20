@@ -191,10 +191,6 @@ public class GameDTO {
         return hasMultiplayer != null && hasMultiplayer;
     }
 
-    public boolean supportsPlatform(GameEntity.GamePlatform platform) {
-        return platforms != null && platforms.contains(platform);
-    }
-
     public String getDisplayName() {
         return displayName != null && !displayName.trim().isEmpty() ? displayName : name;
     }

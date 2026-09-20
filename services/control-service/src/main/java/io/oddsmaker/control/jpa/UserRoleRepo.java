@@ -26,11 +26,6 @@ public interface UserRoleRepo extends JpaRepository<UserRoleEntity, Long> {
     List<UserRoleEntity> findByUserIdAndGameId(String userId, String gameId);
 
     /**
-     * 根据用户ID、游戏ID和环境查找用户角色关联
-     */
-    List<UserRoleEntity> findByUserIdAndGameIdAndEnvironment(String userId, String gameId, String environment);
-
-    /**
      * 查找有效的用户角色关联（启用且未过期）
      */
     @Query("SELECT ur FROM UserRoleEntity ur WHERE ur.userId = :userId AND ur.enabled = true AND (ur.expiresAt IS NULL OR ur.expiresAt > :now)")

@@ -67,14 +67,6 @@ class UnorderedFunnelLogicTest {
     }
 
     @Test
-    @DisplayName("超窗重置：仅保留当前事件作为新起点")
-    void resetKeepsOnlyCurrentStep() {
-        Map<Integer, Long> reset = UnorderedFunnelLogic.reset(1, 9_999L);
-        assertEquals(1, reset.size());
-        assertEquals(9_999L, reset.get(1));
-    }
-
-    @Test
     @DisplayName("边界：跨度恰好等于窗口判转化（闭区间）")
     void boundaryExactlyAtWindow() {
         Map<Integer, Long> state = steps(0L, 1_800_000L, 3_600_000L);

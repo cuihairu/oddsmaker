@@ -151,7 +151,4 @@ public class EventDefinitionEntity {
             : eventName;
     }
 
-    public boolean hasRequiredIdentity() {
-        return requireUserId || requireSessionId || requirePlayerId;
-    }
 }

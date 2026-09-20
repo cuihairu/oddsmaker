@@ -112,11 +112,6 @@ public class ApiResponse<T> {
     }
 
     // 设置追踪ID
-    public ApiResponse<T> withTraceId(String traceId) {
-        this.traceId = traceId;
-        return this;
-    }
-
     // 判断是否成功
     public boolean isSuccess() {
         return code >= 200 && code < 300;

@@ -205,14 +205,6 @@ public class UserEntity {
         return status == UserStatus.LOCKED;
     }
 
-    public boolean hasRole(UserRole role) {
-        return roles != null && roles.contains(role);
-    }
-
-    public boolean hasScope(String scope) {
-        return scopes != null && scopes.contains(scope);
-    }
-
     public String getFullName() {
         return displayName != null ? displayName : username;
     }

@@ -201,13 +201,6 @@ public class MLModelPredictionEntity {
         this.completedAt = LocalDateTime.now();
     }
 
-    public void markCached(String prediction) {
-        this.predictionStatus = PredictionStatus.CACHED;
-        this.outputPrediction = prediction;
-        this.cacheHit = true;
-        this.completedAt = LocalDateTime.now();
-    }
-
     public void addFeedback(FeedbackType feedbackType, String actualValue, String feedbackBy) {
         this.feedbackType = feedbackType;
         this.actualValue = actualValue;

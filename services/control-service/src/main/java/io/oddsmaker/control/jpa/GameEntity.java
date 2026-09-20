@@ -198,10 +198,6 @@ public class GameEntity implements org.springframework.data.domain.Persistable<S
         return status == GameStatus.LIVE && deletedAt == null;
     }
 
-    public boolean supportsPlatform(GamePlatform platform) {
-        return platforms != null && platforms.contains(platform);
-    }
-
     public boolean isMultiplayer() {
         return hasMultiplayer != null && hasMultiplayer;
     }

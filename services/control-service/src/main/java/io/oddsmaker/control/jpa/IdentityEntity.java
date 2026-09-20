@@ -137,10 +137,6 @@ public class IdentityEntity {
         return userId != null && !userId.isEmpty();
     }
 
-    public boolean hasPlayerId() {
-        return playerId != null && !playerId.isEmpty();
-    }
-
     public boolean isBoundToUser() {
         return hasUserId();
     }
@@ -168,13 +164,4 @@ public class IdentityEntity {
         };
     }
 
-    public void recordActivity() {
-        lastSeenAt = LocalDateTime.now();
-        eventCount = (eventCount != null ? eventCount : 0) + 1;
-    }
-
-    public void incrementSessionCount() {
-        sessionCount = (sessionCount != null ? sessionCount : 0) + 1;
-        lastSeenAt = LocalDateTime.now();
-    }
 }

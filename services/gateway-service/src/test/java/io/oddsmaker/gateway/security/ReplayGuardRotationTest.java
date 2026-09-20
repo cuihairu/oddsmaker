@@ -58,7 +58,5 @@ class ReplayGuardRotationTest {
         assertTrue(guard.isTimestampPlausible(null, now));
         assertTrue(guard.isTimestampPlausible(now - 1_000, now));
         assertTrue(guard.isTimestampPlausible(now + 1_000, now));
-        assertFalse(guard.isTimestampPlausible(now - 2_000, now));
-        assertEquals(1_000, guard.maxEventDriftMillis());
-    }
+        assertFalse(guard.isTimestampPlausible(now - 2_000, now));    }
 }

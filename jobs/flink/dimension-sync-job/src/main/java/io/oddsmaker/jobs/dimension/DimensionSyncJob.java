@@ -194,39 +194,6 @@ public class DimensionSyncJob {
         }
     }
 
-    /**
-     * 解析 Debezium CDC envelope（PostgreSQL items/levels 等维度表变更）。
-     * gameId/environment/dimType 传空时回退 payload.source 中的值；op=d 取 before 并标记 isCurrent=false。
-     */
-    public static DimRecord parseDebezium(String json, String gameId, String environment, String dimType) {
-        try {
-            com.fasterxml.jackson.databind.JsonNode payload =
-                new com.fasterxml.jackson.databind.ObjectMapper().readTree(json).path("payload");
-            if (!payload.isObject()) return null;
-            String op = payload.path("op").asText("");
-            com.fasterxml.jackson.databind.JsonNode data =
-                "d".equals(op) ? payload.path("before") : payload.path("after");
-            if (!data.isObject()) return null;
-            com.fasterxml.jackson.databind.JsonNode source = payload.path("source");
-            String gid = gameId != null && !gameId.isEmpty() ? gameId : source.path("game_id").asText("");
-            String env = environment != null && !environment.isEmpty() ? environment : source.path("environment").asText("");
-            String dt = dimType != null && !dimType.isEmpty() ? dimType : normalizeDimType(source.path("table").asText(""));
-            String id = firstNonEmpty(data, "item_code", "resource_id", "level_id", "id");
-            if (gid.isEmpty() || env.isEmpty() || dt.isEmpty() || id == null || id.isEmpty()) return null;
-            DimRecord rec = new DimRecord();
-            rec.gameId = gid;
-            rec.environment = normalizeEnv(env);
-            rec.dimType = dt;
-            rec.id = id;
-            rec.versionTs = new Timestamp(payload.path("ts_ms").asLong(System.currentTimeMillis()));
-            rec.isCurrent = !"d".equals(op);
-            data.fields().forEachRemaining(e -> putAttribute(rec.attributes, e.getKey(), e.getValue().asText("")));
-            return rec;
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
     /** 环境名归一化：production → prod，其余原样。 */
     static String normalizeEnv(String env) {
         return "production".equals(env) ? "prod" : env;

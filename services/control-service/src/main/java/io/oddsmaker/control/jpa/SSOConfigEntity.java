@@ -175,10 +175,6 @@ public class SSOConfigEntity {
         return ssoStatus == SSOStatus.TESTING;
     }
 
-    public boolean hasError() {
-        return ssoStatus == SSOStatus.ERROR;
-    }
-
     public boolean isSAML() {
         return ssoProtocol == SSOProtocol.SAML2;
     }
@@ -198,15 +194,6 @@ public class SSOConfigEntity {
 
     public void disable() {
         this.ssoStatus = SSOStatus.DISABLED;
-    }
-
-    public void startTesting() {
-        this.ssoStatus = SSOStatus.TESTING;
-    }
-
-    public void recordError(String error) {
-        this.ssoStatus = SSOStatus.ERROR;
-        this.errorMessage = error;
     }
 
     public boolean isAutoProvisionEnabled() {

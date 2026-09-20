@@ -134,10 +134,6 @@ public class QuotaEntity {
         this.usagePercent = getUsagePercent();
     }
 
-    public boolean needsReset() {
-        return resetAt != null && LocalDateTime.now().isAfter(resetAt);
-    }
-
     public void resetUsage() {
         this.currentUsage = 0L;
         this.usagePercent = 0.0;

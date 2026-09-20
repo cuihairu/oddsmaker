@@ -161,12 +161,6 @@ public class ReviewQueueEntity {
         return reviewStatus == ReviewStatus.ESCALATED;
     }
 
-    public boolean needsAction() {
-        return reviewStatus == ReviewStatus.PENDING ||
-               reviewStatus == ReviewStatus.ASSIGNED ||
-               reviewStatus == ReviewStatus.IN_REVIEW;
-    }
-
     public boolean isOverdue() {
         if (slaDueAt == null) return false;
         return LocalDateTime.now().isAfter(slaDueAt) && !isCompleted();

@@ -420,7 +420,6 @@ class ServicesFinalSweepTest {
         Page<AuditLogEntity> page = new PageImpl<>(List.of(entity));
         Pageable pageable = PageRequest.of(0, 10);
 
-        lenient().when(auditLogRepo.findRecentLogs(pageable)).thenReturn(page);
         lenient().when(auditLogRepo.findByUserIdOrderByCreatedAtDesc("u1", pageable)).thenReturn(page);
         lenient().when(auditLogRepo.findByActionOrderByCreatedAtDesc(AuditLogEntity.AuditAction.CREATE, pageable)).thenReturn(page);
         lenient().when(auditLogRepo.findByStatusOrderByCreatedAtDesc(AuditLogEntity.AuditStatus.FAILURE, pageable)).thenReturn(page);
@@ -430,7 +429,6 @@ class ServicesFinalSweepTest {
         LocalDateTime end = LocalDateTime.now();
         lenient().when(auditLogRepo.findByCreatedAtBetweenOrderByCreatedAtDesc(start, end, pageable)).thenReturn(page);
 
-        assertSame(page, auditLogService.listAuditLogs(pageable));
         assertSame(page, auditLogService.findByUserId("u1", pageable));
         assertSame(page, auditLogService.findByAction(AuditLogEntity.AuditAction.CREATE, pageable));
         assertSame(page, auditLogService.findByStatus(AuditLogEntity.AuditStatus.FAILURE, pageable));
@@ -465,15 +463,6 @@ class ServicesFinalSweepTest {
         assertTrue(((List<?>) stats.get("actionsByResourceType")).isEmpty());
         assertTrue(((List<?>) stats.get("actionsByActionType")).isEmpty());
         assertTrue(((List<?>) stats.get("actionsByHour")).isEmpty());
-    }
-
-    @Test
-    @DisplayName("审计：cleanupOldLogs 返回删除条数")
-    void auditLogCleanupOldLogs() {
-        lenient().when(auditLogRepo.deleteLogsBefore(any(LocalDateTime.class))).thenReturn(7);
-
-        assertEquals(7, auditLogService.cleanupOldLogs(30));
-        verify(auditLogRepo).deleteLogsBefore(any(LocalDateTime.class));
     }
 
     // =========================================================

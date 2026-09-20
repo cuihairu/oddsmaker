@@ -239,18 +239,12 @@ class SecurityComponentsTest {
     // ===== AccessGuard 环境级分支（补齐） =====
 
     @Test
-    @DisplayName("AccessGuard：requireEnvironmentPermission 三级检查")
+    @DisplayName("AccessGuard：requirePermission 全局级与 ROLE_INTERNAL 直通")
     void accessGuardEnvironmentScope() {
         var permissionService2 = mock(PermissionService.class);
         AccessGuard guard = new AccessGuard(permissionService2);
         SecurityContextHolder.getContext().setAuthentication(
             new UsernamePasswordAuthenticationToken("tester", "pw", java.util.List.of()));
-
-        when(permissionService2.hasEnvironmentPermission("tester", "g1", "prod", "game:read")).thenReturn(true);
-        guard.requireEnvironmentPermission("g1", "prod", "game:read");
-
-        when(permissionService2.hasEnvironmentPermission("tester", "g2", "prod", "game:read")).thenReturn(false);
-        assertThrows(SecurityException.class, () -> guard.requireEnvironmentPermission("g2", "prod", "game:read"));
 
         // requirePermission 全局级
         when(permissionService2.hasPermission("tester", "user:update")).thenReturn(true);

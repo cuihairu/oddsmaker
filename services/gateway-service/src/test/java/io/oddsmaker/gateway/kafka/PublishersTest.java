@@ -217,14 +217,6 @@ class PublishersTest {
     }
 
     @Test
-    @DisplayName("静态路由：目标数据库命名")
-    void targetDatabaseNaming() {
-        assertEquals("game_demo_prod", AvroPublisher.targetDatabase("demo", "prod"));
-        assertEquals("game_rpg_staging", AvroPublisher.targetDatabase("rpg", "staging"));
-        assertNotNull(future);
-    }
-
-    @Test
     @DisplayName("DlqPublisher init：按配置装配 KafkaProducer（String 序列化，惰性建连）")
     void dlqPublisherInitBuildsProducer() {
         DlqPublisher dlq = new DlqPublisher();

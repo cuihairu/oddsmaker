@@ -1550,69 +1550,6 @@ class MlExperimentDeepTest {
             .hasMessageContaining("Property definition not found");
     }
 
-    // ==================== PermissionService：环境权限 ====================
-
-    @Test
-    @DisplayName("hasEnvironmentPermission - 环境级角色授权通过")
-    void hasEnvironmentPermission_viaEnvironmentRole() {
-        lenient().when(userRepo.findById("u1")).thenReturn(Optional.of(user(UserEntity.UserStatus.ACTIVE)));
-        lenient().when(userRoleRepo.findByUserIdAndGameIdAndEnvironment("u1", "g1", "prod"))
-            .thenReturn(List.of(assignment("operator", "g1", "prod")));
-        lenient().when(roleRepo.findById("operator"))
-            .thenReturn(Optional.of(role("operator", permission("game:read"))));
-
-        assertThat(permissionService.hasEnvironmentPermission("u1", "g1", "prod", "game:read")).isTrue();
-    }
-
-    @Test
-    @DisplayName("hasEnvironmentPermission - 回退到游戏级角色授权通过")
-    void hasEnvironmentPermission_viaGameRole() {
-        lenient().when(userRepo.findById("u1")).thenReturn(Optional.of(user(UserEntity.UserStatus.ACTIVE)));
-        lenient().when(userRoleRepo.findByUserIdAndGameIdAndEnvironment("u1", "g1", "prod"))
-            .thenReturn(List.of());
-        lenient().when(userRoleRepo.findByUserIdAndGameId("u1", "g1"))
-            .thenReturn(List.of(assignment("operator", "g1", null)));
-        lenient().when(roleRepo.findById("operator"))
-            .thenReturn(Optional.of(role("operator", permission("game:read"))));
-
-        assertThat(permissionService.hasEnvironmentPermission("u1", "g1", "prod", "game:read")).isTrue();
-    }
-
-    @Test
-    @DisplayName("hasEnvironmentPermission - 回退到全局角色授权通过")
-    void hasEnvironmentPermission_viaGlobalRole() {
-        lenient().when(userRepo.findById("u1")).thenReturn(Optional.of(user(UserEntity.UserStatus.ACTIVE)));
-        lenient().when(userRoleRepo.findByUserIdAndGameIdAndEnvironment("u1", "g1", "prod"))
-            .thenReturn(List.of());
-        lenient().when(userRoleRepo.findByUserIdAndGameId("u1", "g1")).thenReturn(List.of());
-        lenient().when(userRoleRepo.findGlobalByUserId("u1"))
-            .thenReturn(List.of(assignment("operator", null, null)));
-        lenient().when(roleRepo.findById("operator"))
-            .thenReturn(Optional.of(role("operator", permission("game:read"))));
-
-        assertThat(permissionService.hasEnvironmentPermission("u1", "g1", "prod", "game:read")).isTrue();
-    }
-
-    @Test
-    @DisplayName("hasEnvironmentPermission - 无匹配角色返回 false")
-    void hasEnvironmentPermission_denied() {
-        lenient().when(userRepo.findById("u1")).thenReturn(Optional.of(user(UserEntity.UserStatus.ACTIVE)));
-        lenient().when(userRoleRepo.findByUserIdAndGameIdAndEnvironment("u1", "g1", "prod"))
-            .thenReturn(List.of());
-        lenient().when(userRoleRepo.findByUserIdAndGameId("u1", "g1")).thenReturn(List.of());
-        lenient().when(userRoleRepo.findGlobalByUserId("u1")).thenReturn(List.of());
-
-        assertThat(permissionService.hasEnvironmentPermission("u1", "g1", "prod", "game:read")).isFalse();
-    }
-
-    @Test
-    @DisplayName("hasEnvironmentPermission - 用户未激活返回 false")
-    void hasEnvironmentPermission_inactiveUser() {
-        lenient().when(userRepo.findById("u1")).thenReturn(Optional.of(user(UserEntity.UserStatus.INACTIVE)));
-
-        assertThat(permissionService.hasEnvironmentPermission("u1", "g1", "prod", "game:read")).isFalse();
-    }
-
     // ==================== PermissionService：资源动作权限 ====================
 
     @Test

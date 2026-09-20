@@ -132,16 +132,6 @@ public class IntegrationLogEntity {
         this.errorMessage = error;
     }
 
-    public void markAsTimeout() {
-        this.callStatus = CallStatus.TIMEOUT;
-        this.errorMessage = "Request timeout";
-    }
-
-    public void markAsRetrying() {
-        this.callStatus = CallStatus.RETRYING;
-        this.retryAttempt++;
-    }
-
     public boolean shouldRetry() {
         return retryAttempt < 3;  // 默认最多重试3次
     }

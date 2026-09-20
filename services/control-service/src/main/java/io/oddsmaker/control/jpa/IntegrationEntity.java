@@ -178,10 +178,6 @@ public class IntegrationEntity {
         this.retryCount++;
     }
 
-    public void markAsDisabled() {
-        this.integrationStatus = IntegrationStatus.DISABLED;
-    }
-
     public void incrementRetry() {
         this.retryCount++;
     }

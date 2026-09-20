@@ -97,18 +97,6 @@ class SymbolicationServiceTest {
     }
 
     @Test
-    @DisplayName("堆栈概要：首行异常 + 指定帧数")
-    void stackSummaryTakesTopFrames() {
-        Map<String, Object> summary = SymbolicationService.stackSummary(
-            "java.lang.NullPointerException\nat A.a(A:1)\nat B.b(B:2)\nat C.c(C:3)", 2);
-        assertEquals("java.lang.NullPointerException", summary.get("exception"));
-        assertEquals(List.of("java.lang.NullPointerException", "at A.a(A:1)"), summary.get("frames"));
-
-        assertEquals(Map.of("exception", "", "frames", List.of()),
-            SymbolicationService.stackSummary(null, 3));
-    }
-
-    @Test
     @DisplayName("坏规则 JSON 的映射不阻断符号化")
     void mappingWithBrokenRulesActsAsNoRules() {
         lenient().when(repo.findActive(any(), any(), any())).thenReturn(List.of(mapping("broken")));
@@ -119,14 +107,4 @@ class SymbolicationServiceTest {
         assertEquals(0, result.rulesApplied());
     }
 
-    @Test
-    @DisplayName("堆栈概要：空行与省略行被跳过")
-    void stackSummarySkipsBlankAndElidedLines() {
-        Map<String, Object> summary = SymbolicationService.stackSummary(
-            "java.lang.IllegalStateException: boom\n\n...\nat A.a(A:1)\n\nat B.b(B:2)", 10);
-        @SuppressWarnings("unchecked")
-        java.util.List<String> frames = (java.util.List<String>) summary.get("frames");
-        assertEquals(3, frames.size());
-        assertEquals("java.lang.IllegalStateException: boom", summary.get("exception"));
-    }
 }

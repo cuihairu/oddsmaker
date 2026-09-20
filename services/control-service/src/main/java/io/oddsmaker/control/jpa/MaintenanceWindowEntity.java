@@ -175,18 +175,6 @@ public class MaintenanceWindowEntity {
                maintenanceStatus == MaintenanceStatus.PAUSED;
     }
 
-    public boolean shouldStart() {
-        return maintenanceStatus == MaintenanceStatus.PENDING &&
-               scheduledStart != null &&
-               LocalDateTime.now().isAfter(scheduledStart);
-    }
-
-    public boolean shouldEnd() {
-        return maintenanceStatus == MaintenanceStatus.IN_PROGRESS &&
-               scheduledEnd != null &&
-               LocalDateTime.now().isAfter(scheduledEnd);
-    }
-
     public boolean isOverdue() {
         return maintenanceStatus == MaintenanceStatus.IN_PROGRESS &&
                scheduledEnd != null &&
@@ -221,21 +209,9 @@ public class MaintenanceWindowEntity {
         this.maintenanceStatus = MaintenanceStatus.PAUSED;
     }
 
-    public void resume() {
-        if (maintenanceStatus == MaintenanceStatus.PAUSED) {
-            this.maintenanceStatus = MaintenanceStatus.IN_PROGRESS;
-        }
-    }
-
     public void cancel(String reason) {
         this.maintenanceStatus = MaintenanceStatus.CANCELLED;
         this.completionNotes = reason;
-    }
-
-    public void extend(LocalDateTime newEndTime) {
-        this.maintenanceStatus = MaintenanceStatus.EXTENDED;
-        this.extendedUntil = newEndTime;
-        this.scheduledEnd = newEndTime;
     }
 
     public long getActualDurationMinutes() {

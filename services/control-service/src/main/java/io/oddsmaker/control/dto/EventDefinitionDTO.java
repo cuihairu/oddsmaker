@@ -130,9 +130,4 @@ public class EventDefinitionDTO {
                importance == EventDefinitionEntity.Importance.HIGH;
     }
 
-    public boolean hasRequiredIdentity() {
-        return Boolean.TRUE.equals(requireUserId) ||
-               Boolean.TRUE.equals(requireSessionId) ||
-               Boolean.TRUE.equals(requirePlayerId);
-    }
 }

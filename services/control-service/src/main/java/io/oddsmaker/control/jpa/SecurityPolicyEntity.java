@@ -203,20 +203,8 @@ public class SecurityPolicyEntity {
         return enabled != null && enabled && deletedAt == null;
     }
 
-    public boolean requiresMFA() {
-        return mfaRequired != null && mfaRequired;
-    }
-
-    public boolean allowsPasswordReuse() {
-        return allowPasswordReuse != null && allowPasswordReuse;
-    }
-
     public boolean isIpWhitelistRequired() {
         return requireIpWhitelist != null && requireIpWhitelist;
-    }
-
-    public boolean requiresHttps() {
-        return requireHttps != null && requireHttps;
     }
 
     @PrePersist

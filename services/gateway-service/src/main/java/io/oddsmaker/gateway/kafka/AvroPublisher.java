@@ -161,14 +161,4 @@ public class AvroPublisher {
         return gr;
     }
 
-    /**
-     * Build a routing map for database selection.
-     * Downstream Flink jobs use this to route events to the correct ClickHouse database.
-     *
-     * Database naming: game_{game_id}_{environment}
-     * Example: game_demo_prod, game_rpg_staging
-     */
-    public static String targetDatabase(String gameId, String environment) {
-        return String.format("game_%s_%s", gameId, environment);
-    }
 }

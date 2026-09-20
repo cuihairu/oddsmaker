@@ -571,9 +571,9 @@ class CoverageTopUpTest {
         PermissionService service = permissionService(userRepo, userRoleRepo);
         ReflectionTestUtils.setField(service, "roleRepo", roleRepo);
 
-        // 环境级/游戏级角色均未 stub（mock 默认空列表）→ 只走全局循环且 if 判 false，
+        // 游戏级角色未 stub（mock 默认空列表）→ 只走全局循环且 if 判 false，
         // 循环体自然执行到末尾（JaCoCo 行尾探针；continue/return 都跳过该探针）
-        assertFalse(service.hasEnvironmentPermission("u1", "g1", "prod", "perm_missing"));
+        assertFalse(service.hasGamePermission("u1", "g1", "perm_missing"));
     }
 
     @Test
@@ -617,7 +617,6 @@ class CoverageTopUpTest {
 
         assertFalse(service.hasPermission("u1", "perm1"));
         assertFalse(service.hasGamePermission("u1", "g1", "perm1"));
-        assertFalse(service.hasEnvironmentPermission("u1", "g1", "prod", "perm1"));
     }
 
     @Test
@@ -633,7 +632,7 @@ class CoverageTopUpTest {
         when(userRoleRepo.findGlobalByUserId("u1")).thenReturn(List.of(invalid));
         PermissionService service = permissionService(userRepo, userRoleRepo);
 
-        assertFalse(service.hasEnvironmentPermission("u1", "g1", "prod", "perm1"));
+        assertFalse(service.hasGamePermission("u1", "g1", "perm1"));
         verify(serviceRoleRepo(service), never()).findById(any());
     }
 

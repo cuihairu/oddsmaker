@@ -140,18 +140,6 @@ public class IdentityLinkEntity {
         return linkType == LinkType.OWNED;
     }
 
-    public void recordUsage() {
-        usageCount = (usageCount != null ? usageCount : 0) + 1;
-        lastSeenAt = LocalDateTime.now();
-    }
-
-    public void confirm(String method) {
-        verificationStatus = VerificationStatus.CONFIRMED;
-        verifiedAt = LocalDateTime.now();
-        lastConfirmedAt = LocalDateTime.now();
-        verificationMethod = method;
-    }
-
     public void revoke() {
         status = LinkStatus.REVOKED;
         expiredAt = LocalDateTime.now();

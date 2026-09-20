@@ -180,7 +180,4 @@ public class ReportExecutionEntity {
         return isCompleted() && rowCount != null && rowCount > 0;
     }
 
-    public boolean hasStoredResults() {
-        return resultStoragePath != null && !resultStoragePath.isEmpty();
-    }
 }

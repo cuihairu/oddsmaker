@@ -146,20 +146,8 @@ public class SecuritySessionEntity {
         return sessionStatus == SessionStatus.TERMINATED;
     }
 
-    public boolean needsMFA() {
-        return !mfaVerified;
-    }
-
     public boolean canRenew() {
         return maxRenewalTimes == null || renewalCount < maxRenewalTimes;
-    }
-
-    public void renew(Integer minutes) {
-        if (canRenew()) {
-            this.expiresAt = this.expiresAt != null ? this.expiresAt.plusMinutes(minutes) : LocalDateTime.now().plusMinutes(minutes);
-            this.renewalCount++;
-            this.lastActivityAt = LocalDateTime.now();
-        }
     }
 
     public void updateActivity() {

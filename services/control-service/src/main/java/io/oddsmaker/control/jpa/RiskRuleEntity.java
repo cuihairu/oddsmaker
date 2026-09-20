@@ -232,19 +232,6 @@ public class RiskRuleEntity {
         return riskLevel == RiskLevel.CRITICAL;
     }
 
-    public void recordTrigger() {
-        totalTriggeredCount = (totalTriggeredCount != null ? totalTriggeredCount : 0) + 1;
-        lastTriggeredAt = LocalDateTime.now();
-    }
-
-    public void recordBlock() {
-        totalBlockedCount = (totalBlockedCount != null ? totalBlockedCount : 0) + 1;
-    }
-
-    public void recordReview() {
-        totalReviewCount = (totalReviewCount != null ? totalReviewCount : 0) + 1;
-    }
-
     public boolean isInCooldown(LocalDateTime lastExecution) {
         if (cooldownMinutes == null || cooldownMinutes <= 0) return false;
         if (lastExecution == null) return false;

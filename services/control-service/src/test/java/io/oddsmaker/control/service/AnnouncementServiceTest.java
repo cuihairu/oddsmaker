@@ -222,23 +222,4 @@ class AnnouncementServiceTest {
         verify(announcementRepo).findActive(eq("game_demo"), eq("env_demo_prod"), any(LocalDateTime.class));
     }
 
-    @Test
-    @DisplayName("窗口判定：inWindow 语义")
-    void inWindowSemantics() {
-        AnnouncementEntity a = draft();
-        a.status = AnnouncementEntity.Status.PUBLISHED;
-        LocalDateTime now = LocalDateTime.now();
-
-        a.autoOfflineAt = now.plusHours(1);
-        assertTrue(a.inWindow(now));
-
-        a.autoOfflineAt = now.minusHours(1);
-        assertFalse(a.inWindow(now));
-
-        a.autoOfflineAt = null;
-        assertTrue(a.inWindow(now));
-
-        a.status = AnnouncementEntity.Status.OFFLINE;
-        assertFalse(a.inWindow(now));
-    }
 }

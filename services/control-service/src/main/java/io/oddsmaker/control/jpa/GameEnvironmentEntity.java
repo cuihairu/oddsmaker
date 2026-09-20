@@ -182,7 +182,4 @@ public class GameEnvironmentEntity {
 
     // 采样判定不在服务端：enableSampling/sampleRate 经 SDK 配置端点送达客户端，由 SDK 自决采样
 
-    public boolean usesDedicatedStorage() {
-        return storageProfile != null && storageProfile.isDedicated();
-    }
 }

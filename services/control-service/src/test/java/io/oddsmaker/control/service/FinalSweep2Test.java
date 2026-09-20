@@ -803,8 +803,6 @@ class FinalSweep2Test {
         lenient().when(storageProfileRepo.save(any(StorageProfileEntity.class)))
             .thenAnswer(inv -> inv.getArgument(0));
 
-        assertEquals(1, controlService.listStorageProfiles().size());
-        assertEquals("Beta", controlService.listStorageProfiles().get(0).name);
         assertNull(controlService.getStorageProfile("sp_del"));
 
         lenient().when(storageProfileRepo.existsById("sp_1")).thenReturn(true);

@@ -178,14 +178,6 @@ public class DataQualityRuleEntity {
         return "stop".equals(actionOnFailure);
     }
 
-    public boolean shouldLogOnFailure() {
-        return actionOnFailure == null || "log".equals(actionOnFailure) || "warn".equals(actionOnFailure);
-    }
-
-    public boolean shouldSkipOnFailure() {
-        return "skip".equals(actionOnFailure);
-    }
-
     public double getViolationRate() {
         if (totalEvaluations == null || totalEvaluations == 0) {
             return 0.0;

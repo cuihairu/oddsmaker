@@ -13,7 +13,8 @@ import static org.junit.jupiter.api.Assertions.*;
 @DisplayName("留存策略测试")
 class RetentionPolicyTest {
 
-    private final RetentionPolicy policy = RetentionPolicy.defaults();
+    // 显式默认向量（defaults() 工厂已删）：N={1,7,30}，Rolling={1,3,7,14,30}
+    private final RetentionPolicy policy = new RetentionPolicy(new int[]{1, 7, 30}, new int[]{1, 3, 7, 14, 30});
 
     @Test
     @DisplayName("N-Day：恰好第 N 天命中")

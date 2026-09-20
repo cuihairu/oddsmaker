@@ -153,16 +153,6 @@ public class FeatureFlagEntity {
         return expiryDate != null && LocalDateTime.now().isAfter(expiryDate);
     }
 
-    public boolean shouldEnable() {
-        if (scheduledEnableAt != null && LocalDateTime.now().isAfter(scheduledEnableAt)) {
-            return true;
-        }
-        if (scheduledDisableAt != null && LocalDateTime.now().isAfter(scheduledDisableAt)) {
-            return false;
-        }
-        return isEnabled();
-    }
-
     /**
      * 名单列（黑白名单）是 JSON 数组文本，如 {@code ["u1","u10"]}——成员判断而非子串匹配，
      * 否则名单含 "u1" 时 "u10" 被误伤（黑名单误拒 / 白名单误放）。

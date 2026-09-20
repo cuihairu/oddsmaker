@@ -246,128 +246,6 @@ class PermissionServiceTest {
         });
     }
 
-    // ========== P1 六角色矩阵测试 ==========
-
-    private Map<String, PermissionEntity> samplePermissions() {
-        Map<String, PermissionEntity> map = new HashMap<>();
-        for (String id : List.of(
-            "game:create", "game:read", "game:update", "game:delete",
-            "environment:create", "environment:read", "environment:update", "environment:delete",
-            "api_key:create", "api_key:read", "api_key:update", "api_key:delete",
-            "experiment:create", "experiment:read", "experiment:update", "experiment:delete",
-            "risk_rule:create", "risk_rule:read", "risk_rule:update", "risk_rule:delete",
-            "user:create", "user:read", "user:update", "user:delete",
-            "audit_log:read", "system:manage")) {
-            PermissionEntity p = new PermissionEntity();
-            p.id = id;
-            p.enabled = true;
-            String[] parts = id.split(":", 2);
-            p.resourceType = parts[0];
-            p.action = PermissionEntity.PermissionAction.valueOf(parts[1].toUpperCase());
-            map.put(id, p);
-        }
-        return map;
-    }
-
-    /**
-     * 运行 initializeDefaults() 后收集角色→权限ID 集合。
-     * roleRepo.save 直接返回入参；permissionRepo 按内存数据应答。
-     */
-    private Map<String, Set<String>> buildRoleMatrix() {
-        Map<String, PermissionEntity> permissions = samplePermissions();
-        Map<String, RoleEntity> savedRoles = new HashMap<>();
-
-        when(permissionRepo.findAll()).thenReturn(new ArrayList<>(permissions.values()));
-        when(permissionRepo.findByAction(any(PermissionEntity.PermissionAction.class)))
-            .thenAnswer(inv -> permissions.values().stream()
-                .filter(p -> p.action == inv.getArgument(0))
-                .collect(java.util.stream.Collectors.toList()));
-        when(permissionRepo.findByType(any(PermissionEntity.PermissionType.class)))
-            .thenAnswer(inv -> new ArrayList<>(permissions.values()));
-        when(permissionRepo.findByResourceType(any(String.class)))
-            .thenAnswer(inv -> permissions.values().stream()
-                .filter(p -> p.resourceType.equals(inv.getArgument(0)))
-                .collect(java.util.stream.Collectors.toList()));
-        when(permissionRepo.findByResourceTypeAndAction(any(String.class), any()))
-            .thenAnswer(inv -> permissions.values().stream()
-                .filter(p -> p.resourceType.equals(inv.getArgument(0)) && p.action == inv.getArgument(1))
-                .findFirst());
-        when(permissionRepo.existsById(any(String.class))).thenReturn(false);
-        when(roleRepo.findById(any(String.class))).thenReturn(Optional.empty());
-        when(roleRepo.save(any(RoleEntity.class)))
-            .thenAnswer(inv -> {
-                RoleEntity r = inv.getArgument(0);
-                savedRoles.put(r.id, r);
-                return r;
-            });
-
-        permissionService.initializeDefaults();
-
-        Map<String, Set<String>> matrix = new HashMap<>();
-        savedRoles.forEach((id, role) ->
-            matrix.put(id, role.getPermissionIds() == null ? Set.of() : role.getPermissionIds()));
-        return matrix;
-    }
-
-    @Test
-    void roleMatrix_OwnerHasEverything() {
-        Map<String, Set<String>> matrix = buildRoleMatrix();
-        assertTrue(matrix.get("owner").containsAll(List.of(
-            "game:delete", "user:delete", "system:manage", "risk_rule:create", "audit_log:read")));
-    }
-
-    @Test
-    void roleMatrix_OperatorManagesConfigButNotUsersOrSystem() {
-        Map<String, Set<String>> matrix = buildRoleMatrix();
-        Set<String> operator = matrix.get("operator");
-        assertTrue(operator.containsAll(List.of(
-            "game:update", "environment:delete", "api_key:create", "experiment:delete")));
-        assertFalse(operator.contains("user:update"));
-        assertFalse(operator.contains("system:manage"));
-        assertFalse(operator.contains("game:delete"));
-    }
-
-    @Test
-    void roleMatrix_AnalystReadsAllAndRunsExperiments() {
-        Map<String, Set<String>> matrix = buildRoleMatrix();
-        Set<String> analyst = matrix.get("analyst");
-        assertTrue(analyst.containsAll(List.of(
-            "game:read", "risk_rule:read", "experiment:create", "experiment:delete")));
-        assertFalse(analyst.contains("risk_rule:delete"));
-        assertFalse(analyst.contains("api_key:create"));
-    }
-
-    @Test
-    void roleMatrix_RiskAdminOwnsRiskRulesOnly() {
-        Map<String, Set<String>> matrix = buildRoleMatrix();
-        Set<String> riskAdmin = matrix.get("risk_admin");
-        assertTrue(riskAdmin.containsAll(List.of(
-            "risk_rule:create", "risk_rule:update", "risk_rule:delete", "game:read")));
-        assertFalse(riskAdmin.contains("api_key:delete"));
-        assertFalse(riskAdmin.contains("user:update"));
-    }
-
-    @Test
-    void roleMatrix_DeveloperManagesKeysAndExperiments() {
-        Map<String, Set<String>> matrix = buildRoleMatrix();
-        Set<String> developer = matrix.get("developer");
-        assertTrue(developer.containsAll(List.of(
-            "api_key:create", "api_key:delete", "experiment:update", "environment:create")));
-        assertFalse(developer.contains("risk_rule:update"));
-        assertFalse(developer.contains("user:create"));
-    }
-
-    @Test
-    void roleMatrix_ViewerIsReadOnly() {
-        Map<String, Set<String>> matrix = buildRoleMatrix();
-        Set<String> viewer = matrix.get("viewer");
-        assertTrue(viewer.containsAll(List.of(
-            "game:read", "environment:read", "api_key:read", "risk_rule:read")));
-        assertFalse(viewer.contains("game:update"));
-        assertFalse(viewer.contains("risk_rule:create"));
-        assertFalse(viewer.contains("experiment:delete"));
-    }
-
     @Test
     void revokeRole_Scoped_OnlyMatchesExactScope() {
         UserRoleEntity globalAssignment = new UserRoleEntity();
@@ -417,24 +295,6 @@ class PermissionServiceTest {
     }
 
     @Test
-    void hasEnvironmentPermission_InvalidRolesSkipped_ReturnsFalse() {
-        UserRoleEntity invalid = new UserRoleEntity();
-        invalid.userId = "user_test123";
-        invalid.roleId = "viewer";
-        invalid.enabled = false;
-
-        when(userRepo.findById("user_test123")).thenReturn(Optional.of(testUser));
-        when(userRoleRepo.findByUserIdAndGameIdAndEnvironment("user_test123", "g1", "prod"))
-            .thenReturn(List.of(invalid));
-        when(userRoleRepo.findByUserIdAndGameId("user_test123", "g1"))
-            .thenReturn(List.of(invalid));
-        when(userRoleRepo.findGlobalByUserId("user_test123"))
-            .thenReturn(List.of(invalid));
-
-        assertFalse(permissionService.hasEnvironmentPermission("user_test123", "g1", "prod", "game:read"));
-    }
-
-    @Test
     void hasGamePermission_GameRoleValidButPermissionMissing_ReturnsFalse() {
         // valid 且 enabled 但不含目标权限的角色走完循环体（continue 短路不经过循环回边）
         UserRoleEntity valid = new UserRoleEntity();
@@ -478,30 +338,5 @@ class PermissionServiceTest {
         when(roleRepo.findById("viewer")).thenReturn(Optional.of(roleWithoutPermission));
 
         assertFalse(permissionService.hasGamePermission("user_test123", "game_123", "game:read"));
-    }
-
-    @Test
-    void hasEnvironmentPermission_EnvRoleValidButPermissionMissing_ReturnsFalse() {
-        // 环境专属角色 valid 但无权限——覆盖环境角色循环体落空
-        UserRoleEntity valid = new UserRoleEntity();
-        valid.userId = "user_test123";
-        valid.roleId = "viewer";
-        valid.enabled = true;
-
-        RoleEntity roleWithoutPermission = new RoleEntity();
-        roleWithoutPermission.id = "viewer";
-        roleWithoutPermission.enabled = true;
-        roleWithoutPermission.permissions = Collections.emptySet();
-
-        when(userRepo.findById("user_test123")).thenReturn(Optional.of(testUser));
-        when(userRoleRepo.findByUserIdAndGameIdAndEnvironment("user_test123", "g1", "prod"))
-            .thenReturn(List.of(valid));
-        when(userRoleRepo.findByUserIdAndGameId("user_test123", "g1"))
-            .thenReturn(List.of());
-        when(userRoleRepo.findGlobalByUserId("user_test123"))
-            .thenReturn(List.of());
-        when(roleRepo.findById("viewer")).thenReturn(Optional.of(roleWithoutPermission));
-
-        assertFalse(permissionService.hasEnvironmentPermission("user_test123", "g1", "prod", "game:read"));
     }
 }

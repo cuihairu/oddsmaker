@@ -21,10 +21,6 @@ public final class RetentionPolicy implements java.io.Serializable {
     }
 
     /** 默认策略：N-Day {1,7,30}，Rolling {1,3,7,14,30} */
-    public static RetentionPolicy defaults() {
-        return new RetentionPolicy(new int[]{1, 7, 30}, new int[]{1, 3, 7, 14, 30});
-    }
-
     /** 从 "1,7,30" 逗号串解析 */
     public static int[] parseDays(String csv) {
         if (csv == null || csv.isBlank()) {

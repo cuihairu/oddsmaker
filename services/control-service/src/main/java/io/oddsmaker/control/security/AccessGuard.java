@@ -7,10 +7,10 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 
 /**
- * 显式权限门卫：连接 Spring Security 认证与 PermissionService 的三级 scope 检查。
+ * 显式权限门卫：连接 Spring Security 认证与 PermissionService 的 scope 检查。
  *
  * ROLE_ADMIN / ROLE_INTERNAL（服务间令牌）直通；
- * 普通用户按 global/game/environment scope 解析权限。
+ * 普通用户按 global/game scope 解析权限。
  */
 @Component
 public class AccessGuard {
@@ -22,11 +22,11 @@ public class AccessGuard {
     }
 
     public void requirePermission(String permissionId) {
-        check(null, null, permissionId);
+        check(null, permissionId);
     }
 
     public void requireGamePermission(String gameId, String permissionId) {
-        check(gameId, null, permissionId);
+        check(gameId, permissionId);
     }
 
     /** 非抛出版：判断当前用户是否对游戏具备权限（跨游戏结果过滤用） */
@@ -44,11 +44,7 @@ public class AccessGuard {
         return permissionService.hasGamePermission(auth.getName(), gameId, permissionId);
     }
 
-    public void requireEnvironmentPermission(String gameId, String environment, String permissionId) {
-        check(gameId, environment, permissionId);
-    }
-
-    private void check(String gameId, String environment, String permissionId) {
+    private void check(String gameId, String permissionId) {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth == null || !auth.isAuthenticated()) {
             throw new SecurityException("User not authenticated");
@@ -60,19 +56,13 @@ public class AccessGuard {
             }
         }
         String userId = auth.getName();
-        boolean allowed;
-        if (gameId != null && environment != null) {
-            allowed = permissionService.hasEnvironmentPermission(userId, gameId, environment, permissionId);
-        } else if (gameId != null) {
-            allowed = permissionService.hasGamePermission(userId, gameId, permissionId);
-        } else {
-            allowed = permissionService.hasPermission(userId, permissionId);
-        }
+        boolean allowed = gameId != null
+            ? permissionService.hasGamePermission(userId, gameId, permissionId)
+            : permissionService.hasPermission(userId, permissionId);
         if (!allowed) {
             throw new SecurityException(
                 "Access denied: missing permission " + permissionId
-                    + (gameId != null ? " for game " + gameId : "")
-                    + (environment != null ? " environment " + environment : ""));
+                    + (gameId != null ? " for game " + gameId : ""));
         }
     }
 }

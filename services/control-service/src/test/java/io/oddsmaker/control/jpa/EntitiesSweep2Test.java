@@ -44,23 +44,14 @@ class EntitiesSweep2Test {
 
         m.maintenanceStatus = MaintenanceWindowEntity.MaintenanceStatus.PENDING;
         assertTrue(m.isPending());
-        assertTrue(m.shouldStart());
-        m.scheduledStart = now.plusHours(1);
-        assertFalse(m.shouldStart());
-        m.scheduledStart = null;
-        assertFalse(m.shouldStart());
         m.scheduledStart = now.minusMinutes(10);
 
         m.maintenanceStatus = MaintenanceWindowEntity.MaintenanceStatus.IN_PROGRESS;
         assertTrue(m.isInProgress());
         assertTrue(m.isActive());
-        assertFalse(m.shouldEnd());
-        assertFalse(m.isOverdue());
         m.scheduledEnd = now.minusMinutes(1);
-        assertTrue(m.shouldEnd());
         assertTrue(m.isOverdue());
         m.scheduledEnd = null;
-        assertFalse(m.shouldEnd());
         assertFalse(m.isOverdue());
 
         m.maintenanceType = MaintenanceWindowEntity.MaintenanceType.EMERGENCY;
@@ -83,14 +74,11 @@ class EntitiesSweep2Test {
         assertNotNull(m.actualStart);
         m.pause();
         assertTrue(m.isActive());
-        m.resume();
-        assertTrue(m.isInProgress());
         m.complete("升级完成");
         assertTrue(m.isCompleted());
         assertNotNull(m.actualEnd);
         assertEquals("升级完成", m.completionNotes);
         assertEquals(100, m.progressPercent);
-        m.resume();
         assertTrue(m.isCompleted());
 
         MaintenanceWindowEntity c = new MaintenanceWindowEntity();
@@ -99,11 +87,6 @@ class EntitiesSweep2Test {
         c.cancel("变更取消");
         assertEquals(MaintenanceWindowEntity.MaintenanceStatus.CANCELLED, c.maintenanceStatus);
         assertEquals("变更取消", c.completionNotes);
-        LocalDateTime extendedTo = LocalDateTime.now().plusHours(5);
-        c.extend(extendedTo);
-        assertEquals(MaintenanceWindowEntity.MaintenanceStatus.EXTENDED, c.maintenanceStatus);
-        assertEquals(extendedTo, c.extendedUntil);
-        assertEquals(extendedTo, c.scheduledEnd);
 
         MaintenanceWindowEntity d = new MaintenanceWindowEntity();
         assertEquals(0, d.getActualDurationMinutes());
@@ -136,20 +119,16 @@ class EntitiesSweep2Test {
         assertFalse(a.isAcknowledged());
         assertFalse(a.isResolved());
         assertFalse(a.isCritical());
-        assertFalse(a.needsEscalation());
 
         a.severity = SystemAlertEntity.Severity.CRITICAL;
         assertTrue(a.isCritical());
         assertFalse(a.isWarning());
-        assertTrue(a.needsEscalation());
         a.escalate();
         assertEquals(1, a.escalationLevel);
         assertNotNull(a.escalatedAt);
-        assertFalse(a.needsEscalation());
         a.escalationLevel = 0;
         a.alertStatus = SystemAlertEntity.AlertStatus.RESOLVED;
         assertTrue(a.isResolved());
-        assertFalse(a.needsEscalation());
         a.alertStatus = SystemAlertEntity.AlertStatus.CLOSED;
         assertTrue(a.isResolved());
         a.alertStatus = SystemAlertEntity.AlertStatus.OPEN;
@@ -180,15 +159,6 @@ class EntitiesSweep2Test {
         assertEquals("赵六", a.resolvedBy);
         assertEquals("扩容后恢复", a.resolutionComment);
 
-        a.snooze(now.plusHours(1));
-        assertEquals(SystemAlertEntity.AlertStatus.SNOOZED, a.alertStatus);
-        assertEquals(now.plusHours(1), a.snoozedUntil);
-        a.unsnooze();
-        assertEquals(SystemAlertEntity.AlertStatus.OPEN, a.alertStatus);
-        assertNull(a.snoozedUntil);
-        a.unsnooze();
-        assertEquals(SystemAlertEntity.AlertStatus.OPEN, a.alertStatus);
-
         SystemAlertEntity fresh = new SystemAlertEntity();
         fresh.onCreate();
         assertNotNull(fresh.createdAt);
@@ -218,8 +188,6 @@ class EntitiesSweep2Test {
         assertFalse(r.isCritical());
         assertTrue(r.isWarning());
         assertFalse(r.shouldStopOnFailure());
-        assertTrue(r.shouldLogOnFailure());
-        assertFalse(r.shouldSkipOnFailure());
 
         r.ruleStatus = DataQualityRuleEntity.RuleStatus.INACTIVE;
         assertFalse(r.isActive());
@@ -238,16 +206,6 @@ class EntitiesSweep2Test {
 
         r.actionOnFailure = "stop";
         assertTrue(r.shouldStopOnFailure());
-        assertFalse(r.shouldLogOnFailure());
-        r.actionOnFailure = "warn";
-        assertTrue(r.shouldLogOnFailure());
-        r.actionOnFailure = "log";
-        assertTrue(r.shouldLogOnFailure());
-        r.actionOnFailure = "skip";
-        assertTrue(r.shouldSkipOnFailure());
-        assertFalse(r.shouldLogOnFailure());
-        r.actionOnFailure = null;
-        assertTrue(r.shouldLogOnFailure());
 
         r.totalEvaluations = null;
         assertEquals(0.0, r.getViolationRate(), 0.001);
@@ -333,7 +291,6 @@ class EntitiesSweep2Test {
         assertTrue(i.isActive());
         assertFalse(i.isMerged());
         assertFalse(i.hasUserId());
-        assertFalse(i.hasPlayerId());
         assertFalse(i.isBoundToUser());
         assertEquals("dev-原始标识", i.getDisplayId());
 
@@ -351,7 +308,6 @@ class EntitiesSweep2Test {
         assertTrue(i.hasUserId());
         assertTrue(i.isBoundToUser());
         i.playerId = "p-200";
-        assertTrue(i.hasPlayerId());
 
         i.primaryIdentityType = IdentityEntity.IdentityType.USER;
         assertEquals("u-100", i.getDisplayId());
@@ -382,16 +338,6 @@ class EntitiesSweep2Test {
         i.lastSeenAt = LocalDateTime.now();
         assertFalse(i.isInactive(2));
 
-        i.eventCount = null;
-        i.recordActivity();
-        assertEquals(1L, i.eventCount);
-        assertNotNull(i.lastSeenAt);
-        i.recordActivity();
-        assertEquals(2L, i.eventCount);
-        i.sessionCount = null;
-        i.incrementSessionCount();
-        assertEquals(1, i.sessionCount);
-        assertNotNull(i.lastSeenAt);
     }
 
     @Test
@@ -447,7 +393,6 @@ class EntitiesSweep2Test {
         assertFalse(e.isCompleted());
         assertFalse(e.isFailed());
         assertFalse(e.hasResults());
-        assertFalse(e.hasStoredResults());
         assertEquals(0, e.getExecutionTimeMinutes());
 
         e.markAsRunning();
@@ -479,11 +424,6 @@ class EntitiesSweep2Test {
         e.markAsCancelled("用户主动取消");
         assertEquals(ReportExecutionEntity.ExecutionStatus.CANCELLED, e.executionStatus);
         assertEquals("用户主动取消", e.statusMessage);
-
-        e.resultStoragePath = "";
-        assertFalse(e.hasStoredResults());
-        e.resultStoragePath = "/storage/report/rpt-1.json";
-        assertTrue(e.hasStoredResults());
 
         e.rowCount = null;
         e.executionTimeMs = null;
@@ -679,22 +619,11 @@ class EntitiesSweep2Test {
         s.eventName = "tutorial_complete";
 
         assertFalse(s.isOptional());
-        assertFalse(s.hasFilter());
-        assertFalse(s.hasTimeWindow());
         s.optional = null;
         assertFalse(s.isOptional());
         s.optional = true;
         assertTrue(s.isOptional());
 
-        s.eventFilter = "";
-        assertFalse(s.hasFilter());
-        s.eventFilter = "{\"level\":\">=3\"}";
-        assertTrue(s.hasFilter());
-
-        s.timeWindowSec = 0L;
-        assertFalse(s.hasTimeWindow());
-        s.timeWindowSec = 300L;
-        assertTrue(s.hasTimeWindow());
     }
 
     @Test
@@ -785,9 +714,6 @@ class EntitiesSweep2Test {
         assertNull(i.lastError);
         assertEquals(0, i.retryCount);
 
-        i.markAsDisabled();
-        assertEquals(IntegrationEntity.IntegrationStatus.DISABLED, i.integrationStatus);
-
         IntegrationEntity fresh = new IntegrationEntity();
         fresh.onCreate();
         assertNotNull(fresh.createdAt);
@@ -824,13 +750,9 @@ class EntitiesSweep2Test {
         assertTrue(l.isFailed());
         assertEquals("远端返回 500", l.errorMessage);
 
-        l.markAsTimeout();
-        assertTrue(l.isFailed());
-        assertEquals("Request timeout", l.errorMessage);
-
-        l.markAsRetrying();
+        l.callStatus = IntegrationLogEntity.CallStatus.RETRYING;
+        l.retryAttempt = 1;
         assertTrue(l.isRetrying());
-        assertEquals(1, l.retryAttempt);
         assertTrue(l.shouldRetry());
         l.retryAttempt = 3;
         assertFalse(l.shouldRetry());
@@ -874,9 +796,7 @@ class EntitiesSweep2Test {
         assertEquals(0.87, p.predictionScore, 0.0001);
         assertNotNull(p.completedAt);
 
-        p.markCached("{\"churn\":false}");
-        assertEquals(MLModelPredictionEntity.PredictionStatus.CACHED, p.predictionStatus);
-        assertTrue(p.isCompleted());
+        p.cacheHit = true;
         assertTrue(p.isCacheHit());
 
         p.fail("模型服务不可用");
@@ -1315,7 +1235,7 @@ class EntitiesSweep2Test {
         r.status = ReportEntity.ReportStatus.SCHEDULED;
         assertTrue(r.isScheduled());
         assertTrue(r.isActive());
-        r.markAsArchived();
+        r.status = ReportEntity.ReportStatus.ARCHIVED;
         assertFalse(r.isActive());
 
         r.isPublic = null;
@@ -1417,10 +1337,9 @@ class EntitiesSweep2Test {
         c.actionTaken = RiskCaseEntity.ActionType.BLOCK;
         assertTrue(c.needsReview());
         assertFalse(c.isBlocked());
-        c.markAsExecuted();
+        c.executionStatus = RiskCaseEntity.ExecutionStatus.EXECUTED;
+        c.executedAt = LocalDateTime.now();
         assertTrue(c.isExecuted());
-        assertTrue(c.isBlocked());
-        assertNotNull(c.executedAt);
 
         c.riskLevel = RiskCaseEntity.RiskLevel.HIGH;
         assertTrue(c.isHighRisk());
@@ -1504,17 +1423,6 @@ class EntitiesSweep2Test {
         r.riskLevel = RiskRuleEntity.RiskLevel.CRITICAL;
         assertTrue(r.isHighRisk());
         assertTrue(r.isCriticalRisk());
-
-        r.totalTriggeredCount = null;
-        r.recordTrigger();
-        assertEquals(1L, r.totalTriggeredCount);
-        assertNotNull(r.lastTriggeredAt);
-        r.totalBlockedCount = null;
-        r.recordBlock();
-        assertEquals(1L, r.totalBlockedCount);
-        r.totalReviewCount = null;
-        r.recordReview();
-        assertEquals(1L, r.totalReviewCount);
 
         assertFalse(r.isInCooldown(null));
         r.cooldownMinutes = 0;
@@ -1677,7 +1585,6 @@ class EntitiesSweep2Test {
         assertTrue(s.isDisabled());
         assertFalse(s.isActive());
         assertFalse(s.isTesting());
-        assertFalse(s.hasError());
         assertFalse(s.isSAML());
         assertFalse(s.isOAuth());
         assertFalse(s.isOIDC());
@@ -1693,13 +1600,11 @@ class EntitiesSweep2Test {
         assertTrue(s.isOAuth());
         assertTrue(s.isOIDC());
 
-        s.recordError("证书校验失败");
-        assertTrue(s.hasError());
-        assertEquals("证书校验失败", s.errorMessage);
+        s.errorMessage = "旧错误";
         s.activate();
         assertTrue(s.isActive());
         assertNull(s.errorMessage);
-        s.startTesting();
+        s.ssoStatus = SSOConfigEntity.SSOStatus.TESTING;
         assertTrue(s.isTesting());
         s.disable();
         assertTrue(s.isDisabled());
@@ -1760,27 +1665,10 @@ class EntitiesSweep2Test {
         assertFalse(p.isEnabled());
         p.deletedAt = null;
 
-        assertFalse(p.requiresMFA());
-        p.mfaRequired = null;
-        assertFalse(p.requiresMFA());
-        p.mfaRequired = true;
-        assertTrue(p.requiresMFA());
-
-        assertFalse(p.allowsPasswordReuse());
-        p.allowPasswordReuse = null;
-        assertFalse(p.allowsPasswordReuse());
-        p.allowPasswordReuse = true;
-        assertTrue(p.allowsPasswordReuse());
-
         p.requireIpWhitelist = null;
         assertFalse(p.isIpWhitelistRequired());
         p.requireIpWhitelist = true;
         assertTrue(p.isIpWhitelistRequired());
-
-        p.requireHttps = null;
-        assertFalse(p.requiresHttps());
-        p.requireHttps = true;
-        assertTrue(p.requiresHttps());
 
         SecurityPolicyEntity fresh = new SecurityPolicyEntity();
         fresh.onCreate();
@@ -2020,12 +1908,6 @@ class EntitiesSweep2Test {
         assertEquals("连接被拒绝", w.errorMessage);
         assertEquals("ConnectException", w.errorType);
 
-        w.markAsTimeout();
-        assertTrue(w.isFailed());
-        assertEquals("Request timeout", w.errorMessage);
-        assertEquals("TIMEOUT", w.errorType);
-        assertTrue(w.shouldRetry());
-
         w.retryCount = null;
         LocalDateTime next = LocalDateTime.now().plusMinutes(5);
         w.scheduleRetry(next);
@@ -2080,18 +1962,11 @@ class EntitiesSweep2Test {
         assertFalse(l.isActive());
         l.deletedAt = null;
 
-        l.confirm("login");
+        l.verificationStatus = IdentityLinkEntity.VerificationStatus.CONFIRMED;
         assertTrue(l.isConfirmed());
-        assertNotNull(l.verifiedAt);
-        assertNotNull(l.lastConfirmedAt);
-        assertEquals("login", l.verificationMethod);
 
-        l.usageCount = null;
-        l.recordUsage();
-        assertEquals(1L, l.usageCount);
-        assertNotNull(l.lastSeenAt);
-
-        assertEquals(0L, l.getDaysSinceLastSeen());  // lastSeenAt 刚被 recordActivity 更新
+        l.lastSeenAt = LocalDateTime.now();
+        assertEquals(0L, l.getDaysSinceLastSeen());
         l.lastSeenAt = LocalDateTime.now().minusDays(3);
         assertTrue(l.getDaysSinceLastSeen() >= 2);
 
@@ -2230,7 +2105,6 @@ class EntitiesSweep2Test {
         assertTrue(e.isActive());
         assertFalse(e.isRequired());
         assertFalse(e.isDeprecated());
-        assertFalse(e.hasRequiredIdentity());
         assertEquals("level_complete", e.getFullEventName());
 
         e.importance = EventDefinitionEntity.Importance.CRITICAL;
@@ -2251,17 +2125,6 @@ class EntitiesSweep2Test {
         assertFalse(e.isActive());
         e.deletedAt = null;
 
-        e.requireUserId = true;
-        assertTrue(e.hasRequiredIdentity());
-        e.requireUserId = false;
-        e.requireSessionId = true;
-        assertTrue(e.hasRequiredIdentity());
-        e.requireSessionId = false;
-        e.requirePlayerId = true;
-        assertTrue(e.hasRequiredIdentity());
-        e.requirePlayerId = false;
-        assertFalse(e.hasRequiredIdentity());
-
         TrackingPlanEntity tp = new TrackingPlanEntity();
         e.trackingPlan = tp;
         assertEquals("level_complete", e.getFullEventName());
@@ -2281,7 +2144,6 @@ class EntitiesSweep2Test {
         assertTrue(p.isActive());
         assertFalse(p.isNumeric());
         assertTrue(p.isString());
-        assertFalse(p.hasValidation());
         assertFalse(p.isSensitive());
         assertEquals("", p.getValidationDescription());
 
@@ -2294,29 +2156,6 @@ class EntitiesSweep2Test {
         assertTrue(p.isString());
         p.type = EventPropertyDefinitionEntity.PropertyType.STRING;
         assertTrue(p.isString());
-
-        p.minValue = 0.0;
-        assertTrue(p.hasValidation());
-        p.minValue = null;
-        p.maxValue = 99.0;
-        assertTrue(p.hasValidation());
-        p.maxValue = null;
-        p.minLength = 1;
-        assertTrue(p.hasValidation());
-        p.minLength = null;
-        p.maxLength = 3;
-        assertTrue(p.hasValidation());
-        p.maxLength = null;
-        p.regexPattern = "^\\d+$";
-        assertTrue(p.hasValidation());
-        p.regexPattern = null;
-        p.allowedValues = "[1,2,3]";
-        assertTrue(p.hasValidation());
-        p.allowedValues = null;
-        p.cardinalityLimit = 100;
-        assertTrue(p.hasValidation());
-        p.cardinalityLimit = null;
-        assertFalse(p.hasValidation());
 
         p.required = true;
         p.minValue = 0.0;
