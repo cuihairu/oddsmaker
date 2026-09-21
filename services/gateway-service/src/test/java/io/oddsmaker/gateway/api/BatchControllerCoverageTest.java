@@ -602,4 +602,160 @@ class BatchControllerCoverageTest {
             .jsonPath("$.accepted[0]").isEqualTo("01JPOLICY0004");
         verify(avroPublisher).publish(any());
     }
+
+    // ===== 分支对侧补充（BRANCH 收口）=====
+
+    @Test
+    @DisplayName("事件自带 user_agent/client_ip：不回填请求级兜底值")
+    void eventOwnAgentAndIpKept() {
+        client.post().uri("/v1/batch")
+            .contentType(MediaType.APPLICATION_JSON)
+            .header("x-api-key", "pk_test_example")
+            .header("user-agent", "req-agent/1.0")
+            .bodyValue("[" + "{\"event_id\":\"01JOWNIP00001\",\"event_name\":\"level_start\","
+                + "\"game_id\":\"game_demo\",\"environment\":\"prod\",\"device_id\":\"d1\","
+                + "\"user_agent\":\"sdk-client/2.0\",\"client_ip\":\"9.9.9.9\","
+                + "\"ts_client\":" + now() + "}" + "]")
+            .exchange()
+            .expectStatus().is2xxSuccessful()
+            .expectBody()
+            .jsonPath("$.accepted[0]").isEqualTo("01JOWNIP00001");
+        var captor = org.mockito.ArgumentCaptor.forClass(io.oddsmaker.common.model.Event.class);
+        verify(avroPublisher).publish(captor.capture());
+        org.junit.jupiter.api.Assertions.assertEquals("sdk-client/2.0", captor.getValue().userAgent);
+        // client_ip 过 PII COARSE 掩码末位
+        org.junit.jupiter.api.Assertions.assertEquals("9.9.9.0", captor.getValue().clientIp);
+    }
+
+    @Test
+    @DisplayName("缺 event_name：invalid_schema 拒绝")
+    void missingEventNameRejected() {
+        client.post().uri("/v1/batch")
+            .contentType(MediaType.APPLICATION_JSON)
+            .header("x-api-key", "pk_test_example")
+            .bodyValue("[" + "{\"event_id\":\"01JNONAME0001\",\"game_id\":\"game_demo\","
+                + "\"environment\":\"prod\",\"device_id\":\"d1\",\"ts_client\":" + now() + "}" + "]")
+            .exchange()
+            .expectStatus().is2xxSuccessful()
+            .expectBody()
+            .jsonPath("$.rejected[0].reason").isEqualTo("invalid_schema");
+    }
+
+    @Test
+    @DisplayName("作用域 key 游戏匹配但环境不匹配：api_key_scope_mismatch")
+    void scopeEnvMismatchRejected() {
+        AuthService.ApiKeyContext scoped = unscopedKey();
+        scoped.gameId = "game_x";
+        scoped.environment = "prod";
+        when(authService.getContext("pk_envmm")).thenReturn(scoped);
+
+        client.post().uri("/v1/batch")
+            .contentType(MediaType.APPLICATION_JSON)
+            .header("x-api-key", "pk_envmm")
+            .bodyValue("[" + event("01JENVMM00001", "game_x", "d1", null)
+                .replace("\"environment\":\"prod\"", "\"environment\":\"dev\"") + "]")
+            .exchange()
+            .expectStatus().is2xxSuccessful()
+            .expectBody()
+            .jsonPath("$.rejected[0].reason").isEqualTo("api_key_scope_mismatch");
+    }
+
+    @Test
+    @DisplayName("user_id 空串与未封禁真值用户：封禁表查空仍发布")
+    void emptyUserIdAndUnblockedUserStillPublish() {
+        // user_id="" 不进封禁目标；userId 非空但未被封禁（isBlocked 的 Boolean.FALSE 路径）
+        client.post().uri("/v1/batch")
+            .contentType(MediaType.APPLICATION_JSON)
+            .header("x-api-key", "pk_test_example")
+            .bodyValue("[" + event("01JUNBLK00001", "game_demo", "d1", "")
+                + "," + event("01JUNBLK00002", "game_demo", "d2", "u-live") + "]")
+            .exchange()
+            .expectStatus().is2xxSuccessful()
+            .expectBody()
+            .jsonPath("$.accepted.length()").isEqualTo(2);
+        verify(avroPublisher, org.mockito.Mockito.times(2)).publish(any());
+    }
+
+    @Test
+    @DisplayName("key 级策略 propsAllowlist 空列表：回落通用过滤")
+    void emptyAllowlistFallsBackToGenericFilter() {
+        AuthService.ApiKeyContext ctx = unscopedKey();
+        ctx.propsAllowlist = java.util.List.of(); // 非-null 但空
+        when(authService.getContext("pk_allow0")).thenReturn(ctx);
+        client.post().uri("/v1/batch")
+            .contentType(MediaType.APPLICATION_JSON)
+            .header("x-api-key", "pk_allow0")
+            .bodyValue("[" + "{\"event_id\":\"01JALLOW00001\",\"event_name\":\"level_start\","
+                + "\"game_id\":\"game_demo\",\"environment\":\"prod\",\"device_id\":\"d1\","
+                + "\"ts_client\":" + now() + ",\"props\":{\"keep\":\"v\",\"junk\":\"w\"}}" + "]")
+            .exchange()
+            .expectStatus().is2xxSuccessful()
+            .expectBody()
+            .jsonPath("$.accepted[0]").isEqualTo("01JALLOW00001");
+    }
+
+    @Test
+    @DisplayName("content-encoding 非 gzip：字节原样解析")
+    void identityEncodingPassthrough() {
+        client.post().uri("/v1/batch")
+            .contentType(MediaType.APPLICATION_JSON)
+            .header("x-api-key", "pk_test_example")
+            .header("content-encoding", "identity")
+            .bodyValue("[" + event("01JIDENT00001", "game_demo", "d1", null) + "]")
+            .exchange()
+            .expectStatus().is2xxSuccessful()
+            .expectBody()
+            .jsonPath("$.accepted[0]").isEqualTo("01JIDENT00001");
+    }
+
+    @Test
+    @DisplayName("ndjson 含 JSON null 字面量行：跳过且不塌缩其余行")
+    void ndjsonNullLineSkipped() {
+        String body = "null\n" + event("01JNULLN00001", "game_demo", "d1", null);
+        client.post().uri("/v1/batch")
+            .contentType(MediaType.valueOf("application/x-ndjson"))
+            .header("x-api-key", "pk_test_example")
+            .bodyValue(body)
+            .exchange()
+            .expectStatus().is2xxSuccessful()
+            .expectBody()
+            .jsonPath("$.accepted[0]").isEqualTo("01JNULLN00001");
+    }
+
+    @Test
+    @DisplayName("device_id 空串：schema minLength=1 拒绝 invalid_schema")
+    void blankDeviceIdRejectedBySchema() {
+        client.post().uri("/v1/batch")
+            .contentType(MediaType.APPLICATION_JSON)
+            .header("x-api-key", "pk_test_example")
+            .bodyValue("[" + "{\"event_id\":\"01JBLANKD0001\",\"event_name\":\"level_start\","
+                + "\"game_id\":\"game_demo\",\"environment\":\"prod\",\"device_id\":\"\","
+                + "\"ts_client\":" + now() + "}" + "]")
+            .exchange()
+            .expectStatus().is2xxSuccessful()
+            .expectBody()
+            .jsonPath("$.rejected[0].reason").isEqualTo("invalid_schema");
+    }
+
+    @Test
+    @DisplayName("key 级 propsAllowlist 非空：只保留白名单键（filterWithAllowlist 生效侧）")
+    void nonEmptyAllowlistFiltersProps() {
+        AuthService.ApiKeyContext ctx = unscopedKey();
+        ctx.propsAllowlist = List.of("keep");
+        when(authService.getContext("pk_allow1")).thenReturn(ctx);
+        client.post().uri("/v1/batch")
+            .contentType(MediaType.APPLICATION_JSON)
+            .header("x-api-key", "pk_allow1")
+            .bodyValue("[" + "{\"event_id\":\"01JALLOW00002\",\"event_name\":\"level_start\","
+                + "\"game_id\":\"game_demo\",\"environment\":\"prod\",\"device_id\":\"d1\","
+                + "\"ts_client\":" + now() + ",\"props\":{\"keep\":\"v\",\"junk\":\"w\"}}" + "]")
+            .exchange()
+            .expectStatus().is2xxSuccessful()
+            .expectBody()
+            .jsonPath("$.accepted[0]").isEqualTo("01JALLOW00002");
+        var captor = org.mockito.ArgumentCaptor.forClass(io.oddsmaker.common.model.Event.class);
+        verify(avroPublisher).publish(captor.capture());
+        org.junit.jupiter.api.Assertions.assertTrue(captor.getValue().props.containsKey("keep"));
+        org.junit.jupiter.api.Assertions.assertFalse(captor.getValue().props.containsKey("junk"));
+    }
 }

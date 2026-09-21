@@ -131,7 +131,8 @@ public class JsonSchemaValidator {
             case "integer" -> value.isIntegralNumber() ? null : key + "_invalid_type";
             case "object" -> value.isObject() ? null : key + "_invalid_type";
             case "array" -> validateArray(key, value, rule);
-            case "null" -> value.isNull() ? null : key + "_invalid_type";
+            // validateField 前置跳过 null 值，能进到此 case 的 value 恒非 null → 恒失配
+            case "null" -> key + "_invalid_type";
             default -> null;
         };
     }

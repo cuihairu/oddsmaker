@@ -368,4 +368,47 @@ class RetentionJobTest {
             org.junit.jupiter.api.Assertions.assertDoesNotThrow(() -> RetentionJob.main(new String[0]));
         }
     }
+
+    // ===== 分支对侧补充（BRANCH 收口） =====
+
+    @Test
+    @DisplayName("uidOf：user_id 非空空串回退 device_id（null 与非空已盖）")
+    void uidOfFallsBackOnEmptyUserId() {
+        RawEvent r = new RawEvent();
+        r.user_id = "";
+        r.device_id = "d1";
+        assertEquals("d1", RetentionJob.uidOf(r));
+    }
+
+    @Test
+    @DisplayName("RetentionProcess：last 缺失（防御侧）时 prevLast 回退 first")
+    void nullLastFallsBackToFirst() throws Exception {
+        TestMapState state = new TestMapState();
+        state.m.put("first", 5L);   // 正常流程首建必同时置 last，此为防御侧
+        RetentionJob.RetentionProcess fn = processWithState(state);
+        List<RetentionJob.RetentionEmit> out = new ArrayList<>();
+        fn.processElement(event(6L), keyedContext(fn), sinkTo(out));   // prevLast=first=5
+        assertEquals(2, out.size());
+        assertEquals(1, out.get(0).d);          // N-Day 1（6-5=1）
+        assertEquals(0, out.get(0).rolling);
+        assertEquals(5L, out.get(0).cohortEpochDay);
+        assertEquals(1, out.get(1).rolling);    // rolling 1 跨越
+        assertEquals(Long.valueOf(6L), state.m.get("last"));
+    }
+
+    @Test
+    @DisplayName("RetentionProcess：rolling 阈值已 seen 时跨过不再补记")
+    void alreadySeenRollingThresholdNotReEmitted() throws Exception {
+        TestMapState state = new TestMapState();
+        state.m.put("first", 0L);
+        state.m.put("last", 0L);
+        state.m.put("seen_r_1", 1L);   // rolling 1 已记过
+        RetentionJob.RetentionProcess fn = processWithState(state);
+        List<RetentionJob.RetentionEmit> out = new ArrayList<>();
+        fn.processElement(event(1L), keyedContext(fn), sinkTo(out));   // 跨 rolling 1 但已 seen
+        assertEquals(1, out.size());   // 仅 N-Day 1
+        assertEquals(1, out.get(0).d);
+        assertEquals(0, out.get(0).rolling);
+        assertEquals(Long.valueOf(1L), state.m.get("last"));   // last 仍推进
+    }
 }

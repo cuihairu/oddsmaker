@@ -194,7 +194,9 @@ public class AnnouncementService {
         requireGame(gameId);
         // environmentId 允许传环境名（dev/prod）或环境ID
         String resolvedEnv = resolveEnvironmentId(gameId, environmentId);
-        return announcementRepo.findActive(gameId, resolvedEnv == null ? "" : resolvedEnv, LocalDateTime.now());
+        // resolveEnvironmentId 三条返回路径（空入参→""、按 ID 命中→env.id、
+        // 回落透传 environmentIdOrName）均不产生 null，无需 null 兜底
+        return announcementRepo.findActive(gameId, resolvedEnv, LocalDateTime.now());
     }
 
     /**

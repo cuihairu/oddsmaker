@@ -84,4 +84,23 @@ class CrashMetricsControllerTest {
             .thenThrow(new IllegalArgumentException("stackTrace is required"));
         assertEquals(400, controller.symbolicate("g", req).getStatusCode().value());
     }
+
+    @Test
+    @DisplayName("符号化：platform 空白 / appVersion 缺失或空白均 400")
+    void symbolicateBlankPlatformOrVersionRejected() {
+        CrashMetricsController.SymbolicateRequest blankPlatform = new CrashMetricsController.SymbolicateRequest();
+        blankPlatform.platform = "   ";
+        blankPlatform.appVersion = "1.0";
+        assertEquals(400, controller.symbolicate("g", blankPlatform).getStatusCode().value());
+
+        CrashMetricsController.SymbolicateRequest noVersion = new CrashMetricsController.SymbolicateRequest();
+        noVersion.platform = "android";
+        assertEquals(400, controller.symbolicate("g", noVersion).getStatusCode().value());
+
+        CrashMetricsController.SymbolicateRequest blankVersion = new CrashMetricsController.SymbolicateRequest();
+        blankVersion.platform = "android";
+        blankVersion.appVersion = "  ";
+        assertEquals(400, controller.symbolicate("g", blankVersion).getStatusCode().value());
+    }
+
 }

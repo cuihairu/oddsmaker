@@ -238,6 +238,9 @@ public class WebhookService {
         if (existing == null || existing.deletedAt != null || !existing.gameId.equals(gameId)) {
             return null;
         }
+        // validateBasics 会把 null httpMethod 兜底为 POST（副作用改写 patch），
+        // 先保存原值以保留 httpMethod 的部分更新语义（未带时沿用 existing，与 authType 一致）
+        String patchHttpMethod = patch.httpMethod;
         validateBasics(patch);
         String name = patch.name.trim();
         webhookConfigRepo.findByGameIdAndName(gameId, name)
@@ -257,8 +260,8 @@ public class WebhookService {
         existing.description = patch.description;
         existing.eventTypes = normalizeCsv(patch.eventTypes);
         existing.riskLevels = normalizeCsv(patch.riskLevels);
-        if (patch.httpMethod != null) {
-            existing.httpMethod = patch.httpMethod;
+        if (patchHttpMethod != null) {
+            existing.httpMethod = patchHttpMethod;
         }
         if (patch.authType != null) {
             existing.authType = patch.authType;
@@ -510,8 +513,10 @@ public class WebhookService {
             // 记录失败
             log.markAsFailed(e.getMessage(), e.getClass().getSimpleName());
 
-            // 检查是否需要重试
-            if (config.shouldRetry() && log.retryCount < config.maxRetries) {
+            // 检查是否需要重试（shouldRetry 已保证 maxRetries != null && > 0；
+            // retryCount 唯一递增点是下方 scheduleRetry，sendWebhook 的 log 由 createWebhookLog
+            // 新建且 retryCount 初值 0，0 < maxRetries 恒真，无需再比较）
+            if (config.shouldRetry()) {
                 long delayMs = config.retryBackoffMs * (long) Math.pow(2, log.retryCount);
                 LocalDateTime nextRetry = LocalDateTime.now().plus(java.time.Duration.ofMillis(delayMs));
                 log.scheduleRetry(nextRetry);

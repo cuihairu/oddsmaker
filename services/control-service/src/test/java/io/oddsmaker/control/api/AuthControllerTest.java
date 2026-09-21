@@ -215,4 +215,25 @@ class AuthControllerTest {
         assertEquals("用户名或密码错误", resp.getBody().get("message"));  // 客户端只见统一文案
         verify(auditLogService).logLoginFailed(eq("nobody"), any(), any(), contains("credentials"));
     }
+
+    @Test
+    @DisplayName("分支对侧：username null 400、未认证 token 登出不审计、XFF 空白回落 remoteAddr")
+    void authBranchCounterSides() {
+        java.util.Map<String, String> nullUser = new java.util.HashMap<>();
+        nullUser.put("username", null);
+        nullUser.put("password", "p");
+        assertEquals(HttpStatus.BAD_REQUEST, controller.login(nullUser, request).getStatusCode());
+
+        // 2 参 TestingAuthenticationToken = 未认证 → isAuthenticated false 侧，不写审计
+        controller.logout(new TestingAuthenticationToken("alice", "n/a"), request);
+        verifyNoInteractions(auditLogService);
+
+        // XFF 存在但空白 → 回落 remoteAddr（isBlank false 侧）
+        request.setRemoteAddr("172.16.0.5");
+        request.addHeader("X-Forwarded-For", "   ");
+        when(userService.findByUsername("nobody")).thenReturn(Optional.empty());
+        controller.login(java.util.Map.of("username", "nobody", "password", "p"), request);
+        verify(auditLogService).logLoginFailed(eq("nobody"), eq("172.16.0.5"), any(), anyString());
+    }
+
 }

@@ -92,6 +92,39 @@ class DashboardServicesTest {
         assertNotNull(analyticsService.getSocialRetentionImpact("g", d));
     }
 
+    @Test
+    @DisplayName("Analytics：会话/社交聚合的 null 指标兜 0（CH 聚合列可空）")
+    void analyticsNullMetricSides() {
+        LocalDate d = LocalDate.of(2026, 9, 1);
+        // 行内 null 元素 → 对应指标按 0 计；非空行 → 真值计入
+        when(sessionAnalysisRepo.getSessionTrends(eq("g"), any(), any()))
+            .thenReturn(List.<Object[]>of(
+                new Object[]{d, null, null, null},
+                new Object[]{d, 100.0, 8.0, 0.5}));
+        Map<String, Object> session = analyticsService.getSessionOverview("g", d, d);
+        assertEquals(2, session.get("days"));
+        assertEquals(50.0, session.get("avgSessionDuration"));
+        assertEquals(4.0, session.get("avgEventsPerSession"));
+        assertEquals(0.25, session.get("avgBounceRate"));
+
+        when(socialAnalyticsRepo.getSocialTrends(eq("g"), any(), any()))
+            .thenReturn(List.<Object[]>of(
+                new Object[]{d, null, null, null},
+                new Object[]{d, 10L, 3L, 0.6}));
+        Map<String, Object> social = analyticsService.getSocialOverview("g", d, d);
+        assertEquals(10L, social.get("totalFriendships"));
+        assertEquals(3L, social.get("totalGuilds"));
+        assertEquals(0.3, social.get("avgViralCoefficient"));
+
+        // 影响行含 null → 0 兜底；retentionLift = 0 - 0
+        when(socialAnalyticsRepo.getSocialRetentionImpact(eq("g"), any()))
+            .thenReturn(new Object[]{null, null});
+        Map<String, Object> impact = analyticsService.getSocialRetentionImpact("g", d);
+        assertEquals(0.0, impact.get("socialUsersD7Retention"));
+        assertEquals(0.0, impact.get("nonSocialUsersD7Retention"));
+        assertEquals(0.0, impact.get("retentionLift"));
+    }
+
     // ===== RiskDashboardService =====
 
     @Mock

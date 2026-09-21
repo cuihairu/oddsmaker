@@ -235,4 +235,76 @@ class RuleFetcherTest {
         assertEquals("http://localhost:8085", url.get(plain));
         assertTrue(f instanceof Runnable);
     }
+
+    // ===== 分支对侧补充（BRANCH 收口） =====
+
+    @Test
+    @DisplayName("fetchAndApply：token 为 null 不带认证头（空串侧已盖）")
+    void fetchOmitsTokenHeaderWhenNullToken() throws Exception {
+        List<String> tokens = new ArrayList<>();
+        HttpServer server = serverResponding(200, "[]", new ArrayList<>(), tokens);
+        try {
+            RuleFetcher f = new RuleFetcher("http://127.0.0.1:" + server.getAddress().getPort(), "g1", null, 60_000L);
+            invokeFetch(f);
+            assertEquals(1, tokens.size());
+            assertNull(tokens.get(0));   // adminToken null → 不加 x-admin-token
+        } finally {
+            server.stop(0);
+            resetRules();
+        }
+    }
+
+    @Test
+    @DisplayName("fetchAndApply：同类型后到更高分规则替换先到低分（低替高的保留侧已盖）")
+    void fetchReplacesWhenLaterRuleScoresHigher() throws Exception {
+        HttpServer server = serverResponding(200, """
+                [
+                  {"id":"low","ruleType":"THRESHOLD","triggerThreshold":500,"riskScore":30,"riskLevel":"LOW"},
+                  {"id":"high","ruleType":"THRESHOLD","triggerThreshold":900,"riskScore":90,"riskLevel":"HIGH"}
+                ]
+                """, new ArrayList<>(), new ArrayList<>());
+        try {
+            RuleFetcher f = new RuleFetcher("http://127.0.0.1:" + server.getAddress().getPort(), "g1", "tok", 60_000L);
+            invokeFetch(f);
+            RuleConfig.RuleSpec t = RuleConfig.byType("THRESHOLD");
+            assertEquals("high", t.ruleId);   // 90 > 30 后到胜出
+            assertEquals(900, t.triggerThreshold);
+        } finally {
+            server.stop(0);
+            resetRules();
+        }
+    }
+
+    @Test
+    @DisplayName("startOnce：首次创建并启动守护线程，二次调用见已有实例直接返回")
+    void startOnceIsIdempotent() throws Exception {
+        // 反射清空静态实例（测试隔离）
+        java.lang.reflect.Field instanceField = RuleFetcher.class.getDeclaredField("instance");
+        instanceField.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        java.util.concurrent.atomic.AtomicReference<RuleFetcher> ref =
+            (java.util.concurrent.atomic.AtomicReference<RuleFetcher>) instanceField.get(null);
+        java.util.function.Supplier<RuleFetcher> current = ref::get;
+
+        List<String> paths = new ArrayList<>();
+        HttpServer server = serverResponding(404, "[]", paths, new ArrayList<>());
+        try {
+            ref.set(null);
+            String base = "http://127.0.0.1:" + server.getAddress().getPort();
+            RuleFetcher.startOnce(base, "g1", "tok", 60_000L);   // 首次：创建 + 启动
+            RuleFetcher first = current.get();
+            assertNotNull(first);
+
+            RuleFetcher.startOnce(base, "g1", "tok", 60_000L);   // 二次：已有实例直接返回
+            assertTrue(current.get() == first, "二次调用不得替换实例");
+
+            first.stop();   // 停守护线程（fetch 404 会安静重试，不阻塞测试）
+        } finally {
+            RuleFetcher live = current.get();
+            if (live != null) live.stop();
+            server.stop(0);
+            resetRules();
+            ref.set(null);
+        }
+    }
 }

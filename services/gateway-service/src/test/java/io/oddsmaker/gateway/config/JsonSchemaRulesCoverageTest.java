@@ -135,6 +135,45 @@ class JsonSchemaRulesCoverageTest {
     }
 
     @Test
+    @DisplayName("畸形 type/oneOf 结构：非标量 type 忽略、type 数组非文本元素跳过")
+    void malformedTypeStructuresIgnored() {
+        // type 为数字（非文本非数组）：validateField 不做类型校验直通
+        Map<String, Object> weird = base();
+        weird.put("weirdtype", 42);
+        assertNull(validator().validate(weird));
+
+        // type 数组含非文本元素：跳过后由文本元素判定（string 传字符串通过）
+        Map<String, Object> ok = base();
+        ok.put("slot2", "text");
+        assertNull(validator().validate(ok));
+
+        Map<String, Object> num = base();
+        num.put("slot2", 9);
+        assertEquals("slot2_invalid_type", validator().validate(num));
+
+        // oneOf 的 option.type 非文本：跳过该 option，由后续文本 option 判定
+        Map<String, Object> mixNum = base();
+        mixNum.put("mix2", 1.5);
+        assertNull(validator().validate(mixNum));
+
+        Map<String, Object> mixBad = base();
+        mixBad.put("mix2", true);
+        assertEquals("mix2_invalid_type", validator().validate(mixBad));
+    }
+
+    @Test
+    @DisplayName("无 maxItems 的数组字段：任意长度通过（has 守卫 false 侧）")
+    void arrayWithoutMaxItemsUnbounded() {
+        Map<String, Object> many = base();
+        many.put("free_arr", List.of("a", "b", "c", "d", "e"));
+        assertNull(validator().validate(many));
+
+        Map<String, Object> notArr = base();
+        notArr.put("free_arr", "x");
+        assertEquals("free_arr_invalid_type", validator().validate(notArr));
+    }
+
+    @Test
     @DisplayName("schema 资源不存在：构造即抛 IllegalStateException")
     void missingSchemaFailsFast() {
         org.junit.jupiter.api.Assertions.assertThrows(IllegalStateException.class,

@@ -82,9 +82,10 @@ public final class CrashMetricsAssembler {
             rateCount.merge(key, 1, Integer::sum);
         }
         for (Map.Entry<String, Map<String, Object>> entry : byVersion.entrySet()) {
-            double avg = rateCount.getOrDefault(entry.getKey(), 0) > 0
-                    ? rateSum.get(entry.getKey()) / rateCount.get(entry.getKey())
-                    : 0.0;
+            // rateCount 与 byVersion 在同一循环内逐行 merge(+1)——byVersion 的 key 必有
+            // rateCount≥1，getOrDefault 的 0 兜底侧（avg=0.0）不可达；
+            // 等价改写为直接取值（rateSum 保留 getOrDefault 防御 null 拆箱崩溃，行为不变）
+            double avg = rateSum.getOrDefault(entry.getKey(), 0.0) / rateCount.get(entry.getKey());
             entry.getValue().put("avgCrashRate", RetentionMetricsAssembler.round4(avg));
         }
         return new ArrayList<>(byVersion.values());

@@ -82,4 +82,17 @@ class LtvForecastServiceTest {
         assertEquals(90, LtvForecastService.clampDays(null));
         assertEquals(730, LtvForecastService.clampDays(9999));
     }
+
+    @Test
+    @DisplayName("环境过滤：blank 环境等同不过滤（isBlank 侧）；clampDays 0/负数回落默认")
+    void blankEnvironmentAndNonPositiveDays() {
+        when(client.isAvailable()).thenReturn(true);
+        when(client.query(anyString(), any(Object[].class))).thenReturn(List.of());
+        service.pltv("g", "   ", 90);
+        verify(client).query(contains("v_user_first_seen"), org.mockito.ArgumentMatchers.eq("g"), any());
+        verify(client).query(contains("v_ltv_by_cohort_day"), org.mockito.ArgumentMatchers.eq("g"), any());
+        assertEquals(90, LtvForecastService.clampDays(0));
+        assertEquals(90, LtvForecastService.clampDays(-7));
+    }
+
 }

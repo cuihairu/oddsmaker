@@ -2,6 +2,7 @@ package io.oddsmaker.control.service;
 
 import io.oddsmaker.control.jpa.DataQualityRuleRepo;
 import io.oddsmaker.control.jpa.FlinkJobRepo;
+import io.oddsmaker.control.jpa.HealthCheckEntity;
 import io.oddsmaker.control.jpa.HealthCheckRepo;
 import io.oddsmaker.control.jpa.HealthMetricRepo;
 import io.oddsmaker.control.jpa.IntegrationLogRepo;
@@ -483,5 +484,52 @@ class InfraServicesTest {
         when(securitySessionRepo.deleteExpired(any(java.time.LocalDateTime.class)))
             .thenThrow(new IllegalStateException("db down"));
         org.junit.jupiter.api.Assertions.assertDoesNotThrow(() -> securityService.deleteOldSessions());
+    }
+
+
+    @Test
+    @DisplayName("分支对侧：degraded 检查致 DEGRADED、调度清扫开关与空/非空、空白 gameId 告警只升级、无待升级")
+    void healthMonitorBranchSides() {
+        // degraded > 0 且 slow 空（|| 第一条件 true 侧）
+        HealthCheckEntity degradedCheck = new HealthCheckEntity();
+        degradedCheck.checkName = "cache";
+        degradedCheck.healthStatus = HealthCheckEntity.HealthStatus.DEGRADED;
+        HealthCheckEntity ok = new HealthCheckEntity();
+        ok.checkName = "db";
+        ok.markAsHealthy("fine");
+        lenient().when(healthCheckRepo.findEnabled()).thenReturn(java.util.List.of(ok, degradedCheck));
+        lenient().when(healthCheckRepo.findUnhealthy()).thenReturn(java.util.List.of());
+        lenient().when(healthCheckRepo.findSlowResponses()).thenReturn(java.util.List.of());
+        Map<String, Object> health = healthMonitorService.getSystemHealth();
+        assertEquals(HealthCheckEntity.HealthStatus.DEGRADED, health.get("overallStatus"));
+
+        // 调度健康检查：开关关闭直接返回；开启后空列表（false 侧）与非空（true 侧，内部异常被吞）
+        org.springframework.test.util.ReflectionTestUtils.setField(healthMonitorService, "simulatedChecksEnabled", false);
+        healthMonitorService.performScheduledHealthChecks();
+        org.springframework.test.util.ReflectionTestUtils.setField(healthMonitorService, "simulatedChecksEnabled", true);
+        lenient().when(healthCheckRepo.findDueChecks(any(java.time.LocalDateTime.class)))
+            .thenReturn(java.util.List.of());
+        healthMonitorService.performScheduledHealthChecks();
+        HealthCheckEntity due = new HealthCheckEntity();
+        due.checkName = "db";
+        lenient().when(healthCheckRepo.findDueChecks(any(java.time.LocalDateTime.class)))
+            .thenReturn(java.util.List.of(due));
+        healthMonitorService.performScheduledHealthChecks();
+
+        // 空白 gameId + severity null 的告警：只升级不派发（isBlank 侧 + severity null 三元）
+        SystemAlertEntity blank = new SystemAlertEntity();
+        blank.id = "sa_blank";
+        blank.title = "平台告警";
+        blank.gameId = "   ";
+        blank.severity = null;
+        lenient().when(systemAlertRepo.save(any(SystemAlertEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(systemAlertRepo.findNeedingEscalation()).thenReturn(java.util.List.of(blank));
+        healthMonitorService.checkAlertEscalations();
+        assertEquals(Integer.valueOf(1), blank.escalationLevel);
+        verify(webhookService, org.mockito.Mockito.never()).sendCustomWebhook(anyString(), anyString(), anyMap());
+
+        // 无待升级告警（!needingEscalation.isEmpty() false 侧）
+        when(systemAlertRepo.findNeedingEscalation()).thenReturn(java.util.List.of());
+        healthMonitorService.checkAlertEscalations();
     }
 }

@@ -339,4 +339,41 @@ class PermissionServiceTest {
 
         assertFalse(permissionService.hasGamePermission("user_test123", "game_123", "game:read"));
     }
+
+    @Test
+    void hasPermissionAndGamePermission_RoleMissingOrDisabled_ReturnsFalse() {
+        when(userRepo.findById("user_test123")).thenReturn(Optional.of(testUser));
+
+        // 63 行 role == null 侧（findById 空）
+        when(userRoleRepo.findValidByUserId(eq("user_test123"), any(LocalDateTime.class)))
+            .thenReturn(List.of(testUserRole));
+        when(roleRepo.findById("viewer")).thenReturn(Optional.empty());
+        assertFalse(permissionService.hasPermission("user_test123", "game:read"));
+
+        // 121/138 行 role == null 侧（游戏与全局两循环各一）
+        when(userRoleRepo.findByUserIdAndGameId("user_test123", "game_123"))
+            .thenReturn(List.of(testUserRole));
+        when(userRoleRepo.findGlobalByUserId("user_test123")).thenReturn(List.of(testUserRole));
+        assertFalse(permissionService.hasGamePermission("user_test123", "game_123", "game:read"));
+
+        // 角色存在但 disabled：63/121/138 行 isEnabled()==false 侧
+        RoleEntity disabled = new RoleEntity();
+        disabled.id = "viewer";
+        disabled.enabled = false;
+        disabled.permissions = java.util.Set.of(testPermission);
+        when(roleRepo.findById("viewer")).thenReturn(Optional.of(disabled));
+        assertFalse(permissionService.hasPermission("user_test123", "game:read"));
+
+        // 121 行 disabled 侧（仅游戏角色循环）
+        when(userRoleRepo.findByUserIdAndGameId("user_test123", "game_123"))
+            .thenReturn(List.of(testUserRole));
+        when(userRoleRepo.findGlobalByUserId("user_test123")).thenReturn(List.of());
+        assertFalse(permissionService.hasGamePermission("user_test123", "game_123", "game:read"));
+
+        // 138 行 disabled 侧（仅全局角色循环）
+        when(userRoleRepo.findByUserIdAndGameId("user_test123", "game_123")).thenReturn(List.of());
+        when(userRoleRepo.findGlobalByUserId("user_test123")).thenReturn(List.of(testUserRole));
+        assertFalse(permissionService.hasGamePermission("user_test123", "game_123", "game:read"));
+    }
+
 }

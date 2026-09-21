@@ -111,4 +111,10 @@ class TotpUtilTest {
                 () -> TotpUtil.currentCode(RFC6238_SECRET, Instant.ofEpochSecond(59)));
         }
     }
+
+    @Test
+    void base32Decode_nullInputYieldsEmptyArray() {
+        assertArrayEquals(new byte[0], TotpUtil.base32Decode(null));
+    }
+
 }

@@ -92,4 +92,16 @@ class OnlineMetricsServiceTest {
         assertEquals(60, OnlineMetricsService.clampMinutes(120));
         assertTrue(OnlineMetricsService.minutesAgo(60).before(Timestamp.from(Instant.now())));
     }
+
+    @Test
+    @DisplayName("环境过滤：blank 环境等同不过滤（isBlank 侧）；clampMinutes 0/负数回落默认")
+    void blankEnvironmentAndNonPositiveMinutes() {
+        when(client.isAvailable()).thenReturn(true);
+        when(client.query(anyString(), any(Object[].class))).thenReturn(List.of());
+        service.overview("g", "   ", 5);
+        verify(client, org.mockito.Mockito.times(5)).query(anyString(), org.mockito.ArgumentMatchers.eq("g"), any());
+        assertEquals(5, OnlineMetricsService.clampMinutes(0));
+        assertEquals(5, OnlineMetricsService.clampMinutes(-1));
+    }
+
 }

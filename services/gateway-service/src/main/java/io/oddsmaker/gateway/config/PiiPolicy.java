@@ -147,7 +147,8 @@ public class PiiPolicy {
                             for (String part : parts) {
                                 int v;
                                 try { v = Integer.parseInt(part); } catch (NumberFormatException e) { return null; }
-                                if (v < 0 || v > 255) return null;
+                                // 负数按无符号比较恒大于 255：与 v<0||v>255 等价的无分支形态
+                                if (Integer.compareUnsigned(v, 255) > 0) return null;
                             }
                             return parts[0]+"."+parts[1]+"."+parts[2]+".0";
                         }

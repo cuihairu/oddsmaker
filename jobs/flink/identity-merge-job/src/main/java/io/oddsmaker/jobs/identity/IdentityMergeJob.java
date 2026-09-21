@@ -210,10 +210,10 @@ public class IdentityMergeJob {
                 s.deviceIds.add(deviceId);
                 if (playerId != null && !playerId.isEmpty()) s.playerIds.add(playerId);
                 if (characterId != null && !characterId.isEmpty()) s.characterIds.add(characterId);
-                if (ts != null) {
-                    s.lastSeen = ts;
-                    if (s.firstSeen == null || ts.before(s.firstSeen)) s.firstSeen = ts;
-                }
+                // extractTs 三级回退（ts_server→ts_client→now）最终取 currentTimeMillis，恒非 null，
+                // 原 if (ts != null) 壳恒真，等价展平
+                s.lastSeen = ts;
+                if (s.firstSeen == null || ts.before(s.firstSeen)) s.firstSeen = ts;
             }
 
             state.update(s);

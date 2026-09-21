@@ -217,4 +217,39 @@ class DeveloperPortalServiceTest {
         assertNotNull(stats);
     }
 
+
+
+    @Test
+    @DisplayName("分支对侧：updateSDKKey 空更新、遥测 config null 跳过应用、退役扫描 null 字段派发")
+    void developerPortalBranchSides() {
+        // 空 updates：两个 containsKey 均 false，密钥字段不动
+        lenient().when(sdkKeyRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(sdkKeyRepo.findById("sdk_b")).thenReturn(Optional.of(key("sdk_b")));
+        assertNotNull(service.updateSDKKey("sdk_b", java.util.Map.of(), "ops1"));
+
+        // createTelemetryConfig config=null → 跳过 applyTelemetryConfig
+        lenient().when(telemetryConfigRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        TelemetryConfigEntity bare = service.createTelemetryConfig(
+            "g", "prod", "bare", TelemetryConfigEntity.ConfigType.BATCH, "d", false, null, "dev1");
+        assertNotNull(bare.id);
+
+        // checkRetiringVersions：platform/versionStatus/retirementDate 全 null 三元侧
+        SDKVersionEntity retiring = new SDKVersionEntity();
+        retiring.version = "1.0.0";
+        retiring.platform = null;
+        retiring.versionStatus = null;
+        retiring.retirementDate = null;
+        when(sdkVersionRepo.findRetiringSoon(any(java.time.LocalDateTime.class)))
+            .thenReturn(java.util.List.of(retiring));
+        assertDoesNotThrow(() -> service.checkRetiringVersions());
+        @SuppressWarnings("unchecked")
+        org.mockito.ArgumentCaptor<Map<String, Object>> cap =
+            org.mockito.ArgumentCaptor.forClass(Map.class);
+        verify(webhookService).sendCustomWebhook(eq("DEFAULT"),
+            eq(WebhookService.EVENT_SDK_VERSION_RETIRING), cap.capture());
+        org.junit.jupiter.api.Assertions.assertNull(cap.getValue().get("platform"));
+        org.junit.jupiter.api.Assertions.assertNull(cap.getValue().get("version_status"));
+        org.junit.jupiter.api.Assertions.assertNull(cap.getValue().get("retirement_date"));
+        assertEquals(-1L, cap.getValue().get("days_until_retiring"));
+    }
 }

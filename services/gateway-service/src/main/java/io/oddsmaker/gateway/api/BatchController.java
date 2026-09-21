@@ -98,9 +98,10 @@ public class BatchController {
             String userAgent = req.getHeaders().getFirst("user-agent");
             String clientIp = extractClientIp(req);
             String apiKey = req.getHeaders().getFirst("x-api-key");
+            // HmacFilter 已保证 /v1/batch 到达此处时 key 上下文必在（无 key/无效 key 均 401 于 filter）
             AuthService.ApiKeyContext keyContext = (AuthService.ApiKeyContext) exchange.getAttributes()
                 .get("oddsmaker.api_key_context");
-            if (keyContext != null && !keyContext.envWritable()) {
+            if (!keyContext.envWritable()) {
                 throw new ResponseStatusException(
                     org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE, "environment_unavailable");
             }
@@ -137,13 +138,7 @@ public class BatchController {
                 if (event.clientIp == null) {
                     event.clientIp = clientIp;
                 }
-                if (event.props != null) {
-                    if (policy != null && policy.propsAllowlist != null && !policy.propsAllowlist.isEmpty()) {
-                        event.props = propsPolicy.filterWithAllowlist(event.props, policy.propsAllowlist);
-                    } else {
-                        event.props = propsPolicy.filter(event.props);
-                    }
-                }
+                applyPropsFilter(event, policy);
                 if (event.props != null && piiPolicy.hasBlockedKeys(event.props, piiOverrides)) {
                     reject(resp, event, "pii_blocked");
                     continue;
@@ -182,7 +177,7 @@ public class BatchController {
             // 环境级确定性采样：按 device_id 哈希分桶，保证同一设备的事件采样结果稳定，
             // 避免漏斗/留存分析因随机采样断裂。被采样丢弃的事件计入 sampled_out，不进 DLQ。
             final List<Event> eventsToPublish;
-            if (keyContext != null && keyContext.samplingEnabled()) {
+            if (keyContext.samplingEnabled()) {
                 List<Event> sampledEvents = new ArrayList<>(validEvents.size());
                 for (Event event : validEvents) {
                     if (sampledIn(event, keyContext.envSampleRate)) {
@@ -203,9 +198,8 @@ public class BatchController {
             String gameId = eventsToPublish.get(0).gameId;
             List<BlockListClient.BatchTarget> targets = new ArrayList<>();
             for (Event event : eventsToPublish) {
-                if (event.deviceId != null && !event.deviceId.isEmpty()) {
-                    targets.add(new BlockListClient.BatchTarget("device_id", event.deviceId));
-                }
+                // device_id 过 invalid_schema + schema minLength=1 后恒非 null 且非空（见下方注释）
+                targets.add(new BlockListClient.BatchTarget("device_id", event.deviceId));
                 if (event.userId != null && !event.userId.isEmpty()) {
                     targets.add(new BlockListClient.BatchTarget("player_id", event.userId));
                 }
@@ -235,11 +229,25 @@ public class BatchController {
         });
     }
 
-    private boolean isBlocked(Event event, Map<String, Boolean> blockedMap) {
-        if (event.deviceId != null) {
-            Boolean b = blockedMap.get("device_id:" + event.deviceId);
-            if (Boolean.TRUE.equals(b)) return true;
+    /**
+     * props 白名单过滤：key 级 allowlist 优先，否则回落通用 allowlist。
+     * policy 为 null 仅在 HmacFilter 缓存过期 race 下可达（getContext 二次查询返回 null），
+     * 走通用过滤兜底。
+     */
+    private void applyPropsFilter(Event event, PolicyService.Policy policy) {
+        if (event.props == null) {
+            return;
         }
+        if (policy != null && policy.propsAllowlist != null && !policy.propsAllowlist.isEmpty()) {
+            event.props = propsPolicy.filterWithAllowlist(event.props, policy.propsAllowlist);
+        } else {
+            event.props = propsPolicy.filter(event.props);
+        }
+    }
+
+    private boolean isBlocked(Event event, Map<String, Boolean> blockedMap) {
+        // device_id 恒非 null（invalid_schema 前置校验保证），无需判空
+        if (Boolean.TRUE.equals(blockedMap.get("device_id:" + event.deviceId))) return true;
         if (event.userId != null) {
             Boolean b = blockedMap.get("player_id:" + event.userId);
             if (Boolean.TRUE.equals(b)) return true;
@@ -289,10 +297,9 @@ public class BatchController {
                         continue;
                     }
                     try {
-                        Event event = readCompatEvent(line);
-                        if (event != null) {
-                            out.add(event);
-                        }
+                        // readCompatEvent 对 null 令牌在返回前即抛（convertValue 得 null 引用后
+                        // 的 event.gameId 访问 NPE），null 行走本 catch 跳过——返回值恒非 null
+                        out.add(readCompatEvent(line));
                     } catch (Exception e) {
                         // Skip malformed lines
                     }
@@ -303,14 +310,12 @@ public class BatchController {
             if (node.isArray()) {
                 List<Event> out = new ArrayList<>();
                 for (JsonNode child : node) {
-                    if (child == null || child.isNull()) {
+                    // Jackson 数组迭代不产生 null 引用（null 元素一律为 NullNode），isNull 判定即可
+                    if (child.isNull()) {
                         continue;  // Skip null elements
                     }
                     try {
-                        Event event = readCompatEvent(child);
-                        if (event != null) {
-                            out.add(event);
-                        }
+                        out.add(readCompatEvent(child));
                     } catch (Exception e) {
                         // Skip malformed elements
                     }
@@ -454,8 +459,9 @@ public class BatchController {
             value = value.substring(value.lastIndexOf("__") + 2);
         }
         if (value.startsWith("env_")) {
+            // startsWith("env_") 保证 lastIndexOf('_') >= 3，idx 恒非负
             int idx = value.lastIndexOf('_');
-            if (idx >= 0 && idx + 1 < value.length()) {
+            if (idx + 1 < value.length()) {
                 value = value.substring(idx + 1);
             }
         }
@@ -563,11 +569,12 @@ public class BatchController {
     }
 
     private void reject(BatchResponse resp, Event event, String reason) {
+        // 全部调用点均传入非 null event（循环内构造），无需判空
         HashMap<String, String> rej = new HashMap<>();
-        rej.put("event_id", event != null ? String.valueOf(event.eventId) : "");
+        rej.put("event_id", String.valueOf(event.eventId));
         rej.put("reason", reason);
         resp.rejected.add(rej);
-        dlq.publish(event != null ? event.eventId : null, reason, toJsonSilently(event));
+        dlq.publish(event.eventId, reason, toJsonSilently(event));
     }
 
     private String toJsonSilently(Object o) {

@@ -67,22 +67,18 @@ public class BlockListClient {
 
         long now = Instant.now().getEpochSecond();
 
-        // 1) 区分缓存命中/未命中
-        Map<Boolean, List<BatchTarget>> partitioned = targets.stream()
-                .collect(Collectors.partitioningBy(t -> {
-                    CacheEntry ce = cache.get(cacheKey(t));
-                    return ce != null && ce.expireAt > now;
-                }));
-
+        // 1) 单次取缓存区分命中/未命中（单次 get 后直接判定，规避二次 get 的竞态防御）
         Map<String, Boolean> result = new java.util.HashMap<>();
-        for (BatchTarget t : partitioned.get(true)) {
+        List<BatchTarget> misses = new ArrayList<>();
+        for (BatchTarget t : targets) {
             CacheEntry ce = cache.get(cacheKey(t));
-            if (ce != null) {
+            if (ce != null && ce.expireAt > now) {
                 result.put(cacheKey(t), ce.blocked);
+            } else {
+                misses.add(t);
             }
         }
 
-        List<BatchTarget> misses = partitioned.get(false);
         if (misses.isEmpty()) {
             return Mono.just(result);
         }

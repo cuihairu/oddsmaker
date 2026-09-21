@@ -90,4 +90,26 @@ class CrashMetricsAssemblerTest {
                         "crash_devices", 1L, "active_devices", 10L, "crash_rate", 0.1)));
         assertEquals("unknown", versions.get(0).get("appVersion"));
     }
+
+    @Test
+    void toTopGroups_missingGroupNormalizedToUnknown() {
+        List<Map<String, Object>> groups = CrashMetricsAssembler.toTopGroups(List.of(
+                Map.of("occurrences", 5L, "sample_message", "NPE")), 10);
+        assertEquals("unknown", groups.get(0).get("crashGroup"));
+    }
+
+    @Test
+    void toVersionRates_olderOrEqualDateDoesNotOverwriteLatest() {
+        List<Map<String, Object>> versions = CrashMetricsAssembler.toVersionRates(List.of(
+                Map.of("app_version", "1.2.0", "event_date", Date.valueOf("2026-09-09"),
+                        "crash_devices", 10L, "active_devices", 100L, "crash_rate", 0.10),
+                Map.of("app_version", "1.2.0", "event_date", Date.valueOf("2026-09-08"),
+                        "crash_devices", 5L, "active_devices", 100L, "crash_rate", 0.05),
+                Map.of("app_version", "1.2.0", "event_date", Date.valueOf("2026-09-09"),
+                        "crash_devices", 9L, "active_devices", 100L, "crash_rate", 0.09)));
+        Map<String, Object> v = versions.get(0);
+        assertEquals("2026-09-09", v.get("lastDate"));
+        assertEquals(10L, v.get("crashDevices"));  // 更早与相等日期均不覆盖最近口径
+    }
+
 }

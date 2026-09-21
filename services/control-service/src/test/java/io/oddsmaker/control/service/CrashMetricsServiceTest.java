@@ -120,4 +120,20 @@ class CrashMetricsServiceTest {
         assertEquals(14, CrashMetricsService.clampDays(null));
         assertEquals(180, CrashMetricsService.clampDays(999));
     }
+
+    @Test
+    @DisplayName("环境过滤：blank 环境三个接口均走无过滤分支（isBlank 侧）")
+    void blankEnvironmentSkipsEnvFilter() {
+        when(client.isAvailable()).thenReturn(true);
+        when(client.query(anyString(), any(Object[].class))).thenReturn(List.of());
+        service.topGroups("g", "   ", 14);
+        service.trend("g", "   ", 14);
+        service.rateByVersion("g", "   ", 14);
+        // 三个接口在 blank 环境下均不携带 environment 参数位
+        verify(client).query(contains("occurrences DESC"), org.mockito.ArgumentMatchers.eq("g"), any());
+        verify(client).query(contains("GROUP BY bucket"), org.mockito.ArgumentMatchers.eq("g"), any());
+        verify(client).query(contains("AS active_devices"),
+            org.mockito.ArgumentMatchers.eq("g"), any(), org.mockito.ArgumentMatchers.eq("g"), any());
+    }
+
 }

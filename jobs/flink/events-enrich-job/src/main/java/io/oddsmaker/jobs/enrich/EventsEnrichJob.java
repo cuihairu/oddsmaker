@@ -472,7 +472,9 @@ public class EventsEnrichJob {
             return om.writeValueAsString(obj);
         } catch (Exception e) {
             // naive fallback
-            if (json == null || json.isEmpty() || json.equals("{}")) {
+            // 进 catch 的唯一途径是 readTree 抛解析异常："" 解析为 MissingNode 不抛（非对象分支已处理）、
+            // "{}" 解析必成功（空对象走 has 分支），故 catch 域内 json 只能是 null（调用方未传）或非法非空文本
+            if (json == null) {
                 return "{\""+key+"\":\""+value.replace("\"","\\\"")+"\"}";
             }
             return json;

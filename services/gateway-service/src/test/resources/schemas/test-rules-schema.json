@@ -1,16 +1,75 @@
 {
   "$id": "https://oddsmaker.test/rules-schema.json",
   "title": "测试规则覆盖 schema（enum/array/integer/type数组/无type oneOf）",
-  "required": ["event_id"],
+  "required": [
+    "event_id"
+  ],
   "properties": {
-    "event_id": {"type": "string", "minLength": 1, "maxLength": 16},
-    "tier": {"type": "string", "enum": ["free", "vip"]},
-    "count": {"type": "integer"},
-    "tags": {"type": "array", "maxItems": 2},
-    "slot": {"type": ["string", "null"]},
-    "mix": {"oneOf": [{"format": "raw"}, {"type": "number"}]},
-    "meta": {"type": "object"},
-    "absent": {"type": "null"},
-    "anything": {"type": "bogus-unknown"}
+    "event_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 16
+    },
+    "tier": {
+      "type": "string",
+      "enum": [
+        "free",
+        "vip"
+      ]
+    },
+    "count": {
+      "type": "integer"
+    },
+    "tags": {
+      "type": "array",
+      "maxItems": 2
+    },
+    "slot": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "mix": {
+      "oneOf": [
+        {
+          "format": "raw"
+        },
+        {
+          "type": "number"
+        }
+      ]
+    },
+    "meta": {
+      "type": "object"
+    },
+    "absent": {
+      "type": "null"
+    },
+    "anything": {
+      "type": "bogus-unknown"
+    },
+    "weirdtype": {
+      "type": 5
+    },
+    "slot2": {
+      "type": [
+        1,
+        "string"
+      ]
+    },
+    "mix2": {
+      "oneOf": [
+        {
+          "type": 5
+        },
+        {
+          "type": "number"
+        }
+      ]
+    },
+    "free_arr": {
+      "type": "array"
+    }
   }
 }

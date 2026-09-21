@@ -265,4 +265,67 @@ class PlayerDataQueryServiceTest {
         java.util.Map<String, Object> out = service.loginLogs("game_demo", "p1", 0);
         assertEquals(1, ((List<?>) out.get("logs")).size());
     }
+
+    // ===== 分支对侧补充（BRANCH 收口）=====
+
+    @Test
+    @DisplayName("档案：playerId null 拒绝；displayName 存在时优先展示（三元非 null 侧）")
+    void profileNullPlayerIdAndDisplayNamePresent() {
+        assertThrows(IllegalArgumentException.class, () -> service.profile(null));
+
+        gameDemo.displayName = "Demo 显示名";
+        when(gameRepo.findByDeletedAtIsNull()).thenReturn(List.of(gameDemo));
+        when(identityRepo.findByPlayerId("game_demo", "p1")).thenReturn(Optional.empty());
+
+        List<java.util.Map<String, Object>> profile = service.profile("p1");
+        assertEquals(1, profile.size());
+        assertEquals("Demo 显示名", profile.get(0).get("gameName"));
+    }
+
+    @Test
+    @DisplayName("上报充值：gameId null 与 playerId null/空白拒绝；软删游戏拒绝")
+    void ingestPaymentNullSidesAndDeletedGame() {
+        // gameId null：第一条件 true 侧
+        PlayerPaymentEntity nullGame = payment("o1", "5", PlayerPaymentEntity.Status.COMPLETED);
+        nullGame.gameId = null;
+        assertThrows(IllegalArgumentException.class, () -> service.ingestPayment(nullGame));
+
+        // playerId 校验位于 requireGame 之后，须先 stub 有效游戏
+        when(gameRepo.findById("game_demo")).thenReturn(Optional.of(gameDemo));
+        PlayerPaymentEntity nullPlayer = payment("o2", "5", PlayerPaymentEntity.Status.COMPLETED);
+        nullPlayer.playerId = null;
+        assertThrows(IllegalArgumentException.class, () -> service.ingestPayment(nullPlayer));
+        PlayerPaymentEntity blankPlayer = payment("o3", "5", PlayerPaymentEntity.Status.COMPLETED);
+        blankPlayer.playerId = " ";
+        assertThrows(IllegalArgumentException.class, () -> service.ingestPayment(blankPlayer));
+
+        // 软删游戏：requireGame filter deletedAt 侧
+        gameDemo.deletedAt = LocalDateTime.now();
+        assertThrows(IllegalArgumentException.class,
+            () -> service.ingestPayment(payment("o4", "5", PlayerPaymentEntity.Status.COMPLETED)));
+    }
+
+    @Test
+    @DisplayName("上报登录：gameId/playerId 空白拒绝；loginAt 已带值不覆盖")
+    void ingestLoginBlankSidesAndProvidedLoginAt() {
+        when(gameRepo.findById("game_demo")).thenReturn(Optional.of(gameDemo));
+        when(loginLogRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        PlayerLoginLogEntity blankGame = new PlayerLoginLogEntity();
+        blankGame.gameId = "  ";
+        assertThrows(IllegalArgumentException.class, () -> service.ingestLogin(blankGame));
+
+        PlayerLoginLogEntity blankPlayer = new PlayerLoginLogEntity();
+        blankPlayer.gameId = "game_demo";
+        blankPlayer.playerId = "  ";
+        assertThrows(IllegalArgumentException.class, () -> service.ingestLogin(blankPlayer));
+
+        LocalDateTime fixed = LocalDateTime.now().minusHours(3);
+        PlayerLoginLogEntity withAt = new PlayerLoginLogEntity();
+        withAt.gameId = "game_demo";
+        withAt.playerId = "p1";
+        withAt.loginAt = fixed;
+        PlayerLoginLogEntity saved = service.ingestLogin(withAt);
+        assertEquals(fixed, saved.loginAt);  // != null false 侧：已带值直通
+    }
 }

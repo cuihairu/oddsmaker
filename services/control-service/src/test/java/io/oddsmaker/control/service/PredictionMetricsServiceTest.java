@@ -173,4 +173,38 @@ class PredictionMetricsServiceTest {
         assertEquals(10, PredictionMetricsService.clampLimit(10));
         assertEquals(500, PredictionMetricsService.clampLimit(9999));
     }
+
+    // ===== 分支对侧补充（BRANCH 收口）=====
+
+    @Test
+    @DisplayName("空白环境与 null 等价：四入口与 writePrediction 归一化均走无环境支（isBlank 侧）")
+    void blankEnvironmentTreatedAsUnset() {
+        when(client.isAvailable()).thenReturn(true);
+        lenient().when(client.query(anyString(), any(Object[].class))).thenReturn(List.of());
+
+        assertTrue((Boolean) service.refreshChurn("g", " ").get("available"));
+        assertTrue((Boolean) service.topChurn("g", " ", null).get("available"));
+        assertTrue((Boolean) service.refreshRiskScore("g", "  ").get("available"));
+        assertTrue((Boolean) service.topRiskScore("g", " ", null).get("available"));
+
+        // envFilter(" ") 视为未指定：任何查询 SQL 都不含环境谓词
+        verify(client, never()).query(contains("AND environment = ?"), any(Object[].class));
+    }
+
+    @Test
+    @DisplayName("writePrediction：空白环境归一化为空串落库（三元空串侧 + 有行写入）")
+    void writePredictionBlankEnvironmentNormalizesToEmpty() {
+        when(client.isAvailable()).thenReturn(true);
+        when(client.query(contains("v_user_features_30d"), any(Object[].class))).thenReturn(List.of(
+            Map.of("user_id", "u1", "days_inactive", 20L, "session_count", 1L, "revenue_total", 0.0)));
+
+        Map<String, Object> resp = service.refreshChurn("g", "   ");
+        assertEquals(1, resp.get("scored"));
+
+        // 空白环境 → INSERT 第二参为 ""（而非 null/原样空白）
+        org.mockito.ArgumentCaptor<Object[]> args =
+            org.mockito.ArgumentCaptor.forClass(Object[].class);
+        verify(client).update(contains("INSERT INTO predictions"), args.capture());
+        assertEquals("", args.getValue()[1]);
+    }
 }

@@ -288,7 +288,8 @@ public class ExperimentService {
     }
 
     private void validateConfig(JsonNode config, boolean requireRunnable) {
-        if (config == null || !config.isObject()) {
+        // 两个调用点（normalizeConfig/readConfig）对 null 入参均兜底 createObjectNode，config 恒非 null
+        if (!config.isObject()) {
             throw new IllegalArgumentException("Experiment config must be a JSON object");
         }
         if (config.has("targeting") && !config.get("targeting").isObject()) {

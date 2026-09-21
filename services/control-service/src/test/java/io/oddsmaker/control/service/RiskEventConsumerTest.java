@@ -251,6 +251,28 @@ class RiskEventConsumerTest {
     }
 
     @Test
+    @DisplayName("身份扩散封禁：设备无关联账号（extended==0 侧）不追加封禁")
+    void identityExtendNoMatches_extendsNothing() {
+        ReflectionTestUtils.setField(consumer, "identityExtend", true);
+        ReflectionTestUtils.setField(consumer, "identityLinkRepo", identityLinkRepo);
+        // 设备名下只有 character_id 关联（非 player_id/user_id）→ extended 计数保持 0
+        io.oddsmaker.control.jpa.IdentityLinkEntity deviceLink = new io.oddsmaker.control.jpa.IdentityLinkEntity();
+        deviceLink.identityId = "idt_1";
+        deviceLink.linkedIdentityType = "character_id";
+        deviceLink.linkedId = "char_9";
+        when(identityLinkRepo.findByTypeAndId("device_id", "dev_none"))
+            .thenReturn(java.util.List.of(deviceLink));
+        when(identityLinkRepo.findByIdentityId("idt_1")).thenReturn(java.util.List.of());
+
+        assertDoesNotThrow(() ->
+            consumer.onRiskEvent(riskEventJson("BLOCK", "HIGH", "DEVICE", "dev_none", "rr_threshold")));
+        // 只有主封禁一次，无扩散封禁
+        verify(blockListService, times(1)).addBlock(
+            any(), any(), any(), any(), any(), any(), any(), anyBoolean(),
+            any(), any(), any(), any());
+    }
+
+    @Test
     @DisplayName("THROTTLE → 审计并下发限流指令到游戏服，不封禁不建案")
     void throttle_notifiesGameServer() {
         consumer.onRiskEvent(riskEventJson("THROTTLE", "MEDIUM", "DEVICE", "dev_th", "rr_freq"));

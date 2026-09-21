@@ -106,4 +106,34 @@ class LtvForecastAssemblerTest {
         assertEquals(8, LtvForecastAssembler.ageDays("2026-09-01", TODAY));
         assertEquals(0, LtvForecastAssembler.ageDays("bad-date", TODAY));
     }
+
+    @Test
+    void forecast_skipsRowsWithoutCohort_andZeroD7MatureCohort() {
+        // 38 行 cohort 空串侧：size 行缺 cohort 键 → asDate null → "" 跳过
+        Map<String, Object> out = LtvForecastAssembler.forecast(
+            List.of(), List.of(Map.<String, Object>of("cohort_size", 5L)), TODAY);
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> points = (List<Map<String, Object>>) out.get("points");
+        assertTrue(points.isEmpty());
+
+        // 52 行 d7==0 短路侧：成熟 cohort 收入全落在 day7 之后 → 不进比率拟合
+        Map<String, Object> out2 = LtvForecastAssembler.forecast(
+            List.of(ltv("2026-07-01", 10, 50.0)),
+            List.of(size("2026-07-01", 100)), TODAY);
+        assertEquals(0.0, out2.get("multiplier"));
+        assertEquals(0, out2.get("basedOnCohorts"));
+    }
+
+
+    @Test
+    void forecast_negativeLaterRevenue_makesD30NonPositive_skipsFromFit() {
+        // 52 行第二条件假侧（d7>0 且 d30<=0）：day10 大额负收入（退款）回吐 day0 收入，
+        // 累计曲线单调性被打破——cumThrough(6)=50、cumThrough(29)=-50，cohort 剔除出乘数拟合
+        Map<String, Object> out = LtvForecastAssembler.forecast(
+            List.of(ltv("2026-07-01", 0, 50.0), ltv("2026-07-01", 10, -100.0)),
+            List.of(size("2026-07-01", 100)), TODAY);
+        assertEquals(0.0, out.get("multiplier"));
+        assertEquals(0, out.get("basedOnCohorts"));
+    }
+
 }

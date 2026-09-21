@@ -62,4 +62,14 @@ class CodeGeneratorTest {
         // 31 个候选字符，32000 次抽样后应全部出现过（概率上几乎必然）
         assertEquals(CodeGenerator.ALPHABET.length(), seen.size());
     }
+
+    @Test
+    void generate_batchDedupSurvivesBirthdayCollisions() {
+        // length=6 → 30^6≈7.3e8 空间；2e5 码期望碰撞 ~27 次，P(零碰撞)≈e^-27≈1e-12，
+        // 确定性意义上必然覆盖 seen.add false 侧（碰撞重试路径）
+        List<String> codes = CodeGenerator.generate(200_000, 6, "");
+        assertEquals(200_000, codes.size());
+        assertEquals(200_000, new java.util.HashSet<>(codes).size());
+    }
+
 }

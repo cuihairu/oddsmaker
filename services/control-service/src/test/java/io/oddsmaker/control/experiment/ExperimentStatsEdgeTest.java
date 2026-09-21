@@ -87,6 +87,11 @@ class ExperimentStatsEdgeTest {
         var tiny = stats.welchTest("rev", arm(1, 3, 9, 0), arm(30, 60, 200, 0));
         assertTrue(tiny.lowPowerHint);
         assertEquals(0.0, tiny.pValue, 1e-12); // 样本不足不计算 p 值
+
+        // 对照侧样本不足（n1 达标、n2 < 2 的短路侧）：同样只标记 lowPower
+        var tinyTreatment = stats.welchTest("rev", arm(30, 60, 200, 0), arm(1, 3, 9, 0));
+        assertTrue(tinyTreatment.lowPowerHint);
+        assertEquals(0.0, tinyTreatment.pValue, 1e-12);
     }
 
     @Test

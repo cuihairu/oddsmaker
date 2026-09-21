@@ -725,4 +725,132 @@ class EventsEnrichJobTest {
             java.nio.file.Files.deleteIfExists(any);
         }
     }
+
+    // ===== 分支对侧补充（BRANCH 收口） =====
+
+    @Test
+    @DisplayName("ValidateFunction：event_name/game_id/environment 各自缺失独立走 DLQ")
+    void validateFunctionDropsEachRequiredField() {
+        EventsEnrichJob.ValidateFunction fn = new EventsEnrichJob.ValidateFunction(new OutputTag<>("dlq", Types.STRING));
+        List<RawEvent> out = new ArrayList<>();
+        List<String> dlq = new ArrayList<>();
+
+        RawEvent noName = validEvent();
+        noName.event_name = null;
+        fn.processElement(noName, validateContext(fn, dlq), sinkTo(out));
+
+        RawEvent noGame = validEvent();
+        noGame.game_id = null;
+        fn.processElement(noGame, validateContext(fn, dlq), sinkTo(out));
+
+        RawEvent noEnv = validEvent();
+        noEnv.environment = null;
+        fn.processElement(noEnv, validateContext(fn, dlq), sinkTo(out));
+
+        assertTrue(out.isEmpty());
+        assertEquals(3, dlq.size());
+        assertTrue(dlq.get(0).contains("invalid_schema"));
+    }
+
+    @Test
+    @DisplayName("toRow：ts_server 与 ts_client 均显式存在时原样直通（不回退 now/server）")
+    void toRowKeepsExplicitTimestamps() {
+        RawEvent r = validEvent();
+        r.ts_server = 2_000_000L;
+        r.ts_client = 1_000_000L;
+        EventsEnrichJob.EventRow row = EventsEnrichJob.toRow(r, EventsEnrichJob.Enrichers.create(""));
+        assertEquals(new Timestamp(2_000L), row.ts_server);
+        assertEquals(new Timestamp(1_000L), row.ts_client);
+    }
+
+    @Test
+    @DisplayName("toRow：国家与 IP 均缺省时跳过富化；props 缺省回退 {}")
+    void toRowEmptyCountryWithoutIpSkipsLookup() {
+        RawEvent r = validEvent();   // country/client_ip/props_json/user_agent 均未设置
+        EventsEnrichJob.EventRow row = EventsEnrichJob.toRow(r, EventsEnrichJob.Enrichers.create(""));
+        assertEquals("", row.country);   // 国家空但 IP 也空 → 不查库
+        assertEquals("{}", row.props_json);   // props null → 基础 "{}"，UA null 不合并
+    }
+
+    @Test
+    @DisplayName("toRow：国家空 + IP 存在 + 库命中 → 采用富化国家")
+    void toRowUsesProviderCountryWhenIpPresent() throws Exception {
+        EventsEnrichJob.Enrichers e = enrichersWith(providerReturning(ip -> cityResponse("JP")));
+        RawEvent r = validEvent();
+        r.client_ip = "8.8.8.8";
+        EventsEnrichJob.EventRow row = EventsEnrichJob.toRow(r, e);
+        assertEquals("JP", row.country);
+    }
+
+    @Test
+    @DisplayName("toRow：UA 三族解析结果为非 null 空串时不合并进 props_json")
+    void uaEmptyFamilyValuesNotMerged() throws Exception {
+        EventsEnrichJob.Enrichers e = EventsEnrichJob.Enrichers.create("");
+        assertNull(e.uaFamily(null));   // 先触发真实初始化
+
+        nl.basjes.parse.useragent.UserAgentAnalyzer uaa =
+            org.mockito.Mockito.mock(nl.basjes.parse.useragent.UserAgentAnalyzer.class);
+        // parse(String) 的返回类型是 final 嵌套类 UserAgent$ImmutableUserAgent（Mockito 5 inline 可 mock final）
+        nl.basjes.parse.useragent.UserAgent.ImmutableUserAgent ua =
+            org.mockito.Mockito.mock(nl.basjes.parse.useragent.UserAgent.ImmutableUserAgent.class);
+        org.mockito.Mockito.when(uaa.parse(org.mockito.ArgumentMatchers.anyString())).thenReturn(ua);
+        org.mockito.Mockito.when(ua.getValue(org.mockito.ArgumentMatchers.anyString())).thenReturn("");
+        Field f = EventsEnrichJob.Enrichers.class.getDeclaredField("uaa");
+        f.setAccessible(true);
+        f.set(e, uaa);
+
+        RawEvent r = validEvent();
+        r.user_agent = "Mozilla/5.0 (compatible)";
+        r.props_json = "{\"k\":\"v\"}";
+        EventsEnrichJob.EventRow row = EventsEnrichJob.toRow(r, e);
+        assertEquals("{\"k\":\"v\"}", row.props_json);   // 三族空串：一个键都不加
+    }
+
+    @Test
+    @DisplayName("mapLiteral：null 键条目剔除（null 值侧已盖）")
+    void mapLiteralSkipsNullKey() {
+        var m = new java.util.LinkedHashMap<String, String>();
+        m.put(null, "v");
+        m.put("k2", "v2");
+        assertEquals("{'k2':'v2'}", EventsEnrichJob.mapLiteral(m));
+    }
+
+    @Test
+    @DisplayName("mp：Avro map 的 null 键条目剔除（null 值侧已盖）")
+    void mpSkipsNullKeyEntry() {
+        var record = new org.apache.avro.generic.GenericData.Record(schemaWithExperiments());
+        var m = new java.util.HashMap<CharSequence, CharSequence>();
+        m.put(null, "x");
+        m.put("k", "v");
+        record.put("experiments", m);
+        assertEquals(java.util.Map.of("k", "v"), RawEvent.mp(record, "experiments"));
+    }
+
+    @Test
+    @DisplayName("ensureInit：mmdb 路径 null 与路径不存在均跳过建库（geoip 保持 null）")
+    void enrichersNullAndMissingMmdbPaths() {
+        EventsEnrichJob.Enrichers nullPath = EventsEnrichJob.Enrichers.create(null);
+        assertNull(nullPath.countryByIp("8.8.8.8"));
+        EventsEnrichJob.Enrichers missing = EventsEnrichJob.Enrichers.create("/nonexistent/dir/x.mmdb");
+        assertNull(missing.countryByIp("8.8.8.8"));   // File.exists()=false → 不建 reader
+    }
+
+    @Test
+    @DisplayName("countryByIp：响应 getCountry() 为 null（未 stub 的 mock）→ 返回 null")
+    void countryByIpNullCountryFromMock() throws Exception {
+        EventsEnrichJob.Enrichers e = enrichersWith(providerReturning(
+            ip -> org.mockito.Mockito.mock(com.maxmind.geoip2.model.CityResponse.class)));
+        assertNull(e.countryByIp("8.8.8.8"));   // mock 未 stub getCountry() → null
+    }
+
+    @Test
+    @DisplayName("uaValue：初始化后 uaa 被置 null（防御侧）→ 返回 null")
+    void uaaNullAfterInitReturnsNull() throws Exception {
+        EventsEnrichJob.Enrichers e = EventsEnrichJob.Enrichers.create("");
+        assertNotNull(e.uaFamily("Mozilla/5.0 (Windows NT 10.0) Chrome/120.0"));   // ensureInit 完成
+        Field f = EventsEnrichJob.Enrichers.class.getDeclaredField("uaa");
+        f.setAccessible(true);
+        f.set(e, null);
+        assertNull(e.uaFamily("Mozilla/5.0"));   // initialized=true 不再重建 → uaa==null 分支
+    }
 }

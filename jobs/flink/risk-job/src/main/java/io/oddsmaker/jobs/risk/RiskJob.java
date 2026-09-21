@@ -225,10 +225,9 @@ public class RiskJob {
         in.receiptKey = firstNonBlank(r.receipt_hash, r.order_id);
         in.revenueAmount = parseAmount(r.revenue_amount);
         String adFormat = nz(r.ad_format);
-        // schema 无 game_event_type 字段（原 GenericRecord 取值恒 null）
-        String gameEventType = "";
+        // schema 无 game_event_type 字段：gameEventType 是空串字面量，
+        // "ad_reward".equalsIgnoreCase("") 恒 false，死枝等价删除
         in.adReward = "rewarded".equalsIgnoreCase(adFormat)
-                || "ad_reward".equalsIgnoreCase(gameEventType)
                 || (eventName != null && eventName.contains("ad_reward"));
         return in;
     }
@@ -381,7 +380,9 @@ public class RiskJob {
                 else if ("sink".equals(e.flowType)) sinkSum = sinkSum.add(e.amount);
                 last = e;
             }
-            if (sinkSum.compareTo(BigDecimal.ZERO) > 0 && last != null) {
+            // sinkSum > 0 蕴含窗口循环至少执行过一次（同一循环里给 last 赋值），
+            // last != null 恒真，等价删枝
+            if (sinkSum.compareTo(BigDecimal.ZERO) > 0) {
                 BigDecimal ratio = sourceSum.divide(sinkSum, 2, RoundingMode.HALF_UP);
                 BigDecimal limit = BigDecimal.valueOf(spec.triggerThreshold);
                 if (ratio.compareTo(limit) > 0) {

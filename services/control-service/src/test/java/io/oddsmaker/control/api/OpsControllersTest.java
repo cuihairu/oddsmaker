@@ -283,4 +283,117 @@ class OpsControllersTest {
         assertEquals(200, symbolMappingController.deprecate("sym_1").getStatusCode().value());
         assertEquals(404, symbolMappingController.deprecate("nope").getStatusCode().value());
     }
+
+    // ===== 分支对侧补充（BRANCH 收口）=====
+
+    @Test
+    @DisplayName("公告：get/schedule/delete 的 404 两侧（不存在 / 跨游戏）")
+    void announcementMissingSides() {
+        assertEquals(404, announcementController.get("g", "other").getStatusCode().value());
+        assertEquals(404, announcementController.get("other-game", "a1").getStatusCode().value());
+        assertEquals(404, announcementController.schedule("g", "other",
+            new AnnouncementController.ScheduleReq()).getStatusCode().value());
+        assertEquals(404, announcementController.schedule("other-game", "a1",
+            new AnnouncementController.ScheduleReq()).getStatusCode().value());
+        assertEquals(404, announcementController.delete("g", "other").getStatusCode().value());
+        assertEquals(404, announcementController.delete("other-game", "a1").getStatusCode().value());
+    }
+
+    @Test
+    @DisplayName("邮件/兑换码：get 端点跨游戏 404（gameId 不匹配侧）")
+    void mailAndRedeemCrossGame404() {
+        MailEntity mail = new MailEntity();
+        mail.id = "m1";
+        mail.gameId = "g";
+        lenient().when(mailService.get("m1")).thenReturn(mail);
+        assertEquals(404, mailController.get("other-game", "m1").getStatusCode().value());
+
+        RedeemCodeBatchEntity batch = new RedeemCodeBatchEntity();
+        batch.id = "b1";
+        batch.gameId = "g";
+        lenient().when(redeemCodeService.getBatch("b1")).thenReturn(batch);
+        assertEquals(404, redeemCodeController.get("other-game", "b1").getStatusCode().value());
+    }
+
+    @Test
+    @DisplayName("currentOperator：认证主体存在时操作者取 auth.getName()（auth != null 侧）")
+    void operatorTakenFromAuthenticatedPrincipal() {
+        AnnouncementEntity entity = new AnnouncementEntity();
+        entity.id = "a1";
+        entity.gameId = "g";
+        lenient().when(announcementService.create(any(), anyString())).thenReturn(entity);
+        MailEntity mail = new MailEntity();
+        mail.id = "m1";
+        mail.gameId = "g";
+        lenient().when(mailService.create(any(), anyString())).thenReturn(mail);
+        RedeemCodeBatchEntity batch = new RedeemCodeBatchEntity();
+        batch.id = "b1";
+        batch.gameId = "g";
+        lenient().when(redeemCodeService.createBatch(any(), any(), anyInt(), any(), anyString()))
+            .thenReturn(batch);
+
+        var auth = new org.springframework.security.authentication.TestingAuthenticationToken(
+            "alice", "n", "ROLE_ADMIN");
+        try {
+            org.springframework.security.core.context.SecurityContextHolder
+                .getContext().setAuthentication(auth);
+            assertEquals(200, announcementController.create("g", new AnnouncementEntity())
+                .getStatusCode().value());
+            verify(announcementService).create(any(), eq("alice"));
+            assertEquals(200, mailController.create("g", new MailEntity()).getStatusCode().value());
+            verify(mailService).create(any(), eq("alice"));
+            assertEquals(200, redeemCodeController.create("g", new RedeemCodeBatchEntity(),
+                null, 12, null).getStatusCode().value());
+            verify(redeemCodeService).createBatch(any(), any(), anyInt(), any(), eq("alice"));
+        } finally {
+            org.springframework.security.core.context.SecurityContextHolder.clearContext();
+        }
+    }
+
+
+    @Test
+    @DisplayName("玩家导出：认证主体存在时操作者取 getName（currentOperator auth!=null 侧）")
+    void playerExportOperatorFromPrincipal() {
+        PlayerExportJobEntity job = new PlayerExportJobEntity();
+        job.id = "pex_1";
+        job.gameId = "g";
+        lenient().when(playerExportService.create(eq("g"), eq("p1"), any(), any(), any(), anyString()))
+            .thenReturn(job);
+        PlayerExportController.CreateRequest req = new PlayerExportController.CreateRequest();
+        req.gameId = "g";
+        req.playerId = "p1";
+        var auth = new org.springframework.security.authentication.TestingAuthenticationToken(
+            "alice", "n", "ROLE_ADMIN");
+        try {
+            org.springframework.security.core.context.SecurityContextHolder
+                .getContext().setAuthentication(auth);
+            assertEquals(200, playerExportController.create(req).getStatusCode().value());
+            verify(playerExportService).create(eq("g"), eq("p1"), any(), any(), any(), eq("alice"));
+        } finally {
+            org.springframework.security.core.context.SecurityContextHolder.clearContext();
+        }
+    }
+
+
+    @Test
+    @DisplayName("符号表：显式 id/status 直用、空串 id 重新生成、无 gameId 审计详情为 null")
+    void symbolMappingExplicitAndEmptySides() {
+        when(symbolMappingRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        SymbolMappingEntity explicit = new SymbolMappingEntity();
+        explicit.id = "my_sym";
+        explicit.platform = "ios";
+        explicit.status = SymbolMappingEntity.MappingStatus.DEPRECATED;
+        SymbolMappingEntity r1 = symbolMappingController.register(explicit).getBody();
+        assertEquals("my_sym", r1.id);
+        assertEquals(SymbolMappingEntity.MappingStatus.DEPRECATED, r1.status);
+        verify(auditLog).logCreate("symbol_mapping", "my_sym", "ios", "api", "api", null,
+            (java.util.Map<String, Object>) null);
+
+        SymbolMappingEntity emptyId = new SymbolMappingEntity();
+        emptyId.platform = "android";
+        SymbolMappingEntity r2 = symbolMappingController.register(emptyId).getBody();
+        org.junit.jupiter.api.Assertions.assertTrue(r2.id.startsWith("sym_"));
+    }
+
 }

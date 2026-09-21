@@ -14,6 +14,8 @@ dependencies {
     exclude(group = "org.jetbrains.kotlin", module = "kotlin-stdlib")
   }
   testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
+  // gzip 失败注入(GZIPOutputStream mockConstruction);版本与主仓 flink/control 一致
+  testImplementation("org.mockito:mockito-core:5.15.2")
   testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 

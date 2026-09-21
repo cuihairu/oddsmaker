@@ -217,6 +217,21 @@ class FunnelConfigServiceTest {
     }
 
     @Test
+    void updateStep_NullOptionalKept() {
+        // optional 有 false 初始化器：HTTP 链路恒非 null，null 跳过侧须显式置 null 直达
+        testStep.optional = true;
+        FunnelStepEntity updates = new FunnelStepEntity();
+        updates.optional = null;
+
+        when(funnelStepRepo.findById("s1")).thenReturn(Optional.of(testStep));
+        when(funnelStepRepo.save(any(FunnelStepEntity.class))).thenReturn(testStep);
+
+        funnelConfigService.updateStep("s1", updates);
+
+        assertTrue(testStep.optional);  // null patch 跳过，原值保留
+    }
+
+    @Test
     void deleteStep_Success() {
         when(funnelStepRepo.findById("s1")).thenReturn(Optional.of(testStep));
 

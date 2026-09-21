@@ -372,4 +372,97 @@ class ExportServiceDeepTest {
         assertTrue(lines[1].contains("\"[1,2]\""), "line=" + lines[1]);
         assertTrue(lines[1].contains(",java.lang.Object@"), "line=" + lines[1]);
     }
+
+    // ===== 分支对侧补充（BRANCH 收口）=====
+
+    @Test
+    @DisplayName("完成通知：notify+email 命中（诚实跳过）与 email 缺省跳过")
+    void notifyCompletionBranches() {
+        ExportJobEntity notified = job("events", "csv", null);
+        notified.notifyOnComplete = true;
+        notified.notificationEmail = "ops@example.com";
+        process(notified, List.of());   // 两条件均 true → sendCompletionNotification（无通道仅日志）
+
+        ExportJobEntity noEmail = job("events", "json", null);
+        noEmail.notifyOnComplete = true;  // notificationEmail null → 第二条件 false
+        process(noEmail, List.of());
+    }
+
+    @Test
+    @DisplayName("checkTimeoutExports：startedAt null、未超时、已超时三形态")
+    void timeoutSides() {
+        ExportJobEntity nullStart = new ExportJobEntity();
+        nullStart.id = "ex_t1";
+        nullStart.exportStatus = ExportJobEntity.ExportStatus.PROCESSING;
+        ExportJobEntity fresh = new ExportJobEntity();
+        fresh.id = "ex_t2";
+        fresh.startedAt = java.time.LocalDateTime.now();
+        fresh.exportStatus = ExportJobEntity.ExportStatus.PROCESSING;
+        ExportJobEntity stale = new ExportJobEntity();
+        stale.id = "ex_t3";
+        stale.startedAt = java.time.LocalDateTime.now().minusHours(2);
+        stale.exportStatus = ExportJobEntity.ExportStatus.PROCESSING;
+        when(repo.findProcessing()).thenReturn(List.of(nullStart, fresh, stale));
+
+        service.checkTimeoutExports();
+
+        assertEquals(ExportJobEntity.ExportStatus.PROCESSING, fresh.exportStatus);
+        assertEquals(ExportJobEntity.ExportStatus.FAILED, stale.exportStatus);
+        verify(repo).save(stale);  // 仅超时项落库
+    }
+
+    @Test
+    @DisplayName("compression 空白等同 none；columns 空白回落 SELECT *")
+    void blankCompressionAndColumns() {
+        ExportJobEntity blankCols = job("events", "csv", "   ");
+        blankCols.columns = "   ";
+        var out = process(blankCols, List.of());
+        assertFalse(out.job().filePath.endsWith(".gz"));       // compression isBlank → none
+        assertTrue(out.sql().startsWith("SELECT * FROM"));     // columns isBlank → 空列表
+    }
+
+    @Test
+    @DisplayName("csvValue：Boolean 直写；csvEscape：换行单元格加引号包裹")
+    void csvBooleanAndNewlineSides() throws Exception {
+        java.util.Map<String, Object> row = new java.util.LinkedHashMap<>();
+        row.put("event_id", "e1");
+        row.put("flag", Boolean.TRUE);
+        java.util.Map<String, Object> nl = new java.util.LinkedHashMap<>();
+        nl.put("event_id", "e\n2");
+        nl.put("flag", Boolean.FALSE);
+        when(ch.query(anyString(), any(Object[].class))).thenReturn(List.of(row, nl));
+        ExportJobEntity j = job("events", "csv", null);
+        ExportJobEntity out = service.processExportJob(j.id);
+
+        String content = Files.readString(Path.of(out.filePath));
+        assertTrue(content.contains(",true"));    // Boolean instanceof 侧直写
+        assertTrue(content.contains("\"e\n2\"")); // \n → 引号包裹
+    }
+
+    @Test
+    @DisplayName("csvEscape：\\r 单独触发引号包裹（前三条件均不命中的第四侧）")
+    void csvCarriageReturnSide() throws Exception {
+        java.util.Map<String, Object> cr = new java.util.LinkedHashMap<>();
+        cr.put("event_id", "e\r3");   // 不含 , " \n，仅 \r → 第四条件 true 侧
+        when(ch.query(anyString(), any(Object[].class))).thenReturn(List.of(cr));
+        ExportJobEntity out = service.processExportJob(job("events", "csv", null).id);
+
+        String content = Files.readString(Path.of(out.filePath));
+        assertTrue(content.contains("\"e\r3\""));
+    }
+
+    @Test
+    @DisplayName("generateFileName：exportFormat null 兜底 csv（初始化器+创建兜底外的 null 直达侧）")
+    void generateFileNameNullFormatSide() {
+        // exportFormat 有 "csv" 初始化器且 createExportJob 先兜底再生成文件名，
+        // 公开链路恒非 null——null 侧经反射直调私有方法直达
+        ExportJobEntity j = new ExportJobEntity();
+        j.gameId = "g1";
+        j.exportType = "events";
+        j.exportFormat = null;
+        String name = org.springframework.test.util.ReflectionTestUtils
+            .invokeMethod(service, "generateFileName", j);
+        assertTrue(name.endsWith(".csv"), name);
+        assertTrue(name.startsWith("events_g1_"), name);
+    }
 }

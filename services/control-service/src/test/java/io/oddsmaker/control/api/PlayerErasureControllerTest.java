@@ -160,4 +160,18 @@ class PlayerErasureControllerTest {
         PlayerErasureRequestEntity created = (PlayerErasureRequestEntity) controller.create(body).getBody();
         assertEquals("per_1", created.id);
     }
+
+    @Test
+    @DisplayName("创建：scheduledFor 空白串视为缺省 null（isBlank false 侧）")
+    void createBlankScheduledFor() {
+        when(service.create(eq("g"), eq("PLAYER_ID"), eq("p1"), isNull(), eq("api")))
+            .thenReturn(req("per_1", "g"));
+        PlayerErasureController.CreateRequest body = new PlayerErasureController.CreateRequest();
+        body.gameId = "g";
+        body.requestType = "PLAYER_ID";
+        body.requestValue = "p1";
+        body.scheduledFor = "   ";
+        assertEquals(200, controller.create(body).getStatusCode().value());
+    }
+
 }

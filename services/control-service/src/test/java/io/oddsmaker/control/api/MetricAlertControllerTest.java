@@ -127,4 +127,66 @@ class MetricAlertControllerTest {
         when(service.resolve("g", "alert_x", "api", null)).thenReturn(alert);
         assertTrue(controller.resolve("g", "alert_x", null).getBody() != null);
     }
+
+    @Test
+    @DisplayName("确认/解决：req 非 null 但 by 字段为 null（c2 短路侧）回落认证主体")
+    void acknowledgeAndResolveNullByField() {
+        SystemAlertEntity alert = new SystemAlertEntity();
+        alert.id = "alert_x";
+        when(service.acknowledge(any(), any(), any(), any())).thenReturn(alert);
+        when(service.resolve(any(), any(), any(), any())).thenReturn(alert);
+
+        // req 非 null、req.by == null → 条件链在第二条件短路，by 回落 currentOperator()
+        MetricAlertController.AlertActionReq nullBy = new MetricAlertController.AlertActionReq();
+        nullBy.comment = "备注";
+        controller.acknowledge("g", "alert_x", nullBy);
+        verify(service).acknowledge("g", "alert_x", "api", "备注");
+
+        MetricAlertController.AlertActionReq nullBy2 = new MetricAlertController.AlertActionReq();
+        controller.resolve("g", "alert_x", nullBy2);
+        verify(service).resolve("g", "alert_x", "api", null);
+
+        // acknowledge 的三真路径（by 直用侧）：已有用例的 "api" 是 currentOperator 缺省值，
+        // 显式 by 才走三元取 req.by 分支
+        MetricAlertController.AlertActionReq explicitBy = new MetricAlertController.AlertActionReq();
+        explicitBy.by = "alice";
+        controller.acknowledge("g", "alert_x", explicitBy);
+        verify(service).acknowledge("g", "alert_x", "alice", null);
+    }
+
+    @Test
+    @DisplayName("确认/解决：req null 与 by 空白串回落认证主体；认证主体存在取 getName")
+    void acknowledgeAndResolveSides() {
+        SystemAlertEntity alert = new SystemAlertEntity();
+        alert.id = "alert_x";
+        when(service.acknowledge(any(), any(), any(), any())).thenReturn(alert);
+        when(service.resolve(any(), any(), any(), any())).thenReturn(alert);
+
+        // acknowledge req=null：by 与 comment 均取缺省（87/88 行 null 侧）
+        controller.acknowledge("g", "alert_x", null);
+        // by 空白串：视为缺省（87 行 isBlank 侧）
+        MetricAlertController.AlertActionReq blankBy = new MetricAlertController.AlertActionReq();
+        blankBy.by = "   ";
+        controller.acknowledge("g", "alert_x", blankBy);
+        verify(service, org.mockito.Mockito.times(2)).acknowledge("g", "alert_x", "api", null);
+
+        // resolve 的同款对侧（97 行 isBlank 侧）
+        MetricAlertController.AlertActionReq blankBy2 = new MetricAlertController.AlertActionReq();
+        blankBy2.by = "   ";
+        controller.resolve("g", "alert_x", blankBy2);
+        verify(service).resolve("g", "alert_x", "api", null);
+
+        // 认证主体存在（110 行 auth != null 侧）：by 缺省取 getName()
+        var auth = new org.springframework.security.authentication.TestingAuthenticationToken(
+            "alice", "n", "ROLE_ADMIN");
+        try {
+            org.springframework.security.core.context.SecurityContextHolder
+                .getContext().setAuthentication(auth);
+            controller.acknowledge("g", "alert_x", new MetricAlertController.AlertActionReq());
+            verify(service).acknowledge("g", "alert_x", "alice", null);
+        } finally {
+            org.springframework.security.core.context.SecurityContextHolder.clearContext();
+        }
+    }
+
 }

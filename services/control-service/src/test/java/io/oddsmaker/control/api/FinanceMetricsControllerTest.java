@@ -71,4 +71,22 @@ class FinanceMetricsControllerTest {
         verify(auditLog).logDataExport(eq("finance_export"), eq("g"), contains("finance_g_month.csv"),
             eq("api"), eq("api"), isNull());
     }
+
+    @Test
+    @DisplayName("导出：认证主体存在时操作者取 getName（currentOperator auth!=null 侧）")
+    void exportOperatorFromPrincipal() {
+        when(service.exportCsv("g", null, "day", 30)).thenReturn("a,b\n");
+        var auth = new org.springframework.security.authentication.TestingAuthenticationToken(
+            "alice", "n", "ROLE_ADMIN");
+        try {
+            org.springframework.security.core.context.SecurityContextHolder
+                .getContext().setAuthentication(auth);
+            assertEquals(200, controller.export("g", null, "day", 30).getStatusCode().value());
+            verify(auditLog).logDataExport(eq("finance_export"), eq("g"), contains("finance_g_day.csv"),
+                eq("alice"), eq("alice"), isNull());
+        } finally {
+            org.springframework.security.core.context.SecurityContextHolder.clearContext();
+        }
+    }
+
 }

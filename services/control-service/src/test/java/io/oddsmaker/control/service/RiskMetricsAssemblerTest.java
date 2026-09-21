@@ -133,4 +133,15 @@ class RiskMetricsAssemblerTest {
     void toIso_handlesNullAsEmptyString() {
         assertEquals("", RiskMetricsAssembler.toIso(null));
     }
+
+    @Test
+    void pivotTrend_ignoresNullAndUnknownSeverity() {
+        java.sql.Timestamp b = java.sql.Timestamp.valueOf("2026-09-01 10:00:00");
+        List<Map<String, Object>> points = RiskMetricsAssembler.pivotTrend(List.of(
+                Map.of("bucket", b, "c", 3L),                         // severity 缺键 → null 侧
+                Map.of("bucket", b, "severity", "weird", "c", 1L)));  // 非白名单 → containsKey false 侧
+        assertEquals(4L, points.get(0).get("total"));
+        assertEquals(0L, points.get(0).get("critical"));
+    }
+
 }

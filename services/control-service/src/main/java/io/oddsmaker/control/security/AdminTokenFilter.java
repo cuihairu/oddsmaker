@@ -85,7 +85,8 @@ public class AdminTokenFilter extends OncePerRequestFilter {
         }
 
         // 如果没有配置 Admin Token，开发模式自动认证。
-        if (adminToken == null || adminToken.isEmpty()) {
+        // adminToken 经构造器 Binder.bind(...).orElse("") 兜底，恒非 null——null 子条件不可达，等价删去
+        if (adminToken.isEmpty()) {
             // 开发模式 - 设置匿名认证
             var auth = new UsernamePasswordAuthenticationToken(
                 "dev-admin", null,

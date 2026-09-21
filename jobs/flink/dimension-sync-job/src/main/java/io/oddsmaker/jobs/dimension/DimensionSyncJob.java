@@ -168,7 +168,8 @@ public class DimensionSyncJob {
             com.fasterxml.jackson.databind.JsonNode node = new com.fasterxml.jackson.databind.ObjectMapper().readTree(json);
             String dimType = node.path("dim_type").asText(node.path("dimension_type").asText("item"));
             String id = firstNonEmpty(node, "resource_id", "item_code", "level_id", "id");
-            if (id == null || id.isEmpty()) return null;
+            // firstNonEmpty 只返回 null 或非空文本（空 asText("") 被跳过），id.isEmpty() 恒 false，等价删枝
+            if (id == null) return null;
             long versionTs = node.path("version_ts").asLong(0);
             Timestamp ts = versionTs > 0 ? new Timestamp(versionTs) : new Timestamp(System.currentTimeMillis());
             DimRecord rec = new DimRecord();

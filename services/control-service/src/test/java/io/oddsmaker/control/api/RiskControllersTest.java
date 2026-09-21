@@ -210,4 +210,40 @@ class RiskControllersTest {
         assertEquals(resp, riskMetricsController.actions("g", null, null).getBody());
         verify(accessGuard, org.mockito.Mockito.times(4)).requireGamePermission("g", "risk_rule:read");
     }
+
+    @Test
+    @DisplayName("分支对侧：封禁显式 SOFT/永久、内部检查 targets 缺失或空、大屏规则 null 枚举字段")
+    void blockListAndDashboardCounterSides() {
+        BlockListController.BlockRequest req = new BlockListController.BlockRequest();
+        req.gameId = "g";
+        req.blockType = "SOFT";
+        req.isPermanent = true;
+        assertEquals(200, blockListController.addBlock(req).getStatusCode().value());
+        verify(blockListService).addBlock(eq("g"), isNull(), isNull(), isNull(), isNull(), isNull(),
+            eq(BlockListEntity.BlockType.SOFT), eq(true), isNull(), isNull(), isNull(), isNull());
+
+        InternalBlockListController.BatchCheckRequest noTargets = new InternalBlockListController.BatchCheckRequest();
+        noTargets.gameId = "g";
+        assertEquals(400, internalBlockListController.batchCheck(noTargets).getStatusCode().value());
+        InternalBlockListController.BatchCheckRequest emptyTargets = new InternalBlockListController.BatchCheckRequest();
+        emptyTargets.gameId = "g";
+        emptyTargets.targets = List.of();
+        assertEquals(400, internalBlockListController.batchCheck(emptyTargets).getStatusCode().value());
+
+        io.oddsmaker.control.jpa.RiskRuleEntity rule = new io.oddsmaker.control.jpa.RiskRuleEntity();
+        rule.id = "rr_1";
+        rule.name = "r";
+        rule.ruleType = null;   // 实体有默认初始化器，须显式置 null 才走三元 null 侧
+        rule.riskLevel = null;
+        rule.actionType = null;
+        when(riskRuleRepo.findActiveByGameId("g")).thenReturn(List.of(rule));
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> rules =
+            (List<Map<String, Object>>) riskDashboardController.getActiveRules("g").getBody();
+        assertEquals("rr_1", rules.get(0).get("id"));
+        org.junit.jupiter.api.Assertions.assertNull(rules.get(0).get("ruleType"));
+        org.junit.jupiter.api.Assertions.assertNull(rules.get(0).get("riskLevel"));
+        org.junit.jupiter.api.Assertions.assertNull(rules.get(0).get("actionType"));
+    }
+
 }

@@ -343,4 +343,87 @@ class CohortServiceDeepTest {
         c.status = CohortEntity.CohortStatus.PENDING;
         assertTrue(c.isActive());
     }
+
+    // ===== 分支对侧补充（BRANCH 收口）=====
+
+    @Test
+    @DisplayName("createCohort：显式 cohortType/retentionPeriods 保留（非空侧）")
+    void createCohortExplicitTypeAndPeriods() {
+        when(cohortRepo.findByGameIdAndName("g1", "typed")).thenReturn(Optional.empty());
+        service.createCohort("g1", null, "typed", "Typed", null,
+            CohortEntity.CohortType.BEHAVIORAL,
+            LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 7), "week", null, null,
+            null, List.of(1, 7), "ops");
+
+        ArgumentCaptor<CohortEntity> cap = ArgumentCaptor.forClass(CohortEntity.class);
+        verify(cohortRepo).save(cap.capture());
+        CohortEntity saved = cap.getValue();
+        assertEquals(CohortEntity.CohortType.BEHAVIORAL, saved.cohortType);
+        assertEquals("[1,7]", saved.retentionPeriods);
+    }
+
+    @Test
+    @DisplayName("getCohortStats：cohortCount null 兜 0、analysisType null 剔除")
+    void cohortStatsNullSides() {
+        CohortEntity done = cohort();
+        done.status = CohortEntity.CohortStatus.COMPLETED;
+        done.cohortCount = null;      // null 兜 0 侧
+        CohortEntity bare = cohort();
+        bare.id = "ch_bare";
+        bare.analysisType = null;     // filter 剔除侧
+        when(cohortRepo.findByGameId("g1")).thenReturn(List.of(done, bare));
+        when(cohortRepo.findCompletedByGameId("g1")).thenReturn(List.of(done));
+
+        Map<String, Object> stats = service.getCohortStats("g1");
+        assertEquals(2, ((Number) stats.get("totalCohorts")).intValue());
+        assertFalse(((Map<?, ?>) stats.get("byAnalysisType")).containsKey(null));
+
+        // 非 null 计数侧
+        done.cohortCount = 42L;
+        when(cohortRepo.findCompletedByGameId("g1")).thenReturn(List.of(done));
+        assertTrue(service.getCohortStats("g1").toString().contains("42"));
+    }
+
+    @Test
+    @DisplayName("computeCohort 对侧：gameId null、endDate null、timeUnit null、环境空白串")
+    void computeCohortNullSides() {
+        CohortEntity noGame = cohort();
+        noGame.gameId = null;
+        runFailing(noGame);
+
+        CohortEntity noEnd = cohort();
+        noEnd.endDate = null;
+        runFailing(noEnd);
+
+        // timeUnit null → 回落 day 正常计算
+        CohortEntity nullUnit = cohort();
+        nullUnit.timeUnit = null;
+        assertEquals(CohortEntity.CohortStatus.COMPLETED, run(nullUnit).status);
+
+        // environmentId 空白串 → 跳过环境映射与过滤
+        CohortEntity blankEnv = cohort();
+        blankEnv.environmentId = "   ";
+        assertEquals(CohortEntity.CohortStatus.COMPLETED, run(blankEnv).status);
+        ArgumentCaptor<String> sqlCap = ArgumentCaptor.forClass(String.class);
+        verify(clickHouse, atLeastOnce()).query(sqlCap.capture(), any(Object[].class));
+        assertFalse(sqlCap.getAllValues().stream().anyMatch(s -> s.contains("AND environment")));
+    }
+
+    @Test
+    @DisplayName("零尺寸桶回访：rate 兜 0.0（size > 0 false 侧）")
+    void zeroSizeBucketRateFallsBackToZero() {
+        when(clickHouse.query(anyString(), any(Object[].class))).thenAnswer(inv -> {
+            String sql = inv.getArgument(0);
+            if (sql.contains("INTERVAL 1 ")) {
+                return List.of(Map.of("first_bucket", "2026-09-01 00:00:00", "returned", 5L));
+            }
+            if (sql.contains("INTERVAL")) {
+                return List.of();
+            }
+            return List.of(Map.of("first_bucket", "2026-09-01 00:00:00", "size", 0L));
+        });
+        CohortEntity calculated = run(cohort());
+        assertEquals(CohortEntity.CohortStatus.COMPLETED, calculated.status);
+        assertTrue(calculated.resultData.contains("\"rate\":0.0"), calculated.resultData);
+    }
 }

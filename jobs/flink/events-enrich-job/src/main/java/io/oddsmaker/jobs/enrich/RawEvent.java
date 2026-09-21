@@ -154,7 +154,7 @@ public class RawEvent {
     }
 
     private static Object field(GenericRecord r, String name) {
-        Schema s = r.getSchema();
-        return s == null || s.getField(name) == null ? null : r.get(name);
+        // GenericRecord.getSchema() 契约恒非 null（Avro 记录构造时必携带 schema），防御壳等价删除
+        return r.getSchema().getField(name) == null ? null : r.get(name);
     }
 }

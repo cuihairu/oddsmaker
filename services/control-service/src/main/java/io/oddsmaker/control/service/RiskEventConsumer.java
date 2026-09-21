@@ -298,7 +298,9 @@ public class RiskEventConsumer {
             Map.of(
                 "gameId", event.gameId != null ? event.gameId : "",
                 "environment", event.environment != null ? event.environment : "",
-                "action", event.action != null ? event.action : "",
+                // action 的 null 防御不可达：onRiskEvent 入口已拦截 action null/blank 才进 switch 分发，
+                // 到达 handleAuditOnly 时 action 必非 null（同款三元其余字段可达，此处等价改写删除 null 侧）
+                "action", event.action,
                 "subjectType", event.subjectType != null ? event.subjectType : "",
                 "subjectId", event.subjectId != null ? event.subjectId : "",
                 "ruleId", event.ruleId != null ? event.ruleId : "",

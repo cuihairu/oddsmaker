@@ -423,4 +423,89 @@ class IdentityMergeJobTest {
             org.junit.jupiter.api.Assertions.assertDoesNotThrow(() -> IdentityMergeJob.main(new String[0]));
         }
     }
+
+    // ===== 分支对侧补充（BRANCH 收口） =====
+
+    @Test
+    @DisplayName("isIdentityEvent：event_type 非空但非 identity 且无 $identify 名 → false")
+    void isIdentityEventRejectsNonIdentityType() {
+        RawEvent business = new RawEvent();
+        business.event_type = "business";
+        assertFalse(IdentityMergeJob.isIdentityEvent(business));
+    }
+
+    @Test
+    @DisplayName("IdentityMergeFunction：environment 缺失的事件直接忽略")
+    void mergeSkipsNullEnvironment() throws Exception {
+        IdentityMergeJob.IdentityMergeFunction fn = functionWithState(new TestValueState());
+        List<IdentityMergeJob.IdentityRecord> out = new ArrayList<>();
+        RawEvent noEnv = identifyEvent("d1", "p1", "c1", 1L);
+        noEnv.environment = null;
+        fn.processElement(noEnv, keyedContext(fn), sinkTo(out));
+        assertTrue(out.isEmpty());
+    }
+
+    @Test
+    @DisplayName("首建分支：props 提取出空串 playerId 与空串 characterId 均不入集合")
+    void firstBuildSkipsEmptyPlayerAndCharacterStrings() throws Exception {
+        TestValueState state = new TestValueState();
+        IdentityMergeJob.IdentityMergeFunction fn = functionWithState(state);
+        List<IdentityMergeJob.IdentityRecord> out = new ArrayList<>();
+        RawEvent r = identifyEvent("d1", null, "", 1_000L);   // character_id 空串
+        r.props_json = "{\"player_id\":\"\"}";                 // 提取结果空串
+        fn.processElement(r, keyedContext(fn), sinkTo(out));
+        assertEquals(1, out.size());
+        assertEquals("", out.get(0).playerId);
+        assertTrue(state.v.playerIds.isEmpty());
+        assertTrue(state.v.characterIds.isEmpty());
+    }
+
+    @Test
+    @DisplayName("合并分支：后续事件携带空串 playerId/characterId 均不入集合")
+    void elseBranchSkipsEmptyStrings() throws Exception {
+        TestValueState state = new TestValueState();
+        IdentityMergeJob.IdentityMergeFunction fn = functionWithState(state);
+        List<IdentityMergeJob.IdentityRecord> out = new ArrayList<>();
+        fn.processElement(identifyEvent("d1", "p1", "c1", 1_000L), keyedContext(fn), sinkTo(out));
+
+        RawEvent second = identifyEvent("d2", null, "", 62_000L);   // characterId 空串
+        second.props_json = "{\"player_id\":\"\"}";                 // playerId 提取空串
+        fn.processElement(second, keyedContext(fn), sinkTo(out));
+        assertEquals(2, out.size());
+        assertEquals(1, out.get(1).playerIds.size());   // 仍只有 p1
+        assertEquals(1, out.get(1).characterIds.size());   // 仍只有 c1
+    }
+
+    @Test
+    @DisplayName("合并分支：既有状态 firstSeen 为 null（防御侧）时直接采用当前 ts")
+    void nullFirstSeenBackfilledOnMerge() throws Exception {
+        TestValueState state = new TestValueState();
+        IdentityMergeJob.IdentityState s = new IdentityMergeJob.IdentityState();
+        s.identityId = "idt_pre";
+        s.firstSeen = null;   // 正常流程首建必置，此为防御侧
+        s.lastSeen = new Timestamp(0L);
+        state.v = s;
+        IdentityMergeJob.IdentityMergeFunction fn = functionWithState(state);
+        List<IdentityMergeJob.IdentityRecord> out = new ArrayList<>();
+        fn.processElement(identifyEvent("d1", "p1", "c1", 1_000L), keyedContext(fn), sinkTo(out));
+        assertEquals(1, out.size());
+        assertEquals(new Timestamp(1_000L), out.get(0).firstSeen);   // null → 采用当前
+        assertEquals(new Timestamp(1_000L), out.get(0).lastSeen);
+    }
+
+    @Test
+    @DisplayName("extractPlayerId：props 无键 / 值无引号 / 值无闭合引号 均返回 null")
+    void extractPlayerIdMalformedJson() {
+        RawEvent noKey = new RawEvent();
+        noKey.props_json = "{\"other\":\"v\"}";
+        assertNull(IdentityMergeJob.extractPlayerId(noKey));
+
+        RawEvent numeric = new RawEvent();
+        numeric.props_json = "{\"player_id\":123}";   // 值非字符串：冒号后无引号
+        assertNull(IdentityMergeJob.extractPlayerId(numeric));
+
+        RawEvent truncated = new RawEvent();
+        truncated.props_json = "{\"player_id\":\"x";   // 无闭合引号
+        assertNull(IdentityMergeJob.extractPlayerId(truncated));
+    }
 }

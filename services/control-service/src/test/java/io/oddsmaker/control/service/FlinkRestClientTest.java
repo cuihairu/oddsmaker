@@ -231,4 +231,21 @@ class FlinkRestClientTest {
         assertNull(FlinkRestClient.mapState("SOMETHING_NEW"));
         assertNull(FlinkRestClient.mapState(null));
     }
+
+    @Test
+    @DisplayName("uploadJar：列表混入非 Map 元素/缺 filename/命中但缺 id——最终命中有效条目")
+    void uploadJarMalformedListEntries() throws Exception {
+        when(restTemplate.exchange(eq(BASE + "/jars"), eq(HttpMethod.POST), any(HttpEntity.class), eq(Map.class)))
+            .thenReturn(ResponseEntity.ok(Map.of("filename", "/tmp/x/a.jar")));
+        when(restTemplate.getForEntity(BASE + "/jars", Map.class))
+            .thenReturn(ResponseEntity.ok(Map.of("files", java.util.Arrays.asList(
+                "str-item",                                   // 64 行 instanceof false 侧
+                Map.of("id", "no-filename.jar"),              // 66 行 fname null 侧
+                Map.of("filename", "/tmp/x/a.jar"),           // 68 行命中但无 id 侧
+                Map.of("id", "hit_id", "filename", "/tmp/x/a.jar")
+            ))));
+
+        assertEquals("hit_id", client.uploadJar(fakeJar("a.jar")));
+    }
+
 }

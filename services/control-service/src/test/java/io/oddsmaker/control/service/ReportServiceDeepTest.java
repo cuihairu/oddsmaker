@@ -144,6 +144,35 @@ class ReportServiceDeepTest {
     }
 
     @Test
+    @DisplayName("过滤缺省各侧：env 无键/空白、eventTypes 空数组/非数组、queryConfig/groupBy 空白 JSON")
+    void configFilterMissingSides() {
+        // config 非 null 但无 environment 键（env == null 侧）+ eventTypes 空数组（isEmpty true 侧）
+        ReportEntity noEnvKey = report();
+        noEnvKey.queryConfig = "{\"eventTypes\":[]}";
+        run(noEnvKey);
+
+        // environment 为空白（isBlank true 侧）+ eventTypes 非 List（instanceof false 侧）
+        ReportEntity blankEnv = report();
+        blankEnv.queryConfig = "{\"environment\":\"   \",\"eventTypes\":\"purchase\"}";
+        run(blankEnv);
+
+        // queryConfig 纯空白（readJsonMap isBlank 侧 → config null）+ groupBy 纯空白（readJsonList isBlank 侧）
+        ReportEntity blankJson = report();
+        blankJson.queryConfig = "   ";
+        blankJson.groupBy = "   ";
+        assertEquals(ReportExecutionEntity.ExecutionStatus.COMPLETED, run(blankJson).executionStatus);
+
+        ArgumentCaptor<String> sqlCap = ArgumentCaptor.forClass(String.class);
+        verify(clickHouse, times(3)).query(sqlCap.capture(), any(Object[].class));
+        for (String sql : sqlCap.getAllValues()) {
+            assertFalse(sql.contains("AND environment"), sql);
+            assertFalse(sql.contains("AND event_type"), sql);
+        }
+        // blank groupBy → 无维度列
+        assertFalse(sqlCap.getAllValues().get(2).contains(" d_"), sqlCap.getAllValues().get(2));
+    }
+
+    @Test
     @DisplayName("过滤参数化：queryConfig.environment 等值 + eventTypes IN (?, ?)，值不拼 SQL")
     void configFiltersParameterized() {
         ReportEntity r = report();

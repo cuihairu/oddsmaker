@@ -67,12 +67,11 @@ public final class CrashFingerprinter {
             if (line.startsWith("at ")) {
                 line = line.substring(3);
             }
+            // 行经 trim 非空：数字归一为 N、非数字非空白字符不被任何正则删除，归一化结果恒非空
             String normalized = normalizeFrame(line);
-            if (!normalized.isEmpty()) {
-                frames.add(normalized);
-                if (frames.size() >= MAX_FRAMES) {
-                    break;
-                }
+            frames.add(normalized);
+            if (frames.size() >= MAX_FRAMES) {
+                break;
             }
         }
         if (frames.isEmpty()) {

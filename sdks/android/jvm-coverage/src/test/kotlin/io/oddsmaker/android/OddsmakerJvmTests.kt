@@ -12,8 +12,10 @@ import io.oddsmaker.android.Oddsmaker.Event
 import io.oddsmaker.android.Oddsmaker.Options
 import io.oddsmaker.android.Oddsmaker.Variant
 import java.io.ByteArrayInputStream
+import java.io.IOException
 import java.net.InetSocketAddress
 import java.util.zip.GZIPInputStream
+import java.util.zip.GZIPOutputStream
 import org.json.JSONObject
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -22,6 +24,8 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.mockito.ArgumentMatchers.any
+import org.mockito.Mockito
 
 // ---------- 测试替身 ----------
 
@@ -939,5 +943,304 @@ class OddsmakerJvmTests {
     assertEquals("p-rt", e.getString("player_id"))
     assertEquals("ord-rt", e.getString("order_id"))
     assertEquals("JPY", e.getString("revenue_currency"))
+  }
+
+  // ---------- 分支对侧补充(BRANCH 收口) ----------
+
+  @Test
+  fun identifySkipsEmptyPreviousUserIdAndEmptyPlayerId() {
+    val sdk = newSdk()
+    sdk.setUserId("")                       // previousUserId="" → isNullOrEmpty 空串侧
+    sdk.identify("u1")
+    sdk.setPlayer("")                       // playerId="" → 不并入 identifyProps
+    sdk.identify("u2")
+    val evts = queueJson()
+    assertTrue(!evts[0].getJSONObject("props").has("previous_user_id"))
+    assertTrue(!evts[1].getJSONObject("props").has("player_id"))
+    assertEquals("u2", evts[1].getJSONObject("props").getString("new_user_id"))
+  }
+
+  @Test
+  fun flushIsNoopWhileAlreadyFlushing() {
+    val server = ScriptedServer().also { servers.add(it.start()) }
+    val sdk = newSdk(endpoint = server.url())
+    sdk.track("pending")
+    val f = Oddsmaker::class.java.getDeclaredField("flushing").apply { isAccessible = true }
+    val flag = f.get(sdk) as java.util.concurrent.atomic.AtomicBoolean
+    flag.set(true)                          // 模拟并发 flush 进行中
+    sdk.flush()                             // CAS false→true 失败 → 直接返回
+    assertEquals(0, server.requests.size)
+    flag.set(false)
+  }
+
+  @Test
+  fun sendSkipsEmptyBatchDirectly() {
+    val server = ScriptedServer().also { servers.add(it.start()) }
+    val sdk = newSdk(endpoint = server.url())
+    call("send", sdk, ArrayList<Event>())   // 私有直调:空批早退
+    assertEquals(0, server.requests.size)
+  }
+
+  @Test
+  fun batch204WithoutBodyTreatedAsAccepted() {
+    val server = ScriptedServer().also { it.enqueue(204); servers.add(it.start()) }
+    val sdk = newSdk(endpoint = server.url())
+    sdk.track("no-body")
+    sdk.flush()                             // OkHttp 204 → resp.body null → body?.string() null 侧
+    assertEquals(1, server.requests.size)
+    assertTrue(queueJson().isEmpty())       // 2xx 无 body → isNullOrEmpty 早退,视为全成功
+  }
+
+  @Test
+  fun rejectedEntriesNonObjectAndBlankIdAreSkipped() {
+    val server = ScriptedServer().also { servers.add(it.start()) }
+    val sdk = newSdk(endpoint = server.url(), debug = true)
+    val idOk = sdk.track("dead")
+    server.enqueue(200, """{"accepted":[],"rejected":[
+      "not-an-object",
+      {"event_id":"","reason":"no-id"},
+      {"event_id":"$idOk","reason":"invalid_schema"}]}""")
+    sdk.flush()
+    assertTrue(queueJson().isEmpty())       // 非对象条目 continue;空串 id 不入 reasons
+    assertTrue(Log.lines.any { it.contains(idOk) && it.contains("invalid_schema") })
+  }
+
+  @Test
+  fun stringifyWritesOrderIdAndProductIdTopLevel() {
+    val e = Event(event_id = "i", game_id = "g", environment = "p", event_type = "b",
+      event_name = "n", device_id = "d", ts_client = 1L,
+      order_id = "o-1", product_id = "p-1")
+    val json = jsonInvoke("stringify", e) as String
+    assertTrue(json.contains("\"order_id\":\"o-1\""))
+    assertTrue(json.contains("\"product_id\":\"p-1\""))
+  }
+
+  @Test
+  fun parseEventExplicitNullsAndFullOptionalsRoundTrip() {
+    // 显式 JSON null:has=T 但 isNull=T → 短路返回 null(全部可选数值/字符串字段)
+    val withNulls = jsonInvoke("parseEvent",
+      """{"event_id":"e","game_id":"g","environment":"p","event_type":"b","event_name":"n",""" +
+      """"device_id":"d","ts_client":1,"user_id":null,"order_id":null,"product_id":null,""" +
+      """"revenue_amount":null,"revenue_currency":null,"item_id":null,""" +
+      """"virtual_amount":null,"resource_amount":null}""") as Event
+    assertNull(withNulls.user_id)
+    assertNull(withNulls.order_id)
+    assertNull(withNulls.product_id)
+    assertNull(withNulls.revenue_amount)
+    assertNull(withNulls.revenue_currency)
+    assertNull(withNulls.item_id)
+    assertNull(withNulls.virtual_amount)
+    assertNull(withNulls.resource_amount)
+
+    // 非 null 值 round-trip(order_id/product_id/revenue_currency/item_id 等取值侧)
+    val full = jsonInvoke("parseEvent",
+      """{"event_id":"e2","game_id":"g","environment":"p","event_type":"b","event_name":"n",""" +
+      """"device_id":"d","ts_client":2,"order_id":"o9","product_id":"p9",""" +
+      """"revenue_currency":"JPY","item_id":"sword","virtual_currency":"gem","resource_id":"gem",""" +
+      """"virtual_amount":1.5,"resource_amount":2.5}""") as Event
+    assertEquals("o9", full.order_id)
+    assertEquals("p9", full.product_id)
+    assertEquals("JPY", full.revenue_currency)
+    assertEquals("sword", full.item_id)
+    assertEquals("gem", full.virtual_currency)
+    assertEquals("gem", full.resource_id)
+    assertEquals(1.5, full.virtual_amount!!, 1e-9)
+    assertEquals(2.5, full.resource_amount!!, 1e-9)
+  }
+
+  @Test
+  fun toJsonValueJavaNullMapsToNull() {
+    // org.json 解析路径只产生 JSONObject.NULL,Java null 仅反射直调可达
+    val m = jsonObj.declaredMethods.first { it.name == "toJsonValue" && it.parameterCount == 1 }
+    m.isAccessible = true
+    assertNull(m.invoke(jsonObj.getDeclaredField("INSTANCE").get(null), *arrayOfNulls<Any?>(1)))
+  }
+
+  @Test
+  fun fetchExperimentsCachedFetchFailureStoresNothing() {
+    val dead = ScriptedServer().also { servers.add(it.start()) }
+    val url = dead.url()
+    dead.stop()                          // 连接拒绝 → fetchExperiments null → 不落库
+    val sdk = newSdk()
+    assertNull(sdk.fetchExperimentsCached(url))
+    assertTrue(!prefs.store.containsKey(expsKey()))
+  }
+
+  @Test
+  fun rejectedSubjectNullAndHashCollisionElseBranches() {
+    // when(String) 编译为 null 检查 + hashCode switch + equals:
+    // 1) batch 中未被拒绝的事件 → subject=null → 空分支(既有用例 reasons 空数组会提前 return,未达此路径)
+    // 2) "kafka_errpS" 与 "kafka_error" hashCode 同为 -51759185 → switch 命中但 equals=F → else 丢弃
+    val server = ScriptedServer().also { servers.add(it.start()) }
+    val sdk = newSdk(endpoint = server.url(), debug = true)
+    val idA = sdk.track("accepted-one")
+    val idB = sdk.track("collide")
+    val collide = "kafka_errpS"
+    assertEquals("kafka_error".hashCode(), collide.hashCode())
+    server.enqueue(200, """{"accepted":["$idA"],"rejected":[{"event_id":"$idB","reason":"$collide"}]}""")
+    sdk.flush()
+    assertTrue(queueJson().isEmpty())    // idA 走 null 分支不回队;idB 走 else 分支丢弃
+    assertTrue(Log.lines.any { it.contains(idB) && it.contains(collide) })
+  }
+
+  @Test
+  fun emptyListPropSerializesAsEmptyArray() {
+    // listToJson 空表:循环零次 + sb.last()==']' 的不裁剪侧
+    val e = Event(event_id = "i", game_id = "g", environment = "p", event_type = "b",
+      event_name = "n", device_id = "d", ts_client = 1L, props = mapOf("none" to emptyList<Any?>()))
+    assertTrue((jsonInvoke("stringify", e) as String).contains("\"none\":[]"))
+  }
+
+  @Test
+  fun mergePropsSkipsBlankPlayerId() {
+    val sdk = newSdk()
+    sdk.setPlayer("")                       // 空串不入 base → base 空 → props 原样返回
+    sdk.track("plain", mapOf("k" to "v"))
+    val props = queueJson()[0].getJSONObject("props")
+    assertEquals("v", props.getString("k"))
+    assertTrue(!props.has("player_id"))
+  }
+
+  @Test
+  fun fetchExperiments204ReturnsEmptyBody() {
+    val server = ScriptedServer().also { it.enqueue(204); servers.add(it.start()) }
+    val sdk = newSdk(endpoint = server.url())
+    // OkHttp 对 204 无实体响应给空实体而非 null body —— ?. null 侧在真实传输层不可达
+    assertEquals("", sdk.fetchExperiments(server.url(), "game1", "prod"))
+  }
+
+  @Test
+  fun fetchExperimentsCachedSingleSegmentRawFallsThroughToFetch() {
+    val server = ScriptedServer().also { it.enqueue(200, """[{"id":"seg"}]"""); servers.add(it.start()) }
+    val sdk = newSdk(endpoint = server.url())
+    prefs.store[expsKey()] = "single-segment"   // 非空但无 \n 分隔 → parts.size==1 → 直接拉取
+    assertEquals("""[{"id":"seg"}]""", sdk.fetchExperimentsCached(server.url()))
+    assertTrue(prefs.store[expsKey()]!!.contains('\n'))   // 拉取成功后重新落库带时间戳
+  }
+
+  // ---------- INSTR 收口:$default 桥默认值体 / 网络边路 / gzip 失败回退 ----------
+
+  @Test
+  fun defaultParamsCoverQuantityDefaultBridge() {
+    // 单参调用:quantity/props 均省略 → itemGrant/itemConsume 的 $default 桥内
+    // quantity=1 默认赋值体执行(两参调用只覆盖桥的 else 路)
+    val sdk = newSdk()
+    sdk.itemGrant("sword")
+    sdk.itemConsume("sword")
+    val events = queueJson().map { it.getString("item_id") to it.getDouble("resource_amount") }
+    assertEquals(listOf("sword" to 1.0, "sword" to 1.0), events)   // 默认 quantity=1 生效
+  }
+
+  @Test
+  fun batchResponse204EmptyBodyTreatedAsSuccess() {
+    // send 路径 204:isSuccessful true → handleBatchResponse 收到空 body
+    // → isNullOrEmpty 早退(事件不回队,区别于非 2xx 的回队路径)
+    val server = ScriptedServer().also { it.enqueue(204, ""); servers.add(it.start()) }
+    val sdk = newSdk(endpoint = server.url())
+    sdk.track("no-body")
+    sdk.flush()
+    assertEquals(1, server.requests.size)
+    assertTrue(queueJson().isEmpty())   // 204 成功:批次不回填
+  }
+
+  @Test
+  fun fetchExperimentsReturnsNullOnNon2xx() {
+    val server = ScriptedServer().also { it.enqueue(404, "nope"); servers.add(it.start()) }
+    val sdk = newSdk(endpoint = server.url())
+    assertNull(sdk.fetchExperiments(server.url(), "game1", "prod"))
+    assertEquals("/api/config/game1/prod", server.requests[0].path)
+  }
+
+  @Test
+  fun sendConnectionRefusedRefillsQueue() {
+    val server = ScriptedServer().also { servers.add(it.start()) }
+    val sdk = newSdk(endpoint = server.url())
+    server.stop()   // 连接拒绝 → execute 抛 → catch 回队
+    sdk.track("refused")
+    sdk.flush()     // 不抛:异常被 send 的 catch 吞
+    assertEquals(1, queueJson().size)   // 批次回填并持久化
+    assertEquals("refused", queueJson()[0].getString("event_name"))
+  }
+
+  @Test
+  fun timerTaskRunSwallowsFlushFailure() {
+    // 非法 URL:send 内 Request.Builder().url() 抛 IAE,冒泡出 flush 的 try
+    // → TimerTask.run 的 catch 吞掉(TimerThread 存活,后续周期照常调度)
+    val sdk = Oddsmaker(FakeContext, defaultOptions().copy(
+      endpoint = "not-a-url", flushIntervalMs = 80))   // 不 shutdown,让定时器跑
+    sdk.track("boom")
+    Thread.sleep(400)
+    assertTrue(queueJson().isEmpty())   // 第一轮:取出 → send 抛 → finally 持久化空队列
+    sdk.track("still-alive")
+    Thread.sleep(400)
+    assertTrue(queueJson().isEmpty())   // 第二轮照常执行 → catch 吞错未杀 TimerThread
+    sdk.shutdown()
+  }
+
+  @Test
+  fun gzipFailureFallsBackToPlainNdjson() {
+    // GZIPOutputStream.write 注入 IOException → runCatching 捕获 → getOrNull null
+    // → 明文回退(不加 content-encoding 头,body 不经 gunzip)
+    val server = ScriptedServer().also { servers.add(it.start()) }
+    val sdk = newSdk(endpoint = server.url())
+    Mockito.mockConstruction(GZIPOutputStream::class.java) { mock, _ ->
+      Mockito.doThrow(IOException("zip boom")).`when`(mock).write(any<ByteArray>())
+    }.use {
+      sdk.track("plain-fallback")
+      sdk.flush()
+    }
+    assertEquals(1, server.requests.size)
+    assertNull(server.requests[0].headers["content-encoding"])   // 明文:未加 gzip 头
+    assertEquals("plain-fallback",
+      JSONObject(String(server.requests[0].body).trim()).getString("event_name"))
+  }
+
+  /** 声明 Content-Length 但只写一半 → 客户端读 body 时 EOF:驱动 string() 在 use 体内抛的路径。 */
+  private fun truncatedServer(): HttpServer {
+    val s = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+    s.createContext("/") { ex ->
+      ex.sendResponseHeaders(200, 1_000L)   // 声明 1000 字节
+      ex.responseBody.use { it.write(ByteArray(10)) }   // 只写 10 → 提前 EOF
+      ex.close()
+    }
+    s.start()
+    return s
+  }
+
+  @Test
+  fun sendTruncatedBodyRefillsQueue() {
+    // 200 + 截断体:string() 在 use 体内抛 IOException(区别于 execute 阶段的连接拒绝,
+    // 会经过 use 的异常传播段 closeFinally 后 rethrow)→ 外层 catch 回队
+    val server = truncatedServer()
+    try {
+      val sdk = newSdk(endpoint = "http://127.0.0.1:${server.address.port}/")
+      sdk.track("truncated")
+      sdk.flush()   // 不抛:string() 的 IOException 被 send 的 catch 吞
+      assertEquals(1, queueJson().size)   // 批次回填
+      assertEquals("truncated", queueJson()[0].getString("event_name"))
+    } finally { server.stop(0) }
+  }
+
+  @Test
+  fun fetchExperimentsTruncatedBodyReturnsNull() {
+    // 200 + 截断体:string() 在 use 体内抛 → 异常传播段 → catch(_ : Throwable) → null
+    val server = truncatedServer()
+    try {
+      val sdk = newSdk()
+      assertNull(sdk.fetchExperiments(
+        "http://127.0.0.1:${server.address.port}/", "game1", "prod"))
+    } finally { server.stop(0) }
+  }
+
+  @Test
+  fun handleBatchResponseNonJsonBodyIgnored() {
+    // 2xx + 坏 JSON 文本("{{{" 解析中途 EOF 必抛;"not-json" 会被 org.json 20240303 宽松接受):
+    // JSONObject 构造抛 → handleBatchResponse 的 catch 早退(事件不回队)
+    val server = ScriptedServer().also { it.enqueue(200, "{{{"); servers.add(it.start()) }
+    val sdk = newSdk(endpoint = server.url())
+    sdk.track("opaque")
+    sdk.flush()
+    assertEquals(1, server.requests.size)
+    assertTrue(queueJson().isEmpty())   // 解析失败按全成功处理:不回队
   }
 }

@@ -1333,6 +1333,23 @@ class ServicesFinalSweepTest {
         assertDoesNotThrow(() -> healthMonitorService.checkAlertEscalations());
     }
 
+    @Test
+    @DisplayName("健康监控：升级派发 payload 的 severity null 侧（显式覆盖 WARNING 初始化器）")
+    void healthEscalationPayloadSeverityNullSide() {
+        // severity 有 WARNING 初始化器：HTTP/创建链路恒非 null，null 侧须显式置 null 直达
+        SystemAlertEntity platformAlert = new SystemAlertEntity();
+        platformAlert.id = "alert_nosev";
+        platformAlert.alertStatus = SystemAlertEntity.AlertStatus.OPEN;
+        platformAlert.escalationLevel = 0;
+        platformAlert.gameId = "g1";   // 带 gameId 才会进 payload 派发分支
+        platformAlert.severity = null;
+        lenient().when(systemAlertRepo.findNeedingEscalation()).thenReturn(List.of(platformAlert));
+        lenient().when(systemAlertRepo.save(any(SystemAlertEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        assertDoesNotThrow(() -> healthMonitorService.checkAlertEscalations());
+        assertEquals(1, platformAlert.escalationLevel);
+    }
+
     // =========================================================
     // RedeemCodeService：列表/详情/停用 / SHARED 生成码 / UNIQUE 上限 / 入参校验
     // =========================================================

@@ -962,4 +962,38 @@ class ApiControllersDeepTest {
         verify(auditLog, org.mockito.Mockito.times(2))
             .logDelete(eq("announcement"), any(), any(), eq("op_1"), eq("op_1"), any());
     }
+
+    @Test
+    @DisplayName("listKeys/listGames：过滤参数 false 侧、blank sort/q 回落默认")
+    void listKeysAndListGamesBlankSides() {
+        List<Models.KeyDetailResp> all = List.of(new Models.KeyDetailResp());
+        ControlService.Paged<Models.KeyDetailResp> paged = new ControlService.Paged<>(all, 1L);
+        lenient().when(svc.searchKeys(org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.anyInt(), org.mockito.ArgumentMatchers.anyInt()))
+            .thenReturn(paged);
+        // 79 行五条件全 false + 84/85 三元非 null 侧
+        assertSame(paged, apiController.listKeys("q", "g", "e", 1, 5));
+        verify(svc).searchKeys("g", "e", "q", 1, 5);
+
+        // 150 行 sort blank 回落 name + 152 行 q blank 走 getGames
+        GameDTO dto = gameDto("game_1", "Demo");
+        lenient().when(gameService.getGames(any(Pageable.class))).thenReturn(new PageImpl<>(List.of(dto)));
+        apiController.listGames("   ", null, null, "   ");
+        org.mockito.ArgumentCaptor<Pageable> captor =
+            org.mockito.ArgumentCaptor.forClass(Pageable.class);
+        verify(gameService).getGames(captor.capture());
+        assertNotNull(captor.getValue().getSort().getOrderFor("name"));
+    }
+
+    @Test
+    @DisplayName("updateStorageProfile：无消息 IAE 透传（ex.getMessage()==null 侧）")
+    void updateStorageProfileNullMessage() {
+        StorageProfileDTO in = spDto("sp_1");
+        lenient().when(storageProfileService.updateStorageProfile(eq("sp_null"), any(StorageProfileDTO.class)))
+            .thenThrow(new IllegalArgumentException());
+        assertThrows(IllegalArgumentException.class,
+            () -> apiController.updateStorageProfile("sp_null", in));
+    }
+
 }

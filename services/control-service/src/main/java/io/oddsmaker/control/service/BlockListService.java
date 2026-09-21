@@ -133,7 +133,10 @@ public class BlockListService {
             null,
             Map.of(
                 "gameId", gameId,
-                "blockType", blockType.name(),
+                // 引用归一化后的实体字段而非原始参数：三个生产调用方（Controller 三元归一化、
+                // RiskEventConsumer/createBlockFromRiskCase 字面量 HARD）blockType 恒非 null，
+                // 可达域行为不变；参数为 null 时不再先于 L107 默认值逻辑抛 NPE
+                "blockType", block.blockType.name(),
                 "isPermanent", isPermanent,
                 "durationMinutes", durationMinutes != null ? durationMinutes : 0
             )
@@ -149,9 +152,12 @@ public class BlockListService {
         payload.put("target", Map.of(
             "type", block.targetType,
             "id", block.targetValue,
-            "name", block.targetName != null ? block.targetName : block.targetValue
+            // targetName 与 targetValue 同源赋值（上方 block.targetName = targetValue），
+            // 三元恒取真侧；null 时上方 Map.of("id", null) 已先行抛错，假侧不可达
+            "name", block.targetName
         ));
-        payload.put("block_type", block.blockType != null ? block.blockType.name() : null);
+        // blockType 已在赋值段归一化（null → HARD），此处恒非 null
+        payload.put("block_type", block.blockType.name());
         payload.put("is_permanent", block.isPermanent);
         payload.put("expires_at", block.expiresAt != null ? block.expiresAt.toString() : null);
         payload.put("block_reason", block.blockReason);

@@ -270,14 +270,14 @@ public class AnalyticsService {
     public Map<String, Object> getSocialRetentionImpact(String gameId, LocalDate date) {
         Object[] impact = socialAnalyticsRepo.getSocialRetentionImpact(gameId, date);
 
-        Map<String, Object> result = new HashMap<>();
-        result.put("socialUsersD7Retention", impact[0] != null ? ((Number) impact[0]).doubleValue() : 0);
-        result.put("nonSocialUsersD7Retention", impact[1] != null ? ((Number) impact[1]).doubleValue() : 0);
+        // map 中两个键刚由本方法写入（doubleValue() 或字面量 0），恒为 Number，
+        // 回读时的 instanceof 防御恒真——直接用局部变量，语义等价
+        double socialRet = impact[0] != null ? ((Number) impact[0]).doubleValue() : 0;
+        double nonSocialRet = impact[1] != null ? ((Number) impact[1]).doubleValue() : 0;
 
-        double socialRet = result.get("socialUsersD7Retention") instanceof Number ?
-            ((Number) result.get("socialUsersD7Retention")).doubleValue() : 0;
-        double nonSocialRet = result.get("nonSocialUsersD7Retention") instanceof Number ?
-            ((Number) result.get("nonSocialUsersD7Retention")).doubleValue() : 0;
+        Map<String, Object> result = new HashMap<>();
+        result.put("socialUsersD7Retention", socialRet);
+        result.put("nonSocialUsersD7Retention", nonSocialRet);
         result.put("retentionLift", socialRet - nonSocialRet);
         return result;
     }

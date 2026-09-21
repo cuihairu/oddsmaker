@@ -43,6 +43,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -233,6 +234,11 @@ class OpsServicesDeepTest {
         assertEquals(ReportExecutionEntity.ExecutionStatus.TIMEOUT, running.executionStatus);
         assertEquals("Execution timeout", running.statusMessage);
         assertNotNull(running.completedAt);
+
+        // 无超时执行（空列表侧）：静默返回不追加保存（前段已 save 过一次）
+        lenient().when(executionRepo.findTimeout(any())).thenReturn(List.of());
+        assertDoesNotThrow(reportService::checkTimeoutExecutions);
+        verify(executionRepo, org.mockito.Mockito.times(1)).save(any());
 
         reportService.cleanupExpiredExecutions();
         org.mockito.Mockito.verify(executionRepo).deleteExpired(any());
@@ -1049,5 +1055,43 @@ class OpsServicesDeepTest {
         assertEquals(0.4, impact.get("socialUsersD7Retention"));
         assertEquals(0.25, impact.get("nonSocialUsersD7Retention"));
         assertEquals(0.15, (double) impact.get("retentionLift"), 1e-9);
+    }
+
+
+    @Test
+    @DisplayName("分支对侧：id 空白走 slug、name null/同名不查重、软删 profile 的 get/delete、slug null 拒绝")
+    void storageProfileBranchSides() {
+        lenient().when(storageProfileRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        lenient().when(storageProfileRepo.existsById(anyString())).thenReturn(false);
+
+        // dto.id 空白串（trim().isEmpty() 侧）→ 由 name 生成 slug
+        StorageProfileDTO blankId = new StorageProfileDTO();
+        blankId.id = "   ";
+        blankId.name = "Blank Id Pool";
+        assertEquals("blank-id-pool", storageProfileService.createStorageProfile(blankId).id);
+
+        // name=null 且 id=null → slug(null) 抛 IAE（value == null 侧）
+        StorageProfileDTO noName = new StorageProfileDTO();
+        assertThrows(IllegalArgumentException.class, () -> storageProfileService.createStorageProfile(noName));
+
+        // update：name null → 跳过重名校验（第一条件 false 侧）
+        StorageProfileEntity entity = storageProfile("sp-b", "keep-name", StorageProfileEntity.IsolationStrategy.SHARED);
+        lenient().when(storageProfileRepo.findById("sp-b")).thenReturn(Optional.of(entity));
+        StorageProfileDTO noNameUpdate = new StorageProfileDTO();
+        noNameUpdate.displayName = "仅改显示名";
+        assertEquals("keep-name", storageProfileService.updateStorageProfile("sp-b", noNameUpdate).name);
+
+        // update：name 与实体同名 → 不查重（第二条件 false 侧）
+        StorageProfileDTO sameName = new StorageProfileDTO();
+        sameName.name = "keep-name";
+        assertEquals("keep-name", storageProfileService.updateStorageProfile("sp-b", sameName).name);
+        verify(storageProfileRepo, org.mockito.Mockito.never()).existsByNameAndDeletedAtIsNull("keep-name");
+
+        // 软删 profile：get → empty（filter false 侧）；delete → IAE
+        StorageProfileEntity deleted = storageProfile("sp-del", "gone", StorageProfileEntity.IsolationStrategy.SHARED);
+        deleted.deletedAt = LocalDateTime.now();
+        lenient().when(storageProfileRepo.findById("sp-del")).thenReturn(Optional.of(deleted));
+        assertTrue(storageProfileService.getStorageProfile("sp-del").isEmpty());
+        assertThrows(IllegalArgumentException.class, () -> storageProfileService.deleteStorageProfile("sp-del"));
     }
 }

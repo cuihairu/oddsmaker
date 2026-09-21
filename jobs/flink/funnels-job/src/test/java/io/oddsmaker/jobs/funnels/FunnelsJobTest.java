@@ -391,6 +391,15 @@ class FunnelsJobTest {
     // ===== 覆盖缺口补充 =====
 
     @Test
+    @DisplayName("uidOf：user_id 非空空串回退 device_id（null 与非空已盖）")
+    void uidOfFallsBackOnEmptyUserId() {
+        RawEvent r = new RawEvent();
+        r.user_id = "";
+        r.device_id = "d1";
+        assertEquals("d1", FunnelsJob.uidOf(r));
+    }
+
+    @Test
     @DisplayName("main：替身执行环境下完成入口（不触达真实集群）")
     void mainCompletesWithMockEnv() {
         try (org.mockito.MockedStatic<StreamExecutionEnvironment> mocked =

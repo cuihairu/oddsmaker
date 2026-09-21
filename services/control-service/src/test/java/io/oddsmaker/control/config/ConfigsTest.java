@@ -116,4 +116,69 @@ class ConfigsTest {
         filter.doFilter(request, response, (req, res) -> { });
         assertEquals(200, response.getStatus());
     }
+
+    @Test
+    @DisplayName("JWT 解码器：全 null 字段回落空实现（@Value 缺省注入前的裸实例侧）")
+    void jwtDecoderAllNullFields() {
+        SecurityConfig config = new SecurityConfig();
+        assertNull(config.jwtDecoder().decode("any-token"));
+    }
+
+    @Test
+    @DisplayName("JWT 解码器：jwk-set-uri 优先分支（withJwkSetUri 为惰性构造，不发请求）")
+    void jwtDecoderJwkSetUriBranch() {
+        SecurityConfig config = new SecurityConfig();
+        ReflectionTestUtils.setField(config, "jwkSetUri", "http://127.0.0.1:1/jwks");
+        assertNotNull(config.jwtDecoder());
+    }
+
+    @Test
+    @DisplayName("JWT 解码器：issuer-uri 分支（本地 HttpServer 提供 OIDC discovery + 空 JWKS）")
+    void jwtDecoderIssuerUriBranch() throws Exception {
+        com.sun.net.httpserver.HttpServer server =
+            com.sun.net.httpserver.HttpServer.create(new java.net.InetSocketAddress("127.0.0.1", 0), 0);
+        int port = server.getAddress().getPort();
+        String base = "http://127.0.0.1:" + port;
+        java.nio.charset.Charset cs = java.nio.charset.StandardCharsets.UTF_8;
+        server.createContext("/.well-known/openid-configuration", ex -> {
+            byte[] body = ("{\"issuer\":\"" + base + "\",\"jwks_uri\":\"" + base + "/jwks\"}")
+                .getBytes(cs);
+            ex.getResponseHeaders().add("Content-Type", "application/json");
+            ex.sendResponseHeaders(200, body.length);
+            ex.getResponseBody().write(body);
+            ex.close();
+        });
+        server.createContext("/jwks", ex -> {
+            // fromIssuerLocation 要求 JWKS 至少含一个带算法的 key，空 keys 会抛
+            // "Failed to find any algorithms"——动态生成 RSA 公钥输出 JWK
+            byte[] body;
+            try {
+                java.security.KeyPairGenerator kpg = java.security.KeyPairGenerator.getInstance("RSA");
+                kpg.initialize(2048);
+                java.security.interfaces.RSAPublicKey pub =
+                    (java.security.interfaces.RSAPublicKey) kpg.generateKeyPair().getPublic();
+                String n = java.util.Base64.getUrlEncoder().withoutPadding()
+                    .encodeToString(pub.getModulus().toByteArray());
+                String e = java.util.Base64.getUrlEncoder().withoutPadding()
+                    .encodeToString(pub.getPublicExponent().toByteArray());
+                body = ("{\"keys\":[{\"kty\":\"RSA\",\"use\":\"sig\",\"alg\":\"RS256\","
+                    + "\"kid\":\"test\",\"n\":\"" + n + "\",\"e\":\"" + e + "\"}]}").getBytes(cs);
+            } catch (java.security.NoSuchAlgorithmException nsae) {
+                throw new IllegalStateException(nsae);
+            }
+            ex.getResponseHeaders().add("Content-Type", "application/json");
+            ex.sendResponseHeaders(200, body.length);
+            ex.getResponseBody().write(body);
+            ex.close();
+        });
+        server.start();
+        try {
+            SecurityConfig config = new SecurityConfig();
+            ReflectionTestUtils.setField(config, "jwtIssuerUri", base);
+            assertNotNull(config.jwtDecoder());
+        } finally {
+            server.stop(0);
+        }
+    }
+
 }

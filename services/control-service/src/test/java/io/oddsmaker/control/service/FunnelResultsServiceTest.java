@@ -157,4 +157,32 @@ class FunnelResultsServiceTest {
         LocalDate expectedSince = LocalDate.now().minusDays(30);
         verify(client).query(anyString(), eq("f1"), eq("g"), eq(expectedSince));
     }
+
+    @Test
+    @DisplayName("对侧：funnel.type null 透传；首步零用户的 overallRate/stepRate/rate 回落侧")
+    void funnelNullTypeAndZeroFirstUsersSides() {
+        // 45 行 type null 侧
+        FunnelConfigEntity noType = funnel("f1", "g");
+        noType.type = null;
+        when(funnelConfigService.findById("f1")).thenReturn(noType);
+        when(client.isAvailable()).thenReturn(false);
+        Map<String, Object> degraded = service.results("f1", "g", null, 90);
+        assertNull(degraded.get("funnelType"));
+
+        // 89/90/105 行：首步 0 用户 → overallRate 0.0、stepRate null、总转化 0.0
+        Map<String, Object> resp = new java.util.HashMap<>();
+        FunnelResultsService.assembleSteps(resp, List.of(
+            Map.of("step", 1, "users", 0L, "step_name", "s1"),
+            Map.of("step", 2, "users", 5L, "step_name", "s2")));
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> steps = (List<Map<String, Object>>) resp.get("steps");
+        assertEquals(0.0, steps.get(1).get("overallRate"));
+        assertNull(steps.get(1).get("stepRate"));
+        assertEquals(0L, steps.get(1).get("dropOff"));   // Math.max(0, 0-5) = 0
+        @SuppressWarnings("unchecked")
+        Map<String, Object> overall = (Map<String, Object>) resp.get("overall");
+        assertEquals(0.0, overall.get("rate"));
+        assertEquals(0L, overall.get("firstUsers"));
+    }
+
 }

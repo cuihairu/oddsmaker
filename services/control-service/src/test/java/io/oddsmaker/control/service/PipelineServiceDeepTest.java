@@ -372,4 +372,108 @@ class PipelineServiceDeepTest {
         service.executeScheduledPipelines();
         verifyNoInteractions(pipelineRepo, ch);
     }
+
+    // ==================== 分支对侧补充（BRANCH 收口） ====================
+
+    @Test
+    @DisplayName("阈值操作符对侧：gte/lt/lte 的通过侧 + operator 空白串回落 gt")
+    void thresholdOperatorsPassSides() {
+        // violations=10：gte>10 / lt<9 / lte<9 均为 false → 通过（totalViolations 不累加）
+        record Case(String op, long threshold) {}
+        for (Case c : List.of(new Case("gte", 11L), new Case("lt", 9L), new Case("lte", 9L))) {
+            DataQualityRuleEntity r = rule(DataQualityRuleEntity.RuleType.COMPLETENESS);
+            r.thresholdOperator = c.op();
+            r.thresholdValue = String.valueOf(c.threshold());
+            eval(r, List.of(Map.of("total", 100L, "v", 10L)));
+            assertEquals(0, r.totalViolations, "operator=" + c.op());
+        }
+
+        // operator 空白串（isBlank 侧）→ 回落 gt 语义
+        DataQualityRuleEntity blankOp = rule(DataQualityRuleEntity.RuleType.COMPLETENESS);
+        blankOp.thresholdOperator = "   ";
+        blankOp.thresholdValue = "5";
+        eval(blankOp, List.of(Map.of("total", 100L, "v", 10L)));
+        assertEquals(10, blankOp.totalViolations);  // gt 5 越界 → 不通过
+    }
+
+    @Test
+    @DisplayName("parseThreshold/parseThresholdValue 空白串侧：按未设置处理")
+    void blankThresholdTreatedAsUnset() {
+        // thresholdValue 空白 → 0（gt 0 语义：出现违规即不通过）
+        DataQualityRuleEntity r = rule(DataQualityRuleEntity.RuleType.COMPLETENESS);
+        r.thresholdValue = "   ";
+        eval(r, List.of(Map.of("total", 10L, "v", 1L)));
+        assertEquals(1, r.totalViolations);
+
+        // minThreshold 空白 → 视为无下界，仅 max 生效
+        DataQualityRuleEntity r2 = rule(DataQualityRuleEntity.RuleType.RANGE);
+        r2.minThreshold = "  ";
+        r2.maxThreshold = "50";
+        Captured c2 = eval(r2, List.of(Map.of("total", 10L, "v", 0L)));
+        assertEquals("SELECT count() AS total, countIf(isNotNull(device_id) AND (device_id > ?)) AS v FROM events", c2.sql());
+    }
+
+    @Test
+    @DisplayName("PATTERN：patternRegex null（缺失侧）同样拒绝")
+    void patternRuleNullRegexRejected() {
+        DataQualityRuleEntity r = rule(DataQualityRuleEntity.RuleType.PATTERN);
+        r.patternRegex = null;
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+            () -> service.evaluateQualityRule(r));
+        assertTrue(ex.getMessage().contains("pattern_regex"));
+    }
+
+    @Test
+    @DisplayName("重试上限打满：needsRetry false → job 停在 FAILED 不再 RETRYING")
+    void retryExhaustedJobStaysFailed() {
+        PipelineEntity pipeline = new PipelineEntity();
+        pipeline.id = "p1";
+        pipeline.pipelineStatus = PipelineEntity.PipelineStatus.ACTIVE;
+        pipeline.failureCount = 3;  // = maxRetries：needsRetry() 为 false
+        when(pipelineRepo.findById("p1")).thenReturn(Optional.of(pipeline));
+        when(pipelineRepo.save(any(PipelineEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(jobRepo.save(any(PipelineJobEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        DataQualityRuleEntity r = rule(DataQualityRuleEntity.RuleType.COMPLETENESS);
+        when(ruleRepo.findByPipelineId("p1")).thenReturn(List.of(r));
+        when(ch.query(anyString(), any(Object[].class))).thenThrow(new RuntimeException("CH down"));
+
+        PipelineJobEntity job = service.executePipeline("p1", "ops");
+        assertEquals(PipelineJobEntity.JobStatus.FAILED, job.jobStatus);
+    }
+
+    @Test
+    @DisplayName("createQualityRule：ruleDefinition null（不序列化侧）")
+    void createQualityRuleNullDefinition() {
+        DataQualityRuleEntity created = service.createQualityRule("game_demo", "p1", "r-null",
+            DataQualityRuleEntity.RuleType.COMPLETENESS, DataQualityRuleEntity.Severity.WARNING,
+            "events", "device_id", null, "ops");
+        assertNotNull(created.id);
+        assertNull(created.ruleDefinition);
+    }
+
+    @Test
+    @DisplayName("调度开启：空列表安静返回；命中管道真跑（isEmpty 两侧）")
+    void schedulerEnabledRunsPipelines() {
+        ReflectionTestUtils.setField(service, "scheduleEnabled", true);
+
+        // 空列表：!isEmpty false 侧
+        when(pipelineRepo.findScheduledPipelines(any())).thenReturn(List.of());
+        service.executeScheduledPipelines();
+        verify(jobRepo, never()).save(any(PipelineJobEntity.class));
+
+        // 命中一条：无规则管道真跑成功
+        PipelineEntity pipeline = new PipelineEntity();
+        pipeline.id = "ps1";
+        pipeline.pipelineName = "scheduled-pipe";
+        pipeline.gameId = "game_demo";
+        pipeline.pipelineStatus = PipelineEntity.PipelineStatus.ACTIVE;
+        when(pipelineRepo.findScheduledPipelines(any())).thenReturn(List.of(pipeline));
+        when(pipelineRepo.save(any(PipelineEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(jobRepo.save(any(PipelineJobEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(ruleRepo.findByPipelineId("ps1")).thenReturn(List.of());
+
+        service.executeScheduledPipelines();
+        assertEquals(1, pipeline.successCount);
+    }
 }

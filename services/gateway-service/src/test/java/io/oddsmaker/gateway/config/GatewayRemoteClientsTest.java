@@ -187,4 +187,69 @@ class GatewayRemoteClientsTest {
         assertEquals("player_id", viaJson.targetType);
         assertEquals("u1", viaJson.targetValue);
     }
+
+    // ===== 分支对侧补充（BRANCH 收口）=====
+
+    @Test
+    @DisplayName("封禁：缓存条目过期后重新请求远端（expireAt <= now 侧）")
+    void blockListExpiredEntryRefetches() {
+        BlockListClient client = new BlockListClient(envWithControl());
+        List<BlockListClient.BatchTarget> targets =
+            List.of(new BlockListClient.BatchTarget("device_id", "d_block"));
+        Map<String, Boolean> first = client.batchCheck("game_x", targets).block();
+        assertEquals(Boolean.TRUE, first.get("device_id:d_block"));
+        assertEquals(1, blockChecks.get());
+
+        // 缓存条目置为过期：下次查询必须穿透缓存重新请求
+        try {
+            @SuppressWarnings("unchecked")
+            java.util.concurrent.ConcurrentHashMap<String, Object> cache =
+                (java.util.concurrent.ConcurrentHashMap<String, Object>)
+                    org.springframework.test.util.ReflectionTestUtils.getField(client, "cache");
+            Object entry = cache.get("device_id:d_block");
+            org.springframework.test.util.ReflectionTestUtils.setField(entry, "expireAt",
+                java.time.Instant.now().getEpochSecond() - 1);
+        } catch (Exception ignore) {
+            // 结构变化时跳过穿透断言
+        }
+        Map<String, Boolean> second = client.batchCheck("game_x", targets).block();
+        assertEquals(Boolean.TRUE, second.get("device_id:d_block"));
+        assertEquals(2, blockChecks.get());
+    }
+
+    @Test
+    @DisplayName("封禁：畸形响应体（results 非 List / 元素非 Map）容错解析")
+    void blockListMalformedResponseTolerated() {
+        // 切换 mock 响应为畸形体
+        server.removeContext("/internal/block-lists/batch-check");
+        server.createContext("/internal/block-lists/batch-check", ex -> {
+            blockChecks.incrementAndGet();
+            ex.getRequestBody().readAllBytes();
+            // results 非列表 + 列表内非对象元素：全部容错跳过
+            byte[] body = ("{\"results\":\"not-a-list\"}").getBytes(StandardCharsets.UTF_8);
+            ex.getResponseHeaders().add("Content-Type", "application/json");
+            ex.sendResponseHeaders(200, body.length);
+            ex.getResponseBody().write(body);
+            ex.close();
+        });
+        BlockListClient client = new BlockListClient(envWithControl());
+        Map<String, Boolean> r = client.batchCheck("game_x",
+            List.of(new BlockListClient.BatchTarget("device_id", "d1"))).block();
+        assertEquals(Boolean.FALSE, r.get("device_id:d1")); // 未识别 → 不封禁
+
+        // results 为列表但元素非 Map
+        server.removeContext("/internal/block-lists/batch-check");
+        server.createContext("/internal/block-lists/batch-check", ex -> {
+            ex.getRequestBody().readAllBytes();
+            byte[] body = ("{\"results\":[\"str-item\", 42]}").getBytes(StandardCharsets.UTF_8);
+            ex.getResponseHeaders().add("Content-Type", "application/json");
+            ex.sendResponseHeaders(200, body.length);
+            ex.getResponseBody().write(body);
+            ex.close();
+        });
+        BlockListClient client2 = new BlockListClient(envWithControl());
+        Map<String, Boolean> r2 = client2.batchCheck("game_x",
+            List.of(new BlockListClient.BatchTarget("device_id", "d2"))).block();
+        assertEquals(Boolean.FALSE, r2.get("device_id:d2"));
+    }
 }

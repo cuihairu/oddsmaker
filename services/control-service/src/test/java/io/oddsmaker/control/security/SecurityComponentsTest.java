@@ -301,4 +301,89 @@ class SecurityComponentsTest {
         when(permissionService2.hasGamePermission("u", "g2", "game:read")).thenReturn(false);
         assertThrows(SecurityException.class, () -> guard.requireGamePermission("g2", "game:read"));
     }
+
+    @Test
+    @DisplayName("JWT 转换：roles 数组 null/blank 元素被滤、realm/client 无 roles 键、principal 逐级空串回退")
+    void jwtConverterBlankAndMissingKeySides() {
+        KeycloakJwtAuthenticationConverter converter = new KeycloakJwtAuthenticationConverter();
+        java.util.Map<String, Object> claims = new java.util.HashMap<>();
+        claims.put("roles", java.util.Arrays.asList("auditor", null, "   "));
+        claims.put("realm_access", java.util.Map.of("other", "x"));            // containsKey false 侧
+        claims.put("resource_access", java.util.Map.of("clientA", java.util.Map.of("perm", 1))); // 74 行 false 侧
+        claims.put("preferred_username", "");                                  // 99 行 isEmpty 侧
+        claims.put("email", "");                                                // 105 行 isEmpty 侧
+        claims.put("name", "");                                                 // 111 行 isEmpty 侧
+        JwtAuthenticationToken token = (JwtAuthenticationToken) converter.convert(jwt(claims));
+        // username/email/name 全空串 → 回退 subject
+        assertEquals("sub-1", token.getName());
+        assertTrue(token.getAuthorities().stream()
+            .anyMatch(a -> "ROLE_AUDITOR".equals(a.getAuthority())));
+        // null 与 blank 角色元素被过滤，不产生 ROLE_NULL / 空名角色
+        assertTrue(token.getAuthorities().stream()
+            .noneMatch(a -> a.getAuthority().endsWith("NULL") || a.getAuthority().equals("ROLE_")));
+    }
+
+    @Test
+    @DisplayName("管理令牌：Authorization 非 Bearer 形态不走放行；adminToken 空串为开发模式；空/缺失头不匹配")
+    void adminFilterNonBearerAndEmptyTokenSides() throws Exception {
+        // 82 行 startsWith("Bearer ") false 侧：Basic 头继续走 admin 检查
+        AdminTokenFilter f = filter("secret", "internal-secret");
+        SecurityContextHolder.clearContext();
+        MockHttpServletRequest basicReq = new MockHttpServletRequest("GET", "/api/games");
+        basicReq.addHeader("Authorization", "Basic dXNlcjpwYXNz");
+        basicReq.addHeader("x-admin-token", "secret");
+        MockHttpServletResponse basicResp = new MockHttpServletResponse();
+        f.doFilter(basicReq, basicResp, mock(jakarta.servlet.FilterChain.class));
+        assertEquals(200, basicResp.getStatus());
+        assertEquals("admin", SecurityContextHolder.getContext().getAuthentication().getName());
+
+        // 88 行 adminToken 空串侧：同 null 开发模式
+        SecurityContextHolder.clearContext();
+        AdminTokenFilter emptyToken = filter("", null);
+        MockHttpServletResponse devResp2 = run(emptyToken, "/api/games", null, null);
+        assertEquals(200, devResp2.getStatus());
+        assertEquals("dev-admin", SecurityContextHolder.getContext().getAuthentication().getName());
+
+        // 117 行 supplied null / empty 侧：无头与空头均不匹配 → 401
+        SecurityContextHolder.clearContext();
+        assertEquals(401, run(f, "/api/games", null, null).getStatus());
+        SecurityContextHolder.clearContext();
+        assertEquals(401, run(f, "/api/games", null, "").getStatus());
+    }
+
+    @Test
+    @DisplayName("matches 直调：expected==null 与 supplied==null/空串/相等/不等全边（构造器 orElse 兜底使 null 仅直调可达）")
+    void matchesDirectAllSides() {
+        AdminTokenFilter f = filter("secret", "internal-secret");
+        // expected == null：构造器 Binder.orElse("") 使字段恒非 null，私有 matches 直调可达。
+        // 显式 (Boolean) 转型——Object 直接交 assertFalse 会命中 BooleanSupplier 重载抛 CCE
+        assertFalse((Boolean) org.springframework.test.util.ReflectionTestUtils
+            .invokeMethod(f, "matches", "s", null));
+        // supplied 非空 + expected 空串：第四条件真边（HTTP 链路下 internal 测试无头在第一条件短路，
+        // 到不了第四条件）
+        assertFalse((Boolean) org.springframework.test.util.ReflectionTestUtils
+            .invokeMethod(f, "matches", "s", ""));
+        assertFalse((Boolean) org.springframework.test.util.ReflectionTestUtils
+            .invokeMethod(f, "matches", null, "secret"));
+        assertFalse((Boolean) org.springframework.test.util.ReflectionTestUtils
+            .invokeMethod(f, "matches", "", "secret"));
+        assertTrue((Boolean) org.springframework.test.util.ReflectionTestUtils
+            .invokeMethod(f, "matches", "secret", "secret"));
+        assertFalse((Boolean) org.springframework.test.util.ReflectionTestUtils
+            .invokeMethod(f, "matches", "wrong", "secret"));
+    }
+
+    @Test
+    @DisplayName("roles 过滤 lambda 直调：null 元素侧（getClaimAsStringList 的 Conversion 会剥掉 null 元素，仅直调可达）")
+    void rolesFilterLambdaNullSide() throws Exception {
+        // 52 行 filter 链的 role == null 边：经 Jwt.getClaimAsStringList 转换的列表不含 null 元素，
+        // 该边只能直调 lambda 合成方法覆盖
+        java.lang.reflect.Method lambda = KeycloakJwtAuthenticationConverter.class
+            .getDeclaredMethod("lambda$extractKeycloakAuthorities$0", String.class);
+        lambda.setAccessible(true);
+        assertEquals(Boolean.FALSE, lambda.invoke(null, (Object) null));
+        assertEquals(Boolean.FALSE, lambda.invoke(null, "   "));
+        assertEquals(Boolean.TRUE, lambda.invoke(null, "auditor"));
+    }
+
 }

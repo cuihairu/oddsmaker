@@ -344,4 +344,92 @@ class RedeemCodeServiceTest {
         assertEquals(1, service.playerHistory("game_demo", "player_1").size());
         assertEquals(2, service.listCodes(b.id).size());
     }
+
+    // ===== 分支对侧补充（BRANCH 收口）=====
+
+    @Test
+    @DisplayName("创建：name null 拒绝；reward null/空白/缺 type 拒绝")
+    void createValidatesNullSides() {
+        stubGame();
+        RedeemCodeBatchEntity noName = batch(RedeemCodeBatchEntity.CodeType.UNIQUE, 5, 1);
+        noName.name = null;
+        assertThrows(IllegalArgumentException.class,
+            () -> service.createBatch(noName, null, 0, null, "op_1"));
+
+        RedeemCodeBatchEntity noReward = batch(RedeemCodeBatchEntity.CodeType.UNIQUE, 5, 1);
+        noReward.reward = null;
+        assertThrows(IllegalArgumentException.class,
+            () -> service.createBatch(noReward, null, 0, null, "op_1"));
+
+        RedeemCodeBatchEntity blankReward = batch(RedeemCodeBatchEntity.CodeType.UNIQUE, 5, 1);
+        blankReward.reward = "   ";
+        assertThrows(IllegalArgumentException.class,
+            () -> service.createBatch(blankReward, null, 0, null, "op_1"));
+
+        // reward 对象缺 type（m.get("type") == null 侧）
+        RedeemCodeBatchEntity noType = batch(RedeemCodeBatchEntity.CodeType.UNIQUE, 5, 1);
+        noType.reward = "[{\"id\":\"gem\"}]";
+        assertThrows(IllegalArgumentException.class,
+            () -> service.createBatch(noType, null, 0, null, "op_1"));
+        verify(batchRepo, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("创建：UNIQUE codeLength<=0 回落 12；SHARED 未指定码自动生成（同样回落 12）")
+    void createCodeLengthDefaultsToTwelve() {
+        stubGame();
+        when(batchRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(codeRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(codeRepo.findByCode(org.mockito.ArgumentMatchers.argThat(
+                c -> c != null && c.length() == 12))).thenReturn(Optional.empty());
+
+        // UNIQUE + codeLength 0 → 默认长度 12
+        service.createBatch(batch(RedeemCodeBatchEntity.CodeType.UNIQUE, 3, 1), "P-", 0, null, "op_1");
+        verify(codeRepo, times(3)).save(argThat(c -> c.code.length() == 14));  // "P-"(2) + 12 位
+
+        // SHARED + sharedCode null → 生成 12 位码（codeLength 0 回落）
+        service.createBatch(batch(RedeemCodeBatchEntity.CodeType.SHARED, 0, 1), null, 0, null, "op_1");
+        verify(codeRepo, times(1)).save(argThat(c -> !c.code.startsWith("P-") && c.code.length() == 12));
+    }
+
+    @Test
+    @DisplayName("兑换入口：code/playerKey null 与空白拒绝；游戏服入口 code null 按无效码处理")
+    void redeemRejectsNullAndBlankInputs() {
+        assertThrows(IllegalArgumentException.class, () -> service.redeem(null, "player_1"));
+        assertThrows(IllegalArgumentException.class, () -> service.redeem("  ", "player_1"));
+        assertThrows(IllegalArgumentException.class, () -> service.redeem("ABC234", null));
+        assertThrows(IllegalArgumentException.class, () -> service.redeem("ABC234", "  "));
+
+        // 游戏服入口 code null → 归一化为空串查不到 → invalid_code
+        stubGame();
+        when(codeRepo.findByCode("")).thenReturn(Optional.empty());
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+            () -> service.redeem("game_demo", null, "player_1"));
+        assertEquals("invalid_code", ex.getMessage());
+    }
+
+    @Test
+    @DisplayName("兑换：SHARED 批次总量未满（count < total）正常兑换")
+    void redeemSharedUnderTotalSucceeds() {
+        RedeemCodeBatchEntity b = batch(RedeemCodeBatchEntity.CodeType.SHARED, 5, 3);
+        b.id = "rb_under";
+        when(codeRepo.findByCode("SHARED1")).thenReturn(
+            Optional.of(code(b.id, "SHARED1", RedeemCodeEntity.Status.AVAILABLE)));
+        when(batchRepo.findByIdAndDeletedAtIsNull(b.id)).thenReturn(Optional.of(b));
+        when(recordRepo.findByBatchIdAndPlayerKey(b.id, "player_1")).thenReturn(List.of());
+        when(recordRepo.countByBatchId(b.id)).thenReturn(2L);  // 2 < 5：未领完
+        when(recordRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        RedeemRecordEntity record = service.redeem("SHARED1", "player_1");
+        assertEquals(b.id, record.batchId);
+        assertEquals(b.reward, record.reward);
+    }
+
+    @Test
+    @DisplayName("查询：软删游戏拒绝（requireGame filter deletedAt 侧）")
+    void deletedGameRejected() {
+        game.deletedAt = LocalDateTime.now();
+        when(gameRepo.findById("game_demo")).thenReturn(Optional.of(game));
+        assertThrows(IllegalArgumentException.class, () -> service.listBatches("game_demo"));
+    }
 }

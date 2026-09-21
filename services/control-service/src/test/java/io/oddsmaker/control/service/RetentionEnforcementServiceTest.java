@@ -390,4 +390,24 @@ class RetentionEnforcementServiceTest {
         service.scheduledEnforce();
         verify(clickHouse).isAvailable();
     }
+
+    @Test
+    @DisplayName("分支对侧：无环境且无游戏 → 全局默认；engine_full 行缺键被跳过")
+    void retentionCounterSides() {
+        assertThat(service.effectiveDays(null, null)).isEqualTo(90);
+
+        List<Map<String, Object>> rows = new ArrayList<>();
+        Map<String, Object> full = new LinkedHashMap<>();
+        full.put("table", "t1");
+        full.put("engine_full", "ENGINE X");
+        rows.add(full);
+        rows.add(Map.of("table", "t2"));            // engine_full 缺键 → null 侧
+        rows.add(Map.of("engine_full", "ENGINE"));  // table 缺键 → null 侧
+        when(clickHouse.query(anyString())).thenReturn(rows);
+        @SuppressWarnings("unchecked")
+        Map<String, String> fulls = (Map<String, String>)
+            org.springframework.test.util.ReflectionTestUtils.invokeMethod(service, "loadEngineFulls");
+        assertThat(fulls).containsOnlyKeys("t1");
+    }
+
 }

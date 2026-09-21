@@ -92,4 +92,19 @@ class PaymentFunnelServiceTest {
         assertEquals(90, PaymentFunnelService.clampDays(null));
         assertEquals(365, PaymentFunnelService.clampDays(10000));
     }
+
+    @Test
+    @DisplayName("环境过滤：blank 环境等同不过滤（isBlank 侧）；clampDays 0/负数回落默认")
+    void blankEnvironmentAndNonPositiveDays() {
+        when(client.isAvailable()).thenReturn(true);
+        when(client.query(anyString(), any(Object[].class))).thenReturn(List.of());
+        service.funnel("g", "   ", 90);
+        // blank 环境：pay_events 查询 varargs 为 (gameId, gameId, since)，dateDiff 为 (gameId, since)
+        verify(client).query(contains("pay_events"), org.mockito.ArgumentMatchers.eq("g"),
+            org.mockito.ArgumentMatchers.eq("g"), any());
+        verify(client).query(contains("dateDiff"), org.mockito.ArgumentMatchers.eq("g"), any());
+        assertEquals(90, PaymentFunnelService.clampDays(0));
+        assertEquals(90, PaymentFunnelService.clampDays(-7));
+    }
+
 }

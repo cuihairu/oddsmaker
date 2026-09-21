@@ -23,6 +23,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -355,5 +356,53 @@ class IntegrationServiceDeepTest {
         RestTemplate def = (RestTemplate) ReflectionTestUtils.getField(bare, "restTemplate");
         SimpleClientHttpRequestFactory df = (SimpleClientHttpRequestFactory) def.getRequestFactory();
         assertEquals(30000, ReflectionTestUtils.getField(df, "connectTimeout"));
+    }
+
+
+    @Test
+    @DisplayName("分支对侧：鉴权字段缺失跳过头设置；类型 null 剔除出 byType；avgDuration null 兜 0")
+    void nullAuthFieldsAndStatSides() {
+        IntegrationEntity e = activeIntegration();
+        e.integrationStatus = IntegrationEntity.IntegrationStatus.ACTIVE;
+        when(integrationRepo.findById("int_1")).thenReturn(java.util.Optional.of(e));
+        when(callTemplate.exchange(anyString(), eq(HttpMethod.POST), any(HttpEntity.class), eq(String.class)))
+            .thenReturn(new ResponseEntity<>("ok", HttpStatus.OK));
+
+        // API_KEY 但 apiKey=null → 不设 X-API-Key
+        e.authType = IntegrationEntity.AuthType.API_KEY;
+        e.apiKey = null;
+        service.callIntegration("int_1", "evt", java.util.Map.of(), "c-null-1");
+        // BEARER_TOKEN 但 bearerToken=null → 不设 Authorization
+        e.authType = IntegrationEntity.AuthType.BEARER_TOKEN;
+        e.bearerToken = null;
+        service.callIntegration("int_1", "evt", java.util.Map.of(), "c-null-2");
+        // BASIC_AUTH 但 username/password=null → 不设 Authorization
+        e.authType = IntegrationEntity.AuthType.BASIC_AUTH;
+        e.username = null;
+        e.password = null;
+        service.callIntegration("int_1", "evt", java.util.Map.of(), "c-null-3");
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<HttpEntity<Object>> captor =
+            ArgumentCaptor.forClass((Class<HttpEntity<Object>>) (Class<?>) HttpEntity.class);
+        verify(callTemplate, times(3)).exchange(anyString(), eq(HttpMethod.POST), captor.capture(), eq(String.class));
+        for (HttpEntity<Object> sent : captor.getAllValues()) {
+            assertNull(sent.getHeaders().getFirst("X-API-Key"));
+            assertNull(sent.getHeaders().getFirst("Authorization"));
+        }
+
+        // getIntegrationStats：integrationType null 的集成剔除出 byType（filter false 侧）
+        e.integrationType = null;
+        when(integrationRepo.findByGameId("g1")).thenReturn(java.util.List.of(e));
+        Map<String, Object> stats = service.getIntegrationStats("g1");
+        assertEquals(1L, stats.get("total"));
+        assertTrue(((Map<?, ?>) stats.get("byType")).isEmpty());
+
+        // getCallStats：averageDurationSince 返回 null → 兜 0（三元 null 侧）
+        when(integrationLogRepo.countCallsSince(eq("int_1"), any())).thenReturn(0L);
+        when(integrationLogRepo.countSuccessCallsSince(eq("int_1"), any())).thenReturn(0L);
+        when(integrationLogRepo.countFailedCallsSince(eq("int_1"), any())).thenReturn(0L);
+        when(integrationLogRepo.averageDurationSince(eq("int_1"), any())).thenReturn(null);
+        assertEquals(0L, service.getCallStats("int_1", LocalDateTime.now()).get("averageDurationMs"));
     }
 }

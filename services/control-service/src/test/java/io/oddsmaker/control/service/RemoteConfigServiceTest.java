@@ -233,4 +233,60 @@ class RemoteConfigServiceTest {
         assertEquals("hello", configs.get("greeting"));
         assertNotNull(configs.get("raw.object"));  // 非标量原样解析为 JsonNode/Map
     }
+
+    // ===== 分支对侧补充（BRANCH 收口）=====
+
+    @Test
+    @DisplayName("分支对侧：key/value null、软删 get/软删游戏、环境空白、命名环境重复键")
+    void branchSides() {
+        when(gameRepo.findById("game_demo")).thenReturn(Optional.of(game));
+
+        // configKey null → 拒绝（key == null true 侧）
+        RemoteConfigEntity nullKey = new RemoteConfigEntity();
+        nullKey.gameId = "game_demo";
+        nullKey.configKey = null;
+        nullKey.configValue = "1";
+        assertThrows(IllegalArgumentException.class, () -> service.create(nullKey, "ops1"));
+
+        // configValue null → 必填拒绝（value == null true 侧）
+        RemoteConfigEntity nullValue = new RemoteConfigEntity();
+        nullValue.gameId = "game_demo";
+        nullValue.configKey = "shop.rate";
+        nullValue.configValue = null;
+        assertThrows(IllegalArgumentException.class, () -> service.create(nullValue, "ops1"));
+
+        // list 环境空白（isBlank 侧）→ 不做环境过滤
+        when(repo.findByGameId("game_demo")).thenReturn(List.of(
+            config("", "a", "1", 1, RemoteConfigEntity.Status.ACTIVE),
+            config("prod", "b", "2", 1, RemoteConfigEntity.Status.ACTIVE)));
+        assertEquals(2, service.list("game_demo", "  ").size());
+
+        // resolve 环境空白（isBlank 侧）→ env 归 null
+        when(repo.findEffective("game_demo", null)).thenReturn(List.of());
+        assertNull(service.resolve("game_demo", " ").get("environment"));
+
+        // get 软删配置 → not found（filter deletedAt false 侧）
+        RemoteConfigEntity deleted = config("", "k", "1", 1, RemoteConfigEntity.Status.ACTIVE);
+        deleted.deletedAt = java.time.LocalDateTime.now();
+        when(repo.findById("rc_del")).thenReturn(Optional.of(deleted));
+        assertThrows(IllegalArgumentException.class, () -> service.get("rc_del"));
+
+        // 命名环境重复键：异常消息含环境名而非 "*"（isEmpty false 侧）
+        when(repo.findByGameIdAndEnvironmentIdAndConfigKeyAndDeletedAtIsNull("game_demo", "prod", "k2"))
+            .thenReturn(Optional.of(config("prod", "k2", "1", 1, RemoteConfigEntity.Status.ACTIVE)));
+        RemoteConfigEntity dupEnv = new RemoteConfigEntity();
+        dupEnv.gameId = "game_demo";
+        dupEnv.environmentId = "prod";
+        dupEnv.configKey = "k2";
+        dupEnv.configValue = "2";
+        IllegalStateException ex = assertThrows(IllegalStateException.class, () -> service.create(dupEnv, "ops1"));
+        assertTrue(ex.getMessage().contains("@prod"));
+
+        // 软删游戏（requireGame filter false 侧）
+        GameEntity deletedGame = new GameEntity();
+        deletedGame.id = "game_gone";
+        deletedGame.deletedAt = java.time.LocalDateTime.now();
+        when(gameRepo.findById("game_gone")).thenReturn(Optional.of(deletedGame));
+        assertThrows(IllegalArgumentException.class, () -> service.list("game_gone", null));
+    }
 }

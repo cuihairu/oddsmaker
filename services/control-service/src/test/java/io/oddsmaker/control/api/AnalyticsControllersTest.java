@@ -150,4 +150,19 @@ class AnalyticsControllersTest {
         assertEquals(403, exceptionHandler.handleSecurity(new SecurityException("denied")).getStatusCode().value());
         assertEquals(400, exceptionHandler.handleBadRequest(new IllegalArgumentException("bad")).getStatusCode().value());
     }
+
+    @Test
+    @DisplayName("分支对侧：cohort 显式 BEHAVIORAL、漏斗列表 asc 排序")
+    void analyticsCounterSides() {
+        CohortController.CohortRequest req = new CohortController.CohortRequest();
+        req.gameId = "g";
+        req.cohortType = "BEHAVIORAL";
+        assertEquals(200, cohortController.createCohort(req).getStatusCode().value());
+        verify(cohortService).createCohort(eq("g"), isNull(), isNull(), isNull(), isNull(),
+            eq(io.oddsmaker.control.jpa.CohortEntity.CohortType.BEHAVIORAL),
+            isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull());
+
+        assertEquals(200, funnelController.listFunnels("g", 0, 20, "createdAt", "asc").getStatusCode().value());
+    }
+
 }

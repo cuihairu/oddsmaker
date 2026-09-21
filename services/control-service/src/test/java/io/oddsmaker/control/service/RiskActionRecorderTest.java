@@ -147,4 +147,18 @@ class RiskActionRecorderTest {
 
         assertDoesNotThrow(() -> recorder.record(e, "alert", "logged", null));
     }
+
+    @Test
+    void record_nullClientNoThrow_andSubjectIdNullSide() {
+        // 38 行 client == null 侧：直接返回
+        assertDoesNotThrow(() -> new RiskActionRecorder(null).record(event(), "block", "blocked", null));
+
+        // 65 行 subjectType 非空但 subjectId null → 跳过 risk_scores 更新
+        when(client.isAvailable()).thenReturn(true);
+        RiskEventDto noSubjectId = event();
+        noSubjectId.subjectId = null;
+        recorder.record(noSubjectId, "alert", "logged", null);
+        verify(client, never()).execute(any(ConnectionCallback.class));
+    }
+
 }

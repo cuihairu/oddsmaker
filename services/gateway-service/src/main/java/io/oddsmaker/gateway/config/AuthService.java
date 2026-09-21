@@ -141,7 +141,8 @@ public class AuthService {
     }
 
     private ApiKeyContext fetchRemoteContext(String apiKey) {
-        if (controlUrl == null || controlUrl.isBlank() || internalToken == null || internalToken.isBlank()) {
+        // internalToken 由 Binder orElse("") 兜底恒非 null，只需判空白
+        if (controlUrl == null || controlUrl.isBlank() || internalToken.isBlank()) {
             meters.counter(REMOTE_LOOKUP_METRIC, "outcome", "not_configured", "code", "none").increment();
             return null;
         }

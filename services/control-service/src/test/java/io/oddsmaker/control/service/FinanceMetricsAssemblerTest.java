@@ -103,4 +103,10 @@ class FinanceMetricsAssemblerTest {
                 List.of(Map.of("stat_date", "", "new_users", 1L)));
         assertTrue(rows.isEmpty());
     }
+
+    @Test
+    void csvCell_escapesCarriageReturn() {
+        assertEquals("\"a\rb\"", FinanceMetricsAssembler.csvCell("a\rb"));
+    }
+
 }

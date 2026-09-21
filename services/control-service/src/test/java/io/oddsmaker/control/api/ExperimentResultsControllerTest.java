@@ -145,4 +145,64 @@ class ExperimentResultsControllerTest {
         assertEquals(200, resp.getStatusCode().value());
         assertEquals("running", resp.getBody().get("status"));
     }
+
+    @Test
+    @DisplayName("metrics 回填：null/负值/越界规整（count/successes/sumSquares 兜底与截断）")
+    void ingestMetricsNormalizes() {
+        ExperimentEntity experiment = new ExperimentEntity();
+        experiment.id = "exp_norm";
+        when(experimentRepo.findById("exp_norm")).thenReturn(Optional.of(experiment));
+        when(snapshotRepo.findByExperimentIdAndMetricNameAndVariantAndWindowStart(
+            org.mockito.ArgumentMatchers.eq("exp_norm"), org.mockito.ArgumentMatchers.anyString(),
+            org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyLong()))
+            .thenReturn(Optional.empty());
+
+        ExperimentResultsController.MetricsBatchReq req = new ExperimentResultsController.MetricsBatchReq();
+        ExperimentResultsController.MetricSnapshotReq s1 = new ExperimentResultsController.MetricSnapshotReq();
+        s1.metricName = "purchase";
+        s1.variant = "control";
+        // count/successes/sumSquares/sum 全 null → 0 兜底
+        ExperimentResultsController.MetricSnapshotReq s2 = new ExperimentResultsController.MetricSnapshotReq();
+        s2.metricName = "purchase";
+        s2.variant = "treatment";
+        s2.count = -5L;       // 负数 → max(0,·)=0
+        s2.successes = 50L;   // > count → min 截断为 0
+        s2.sumSquares = 1.25;
+        req.snapshots = List.of(s1, s2);
+
+        var resp = controller.ingestMetrics("exp_norm", req);
+        assertEquals(200, resp.getStatusCode().value());
+        assertEquals(2, resp.getBody().get("ingested"));
+
+        org.mockito.ArgumentCaptor<ExperimentMetricSnapshotEntity> cap =
+            org.mockito.ArgumentCaptor.forClass(ExperimentMetricSnapshotEntity.class);
+        org.mockito.Mockito.verify(snapshotRepo, org.mockito.Mockito.times(2)).save(cap.capture());
+        ExperimentMetricSnapshotEntity first = cap.getAllValues().get(0);
+        assertEquals(0L, first.count);
+        assertEquals(0L, first.successes);
+        assertEquals(0.0, first.sumSquares);
+        assertEquals(0L, first.sum);
+        ExperimentMetricSnapshotEntity second = cap.getAllValues().get(1);
+        assertEquals(0L, second.count);
+        assertEquals(0L, second.successes);   // min(50, 0) = 0
+        assertEquals(1.25, second.sumSquares);
+    }
+
+    @Test
+    @DisplayName("results：configJson null 与空白回退空配置")
+    void resultsNullAndBlankConfig() {
+        ExperimentEntity e1 = new ExperimentEntity();
+        e1.status = "RUNNING";
+        when(experimentRepo.findById("exp_nullcfg")).thenReturn(Optional.of(e1));
+        when(snapshotRepo.findByExperimentIdOrderByWindowStartAsc("exp_nullcfg")).thenReturn(List.of());
+        assertEquals(200, controller.results("exp_nullcfg").getStatusCode().value());
+
+        ExperimentEntity e2 = new ExperimentEntity();
+        e2.status = "RUNNING";
+        e2.configJson = "   ";
+        when(experimentRepo.findById("exp_blankcfg")).thenReturn(Optional.of(e2));
+        when(snapshotRepo.findByExperimentIdOrderByWindowStartAsc("exp_blankcfg")).thenReturn(List.of());
+        assertEquals(200, controller.results("exp_blankcfg").getStatusCode().value());
+    }
+
 }

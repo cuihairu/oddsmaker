@@ -468,4 +468,73 @@ class PipelineControllersTest {
         verify(accessGuard, org.mockito.Mockito.times(4)).requirePermission("audit:sensitive");
         verify(accessGuard, org.mockito.Mockito.times(1)).requirePermission("audit:manage");
     }
+
+    @Test
+    @DisplayName("Webhook：认证主体存在时创建者取 getName（currentOperator auth!=null 侧）")
+    void webhookOperatorFromPrincipal() {
+        org.mockito.Mockito.when(webhookService.createWebhookConfig(org.mockito.ArgumentMatchers.eq("g"),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.anyString())).thenReturn(new io.oddsmaker.control.jpa.WebhookConfigEntity());
+        var auth = new org.springframework.security.authentication.TestingAuthenticationToken(
+            "alice", "n", "ROLE_ADMIN");
+        try {
+            org.springframework.security.core.context.SecurityContextHolder
+                .getContext().setAuthentication(auth);
+            assertEquals(201, webhookController.createConfig("g",
+                new io.oddsmaker.control.jpa.WebhookConfigEntity()).getStatusCode().value());
+            verify(webhookService).createWebhookConfig(org.mockito.ArgumentMatchers.eq("g"),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq("alice"));
+        } finally {
+            org.springframework.security.core.context.SecurityContextHolder.clearContext();
+        }
+    }
+
+
+    @Test
+    @DisplayName("分支对侧：readiness HEALTHY=READY、metrics since 解析、报表显式 CUSTOM、集成类型过滤与 callStats since、审计 asc")
+    void pipelineControllerCounterSides() {
+        org.mockito.Mockito.when(healthMonitorService.getSystemHealth()).thenReturn(java.util.Map.of(
+            "overallStatus", io.oddsmaker.control.jpa.HealthCheckEntity.HealthStatus.HEALTHY));
+        @SuppressWarnings("unchecked")
+        java.util.Map<String, Object> ready =
+            (java.util.Map<String, Object>) healthController.readiness().getBody();
+        assertEquals("READY", ready.get("status"));
+
+        assertEquals(200, healthController.getRecentMetrics(
+            io.oddsmaker.control.jpa.HealthMetricEntity.MetricType.CPU_USAGE, "2026-09-01T00:00:00")
+            .getStatusCode().value());
+        verify(healthMonitorService).getRecentMetrics(
+            io.oddsmaker.control.jpa.HealthMetricEntity.MetricType.CPU_USAGE,
+            java.time.LocalDateTime.parse("2026-09-01T00:00:00"));
+
+        ReportController.ReportRequest reportReq = new ReportController.ReportRequest();
+        reportReq.gameId = "g";
+        reportReq.reportType = "CUSTOM";
+        assertEquals(200, reportController.createReport(reportReq).getStatusCode().value());
+        verify(reportService).createReport(eq("g"), isNull(), isNull(), isNull(), isNull(),
+            eq(io.oddsmaker.control.jpa.ReportEntity.ReportType.CUSTOM),
+            isNull(), isNull(), isNull(), isNull(), isNull());
+
+        io.oddsmaker.control.jpa.IntegrationEntity wh = new io.oddsmaker.control.jpa.IntegrationEntity();
+        wh.integrationType = io.oddsmaker.control.jpa.IntegrationEntity.IntegrationType.WEBHOOK;
+        io.oddsmaker.control.jpa.IntegrationEntity slack = new io.oddsmaker.control.jpa.IntegrationEntity();
+        slack.integrationType = io.oddsmaker.control.jpa.IntegrationEntity.IntegrationType.SLACK;
+        org.mockito.Mockito.when(integrationService.getIntegrations("g"))
+            .thenReturn(java.util.List.of(wh, slack));
+        @SuppressWarnings("unchecked")
+        java.util.List<io.oddsmaker.control.jpa.IntegrationEntity> byType =
+            (java.util.List<io.oddsmaker.control.jpa.IntegrationEntity>) (java.util.List<?>)
+                integrationController.getIntegrationsByType("g",
+                    io.oddsmaker.control.jpa.IntegrationEntity.IntegrationType.SLACK).getBody();
+        assertEquals(1, byType.size());
+        assertEquals(io.oddsmaker.control.jpa.IntegrationEntity.IntegrationType.SLACK,
+            byType.get(0).integrationType);
+
+        assertEquals(200, integrationController.getCallStats("i1", "g", "2026-09-01T00:00:00")
+            .getStatusCode().value());
+        verify(integrationService).getCallStats("i1", java.time.LocalDateTime.parse("2026-09-01T00:00:00"));
+
+        assertEquals(200, auditLogController.listAuditLogs(0, 50, "createdAt", "asc").getStatusCode().value());
+    }
+
 }

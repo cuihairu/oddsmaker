@@ -88,4 +88,22 @@ class RuleConfigTest {
         }
         assertNull(RuleConfig.byType("THRESHOLD").ruleId);   // 空快照 → DEFAULTS（ruleId null）
     }
+
+    @Test
+    @DisplayName("byType：current 快照为 null（未初始化防御侧）时回落 DEFAULTS")
+    void byTypeFallsBackWhenCurrentNull() throws Exception {
+        java.lang.reflect.Field f = RuleConfig.class.getDeclaredField("current");
+        f.setAccessible(true);
+        Object saved = f.get(null);
+        f.set(null, null);
+        try {
+            RuleConfig.RuleSpec spec = RuleConfig.byType("THRESHOLD");
+            assertNotNull(spec);
+            assertNull(spec.ruleId);
+            assertEquals(100_000, spec.triggerThreshold);
+            assertEquals("ALERT", spec.actionType);
+        } finally {
+            f.set(null, saved);
+        }
+    }
 }

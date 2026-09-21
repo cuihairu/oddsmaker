@@ -64,4 +64,11 @@ class JwtServiceTest {
             secret.getBytes(StandardCharsets.UTF_8));
         return NimbusJwtDecoder.withSecretKey(key).macAlgorithm(MacAlgorithm.HS256).build();
     }
+
+    @Test
+    @DisplayName("secret 为 null 拒绝启动（防御侧）")
+    void rejectNullSecret() {
+        assertThrows(IllegalStateException.class, () -> new JwtService(null, 60));
+    }
+
 }

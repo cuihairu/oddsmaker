@@ -390,4 +390,182 @@ class PlayerExportServiceTest {
         assertEquals(PlayerExportJobEntity.Status.EXPIRED, job.status);
         assertFalse(Files.exists(file));
     }
+
+    // ===== 分支对侧补充（BRANCH 收口）=====
+
+    @Test
+    @DisplayName("创建：playerId/format/sections 空值侧与超长 playerId 截断、软删游戏拒绝")
+    void createSidesAndLongPlayerId() {
+        when(gameRepo.findById("game_demo")).thenReturn(Optional.of(gameDemo));
+        when(jobRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        // playerId null 侧
+        assertThrows(IllegalArgumentException.class,
+            () -> service.create("game_demo", null, null, null, null, "ops1"));
+        // format 空白串 → 默认 json（isBlank 侧）
+        assertEquals("json", service.create("game_demo", "p1", null, "  ", null, "ops1").exportFormat);
+        // sections 空列表 → 全分区（isEmpty 侧）
+        PlayerExportJobEntity job = service.create("game_demo", "p1", null, null, List.of(), "ops1");
+        assertEquals(4, job.sections.split(",").length);
+        // 超 40 字符 playerId 截断入文件名（length > 40 侧）
+        String longId = "p".repeat(50);
+        PlayerExportJobEntity longJob = service.create("game_demo", longId, null, null, null, "ops1");
+        assertTrue(longJob.fileName.startsWith("player-" + "p".repeat(40) + "-"));
+
+        // 软删游戏拒绝（requireGame filter deletedAt 侧）
+        gameDemo.deletedAt = LocalDateTime.now();
+        assertThrows(IllegalArgumentException.class,
+            () -> service.create("game_demo", "p9", null, null, null, "ops1"));
+    }
+
+    @Test
+    @DisplayName("处理：手工任务的未知分区走 default 跳过、sections null 回落全分区")
+    void processUnknownSectionAndNullSections() throws Exception {
+        when(jobRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        // 未知分区（default 分支）：跳过，0 行仍 COMPLETED
+        PlayerExportJobEntity job = new PlayerExportJobEntity();
+        job.id = "pex_weird";
+        job.gameId = "game_demo";
+        job.playerId = "p1";
+        job.exportFormat = "json";
+        job.sections = "[\"weird\"]";
+        job.status = PlayerExportJobEntity.Status.PENDING;
+        job.fileName = "weird.json";
+        when(jobRepo.findById("pex_weird")).thenReturn(Optional.of(job));
+        PlayerExportJobEntity done = service.process("pex_weird");
+        assertEquals(PlayerExportJobEntity.Status.COMPLETED, done.status);
+        assertEquals(0L, done.rowCount);
+
+        // sections null（fromJson null 侧）→ 回落全分区
+        PlayerExportJobEntity nullSections = new PlayerExportJobEntity();
+        nullSections.id = "pex_nullsec";
+        nullSections.gameId = "game_demo";
+        nullSections.playerId = "p1";
+        nullSections.exportFormat = "json";
+        nullSections.sections = null;
+        nullSections.status = PlayerExportJobEntity.Status.PENDING;
+        nullSections.fileName = "null-sec.json";
+        when(jobRepo.findById("pex_nullsec")).thenReturn(Optional.of(nullSections));
+        // profile 分区（identity 不存在 → found=false）足够驱动全分区路径
+        when(identityRepo.findByPlayerId("game_demo", "p1")).thenReturn(Optional.empty());
+        when(paymentRepo.findByGameIdAndPlayerIdOrderByPaidAtDesc("game_demo", "p1")).thenReturn(List.of());
+        when(loginLogRepo.findByGameIdAndPlayerIdOrderByLoginAtDesc("game_demo", "p1")).thenReturn(List.of());
+        when(redeemRecordRepo.findByGameIdAndPlayerKeyOrderByRedeemedAtDesc("game_demo", "p1")).thenReturn(List.of());
+        PlayerExportJobEntity done2 = service.process("pex_nullsec");
+        assertEquals(PlayerExportJobEntity.Status.COMPLETED, done2.status);
+        assertEquals(1L, done2.rowCount);  // profile 档案计 1 行，其余三空分区 0 行
+
+        // sections 纯空白（fromJson isBlank 侧）→ 同样回落全分区
+        PlayerExportJobEntity blankSections = new PlayerExportJobEntity();
+        blankSections.id = "pex_blanksec";
+        blankSections.gameId = "game_demo";
+        blankSections.playerId = "p1";
+        blankSections.exportFormat = "json";
+        blankSections.sections = "   ";
+        blankSections.status = PlayerExportJobEntity.Status.PENDING;
+        blankSections.fileName = "blank-sec.json";
+        when(jobRepo.findById("pex_blanksec")).thenReturn(Optional.of(blankSections));
+        PlayerExportJobEntity done3 = service.process("pex_blanksec");
+        assertEquals(PlayerExportJobEntity.Status.COMPLETED, done3.status);
+        assertEquals(1L, done3.rowCount);  // 与 null sections 同：全分区、profile 计 1 行
+    }
+
+    @Test
+    @DisplayName("CSV 单元格转义：逗号/引号/换行/回车四种特殊字符各自触发包裹")
+    void csvCellEscapesAllSpecialCharacters() throws Exception {
+        when(gameRepo.findById("game_demo")).thenReturn(Optional.of(gameDemo));
+        when(jobRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        PlayerExportJobEntity job = service.create("game_demo", "p1", null, "csv", null, "ops1");
+        when(jobRepo.findById(job.id)).thenReturn(Optional.of(job));
+
+        // 四分区各注入一种特殊字符（不含其他三种），覆盖 || 链每个条件的独立 true 侧：
+        // profile.deviceId 含逗号；payments.orderId 含引号；loginLogs.deviceId 含 \n；redeem.code 含 \r
+        IdentityEntity idn = identity();
+        idn.deviceId = "dev,1";
+        when(identityRepo.findByPlayerId("game_demo", "p1")).thenReturn(Optional.of(idn));
+        when(paymentRepo.findByGameIdAndPlayerIdOrderByPaidAtDesc("game_demo", "p1"))
+            .thenReturn(List.of(payment("o\"1", "10", PlayerPaymentEntity.Status.COMPLETED)));
+        when(paymentRepo.sumCompletedAmount("game_demo", "p1")).thenReturn(new BigDecimal("10.00"));
+        when(paymentRepo.countByGameIdAndPlayerIdAndStatus("game_demo", "p1", PlayerPaymentEntity.Status.COMPLETED)).thenReturn(1L);
+        PlayerLoginLogEntity withNl = loginLog();
+        withNl.deviceId = "dev\n2";
+        when(loginLogRepo.findByGameIdAndPlayerIdOrderByLoginAtDesc("game_demo", "p1"))
+            .thenReturn(List.of(withNl));
+        when(loginLogRepo.countByGameIdAndPlayerId("game_demo", "p1")).thenReturn(1L);
+        when(loginLogRepo.findFirstByGameIdAndPlayerIdOrderByLoginAtDesc("game_demo", "p1"))
+            .thenReturn(Optional.of(withNl));
+        RedeemRecordEntity withCr = redeemRecord();
+        withCr.code = "AB\rCD";
+        when(redeemRecordRepo.findByGameIdAndPlayerKeyOrderByRedeemedAtDesc("game_demo", "p1"))
+            .thenReturn(List.of(withCr));
+
+        PlayerExportJobEntity done = service.process(job.id);
+        assertEquals(PlayerExportJobEntity.Status.COMPLETED, done.status);
+        try (ZipFile zip = new ZipFile(Path.of(done.filePath).toFile())) {
+            String profile = new String(zip.getInputStream(zip.getEntry("profile.csv")).readAllBytes(), StandardCharsets.UTF_8);
+            assertTrue(profile.contains("\"dev,1\""), profile);   // 逗号 → 包裹
+            String payments = new String(zip.getInputStream(zip.getEntry("payments.csv")).readAllBytes(), StandardCharsets.UTF_8);
+            assertTrue(payments.contains("\"o\"\"1\""), payments); // 引号 → 包裹+翻倍
+            String logins = new String(zip.getInputStream(zip.getEntry("login-logs.csv")).readAllBytes(), StandardCharsets.UTF_8);
+            assertTrue(logins.contains("\"dev\n2\""), logins);    // \n → 包裹
+            String redeems = new String(zip.getInputStream(zip.getEntry("redeem-records.csv")).readAllBytes(), StandardCharsets.UTF_8);
+            assertTrue(redeems.contains("\"AB\rCD\""), redeems);  // \r → 包裹
+        }
+    }
+
+    @Test
+    @DisplayName("下载：expiresAt null 的完成任务可下载")
+    void downloadNullExpiresAt() throws Exception {
+        Path file = tempDir.resolve("no-exp.json");
+        Files.write(file, "{}".getBytes(StandardCharsets.UTF_8));
+        PlayerExportJobEntity job = new PlayerExportJobEntity();
+        job.id = "pex_noexp";
+        job.fileName = "no-exp.json";
+        job.exportFormat = "json";
+        job.status = PlayerExportJobEntity.Status.COMPLETED;
+        job.expiresAt = null;
+        job.filePath = file.toString();
+        when(jobRepo.findById("pex_noexp")).thenReturn(Optional.of(job));
+
+        PlayerExportService.ExportedFile out = service.download("pex_noexp");
+        assertEquals("application/json", out.contentType());
+    }
+
+    @Test
+    @DisplayName("csv：含逗号/引号的单元格按 RFC4180 转义加引号")
+    void csvSpecialCharsQuoted() throws Exception {
+        when(jobRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        PlayerExportJobEntity job = new PlayerExportJobEntity();
+        job.id = "pex_csvq";
+        job.gameId = "game_demo";
+        job.playerId = "p1";
+        job.exportFormat = "csv";
+        job.sections = "[\"payments\"]";
+        job.status = PlayerExportJobEntity.Status.PENDING;
+        job.fileName = "quoted.zip";
+        when(jobRepo.findById("pex_csvq")).thenReturn(Optional.of(job));
+        PlayerPaymentEntity tricky = payment("o,1", "30", PlayerPaymentEntity.Status.COMPLETED);
+        tricky.productId = "say \"hi\"";
+        when(paymentRepo.findByGameIdAndPlayerIdOrderByPaidAtDesc("game_demo", "p1"))
+            .thenReturn(List.of(tricky));
+
+        service.process("pex_csvq");
+
+        try (ZipFile zip = new ZipFile(Path.of(job.filePath).toFile())) {
+            String csv = new String(zip.getInputStream(zip.getEntry("payments.csv")).readAllBytes(),
+                StandardCharsets.UTF_8);
+            assertTrue(csv.contains("\"o,1\""));           // 逗号 → 加引号
+            assertTrue(csv.contains("\"say \"\"hi\"\"\"")); // 引号 → 双写转义
+        }
+    }
+
+    @Test
+    @DisplayName("cleanup：无到期任务（empty 侧）安静返回")
+    void cleanupNoExpiredJobsQuiet() {
+        when(jobRepo.findByStatusAndExpiresAtBefore(eq(PlayerExportJobEntity.Status.COMPLETED), any()))
+            .thenReturn(List.of());
+        assertDoesNotThrow(() -> service.cleanup());
+        verify(jobRepo, never()).save(any());
+    }
 }

@@ -1264,4 +1264,76 @@ class InfraServicesDeepTest2 {
         assertDoesNotThrow(() -> webhookService.cleanupExpiredLogs());
         verify(webhookLogRepo, times(2)).deleteExpiredLogs(any(LocalDateTime.class));
     }
+
+    @Test
+    @DisplayName("Flink：blank flinkJobId（stop 不 cancel、refresh 拒绝）+ controlToken/ruleIds 空 Triple 侧")
+    void flinkJobBlankAndTokenSides() throws Exception {
+        // 203 行 isBlank 侧：blank flinkJobId → 不调 cancel 仅落状态
+        FlinkJobEntity blankFlink = flinkJob("fj-blank-stop", FlinkJobEntity.JobStatus.RUNNING);
+        blankFlink.flinkJobId = "   ";
+        lenient().when(flinkJobRepo.findById("fj-blank-stop")).thenReturn(Optional.of(blankFlink));
+        FlinkJobEntity stopped = flinkJobService.stopJob("fj-blank-stop", "op");
+        assertEquals(FlinkJobEntity.JobStatus.STOPPED, stopped.status);
+        verify(flinkRestClient, never()).cancel(any());
+
+        // 249 行 isBlank 侧
+        FlinkJobEntity blankFlink2 = flinkJob("fj-blank-refresh", FlinkJobEntity.JobStatus.RUNNING);
+        blankFlink2.flinkJobId = "   ";
+        lenient().when(flinkJobRepo.findById("fj-blank-refresh")).thenReturn(Optional.of(blankFlink2));
+        assertThrows(IllegalStateException.class,
+            () -> flinkJobService.refreshJobStatus("fj-blank-refresh"));
+
+        // 450 行 true 侧：controlToken 非空 → programArgs 带 token；458 行空 ruleIds 侧
+        Path jarDirPath = makeJarDir("risk-job-0.1.0-all.jar");
+        setFlinkField("jarDir", jarDirPath.toString());
+        org.springframework.test.util.ReflectionTestUtils.setField(flinkJobService, "controlToken", "tok123");
+        lenient().when(flinkRestClient.uploadJar(any(Path.class))).thenReturn("jar_1");
+        lenient().when(flinkRestClient.launch(eq("jar_1"), anyString(), eq(2), anyString()))
+            .thenReturn("job-9");
+        FlinkJobEntity draft2 = flinkJob("fj-draft-empty-rules", FlinkJobEntity.JobStatus.DRAFT);
+        draft2.ruleIds = "[]";
+        lenient().when(flinkJobRepo.findById("fj-draft-empty-rules")).thenReturn(Optional.of(draft2));
+        flinkJobService.deployJob("fj-draft-empty-rules", "op");
+        org.mockito.ArgumentCaptor<String> argsCaptor = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(flinkRestClient).launch(eq("jar_1"), anyString(), eq(2), argsCaptor.capture());
+        assertTrue(argsCaptor.getValue().contains("--control.token=tok123"));
+        assertFalse(argsCaptor.getValue().contains("--rule-ids="));
+    }
+
+
+    @Test
+    @DisplayName("限流：createRateLimit null 兜底侧（规则三元先执行、审计 Map.of 不容 null 值而 NPE）+ 配额 webhook resourceType null + 统计 scope 过滤")
+    void rateLimitAndQuotaCounterSides() {
+        // 56 行 limit null → 100；随后审计 Map.of("limit", null) 抛 NPE（生产语义如此，三元行已执行）
+        assertThrows(NullPointerException.class, () -> rateLimitService.createRateLimit(
+            "g1", null, null, null, RateLimitEntity.Scope.GAME, null,
+            RateLimitEntity.WindowType.HOUR, 1, null, null, null, null));
+        // 57 行 windowType null → MINUTE；审计 Map.of("windowType", null) 抛 NPE
+        assertThrows(NullPointerException.class, () -> rateLimitService.createRateLimit(
+            "g1", null, null, null, RateLimitEntity.Scope.GAME, 200, null, 1, null, null, null, null));
+
+        // 233 行 quota.resourceType null → payload resource_type null
+        QuotaEntity nullType = quota("q-null", 100, 99);
+        nullType.resourceType = null;
+        // @InjectMocks 实例不会被注入进另一个 @InjectMocks（Mockito 不级联），手动接线，
+        // 否则 rateLimitService.webhookService 为 null、NPE 被 dispatchQuotaWebhook 的 catch 吞掉
+        org.springframework.test.util.ReflectionTestUtils.setField(rateLimitService, "webhookService", webhookService);
+        org.springframework.test.util.ReflectionTestUtils.invokeMethod(rateLimitService,
+            "dispatchQuotaWebhook", nullType, WebhookService.EVENT_QUOTA_ALERT);
+        // webhookService 是 @InjectMocks 真实例（非 mock），验证其首个副作用：查询活跃配置
+        verify(webhookConfigRepo).findActiveByGameId("g1");
+
+        // 324 行 scope null 过滤侧：byScope 只统计有 scope 的规则
+        RateLimitEntity withScope = rateLimit("rl-s", RateLimitEntity.Scope.GAME,
+            RateLimitEntity.Algorithm.SLIDING_WINDOW, 10, true);
+        RateLimitEntity noScope = rateLimit("rl-ns", null,
+            RateLimitEntity.Algorithm.SLIDING_WINDOW, 10, true);
+        when(rateLimitRepo.findByGameId("g1")).thenReturn(List.of(withScope, noScope));
+        Map<String, Object> stats = rateLimitService.getRateLimitStats("g1");
+        assertEquals(2L, stats.get("total"));
+        @SuppressWarnings("unchecked")
+        Map<String, Long> byScope = (Map<String, Long>) stats.get("byScope");
+        assertEquals(Map.of(RateLimitEntity.Scope.GAME.name(), 1L), byScope);
+    }
+
 }

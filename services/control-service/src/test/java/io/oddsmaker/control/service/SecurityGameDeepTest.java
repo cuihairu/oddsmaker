@@ -1676,4 +1676,115 @@ class SecurityGameDeepTest {
         j.totalActionsExecuted = 0L;
         return j;
     }
+
+    @Test
+    @DisplayName("RiskDashboard 对侧：needsReview 已审、hitCount null、reviewStatus none 回退、createdAt null 过滤")
+    void riskDashboardNullSides() {
+        // 75 行：needsReview true && reviewStatus 非 null（不计入 pendingReview）
+        RiskCaseEntity reviewed = riskCase("c9", RiskCaseEntity.RiskLevel.HIGH,
+            RiskCaseEntity.ActionType.BLOCK, RiskCaseEntity.ExecutionStatus.EXECUTED, "approved");
+        reviewed.createdAt = LocalDateTime.now();
+        lenient().when(riskCaseRepo.countByGameIdSince(eq("g1"), any(LocalDateTime.class))).thenReturn(1L);
+        lenient().when(riskCaseRepo.findByGameId("g1")).thenReturn(List.of(reviewed));
+        lenient().when(blockListRepo.findActiveBlocks(eq("g1"), any(LocalDateTime.class)))
+            .thenReturn(List.of());
+        lenient().when(flinkJobRepo.findRunningJobs("g1")).thenReturn(List.of());
+        Map<String, Object> overview = riskDashboardService.getOverview("g1", LocalDateTime.now().minusDays(1));
+        assertEquals(0L, overview.get("pendingReview"));
+
+        // 216 行：hitCount null → 计 0
+        BlockListEntity noHits = blockEntity("b9", true);
+        noHits.hitCount = null;
+        lenient().when(blockListRepo.findActiveBlocks(eq("g2"), any(LocalDateTime.class)))
+            .thenReturn(List.of(noHits));
+        Map<String, Object> stats = riskDashboardService.getBlockStats("g2");
+        assertEquals(0L, stats.get("totalHits"));
+
+        // 302 行：reviewStatus null → "none"
+        RiskCaseEntity noReview = riskCase("c10", RiskCaseEntity.RiskLevel.LOW,
+            RiskCaseEntity.ActionType.ALERT, RiskCaseEntity.ExecutionStatus.PENDING, null);
+        noReview.createdAt = LocalDateTime.now();
+        lenient().when(riskCaseRepo.findByGameId("g3")).thenReturn(List.of(noReview));
+        List<Map<String, Object>> recent = riskDashboardService.getRecentCases("g3", 5);
+        assertEquals("none", recent.get(0).get("reviewStatus"));
+
+        // 325 行：createdAt null 不参与平均等待
+        RiskCaseEntity noTs = riskCase("c11", RiskCaseEntity.RiskLevel.MEDIUM,
+            RiskCaseEntity.ActionType.REVIEW, RiskCaseEntity.ExecutionStatus.PENDING, "pending");
+        noTs.createdAt = null;
+        lenient().when(riskCaseRepo.findPendingReview("g4")).thenReturn(List.of(noTs));
+        Map<String, Object> qs = riskDashboardService.getReviewQueueStats("g4");
+        assertEquals(1L, qs.get("totalPending"));
+        assertEquals(0.0, qs.get("avgWaitMinutes"));
+    }
+
+
+
+    // ===== 分支对侧补充（BRANCH 收口）=====
+
+    @Test
+    @DisplayName("分支对侧：已有主 MFA 不重复标记、失败未达上限不锁、OAUTH2 映射、清扫组合、null UA 指纹")
+    void securityBranchSides() {
+        // 用户已有 primary 的 MFA → 新激活方法不再 markAsPrimary（noneMatch false 侧）
+        MFAConfigEntity primary = new MFAConfigEntity();
+        primary.id = "mfa_p";
+        primary.userId = "u1";
+        primary.mfaMethod = MFAConfigEntity.MFAMethod.TOTP;
+        primary.mfaStatus = MFAConfigEntity.MFAStatus.ENABLED;
+        primary.markAsPrimary();
+        MFAConfigEntity second = new MFAConfigEntity();
+        second.id = "mfa_second";
+        second.userId = "u1";
+        second.mfaMethod = MFAConfigEntity.MFAMethod.TOTP;
+        second.mfaStatus = MFAConfigEntity.MFAStatus.PENDING;
+        second.secretKey = TotpUtil.generateSecret();
+        lenient().when(mfaConfigRepo.findById("mfa_second")).thenReturn(Optional.of(second));
+        lenient().when(mfaConfigRepo.findByUserId("u1")).thenReturn(List.of(primary, second));
+        lenient().when(mfaConfigRepo.save(any(MFAConfigEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+        MFAConfigEntity activated = securityService.verifyAndActivateMFA("mfa_second",
+            TotpUtil.currentCode(second.secretKey, Instant.now()));
+        assertEquals(MFAConfigEntity.MFAStatus.ENABLED, activated.mfaStatus);
+        assertFalse(activated.isPrimary());
+
+        // 验证失败但未达上限 → 记次不锁定（hasExceededAttempts false 侧）
+        MFAConfigEntity fresh = new MFAConfigEntity();
+        fresh.id = "mfa_fresh";
+        fresh.userId = "u2";
+        fresh.mfaMethod = MFAConfigEntity.MFAMethod.TOTP;
+        fresh.mfaStatus = MFAConfigEntity.MFAStatus.PENDING;
+        fresh.verificationAttempts = 0;
+        lenient().when(mfaConfigRepo.findById("mfa_fresh")).thenReturn(Optional.of(fresh));
+        assertThrows(IllegalArgumentException.class,
+            () -> securityService.verifyAndActivateMFA("mfa_fresh", "bad-code"));
+        assertEquals(1, fresh.verificationAttempts);
+        assertFalse(fresh.mfaStatus == MFAConfigEntity.MFAStatus.LOCKED);
+
+        // OAUTH2 协议（protocol == OAUTH2 true 侧）
+        lenient().when(ssoConfigRepo.save(any(SSOConfigEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+        Map<String, Object> cfg = new HashMap<>();
+        cfg.put("provider", "github");
+        cfg.put("clientId", "cid");
+        SSOConfigEntity oauth = securityService.createSSOConfig(
+            "GH", "oauth", SSOConfigEntity.SSOProtocol.OAUTH2, cfg, "admin");
+        assertEquals("github", oauth.oauthProvider);
+
+        // 过期会话空但空闲会话非空（|| 第二条件 true 侧）
+        lenient().when(securitySessionRepo.findExpired(any(LocalDateTime.class))).thenReturn(List.of());
+        SecuritySessionEntity idle = new SecuritySessionEntity();
+        idle.sessionStatus = SecuritySessionEntity.SessionStatus.ACTIVE;
+        lenient().when(securitySessionRepo.findIdleExpired(any(LocalDateTime.class))).thenReturn(List.of(idle));
+        lenient().when(securitySessionRepo.save(any(SecuritySessionEntity.class)))
+            .thenAnswer(inv -> inv.getArgument(0));
+        securityService.cleanupExpiredSessions();
+        assertEquals(SecuritySessionEntity.SessionStatus.REVOKED, idle.sessionStatus);
+
+        // deleteExpired 返回 0（deleted > 0 false 侧）
+        lenient().when(securitySessionRepo.deleteExpired(any(LocalDateTime.class))).thenReturn(0);
+        securityService.deleteOldSessions();
+
+        // userAgent null → 归一化为空串（三元 null 侧）
+        SecuritySessionEntity nullUa = securityService.createSession(
+            "u1", SecuritySessionEntity.AuthMethod.SSO, "10.0.0.2", null, 30);
+        assertTrue(nullUa.deviceFingerprint.matches("[0-9a-f]{64}"));
+    }
 }

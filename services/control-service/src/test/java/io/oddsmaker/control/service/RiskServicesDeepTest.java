@@ -433,6 +433,17 @@ class RiskServicesDeepTest {
 
         lenient().when(reviewQueueRepo.findNeedsEscalation(any())).thenReturn(List.of(toEscalate));
         reviewQueueService.checkEscalations();
+
+        // 自动升级 payload：slaDueAt 非 null 侧（toString 进 payload；上一项为 null 侧）
+        ReviewQueueEntity withSlaEsc = queueItem("q_esc_sla", ReviewQueueEntity.ReviewStatus.IN_REVIEW);
+        withSlaEsc.slaDueAt = java.time.LocalDateTime.now().minusHours(2);
+        lenient().when(reviewQueueRepo.findNeedsEscalation(any()))
+            .thenReturn(List.of(withSlaEsc))
+            .thenReturn(List.of());
+        assertDoesNotThrow(reviewQueueService::checkEscalations);
+        assertTrue(withSlaEsc.escalated);
+        assertEquals("system", withSlaEsc.escalatedTo);
+        reviewQueueService.checkEscalations();  // 空列表侧再走一次
     }
 
     // ===== 封禁名单 =====
@@ -801,4 +812,97 @@ class RiskServicesDeepTest {
         assertEquals(Boolean.FALSE, actions.get("available"));
         assertEquals(2160, actions.get("hours"));
     }
+
+    @Test
+    @DisplayName("风控指标：空白环境与 null 等价，走无环境过滤支（isBlank 侧）")
+    void riskMetricsBlankEnvironmentSides() {
+        lenient().when(client.isAvailable()).thenReturn(true);
+        lenient().when(client.query(anyString(), eq("g"), any(Timestamp.class))).thenReturn(List.of());
+
+        Map<String, Object> trend = riskMetricsService.trend("g", "  ", null);
+        assertEquals(Boolean.TRUE, trend.get("available"));
+        assertTrue(((List<?>) trend.get("points")).isEmpty());
+
+        assertTrue(((List<?>) riskMetricsService.ruleHits("g", " ", 24).get("rules")).isEmpty());
+        assertTrue(((List<?>) riskMetricsService.severity("g", " ", null).get("bySeverity")).isEmpty());
+        assertTrue(((List<?>) riskMetricsService.actions("g", " ", null).get("byAction")).isEmpty());
+
+        // envFilter(" ") 视为未指定：所有查询均为 2 个绑定参数，不含环境值
+        verify(client, never()).query(anyString(), eq("g"), eq(" "), any(Timestamp.class));
+    }
+
+    @Test
+    @DisplayName("审核队列：ASSIGNED 状态可认领（isAssigned 短路侧）、SLA 空列表与 slaDueAt 非 null 侧")
+    void reviewQueueClaimAndSlaSides() {
+        // 116 行 isAssigned() true 侧（ASSIGNED 状态短路 ||）
+        ReviewQueueEntity assignedToClaim =
+            queueItem("q_claim2", ReviewQueueEntity.ReviewStatus.ASSIGNED);
+        lenient().when(reviewQueueRepo.findById("q_claim2")).thenReturn(Optional.of(assignedToClaim));
+        ReviewQueueEntity r = reviewQueueService.claimItem("q_claim2", "dave");
+        assertEquals(ReviewQueueEntity.ReviewStatus.CLAIMED, r.reviewStatus);
+        assertEquals("dave", r.claimedBy);
+
+        // 392 行 slaDueAt 非 null 侧（webhook payload 带 toString）
+        ReviewQueueEntity withSla = queueItem("q_sla3", ReviewQueueEntity.ReviewStatus.IN_REVIEW);
+        withSla.slaDueAt = java.time.LocalDateTime.now().minusHours(1);
+        lenient().when(reviewQueueRepo.findOverdue(any()))
+            .thenReturn(java.util.List.of(withSla))
+            .thenReturn(java.util.List.of());
+        reviewQueueService.checkSlaBreaches();
+        assertTrue(withSla.slaBreached);
+        verify(reviewQueueRepo).save(withSla);
+        // 351 行空列表侧
+        reviewQueueService.checkSlaBreaches();
+
+        // 404 行空列表侧
+        lenient().when(reviewQueueRepo.findNeedsEscalation(any()))
+            .thenReturn(java.util.List.of());
+        reviewQueueService.checkEscalations();
+    }
+
+    // ===== 分支对侧补充（BRANCH 收口）=====
+
+    @Test
+    @DisplayName("封禁名单：isBlocked 查无与全环境封禁命中；addBlock 默认类型/时长组合；stats unknown 分类")
+    void blockListBranchSides() {
+        lenient().when(blockListRepo.findActiveBlock(anyString(), anyString(), anyString(), any()))
+            .thenReturn(Optional.empty());
+        lenient().when(blockListRepo.save(any(BlockListEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        // 带环境查询但无活跃封禁：envBlock.isPresent() false 侧
+        assertFalse(blockListService.isBlocked("g", "env1", "device", "d_missing"));
+
+        // 环境不匹配但封禁为全环境（environmentId=null）：|| 第二条件命中
+        BlockListEntity globalNull = block("bl_gn", null);
+        lenient().when(blockListRepo.findActiveBlock(eq("g"), eq("device"), eq("d_gn"), any()))
+            .thenReturn(Optional.of(globalNull));
+        assertTrue(blockListService.isBlocked("g", "env_any", "device", "d_gn"));
+        verify(blockListRepo).recordHit(eq("bl_gn"), any());
+
+        // blockType null → 默认 HARD；临时 + durationMinutes null → 不设过期
+        BlockListEntity defaulted = blockListService.addBlock(
+            "g", "env1", "device", "d_null_type", "r", null, null, false, null, "op", null, null);
+        assertEquals(BlockListEntity.BlockType.HARD, defaulted.blockType);
+        assertNull(defaulted.expiresAt);
+
+        // 临时 + durationMinutes 0：>0 false 侧 → 不设过期
+        BlockListEntity zero = blockListService.addBlock(
+            "g", "env1", "device", "d_zero", "r", null,
+            BlockListEntity.BlockType.SOFT, false, 0, "op", null, null);
+        assertNull(zero.expiresAt);
+
+        // blockCategory null 的封禁在统计里归入 "unknown"
+        BlockListEntity noCat = block("bl_nocat", "env1");
+        noCat.blockCategory = null;
+        BlockListEntity withCat = block("bl_cat", null);
+        withCat.blockCategory = "fraud";
+        lenient().when(blockListRepo.findActiveBlocks(eq("g"), any())).thenReturn(List.of(noCat, withCat));
+        Map<String, Object> stats = blockListService.getBlockStats("g");
+        assertEquals(2, stats.get("totalActive"));
+        @SuppressWarnings("unchecked")
+        Map<String, Long> byCategory = (Map<String, Long>) stats.get("byCategory");
+        assertEquals(1L, byCategory.get("unknown"));
+        assertEquals(1L, byCategory.get("fraud"));
+    }
+
 }

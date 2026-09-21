@@ -134,6 +134,8 @@ class GatewayConfigComponentsTest {
         assertEquals("0:0:0:0:0:0:0:0", p.sanitizeClientIp("::1"));
         // 非法地址解析抛异常 → null
         assertNull(p.sanitizeClientIp("999.999.999.999"));
+        // 四段形态但某段非数字（parseInt 抛 NumberFormatException）→ null
+        assertNull(p.sanitizeClientIp("abc.def.ghi.jkl"));
     }
 
     private PiiPolicy.Overrides overrides(PiiPolicy.IpMode mode) {
@@ -424,5 +426,131 @@ class GatewayConfigComponentsTest {
         client.evictExpired();
         assertEquals(1, cache.size());
         assertTrue(cache.containsKey("device_id:fresh"));
+    }
+
+    // ===== 分支对侧补充（BRANCH 收口） =====
+
+    @Test
+    @DisplayName("PII：toMode/toIpMode null 输入与 DROP IP 模式解析侧")
+    void piiModeParserNullInputAndDropIp() {
+        PiiPolicy p = policy("allow", "allow", "allow");
+        // 构造器 Binder orElse 兜底使生产 s 恒非 null，null 侧经直测覆盖
+        assertEquals(PiiPolicy.Mode.MASK,
+            ReflectionTestUtils.invokeMethod(p, "toMode", (Object) null));
+        assertEquals(PiiPolicy.IpMode.COARSE,
+            ReflectionTestUtils.invokeMethod(p, "toIpMode", (Object) null));
+        // toIpMode("drop") 解析侧（构造器路径）
+        assertNull(policy("allow", "allow", "drop").sanitizeClientIp("1.2.3.4"));
+    }
+
+    @Test
+    @DisplayName("PII：Overrides 存在但 email/phoneMode 未设——回落构造器模式")
+    void piiOverridesFallBackWhenModeUnset() {
+        PiiPolicy p = policy("mask", "mask", "allow");
+        PiiPolicy.Overrides o = new PiiPolicy.Overrides();
+        o.ipMode = PiiPolicy.IpMode.ALLOW; // 只设 ipMode，email/phoneMode 保持 null
+        Map<String, Object> out = p.sanitizeProps(Map.of("mail", "a@b.com", "tel", "13812345678"), o);
+        assertEquals("***@b.com", out.get("mail"));   // emailMode 回落构造器 mask
+        assertTrue(String.valueOf(out.get("tel")).contains("x")); // phoneMode 回落构造器 mask
+    }
+
+    @Test
+    @DisplayName("PII：列表元素清洗为 null 时被剔除（drop 模式）")
+    void piiListElementDropped() {
+        PiiPolicy p = policy("drop", "allow", "allow");
+        Map<String, Object> out = p.sanitizeProps(Map.of("arr", List.of("a@b.com", "plain")));
+        // 邮箱元素被 drop → null 剔除，仅剩普通文本
+        assertEquals(1, ((List<?>) out.get("arr")).size());
+        assertEquals("plain", ((List<?>) out.get("arr")).get(0));
+    }
+
+    @Test
+    @DisplayName("Auth：isScoped 的 gameId/environment null 短路侧与 canWrite null")
+    void authScopedNullShortCircuits() {
+        AuthService.ApiKeyContext ctx = new AuthService.ApiKeyContext();
+        ctx.environment = "prod";
+        assertFalse(ctx.isScoped());  // gameId null 短路
+        ctx.gameId = "  ";
+        assertFalse(ctx.isScoped());  // gameId 空白串（!isBlank false 侧）
+        ctx.gameId = "g";
+        ctx.environment = null;
+        assertFalse(ctx.isScoped());  // environment null
+        // canWrite null → 视为可写（宽松默认）
+        assertTrue(new AuthService.ApiKeyContext().allowsWrite());
+        // 采样：enableSampling true 但 rate=0 → 不启用
+        AuthService.ApiKeyContext zeroRate = new AuthService.ApiKeyContext();
+        zeroRate.envEnableSampling = true;
+        zeroRate.envSampleRate = 0.0;
+        assertFalse(zeroRate.samplingEnabled());
+    }
+
+    @Test
+    @DisplayName("Auth：缓存条目过期后重新拉取（expireAt <= now 侧）与 controlUrl 空白")
+    void authExpiredCacheRefetchesAndBlankControlUrl() {
+        MockEnvironment env = new MockEnvironment()
+            .withProperty("oddsmaker.auth.keys.k_exp", "sk_exp")
+            .withProperty("oddsmaker.control.url", "   "); // 空白 → not_configured → 本地回退
+        AuthService service = new AuthService(env, new SimpleMeterRegistry());
+        AuthService.ApiKeyContext fresh = new AuthService.ApiKeyContext();
+        fresh.apiKey = "k_exp";
+        try {
+            ConcurrentHashMap<String, Object> cache = (ConcurrentHashMap<String, Object>)
+                ReflectionTestUtils.getField(service, "cache");
+            AuthService.CacheEntry stale = new AuthService.CacheEntry();
+            stale.context = fresh;
+            stale.expireAt = java.time.Instant.now().getEpochSecond() - 1;
+            cache.put("k_exp", stale);
+        } catch (Exception ignore) {
+            // 结构变化时跳过
+        }
+        // 过期条目不被命中：走重新拉取（not_configured）→ 本地密钥回退
+        AuthService.ApiKeyContext ctx = service.getContext("k_exp");
+        assertNotNull(ctx);
+        assertEquals("sk_exp", ctx.secret);
+    }
+
+    @Test
+    @DisplayName("Props：filterWithAllowlist null props 直通与列表 null 元素剔除")
+    void propsAllowlistNullPropsAndListNulls() {
+        PropsPolicy restricted = propsPolicy("level");
+        assertNull(restricted.filterWithAllowlist(null, List.of("level")));
+
+        Map<String, Object> withList = Map.of("level", java.util.Arrays.asList("a", null, "b"));
+        Map<String, Object> out = restricted.filterWithAllowlist(withList, List.of("level"));
+        assertEquals(List.of("a", "b"), out.get("level")); // null 元素剔除 + 多元素迭代
+
+        // 空白名单（allowlist 配置为空）的列表直通
+        PropsPolicy open = propsPolicy(null);
+        Map<String, Object> emptyOut = open.filter(Map.of("arr", List.of()));
+        assertTrue(((List<?>) emptyOut.get("arr")).isEmpty());
+    }
+
+    @Test
+    @DisplayName("Props：exceedsRequestLimit 对 null 请求体返回 false")
+    void propsRequestLimitNullBody() {
+        assertFalse(propsPolicy(null).exceedsRequestLimit(null));
+    }
+
+    @Test
+    @DisplayName("限流：同 key 同分钟二次命中（窗口未翻侧）与 bucketsApi 当前窗口保留")
+    void rateLimiterSameMinuteAndApiBucketsEvict() {
+        RateLimiterService svc = new RateLimiterService(10, 10);
+        assertTrue(svc.allowApiKey("k"));
+        assertTrue(svc.allowApiKey("k")); // 同分钟二次：w.window != minute 为 false
+        // bucketsApi 的当前分钟窗口清扫保留（谓词 false 侧）
+        svc.evictStaleWindows();
+        ConcurrentHashMap<String, Object> bucketsApi =
+            (ConcurrentHashMap<String, Object>) ReflectionTestUtils.getField(svc, "bucketsApi");
+        assertEquals(1, bucketsApi.size());
+
+        // 窗口翻新：置为过去分钟后再次 allow → 计数重置（w.window != minute true 侧）
+        ReflectionTestUtils.setField(bucketsApi.get("k"), "window", 0L);
+        assertTrue(svc.allowApiKey("k"));
+        assertEquals(1, bucketsApi.size());
+
+        // bucketsApi 旧窗口清扫驱逐（removeIf 谓词 true 侧）
+        ReflectionTestUtils.setField(bucketsApi.get("k"), "window", 0L);
+        svc.evictStaleWindows();
+        assertTrue(bucketsApi.isEmpty());
     }
 }

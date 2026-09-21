@@ -126,4 +126,58 @@ class HmacFilterCoverageTest {
         filter.filter(ex, chain).block();
         assertEquals(401, status(ex));
     }
+
+    // ===== 分支对侧补充（BRANCH 收口）=====
+
+    @Test
+    @DisplayName("签名头为空串：视为无签名（isEmpty 侧），key 不要求 HMAC 则放行")
+    void emptySignatureHeaderTreatedAsAbsent() {
+        AuthService.ApiKeyContext ctx = key();
+        ctx.requireHmac = false;
+        when(authService.getContext("pk_ok")).thenReturn(ctx);
+        when(chain.filter(any())).thenReturn(reactor.core.publisher.Mono.empty());
+        MockServerWebExchange ex = post("/v1/batch", "pk_ok", "", "[]");
+        filter.filter(ex, chain).block();
+        assertEquals(200, status(ex));
+    }
+
+    @Test
+    @DisplayName("client 角色 key 携带签名头：401 signature_not_supported")
+    void clientRoleWithSignatureRejected() {
+        AuthService.ApiKeyContext ctx = key();
+        ctx.keyRole = "client";
+        when(authService.getContext("pk_cli")).thenReturn(ctx);
+        MockServerWebExchange ex = post("/v1/batch", "pk_cli", "t=1, s=ff", "[]");
+        filter.filter(ex, chain).block();
+        assertEquals(401, status(ex));
+    }
+
+    @Test
+    @DisplayName("key 无 secret 但携带签名头：401 signature_not_supported")
+    void emptySecretWithSignatureRejected() {
+        AuthService.ApiKeyContext ctx = key();
+        ctx.secret = "";
+        when(authService.getContext("pk_nosec")).thenReturn(ctx);
+        MockServerWebExchange ex = post("/v1/batch", "pk_nosec", "t=1, s=ff", "[]");
+        filter.filter(ex, chain).block();
+        assertEquals(401, status(ex));
+
+        // secret 为 null：同样拒绝（secret == null 侧）
+        AuthService.ApiKeyContext nullSec = key();
+        nullSec.secret = null;
+        when(authService.getContext("pk_nullsec")).thenReturn(nullSec);
+        MockServerWebExchange ex2 = post("/v1/batch", "pk_nullsec", "t=1, s=ff", "[]");
+        filter.filter(ex2, chain).block();
+        assertEquals(401, status(ex2));
+    }
+
+    @Test
+    @DisplayName("签名头只有 t 无 s 片段：401 invalid_signature（s==null 侧）")
+    void signatureMissingSPartRejected() {
+        when(authService.getContext("pk_ok")).thenReturn(key());
+        long now = java.time.Instant.now().getEpochSecond();
+        MockServerWebExchange ex = post("/v1/batch", "pk_ok", "t=" + now, "[]");
+        filter.filter(ex, chain).block();
+        assertEquals(401, status(ex));
+    }
 }

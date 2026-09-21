@@ -107,4 +107,30 @@ class SymbolicationServiceTest {
         assertEquals(0, result.rulesApplied());
     }
 
+
+    @Test
+    @DisplayName("对侧：null 堆栈、null/blank 规则串、不命中规则与缺 pattern 键节点")
+    void symbolicateNullSides() {
+        // 38 行 null 侧
+        assertThrows(IllegalArgumentException.class,
+            () -> service.symbolicate("game_demo", "android", "1.2.0", null));
+        // 44 行 mappingRules null 侧
+        when(repo.findActive("g", "ios", "1")).thenReturn(List.of(mapping(null)));
+        var r1 = service.symbolicate("g", "ios", "1", "at A(A:1)");
+        assertNull(r1.mappingId());
+        assertEquals(0, r1.rulesApplied());
+        // 44 行 mappingRules blank 侧
+        when(repo.findActive("g2", "ios", "1")).thenReturn(List.of(mapping("   ")));
+        var r2 = service.symbolicate("g2", "ios", "1", "at A(A:1)");
+        assertNull(r2.mappingId());
+        // 52 行不命中侧：规则存在但 pattern 不匹配 → applied=0
+        when(repo.findActive("g3", "ios", "1")).thenReturn(List.of(
+            mapping("[{\"pattern\":\"zzz-never\",\"replacement\":\"X\"}]")));
+        var r3 = service.symbolicate("g3", "ios", "1", "at A(A:1)");
+        assertEquals("sym_1", r3.mappingId());
+        assertEquals(0, r3.rulesApplied());
+        // 74 行 pattern 缺键侧（path("pattern") → null）
+        assertEquals(0, service.parseRules("[{\"replacement\":\"z\"}]").size());
+    }
+
 }

@@ -237,4 +237,47 @@ class UserServiceTest {
         assertEquals(0, userService.searchUsers("test", pageable).getTotalElements());
         assertEquals(1, userService.findByRole(UserEntity.UserRole.VIEWER).size());
     }
+
+    // ===== 分支对侧补充（BRANCH 收口）=====
+
+    @Test
+    void branchSides_CreateEmptyRoles_UpdateNullFields_SoftDeletedFilters_LoginCountNull() {
+        // create：roles 空集（isEmpty 侧）→ 默认 VIEWER
+        UserEntity emptyRoles = new UserEntity();
+        emptyRoles.username = "er";
+        emptyRoles.email = "er@example.com";
+        emptyRoles.roles = new java.util.HashSet<>();
+        when(userRepo.existsByUsername("er")).thenReturn(false);
+        when(userRepo.existsByEmail("er@example.com")).thenReturn(false);
+        when(userRepo.save(any(UserEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+        assertEquals(Set.of(UserEntity.UserRole.VIEWER), userService.createUser(emptyRoles, "operator").roles);
+
+        // update：email/status 均 null → 原值保留（两个 if 的 false 侧）
+        // status 有 ACTIVE 初始化器：须显式置 null 才真正走 null 跳过侧，
+        // 否则恒写入 ACTIVE、断言 ACTIVE 恰好同值是假绿
+        when(userRepo.findById("user_test123")).thenReturn(Optional.of(testUser));
+        UserEntity partial = new UserEntity();
+        partial.displayName = "新名字";
+        partial.status = null;
+        userService.updateUser("user_test123", partial, "operator");
+        assertEquals("test@example.com", testUser.email);
+        assertEquals(UserEntity.UserStatus.ACTIVE, testUser.status);
+
+        // update：status 非 null 写入（true 侧）
+        UserEntity statusUpdate = new UserEntity();
+        statusUpdate.status = UserEntity.UserStatus.LOCKED;
+        userService.updateUser("user_test123", statusUpdate, "operator");
+        assertEquals(UserEntity.UserStatus.LOCKED, testUser.status);
+
+        // 软删用户：findById/findByUsername 均过滤为 empty（filter false 侧）
+        testUser.deletedAt = LocalDateTime.now();
+        assertTrue(userService.findById("user_test123").isEmpty());
+        when(userRepo.findByUsername("testuser")).thenReturn(Optional.of(testUser));
+        assertTrue(userService.findByUsername("testuser").isEmpty());
+
+        // recordLogin：loginCount null → 0+1
+        testUser.loginCount = null;
+        userService.recordLogin(testUser);
+        assertEquals(1L, testUser.loginCount);
+    }
 }

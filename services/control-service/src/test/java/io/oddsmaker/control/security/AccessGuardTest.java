@@ -86,4 +86,24 @@ class AccessGuardTest {
         when(permissionService.hasPermission("dave", "user:read")).thenReturn(true);
         assertDoesNotThrow(() -> accessGuard.requirePermission("user:read"));
     }
+
+    @Test
+    @DisplayName("未认证令牌（isAuthenticated=false）同样被拒；全局权限拒绝消息无 game 后缀")
+    void unauthenticatedTokenAndGlobalDenialSides() {
+        // 49 行 !auth.isAuthenticated() 侧：双参构造 = 未认证
+        SecurityContextHolder.getContext().setAuthentication(
+            new UsernamePasswordAuthenticationToken("anon", "pw"));
+        SecurityException ex = assertThrows(SecurityException.class,
+            () -> accessGuard.requirePermission("game:read"));
+        assertTrue(ex.getMessage().contains("not authenticated"));
+
+        // 65 行 gameId null 侧：requirePermission 拒绝时消息不带 "for game"
+        login("dave");
+        when(permissionService.hasPermission("dave", "game:read")).thenReturn(false);
+        SecurityException denied = assertThrows(SecurityException.class,
+            () -> accessGuard.requirePermission("game:read"));
+        assertTrue(denied.getMessage().contains("game:read"));
+        assertFalse(denied.getMessage().contains("for game"));
+    }
+
 }

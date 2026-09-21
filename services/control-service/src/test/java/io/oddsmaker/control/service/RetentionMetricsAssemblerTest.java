@@ -92,4 +92,16 @@ class RetentionMetricsAssemblerTest {
         assertEquals("fallback", RetentionMetricsAssembler.asDate("fallback"));
         assertEquals("", RetentionMetricsAssembler.asDate(null));
     }
+
+    @Test
+    void toTrendPoints_ignoresNonRetentionDays() {
+        Date c1 = Date.valueOf("2026-09-01");
+        List<Map<String, Object>> points = RetentionMetricsAssembler.toTrendPoints(List.of(
+                Map.of("cohort", c1, "d", 0, "users", 100L),
+                Map.of("cohort", c1, "d", 2, "users", 99L),   // d=2：非 0/1/7/30 → 忽略
+                Map.of("cohort", c1, "d", 1, "users", 40L)));
+        assertEquals(100L, points.get(0).get("newUsers"));
+        assertEquals(40L, points.get(0).get("d1"));
+    }
+
 }

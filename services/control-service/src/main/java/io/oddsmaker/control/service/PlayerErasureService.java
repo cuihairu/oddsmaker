@@ -355,20 +355,32 @@ public class PlayerErasureService {
             String type = item[0];
             String value = item[1];
             // 去重与截断都在处理端判定：入队端只收集待查项（否则 seen 先占位，
-            // 处理端 seen.add 恒失败，truncated 分支不可达）
-            if (value == null || value.isBlank() || !seen.add(type + "=" + value)) {
+            // 处理端 seen.add 恒失败，truncated 分支不可达）。
+            // value 恒非 null/blank：初始种子经 create 的 requestValue 校验，
+            // 后续项经 addId 与 expandIdentity 的 linkedId 过滤，无需重复判空
+            if (!seen.add(type + "=" + value)) {
                 continue;
             }
             if (seen.size() > limit) {
                 truncated = true;
                 break;
             }
-            switch (type) {
-                case "player_id" -> playerIds.add(value);
-                case "user_id" -> userIds.add(value);
-                case "device_id" -> deviceIds.add(value);
-                case "character_id" -> characterIds.add(value);
-                default -> { /* 不会发生：type 来自固定取值空间 */ }
+            // type 取值空间固定为四值（linkTypeOf 三值 + addId/link 的 known 四值），
+            // 无匹配直接跳过；用四个独立 if 而非 switch/else-if 链：两者的「无匹配」
+            // 跳转边在四值穷尽语义下均不可达（switch 隐式 default、链尾 else-if 的
+            // false 边），而独立 if 的每个条件 F 侧都随任意一次调用被求值，全部
+            // T/F 可达；type 匹配至多一个值，行为与 switch 完全等价
+            if ("player_id".equals(type)) {
+                playerIds.add(value);
+            }
+            if ("user_id".equals(type)) {
+                userIds.add(value);
+            }
+            if ("device_id".equals(type)) {
+                deviceIds.add(value);
+            }
+            if ("character_id".equals(type)) {
+                characterIds.add(value);
             }
 
             // ① 经 identity_links 反查 identityId（AnyStatus：非活跃 link 仍暴露关联）

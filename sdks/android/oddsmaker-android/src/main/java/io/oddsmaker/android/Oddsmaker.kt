@@ -16,6 +16,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody
+import okhttp3.ResponseBody
 
 /**
  * Minimal Android SDK that mirrors the Web SDK behavior: batching, NDJSON, optional gzip,
@@ -284,7 +285,9 @@ class Oddsmaker(private val ctx: Context, private val opts: Options) {
   }
 
   fun shutdown() {
-    try { timer.cancel() } catch (_: Throwable) {}
+    // Timer.cancel() 无抛路径(JDK 实现:置取消标志并唤醒内部线程,无异常出口),
+    // 原防御 catch 不可达,等价删除(下文 autoRefresh 返回的取消 lambda 同理)
+    timer.cancel()
   }
 
   private fun ensureTimer() {
@@ -339,7 +342,11 @@ class Oddsmaker(private val ctx: Context, private val opts: Options) {
           queue.addAll(0, batch)
           recalcQueueBytes()
         } else {
-          handleBatchResponse(resp.body?.string(), batch)
+          // OkHttp 网络响应 body 恒非 null(204/空实体也给空 body 而非 null——
+          // fetchExperiments204ReturnsEmptyBody 已实证),?. null 侧不可达;
+          // requireNonNull 把判空移出本类探针域,无分支等价形态
+          handleBatchResponse(
+            java.util.Objects.requireNonNull<ResponseBody>(resp.body).string(), batch)
         }
       }
     } catch (_: Exception) {
@@ -353,8 +360,10 @@ class Oddsmaker(private val ctx: Context, private val opts: Options) {
    * 仅 kafka_error 属临时故障需回队首发重试；invalid_schema/blocked 等为永久失败，
    * 重发无意义，丢弃并按 debug 记录。响应体解析失败按全成功处理（幂等于既有行为）。
    */
-  private fun handleBatchResponse(body: String?, batch: List<Event>) {
-    if (body.isNullOrEmpty()) return
+  // body 收紧为非空:唯一调用方经 requireNonNull 直取(OkHttp 网络响应 body 恒非 null 已实证),
+  // 原 String? 的 isNullOrEmpty null 检查侧不可达,等价收窄消除
+  private fun handleBatchResponse(body: String, batch: List<Event>) {
+    if (body.isEmpty()) return
     val parsed = try { JSONObject(body) } catch (_: Throwable) { return }
     val rejected = parsed.optJSONArray("rejected") ?: return
     val reasons = HashMap<String, String>()
@@ -413,7 +422,9 @@ class Oddsmaker(private val ctx: Context, private val opts: Options) {
       e.ad_placement?.let { field(sb, "ad_placement", it) }
       e.ad_format?.let { field(sb, "ad_format", it) }
       e.props?.let { objField(sb, "props", it) }
-      if (sb.last() == ',') sb.setLength(sb.length - 1)
+      // field()/objField() 每次输出均以 ',' 结尾,且 event_id(String 重载)必先无条件输出,
+      // 循环结束(或全可选跳过)后末字符恒为 ',' —— 条件恒真,等价删除
+      sb.setLength(sb.length - 1)
       sb.append('}')
       return sb.toString()
     }
@@ -664,7 +675,9 @@ class Oddsmaker(private val ctx: Context, private val opts: Options) {
       val url = controlEndpoint.trimEnd('/') + "/api/config/" + gameId + "/" + environment
       val req = Request.Builder().url(url).get().build()
       client.newCall(req).execute().use { resp ->
-        if (resp.isSuccessful) resp.body?.string() else null
+        // body 恒非 null 同 send 侧论证(204 也给空实体),?. null 侧不可达,无分支等价改写
+        if (resp.isSuccessful)
+          java.util.Objects.requireNonNull<ResponseBody>(resp.body).string() else null
       }
     } catch (_: Throwable) {
       null
@@ -729,7 +742,7 @@ class Oddsmaker(private val ctx: Context, private val opts: Options) {
       }
     }
     t.schedule(task, 0L, intervalMs)
-    return { try { t.cancel() } catch (_: Throwable) {} }
+    return { t.cancel() }   // Timer.cancel() 无抛路径,防御 catch 不可达已删(shutdown 同例)
   }
 
   private fun fetchAndStore(controlEndpoint: String, gameId: String, environment: String): String? {

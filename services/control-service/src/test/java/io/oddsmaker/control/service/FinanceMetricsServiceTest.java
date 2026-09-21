@@ -93,4 +93,18 @@ class FinanceMetricsServiceTest {
         assertEquals("event_date", FinanceMetricsService.bucketApply("", "event_date"));
         assertEquals("toStartOfMonth(cohort_date)", FinanceMetricsService.bucketApply("toStartOfMonth", "cohort_date"));
     }
+
+    @Test
+    @DisplayName("环境过滤：blank 环境等同不过滤（isBlank 侧）；clampDays 0/负数回落默认")
+    void blankEnvironmentAndNonPositiveDays() {
+        when(client.isAvailable()).thenReturn(true);
+        when(client.query(anyString(), any(Object[].class))).thenReturn(List.of());
+        service.report("g", "   ", "day", 30);
+        // blank 环境：无 environment 参数位，varargs 只带 gameId + since
+        verify(client).query(contains("uniqExact"), org.mockito.ArgumentMatchers.eq("g"), any());
+        verify(client).query(contains("v_user_first_seen"), org.mockito.ArgumentMatchers.eq("g"), any());
+        assertEquals(90, FinanceMetricsService.clampDays(0));
+        assertEquals(90, FinanceMetricsService.clampDays(-7));
+    }
+
 }

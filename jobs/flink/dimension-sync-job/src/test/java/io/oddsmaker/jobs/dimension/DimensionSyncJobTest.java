@@ -395,6 +395,22 @@ class DimensionSyncJobTest {
         assertEquals("v", attrs.get("custom_key"));
         assertEquals(4, attrs.size());
     }
+
+    // ===== 分支对侧补充（BRANCH 收口） =====
+
+    @Test
+    @DisplayName("dimRecords：props_json 为 null（与空串并列的缺省形态）静默丢弃")
+    void dimRecordsDropsNullPropsJson() {
+        List<DimensionSyncJob.DimRecord> out = new ArrayList<>();
+        RawEvent nullProps = new RawEvent();
+        nullProps.event_type = "dimension";
+        nullProps.game_id = "g";
+        nullProps.environment = "prod";
+        nullProps.props_json = null;   // 未设置（区别于既有用例的 ""）
+        DimensionSyncJob.dimRecords(nullProps, sinkTo(out));
+        assertTrue(out.isEmpty());
+    }
+
     @Test
     @DisplayName("main：替身执行环境下完成入口（不触达真实集群）")
     void mainCompletesWithMockEnv() {

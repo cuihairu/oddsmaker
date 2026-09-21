@@ -77,7 +77,9 @@ public final class ExperimentSplitter {
             return out;
         }
         for (JsonNode variant : variants) {
-            if (variant == null || !variant.isObject()) continue;
+            // Jackson ArrayNode 迭代不产生 Java null（JSON null 解析为 NullNode 单例），
+            // variant == null 防御不可达，仅保留非 object 过滤（NullNode/标量元素由此拒绝）
+            if (!variant.isObject()) continue;
             JsonNode name = variant.get("name");
             JsonNode weight = variant.get("weight");
             if (name == null || !name.isTextual() || name.asText().isBlank()) continue;

@@ -214,6 +214,11 @@ class PublishersTest {
         dlqPublisher.publish("evt_2", "boom", "plain \"text\" \\ end");
         verify(producer).send(org.mockito.ArgumentMatchers.argThat(r ->
             String.valueOf(r.value()).contains("\"raw\":\"plain \\\"text\\\" \\\\ end\"")));
+
+        // raw 以 [ 开头（JSON 数组）同样原样嵌入
+        dlqPublisher.publish("evt_3", "boom", "[1,2]");
+        verify(producer).send(org.mockito.ArgumentMatchers.argThat(r ->
+            String.valueOf(r.value()).endsWith("\"raw\":[1,2]}")));
     }
 
     @Test

@@ -185,7 +185,9 @@ public class ExperimentStatsService {
         r.chiSquare = chi2;
         r.degreesOfFreedom = observedCounts.size() - 1;
         r.pValue = chiSquareSurvival(chi2, r.degreesOfFreedom);
-        r.detected = r.pValue > 0 && r.pValue < SRM_ALPHA;
+        // pValue > 0 恒真：chiSquareSurvival 对 x<=0 返回 1.0、否则 Math.max(Q, 1e-300) 下限钳制，
+        // 任何返回值都 >= 1e-300，pValue==0 不可达（null 检测防御删除，等价改写）
+        r.detected = r.pValue < SRM_ALPHA;
         return r;
     }
 

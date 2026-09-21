@@ -96,4 +96,16 @@ class RetentionMetricsServiceTest {
         assertEquals("day", RetentionMetricsService.normalizeGranularity(null));
         assertEquals("day", RetentionMetricsService.normalizeGranularity("  "));
     }
+
+    @Test
+    @DisplayName("环境过滤：blank 环境等同不过滤（isBlank 侧）；clampDays 0/负数回落默认")
+    void blankEnvironmentAndNonPositiveDays() {
+        when(client.isAvailable()).thenReturn(true);
+        when(client.query(anyString(), any(Object[].class))).thenReturn(List.of());
+        service.trend("g", "   ", "day", 30);
+        verify(client).query(contains("FROM retention_daily"), org.mockito.ArgumentMatchers.eq("g"), any());
+        assertEquals(90, RetentionMetricsService.clampDays(0));
+        assertEquals(90, RetentionMetricsService.clampDays(-7));
+    }
+
 }

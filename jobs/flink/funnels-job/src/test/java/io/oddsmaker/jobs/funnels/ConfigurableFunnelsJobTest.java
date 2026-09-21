@@ -708,4 +708,105 @@ class ConfigurableFunnelsJobTest {
         assertTrue(ConfigurableFunnelsJob
             .loadFromControlDb("jdbc:postgresql://127.0.0.1:1/none", "u", "p", "no.such.Driver").isEmpty());
     }
+
+    // ===== 分支对侧补充（BRANCH 收口） =====
+
+    @Test
+    @DisplayName("uidOf：user_id 非空空串回退 device_id（null 与非空已盖）")
+    void uidOfFallsBackOnEmptyUserId() {
+        RawEvent r = new RawEvent();
+        r.user_id = "";
+        r.device_id = "d9";
+        assertEquals("d9", ConfigurableFunnelsJob.uidOf(r));
+    }
+
+    @Test
+    @DisplayName("isUnordered：UNORDERED 类型与 STANDARD 同走无序分支")
+    void unorderedTypeGoesUnorderedPath() throws Exception {
+        TestMapState state = new TestMapState();
+        ConfigurableFunnelsJob.ConfigurableFunnelProcess fn = processWithState("UNORDERED", 2, 60, state);
+        List<ConfigurableFunnelsJob.FunnelRow> out = new ArrayList<>();
+        fn.processElement(event("e1", 0L), keyedContext(fn), sinkTo(out));
+        assertEquals(1, out.size());   // 走 processUnordered：u_step_0_ts 首见 emit
+        assertEquals(Long.valueOf(0L), state.m.get("u_step_0_ts"));
+    }
+
+    @Test
+    @DisplayName("无序漏斗：同一步骤二次到达不再重复计数（u_step_*_ts 已存在的 false 侧）")
+    void unorderedSameStepTwiceCountsOnce() throws Exception {
+        TestMapState state = new TestMapState();
+        ConfigurableFunnelsJob.ConfigurableFunnelProcess fn = processWithState("STANDARD", 3, 60, state);
+        List<ConfigurableFunnelsJob.FunnelRow> out = new ArrayList<>();
+        fn.processElement(event("e1", 0L), keyedContext(fn), sinkTo(out));
+        fn.processElement(event("e1", 5L), keyedContext(fn), sinkTo(out));   // 二次 e1：ts 已存在不覆盖不 emit
+        assertEquals(1, out.size());
+        assertEquals(Long.valueOf(0L), state.m.get("u_step_0_ts"));   // 首见时间保留
+    }
+
+    @Test
+    @DisplayName("顺序漏斗：后续步骤同日二次到达不重复计数（step_N_day_* 已存在的 false 侧）")
+    void sequentialSameLaterStepTwiceCountsOnce() throws Exception {
+        TestMapState state = new TestMapState();
+        ConfigurableFunnelsJob.ConfigurableFunnelProcess fn = processWithState("SEQUENTIAL", 3, 60, state);
+        List<ConfigurableFunnelsJob.FunnelRow> out = new ArrayList<>();
+        fn.processElement(event("e1", 0L), keyedContext(fn), sinkTo(out));
+        fn.processElement(event("e2", 2L), keyedContext(fn), sinkTo(out));   // step_1_day_0 首见 emit
+        fn.processElement(event("e2", 4L), keyedContext(fn), sinkTo(out));   // 二次 e2 同日：已存在不 emit
+        assertEquals(2, out.size());
+        assertEquals(Long.valueOf(4L), state.m.get("step_1_ts"));   // ts 仍推进
+    }
+
+    @Test
+    @DisplayName("顺序漏斗：无前置且非 optional 的跳步直接丢弃（optional false 侧）")
+    void sequentialNonOptionalSkippedStepDropped() throws Exception {
+        TestMapState state = new TestMapState();
+        // 3 步配置：仅最后一步 optional，直接来 e2（step2 非 optional）
+        ConfigurableFunnelsJob.ConfigurableFunnelProcess fn = processWithState("SEQUENTIAL", 3, 60, state);
+        List<ConfigurableFunnelsJob.FunnelRow> out = new ArrayList<>();
+        fn.processElement(event("e2", 0L), keyedContext(fn), sinkTo(out));   // prev(step_1) 无 ts 且非 optional
+        assertTrue(out.isEmpty());
+        assertNullState(state, "step_1_ts");
+    }
+
+    @Test
+    @DisplayName("顺序漏斗 optional 回退：更早步骤均无 ts 时自然耗尽（prevPrevTs null 侧）")
+    void optionalFallbackSkipsNullPrevPrevTs() throws Exception {
+        TestMapState state = new TestMapState();
+        ConfigurableFunnelsJob.ConfigurableFunnelProcess fn = processWithState("SEQUENTIAL", 3, 60, state);
+        List<ConfigurableFunnelsJob.FunnelRow> out = new ArrayList<>();
+        // e3（optional）直接到达：step_1/step_0 均无 ts → 两轮 prevPrevTs==null → 循环耗尽
+        fn.processElement(event("e3", 0L), keyedContext(fn), sinkTo(out));
+        assertTrue(out.isEmpty());
+        assertNullState(state, "step_2_ts");
+    }
+
+    @Test
+    @DisplayName("顺序漏斗 optional 回退：目标步骤当日已计数时只推进 ts 不重复 emit")
+    void optionalFallbackSkipsAlreadyCountedDay() throws Exception {
+        TestMapState state = new TestMapState();
+        ConfigurableFunnelsJob.ConfigurableFunnelProcess fn = processWithState("SEQUENTIAL", 3, 60, state);
+        List<ConfigurableFunnelsJob.FunnelRow> out = new ArrayList<>();
+        fn.processElement(event("e1", 0L), keyedContext(fn), sinkTo(out));
+        // 预置 step_2 当日已计数：回溯命中 step_0（8-0<=10s）但 day key 已存在 → 不 emit、仍推进 ts
+        state.m.put("step_2_day_0", 1L);
+        fn.processElement(event("e3", 8L), keyedContext(fn), sinkTo(out));
+        assertEquals(1, out.size());
+        assertEquals(Long.valueOf(8L), state.m.get("step_2_ts"));
+    }
+
+    private static void assertNullState(TestMapState state, String key) {
+        org.junit.jupiter.api.Assertions.assertNull(state.m.get(key));
+    }
+
+    @Test
+    @DisplayName("stepWindowMs 第三级回退：步骤窗 0 + 漏斗总窗 0 → 默认 24h")
+    void stepWindowFallsBackTo24hDefault() throws Exception {
+        TestMapState state = new TestMapState();
+        ConfigurableFunnelsJob.ConfigurableFunnelProcess fn = processWithState("SEQUENTIAL", 2, 0, state);
+        for (ConfigurableFunnelsJob.FunnelStep s : stepsOf(fn)) s.timeWindowSec = 0;
+        List<ConfigurableFunnelsJob.FunnelRow> out = new ArrayList<>();
+        fn.processElement(event("e1", 0L), keyedContext(fn), sinkTo(out));
+        fn.processElement(event("e2", 3_600L), keyedContext(fn), sinkTo(out));   // 1h <= 24h 默认窗 → 计入
+        assertEquals(2, out.size());
+    }
 }

@@ -80,7 +80,9 @@ public class ExperimentResultsController {
                 throw new IllegalArgumentException("variant is required");
             }
             long count = s.count == null ? 0 : Math.max(0, s.count);
-            long successes = s.successes == null ? 0 : Math.max(0, Math.min(s.successes == null ? 0 : s.successes, count));
+            // 内层 s.successes == null ? 0 位于外层同判定的真分支内，恒不可达（外层 null 已短路到 0）；
+            // 等价改写为直接取值，行为不变
+            long successes = s.successes == null ? 0 : Math.max(0, Math.min(s.successes, count));
             long windowStart = s.windowStart == null ? 0L : s.windowStart;
 
             ExperimentMetricSnapshotEntity entity = snapshotRepo

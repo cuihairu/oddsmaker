@@ -157,4 +157,39 @@ class ExperimentMetricsAggregatorTest {
         assertEquals(0, written);
         verify(snapshotRepo, never()).save(any());
     }
+
+    @Test
+    @DisplayName("aggregateRunning：无运行中实验（!running.isEmpty() 的空侧）")
+    void aggregateRunningNoRunningExperiments() {
+        when(clickHouse.isAvailable()).thenReturn(true);
+        when(experimentRepo.findByStatus("running")).thenReturn(List.of());
+
+        aggregator.aggregateRunning();
+
+        verify(clickHouse, never()).query(anyString());
+        verify(snapshotRepo, never()).save(any(ExperimentMetricSnapshotEntity.class));
+    }
+
+    @Test
+    @DisplayName("str/num/dbl：null 与非 Number 输入的回落侧")
+    void staticValueCoercionSides() throws Exception {
+        java.lang.reflect.Method str = ExperimentMetricsAggregator.class
+            .getDeclaredMethod("str", Object.class);
+        java.lang.reflect.Method num = ExperimentMetricsAggregator.class
+            .getDeclaredMethod("num", Object.class);
+        java.lang.reflect.Method dbl = ExperimentMetricsAggregator.class
+            .getDeclaredMethod("dbl", Object.class);
+        str.setAccessible(true);
+        num.setAccessible(true);
+        dbl.setAccessible(true);
+        assertEquals("", str.invoke(null, (Object) null));
+        assertEquals("txt", str.invoke(null, (Object) "txt"));
+        assertEquals(0L, num.invoke(null, (Object) null));
+        assertEquals(0L, num.invoke(null, (Object) "not-a-number"));
+        assertEquals(7L, num.invoke(null, (Object) 7));
+        assertEquals(0.0, dbl.invoke(null, (Object) null));
+        assertEquals(0.0, dbl.invoke(null, (Object) "not-a-number"));
+        assertEquals(2.5, dbl.invoke(null, (Object) 2.5));
+    }
+
 }

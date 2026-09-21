@@ -141,6 +141,31 @@ class CrashFingerprinterTest {
     }
 
     @Test
+    @DisplayName("注入边界：null 事件、空白 crash_hash 覆盖、空白 message 不注入")
+    void enrichEdgeSides() {
+        // null 事件引用：直接返回不抛（event == null 短路侧）
+        CrashFingerprinter.enrich(null);
+
+        // crash_hash 已存在但为空白串：视为未提供，重新计算覆盖
+        Event blankHash = new Event();
+        blankHash.eventType = "error";
+        blankHash.eventName = "error_crash";
+        blankHash.props = new java.util.HashMap<>();
+        blankHash.props.put("crash_hash", "   ");
+        CrashFingerprinter.enrich(blankHash);
+        assertEquals(CrashFingerprinter.fingerprint("error_crash", null), blankHash.props.get("crash_hash"));
+
+        // error_message 存在但为空白串：不注入 crash_message（!isBlank 短路侧）
+        Event blankMessage = new Event();
+        blankMessage.eventType = "error";
+        blankMessage.eventName = "error_crash";
+        blankMessage.props = new java.util.HashMap<>();
+        blankMessage.props.put("error_message", "   ");
+        CrashFingerprinter.enrich(blankMessage);
+        assertNull(blankMessage.props.get("crash_message"));
+    }
+
+    @Test
     @DisplayName("指纹：全空输入走事件名回退且稳定")
     void fingerprintNullInputs() {
         String hash = CrashFingerprinter.fingerprint(null, null);

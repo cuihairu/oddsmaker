@@ -226,4 +226,107 @@ class MailServiceTest {
         assertFalse(MailEntity.containsRecipient("alice, bob", "bobby"));
         assertFalse(MailEntity.containsRecipient("", "alice"));
     }
+
+    // ===== 分支对侧补充（BRANCH 收口）=====
+
+    @Test
+    @DisplayName("创建：title/content 缺失与空白收件人、未来过期时间通过")
+    void createValidationSides() {
+        stubGame();
+        when(mailRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        MailEntity noTitle = mail(MailEntity.Scope.ALL, null);
+        noTitle.title = null;
+        assertThrows(IllegalArgumentException.class, () -> service.create(noTitle, "op_1"));
+        MailEntity blankTitle = mail(MailEntity.Scope.ALL, null);
+        blankTitle.title = "  ";
+        assertThrows(IllegalArgumentException.class, () -> service.create(blankTitle, "op_1"));
+
+        MailEntity noContent = mail(MailEntity.Scope.ALL, null);
+        noContent.content = null;
+        assertThrows(IllegalArgumentException.class, () -> service.create(noContent, "op_1"));
+        MailEntity blankContent = mail(MailEntity.Scope.ALL, null);
+        blankContent.content = " ";
+        assertThrows(IllegalArgumentException.class, () -> service.create(blankContent, "op_1"));
+
+        // INDIVIDUAL 收件人为空白串（isBlank 侧）
+        MailEntity blankRcpts = mail(MailEntity.Scope.INDIVIDUAL, "   ");
+        assertThrows(IllegalArgumentException.class, () -> service.create(blankRcpts, "op_1"));
+
+        // 未来过期时间：!isAfter false 侧 → 校验通过
+        MailEntity future = mail(MailEntity.Scope.ALL, null);
+        future.expireAt = LocalDateTime.now().plusDays(1);
+        assertEquals(MailEntity.Status.DRAFT, service.create(future, "op_1").status);
+        verify(mailRepo, times(1)).save(any());
+    }
+
+    @Test
+    @DisplayName("创建：附件 null/空白直通（validateAttachments 早退侧）；缺 type 拒绝")
+    void attachmentsNullBlankAndMissingType() {
+        stubGame();
+        when(mailRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        MailEntity noAtt = mail(MailEntity.Scope.ALL, null);
+        noAtt.attachments = null;
+        assertEquals(MailEntity.Status.DRAFT, service.create(noAtt, "op_1").status);
+
+        MailEntity blankAtt = mail(MailEntity.Scope.ALL, null);
+        blankAtt.attachments = "   ";
+        assertEquals(MailEntity.Status.DRAFT, service.create(blankAtt, "op_1").status);
+
+        // 附件对象缺 type（m.get("type") == null 侧）
+        MailEntity noType = mail(MailEntity.Scope.ALL, null);
+        noType.attachments = "[{\"id\":\"gem\"}]";
+        assertThrows(IllegalArgumentException.class, () -> service.create(noType, "op_1"));
+    }
+
+    @Test
+    @DisplayName("发送：草稿带过期时间已过拒绝，未来过期时间正常发送")
+    void sendChecksExpireAtSides() {
+        MailEntity expired = mail(MailEntity.Scope.ALL, null);
+        expired.id = "mail_exp_send";
+        expired.status = MailEntity.Status.DRAFT;
+        expired.expireAt = LocalDateTime.now().minusMinutes(1);
+        when(mailRepo.findByIdAndDeletedAtIsNull("mail_exp_send")).thenReturn(Optional.of(expired));
+        assertThrows(IllegalStateException.class, () -> service.send("mail_exp_send", "op_1"));
+
+        MailEntity ok = mail(MailEntity.Scope.ALL, null);
+        ok.id = "mail_ok_send";
+        ok.status = MailEntity.Status.DRAFT;
+        ok.expireAt = LocalDateTime.now().plusDays(1);
+        when(mailRepo.findByIdAndDeletedAtIsNull("mail_ok_send")).thenReturn(Optional.of(ok));
+        when(mailRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        assertEquals(MailEntity.Status.SENT, service.send("mail_ok_send", "op_1").status);
+
+        // 无过期时间（expireAt == null 侧）：草稿直接可发
+        MailEntity noExp = mail(MailEntity.Scope.ALL, null);
+        noExp.id = "mail_noexp_send";
+        noExp.status = MailEntity.Status.DRAFT;
+        when(mailRepo.findByIdAndDeletedAtIsNull("mail_noexp_send")).thenReturn(Optional.of(noExp));
+        assertEquals(MailEntity.Status.SENT, service.send("mail_noexp_send", "op_1").status);
+    }
+
+    @Test
+    @DisplayName("收件箱：playerKey null/空白拒绝；environmentId null 回落空串")
+    void inboxPlayerKeyAndEnvironmentSides() {
+        stubGame();
+        assertThrows(IllegalArgumentException.class, () -> service.inbox("game_demo", null, null));
+        assertThrows(IllegalArgumentException.class, () -> service.inbox("game_demo", null, "  "));
+
+        when(mailRepo.findInbox(eq("game_demo"), eq(""), eq("p1"), any(LocalDateTime.class)))
+            .thenReturn(List.of());
+        service.inbox("game_demo", null, "p1");
+        verify(mailRepo).findInbox(eq("game_demo"), eq(""), eq("p1"), any(LocalDateTime.class));
+    }
+
+    @Test
+    @DisplayName("领取：playerKey null/空白拒绝；软删游戏拒绝")
+    void claimPlayerKeySidesAndDeletedGame() {
+        assertThrows(IllegalArgumentException.class, () -> service.claim("mail_1", null));
+        assertThrows(IllegalArgumentException.class, () -> service.claim("mail_1", "  "));
+
+        game.deletedAt = LocalDateTime.now();
+        when(gameRepo.findById("game_demo")).thenReturn(Optional.of(game));
+        assertThrows(IllegalArgumentException.class, () -> service.list("game_demo"));
+    }
 }

@@ -222,4 +222,143 @@ class AnnouncementServiceTest {
         verify(announcementRepo).findActive(eq("game_demo"), eq("env_demo_prod"), any(LocalDateTime.class));
     }
 
+    // ===== 分支对侧补充（BRANCH 收口）=====
+
+    @Test
+    @DisplayName("创建：title/content 缺失（null 与空白两侧）拒绝")
+    void createRequiresTitleAndContent() {
+        stubGame();
+        AnnouncementEntity noTitle = draft();
+        noTitle.title = null;
+        assertThrows(IllegalArgumentException.class, () -> service.create(noTitle, "op_1"));
+        AnnouncementEntity blankTitle = draft();
+        blankTitle.title = "   ";
+        assertThrows(IllegalArgumentException.class, () -> service.create(blankTitle, "op_1"));
+
+        AnnouncementEntity noContent = draft();
+        noContent.content = null;
+        assertThrows(IllegalArgumentException.class, () -> service.create(noContent, "op_1"));
+        AnnouncementEntity blankContent = draft();
+        blankContent.content = "  ";
+        assertThrows(IllegalArgumentException.class, () -> service.create(blankContent, "op_1"));
+        verify(announcementRepo, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("创建：环境已删除或属于其他游戏（filter 两侧）拒绝或回落")
+    void createEnvironmentFilterSides() {
+        stubGame();
+        // 环境存在但属于其他游戏：gameId.equals 为 false → 拒绝
+        AnnouncementEntity foreign = draft();
+        foreign.environmentId = "env_foreign";
+        var otherGameEnv = new io.oddsmaker.control.jpa.GameEnvironmentEntity();
+        otherGameEnv.id = "env_foreign";
+        otherGameEnv.gameId = "game_other";
+        when(environmentRepo.findById("env_foreign")).thenReturn(Optional.of(otherGameEnv));
+        assertThrows(IllegalArgumentException.class, () -> service.create(foreign, "op_1"));
+
+        // 环境已软删：deletedAt != null → 同样拒绝
+        AnnouncementEntity deletedEnv = draft();
+        deletedEnv.environmentId = "env_del";
+        var delEnv = new io.oddsmaker.control.jpa.GameEnvironmentEntity();
+        delEnv.id = "env_del";
+        delEnv.gameId = "game_demo";
+        delEnv.deletedAt = LocalDateTime.now();
+        when(environmentRepo.findById("env_del")).thenReturn(Optional.of(delEnv));
+        assertThrows(IllegalArgumentException.class, () -> service.create(deletedEnv, "op_1"));
+    }
+
+    @Test
+    @DisplayName("更新：字段可选更新（null/空白跳过，非空写入）")
+    void updateSelectivelyAppliesFields() {
+        AnnouncementEntity a = draft();
+        a.id = "ann_u";
+        a.status = AnnouncementEntity.Status.DRAFT;
+        when(announcementRepo.findById("ann_u")).thenReturn(Optional.of(a));
+        when(announcementRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        // title/content 为 null/空白 → 跳过；channel/priority 非空 → 写入
+        AnnouncementEntity req = new AnnouncementEntity();
+        req.content = "  ";
+        req.channel = AnnouncementEntity.Channel.MARQUEE;
+        req.priority = 5;
+        AnnouncementEntity updated = service.update("ann_u", req, "op_1");
+        assertEquals("维护公告", updated.title);       // 未变
+        assertEquals("今晚 02:00 停服维护", updated.content); // 空白跳过
+        assertEquals(AnnouncementEntity.Channel.MARQUEE, updated.channel);
+        assertEquals(5, updated.priority.intValue());
+
+        // title 非空 → 写入（title != null && !isBlank 的 true 侧）。
+        // channel/priority 初始化器（LOBBY/0）在 req2 上同样非 null，不置 null 会把
+        // 前段写入的 MARQUEE/5 冲回默认值，破坏后续 nullPatch 段的保留断言
+        AnnouncementEntity req2 = new AnnouncementEntity();
+        req2.title = "新标题";
+        req2.channel = null;
+        req2.priority = null;
+        assertEquals("新标题", service.update("ann_u", req2, "op_1").title);
+
+        // channel/priority 有初始化器（LOBBY/0）：HTTP 链路恒非 null，
+        // null 跳过侧须显式置 null 直达——原值保留（channel=LOBBY/priority=0 保持不变）
+        AnnouncementEntity nullPatch = new AnnouncementEntity();
+        nullPatch.channel = null;
+        nullPatch.priority = null;
+        AnnouncementEntity kept = service.update("ann_u", nullPatch, "op_1");
+        assertEquals(AnnouncementEntity.Channel.MARQUEE, kept.channel);  // 前段写入的 MARQUEE 保留
+        assertEquals(5, kept.priority.intValue());                       // 前段写入的 5 保留
+    }
+
+    @Test
+    @DisplayName("查询：软删公告视为不存在（filter deletedAt 侧）")
+    void deletedAnnouncementTreatedAsMissing() {
+        AnnouncementEntity a = draft();
+        a.id = "ann_del";
+        a.deletedAt = LocalDateTime.now();
+        when(announcementRepo.findById("ann_del")).thenReturn(Optional.of(a));
+        assertThrows(IllegalArgumentException.class, () -> service.publish("ann_del", "op_1"));
+    }
+
+    @Test
+    @DisplayName("查询：软删游戏拒绝（requireGame filter deletedAt 侧）")
+    void deletedGameRejected() {
+        game.deletedAt = LocalDateTime.now();
+        when(gameRepo.findById("game_demo")).thenReturn(Optional.of(game));
+        assertThrows(IllegalArgumentException.class, () -> service.list("game_demo"));
+    }
+
+    @Test
+    @DisplayName("活跃列表：environmentId 为 null（全环境）与已删环境回落名解析")
+    void listActiveNullEnvironmentAndDeletedEnvFallback() {
+        stubGame();
+        // environmentId == null → resolveEnvironmentId 直接返回 ""
+        when(announcementRepo.findActive(eq("game_demo"), eq(""), any(LocalDateTime.class)))
+            .thenReturn(List.of());
+        service.listActive("game_demo", null);
+        verify(announcementRepo).findActive(eq("game_demo"), eq(""), any(LocalDateTime.class));
+
+        // 按 ID 查到但环境已软删 → 回落按名解析；名也无 → 保守透传原值
+        var deleted = new io.oddsmaker.control.jpa.GameEnvironmentEntity();
+        deleted.id = "env_x";
+        deleted.gameId = "game_demo";
+        deleted.deletedAt = LocalDateTime.now();
+        when(environmentRepo.findById("env_x")).thenReturn(Optional.of(deleted));
+        when(environmentRepo.findByGameIdAndNameAndDeletedAtIsNull(eq("game_demo"), any()))
+            .thenReturn(List.of());
+        when(announcementRepo.findActive(eq("game_demo"), eq("env_x"), any(LocalDateTime.class)))
+            .thenReturn(List.of());
+        service.listActive("game_demo", "env_x");
+        verify(announcementRepo).findActive(eq("game_demo"), eq("env_x"), any(LocalDateTime.class));
+
+        // 环境活着但属于别家游戏（gameId.equals false 侧）→ 同样回落按名解析，名也无 → 透传
+        var foreign = new io.oddsmaker.control.jpa.GameEnvironmentEntity();
+        foreign.id = "env_foreign_id";
+        foreign.gameId = "game_other";
+        when(environmentRepo.findById("env_foreign_id")).thenReturn(Optional.of(foreign));
+        when(environmentRepo.findByGameIdAndNameAndDeletedAtIsNull(eq("game_demo"), eq("env_foreign_id")))
+            .thenReturn(List.of());
+        when(announcementRepo.findActive(eq("game_demo"), eq("env_foreign_id"), any(LocalDateTime.class)))
+            .thenReturn(List.of());
+        service.listActive("game_demo", "env_foreign_id");
+        verify(announcementRepo).findActive(eq("game_demo"), eq("env_foreign_id"), any(LocalDateTime.class));
+    }
+
 }

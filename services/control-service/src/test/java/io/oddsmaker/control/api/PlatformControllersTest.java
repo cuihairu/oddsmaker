@@ -241,4 +241,60 @@ class PlatformControllersTest {
         assertEquals("运营管理员", result.get(0).get("name"));
         verify(accessGuard).requirePermission("user:read");
     }
+
+    @Test
+    @DisplayName("角色分配：roleId 空白/environment 缺 gameId 拒绝；完整 scope 与认证主体")
+    void roleAssignmentScopeSides() {
+        io.oddsmaker.control.jpa.RoleEntity role = new io.oddsmaker.control.jpa.RoleEntity();
+        role.id = "role_operator";
+        when(roleRepo.findByEnabledTrue()).thenReturn(List.of(role));
+
+        // roleId 空白串（isBlank 侧）
+        RoleAssignmentController.AssignReq blank = new RoleAssignmentController.AssignReq();
+        blank.roleId = "   ";
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+            () -> roleAssignmentController.assign("u1", blank));
+
+        // environment 存在但 gameId 缺失（88 行 true 侧）
+        RoleAssignmentController.AssignReq envOnly = new RoleAssignmentController.AssignReq();
+        envOnly.roleId = "role_operator";
+        envOnly.environment = "prod";
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+            () -> roleAssignmentController.assign("u1", envOnly));
+
+        // environment+gameId 齐备（88 行 false 侧）、toResp 三元非 null 侧、auth 主体侧（96 行）
+        io.oddsmaker.control.jpa.UserRoleEntity full = new io.oddsmaker.control.jpa.UserRoleEntity();
+        full.userId = "u1";
+        full.roleId = "role_operator";
+        full.gameId = "g";
+        full.environment = "prod";
+        when(permissionService.assignRole(anyString(), anyString(), any(), any(), any()))
+            .thenReturn(full);
+        RoleAssignmentController.AssignReq complete = new RoleAssignmentController.AssignReq();
+        complete.roleId = "role_operator";
+        complete.gameId = "g";
+        complete.environment = "prod";
+        var auth = new org.springframework.security.authentication.TestingAuthenticationToken(
+            "alice", "n", "ROLE_ADMIN");
+        try {
+            org.springframework.security.core.context.SecurityContextHolder
+                .getContext().setAuthentication(auth);
+            var resp = roleAssignmentController.assign("u1", complete);
+            assertEquals(200, resp.getStatusCode().value());
+            assertEquals("g", resp.getBody().get("gameId"));
+            assertEquals("prod", resp.getBody().get("environment"));
+            verify(permissionService).assignRole("u1", "role_operator", "g", "prod", "alice");
+        } finally {
+            org.springframework.security.core.context.SecurityContextHolder.clearContext();
+        }
+    }
+
+
+    @Test
+    @DisplayName("分支对侧：用户列表 asc 排序方向")
+    void userListAscending() {
+        when(userService.listUsers(any())).thenReturn(org.springframework.data.domain.Page.empty());
+        assertEquals(200, userController.listUsers(0, 20, "createdAt", "asc").getStatusCode().value());
+    }
+
 }

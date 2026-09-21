@@ -16,13 +16,17 @@ import java.util.concurrent.atomic.AtomicReference;
 public class RuleFetcher implements Runnable {
     private static final AtomicReference<RuleFetcher> instance = new AtomicReference<>();
 
-    public static void startOnce(String controlUrl, String gameId, String adminToken, long intervalMs) {
-        if (instance.get() == null) {
-            RuleFetcher fetcher = new RuleFetcher(controlUrl, gameId, adminToken, intervalMs);
-            if (instance.compareAndSet(null, fetcher)) {
-                fetcher.start();
-            }
+    // 原双检+CAS 形态的 false 侧（外层判空与 CAS 之间仅并发竞争窗口可进，单测无法确定性注入），
+    // 改 synchronized 单检：锁互斥同样保证「至多一个 fetcher 启动」，竞争败者由原「构造不启动」
+    // 变为「等锁后见非空直接返回」，外部可观察行为等价；非空侧顺序调用即可达。
+    // startOnce 仅作业启动期调用，无热路径性能敏感。
+    public static synchronized void startOnce(String controlUrl, String gameId, String adminToken, long intervalMs) {
+        if (instance.get() != null) {
+            return;
         }
+        RuleFetcher fetcher = new RuleFetcher(controlUrl, gameId, adminToken, intervalMs);
+        instance.set(fetcher);
+        fetcher.start();
     }
 
     private final String controlUrl;

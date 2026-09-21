@@ -323,4 +323,26 @@ class SessionsJobTest {
             org.junit.jupiter.api.Assertions.assertDoesNotThrow(() -> SessionsJob.main(new String[0]));
         }
     }
+
+    // ===== 分支对侧补充（BRANCH 收口） =====
+
+    @Test
+    @DisplayName("userOrDeviceId：userId 非空空串回退 deviceId（null 与非空已盖）")
+    void userOrDeviceIdFallsBackOnEmptyUserId() {
+        SessionsJob.EventLite e = new SessionsJob.EventLite();
+        e.userId = "";
+        e.deviceId = "d1";
+        assertEquals("d1", e.userOrDeviceId());
+    }
+
+    @Test
+    @DisplayName("BuildSession：事件 country 为 null 时不覆盖（保持空串）")
+    void buildSessionNullCountryStaysEmpty() throws Exception {
+        SessionsJob.BuildSession fn = new SessionsJob.BuildSession();
+        List<SessionsJob.SessionRow> out = new ArrayList<>();
+        fn.process(Tuple3.of("g", "prod", "d1"), windowContext(fn),
+                List.of(lite(5_000L, null, "d1", null)), sinkTo(out));   // country=null → 不赋值
+        assertEquals(1, out.size());
+        assertEquals("", out.get(0).country);
+    }
 }

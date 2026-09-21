@@ -16,6 +16,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -152,4 +153,29 @@ class PredictionAndRemoteConfigControllersTest {
         assertEquals(404, remoteConfigController.update("g", "rc_2", req).getStatusCode().value());
         assertEquals(404, remoteConfigController.delete("g", "rc_2").getStatusCode().value());
     }
+
+    @Test
+    @DisplayName("配置拉取：版本不一致返回 200 全量；更新操作者取认证主体")
+    void resolveVersionMismatchAndOperatorFromPrincipal() {
+        when(remoteConfigService.resolve("g", "prod")).thenReturn(Map.of("version", 7L, "configs", Map.of()));
+        assertEquals(200, remoteConfigController.resolve("g", "prod", 6L).getStatusCode().value());
+
+        RemoteConfigEntity entity = new RemoteConfigEntity();
+        entity.gameId = "g";
+        when(remoteConfigService.get("rc_1")).thenReturn(entity);
+        when(remoteConfigService.update(any(), any(), any(), any(), any())).thenReturn(entity);
+        RemoteConfigController.UpdateRequest req = new RemoteConfigController.UpdateRequest();
+        var auth = new org.springframework.security.authentication.TestingAuthenticationToken(
+            "alice", "n", "ROLE_ADMIN");
+        try {
+            org.springframework.security.core.context.SecurityContextHolder
+                .getContext().setAuthentication(auth);
+            assertEquals(entity, remoteConfigController.update("g", "rc_1", req).getBody());
+            // update 签名为 (id, configValue, status, description, operator)，首参非 gameId
+            verify(remoteConfigService).update(eq("rc_1"), any(), any(), any(), eq("alice"));
+        } finally {
+            org.springframework.security.core.context.SecurityContextHolder.clearContext();
+        }
+    }
+
 }

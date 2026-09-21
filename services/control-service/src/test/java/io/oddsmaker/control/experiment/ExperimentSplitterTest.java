@@ -197,4 +197,22 @@ class ExperimentSplitterTest {
             List.of(new ExperimentSplitter.Variant("only", 0))));
         assertNull(ExperimentSplitter.assign("exp", "salt", "s", List.of()));
     }
+
+    @Test
+    @DisplayName("变体解析：非 object 元素/非文本 name/非整数 weight 全部过滤")
+    void parseVariantsMalformedElementSides() throws Exception {
+        String json = "{\"variants\":[" +
+            "\"str-element\", 42, null," +                 // 80 行 !isObject 侧
+            "{\"name\":\"n1\",\"weight\":100}," +        // 正常锚定
+            "{\"name\":123,\"weight\":100}," +             // 83 行 !isTextual 侧
+            "{\"name\":\"n2\"}," +                          // 84 行 weight 缺失侧
+            "{\"name\":\"n3\",\"weight\":1.5}," +         // 84 行非整数侧
+            "{\"name\":\"n4\",\"weight\":\"50\"}" +      // 84 行字符串权重侧
+            "]}";
+        List<ExperimentSplitter.Variant> variants =
+            ExperimentSplitter.parseVariants(new ObjectMapper().readTree(json));
+        assertEquals(1, variants.size());
+        assertEquals("n1", variants.get(0).name);
+    }
+
 }
