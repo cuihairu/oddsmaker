@@ -1,6 +1,8 @@
 package io.oddsmaker.jobs.dimension;
 
 import io.oddsmaker.jobs.enrich.RawEvent;
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.api.common.restartstrategy.RestartStrategies;
 import org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.util.Collector;
@@ -62,6 +64,12 @@ class DimensionSyncJobTest {
         assertNotNull(head);
         // 惰性验证：不 execute，但 transformation 图已包含 source + 两个 sink 分支
         assertTrue(env.getTransformations().size() >= 5, "expect >= 5 transformations, got " + env.getTransformations().size());
+        // 容错三件套生效:无 checkpoint 时 Kafka offset 从不提交,重启丢停机窗口数据(state 全空)
+        assertTrue(env.getCheckpointConfig().isCheckpointingEnabled());
+        assertEquals(30_000L, env.getCheckpointConfig().getCheckpointInterval());
+        assertEquals(CheckpointingMode.AT_LEAST_ONCE, env.getCheckpointConfig().getCheckpointingMode());
+        assertTrue(env.getRestartStrategy() instanceof RestartStrategies.FixedDelayRestartStrategyConfiguration,
+            "重启策略应为固定延迟自愈");
     }
 
     @Test

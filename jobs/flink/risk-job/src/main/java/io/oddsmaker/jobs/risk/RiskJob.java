@@ -2,6 +2,8 @@ package io.oddsmaker.jobs.risk;
 
 import io.oddsmaker.jobs.enrich.ApicurioAvroFlinkDeserializer;
 import io.oddsmaker.jobs.enrich.RawEvent;
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.api.common.restartstrategy.RestartStrategies;
 import org.apache.flink.api.common.eventtime.SerializableTimestampAssigner;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.api.common.functions.FlatMapFunction;
@@ -13,6 +15,7 @@ import org.apache.flink.connector.kafka.sink.KafkaRecordSerializationSchema;
 import org.apache.flink.connector.kafka.sink.KafkaSink;
 import org.apache.flink.connector.kafka.source.KafkaSource;
 import org.apache.flink.connector.kafka.source.enumerator.initializer.OffsetsInitializer;
+import org.apache.kafka.clients.consumer.OffsetResetStrategy;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.datastream.WindowedStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
@@ -95,6 +98,14 @@ public class RiskJob {
      * 搭建六类风控规则管道（惰性：source/sink 均到 execute 才连接，单测可用本地环境直跑）。
      */
     static DataStream<RiskHit> buildPipeline(StreamExecutionEnvironment env, Object[] cfg) {
+        // 容错语义闭环:无 checkpoint 时 KafkaSource 从不提交 offset,重启后按回退策略重新初始化,
+        // 停机窗口事件全部丢失且 keyed state 全空。启用 checkpoint 后 offset 随 checkpoint 提交、
+        // state 持久恢复、重启从上次 checkpoint 续读(残余风险收敛为 JdbcSink at-least-once 的
+        // 检查点间隔窗口内重复,处理层重复由去重/聚合 state 恢复挡住);
+        // 回退 LATEST 保持既有首启动语义,避免已部署环境全量重放+state 空造成全量重复
+        env.enableCheckpointing(30_000L, CheckpointingMode.AT_LEAST_ONCE);
+        env.setRestartStrategy(RestartStrategies.fixedDelayRestart(3,
+                org.apache.flink.api.common.time.Time.seconds(10)));
         String bootstrap = (String) cfg[0];
         String registry = (String) cfg[1];
         String sourceTopic = (String) cfg[2];
@@ -114,7 +125,7 @@ public class RiskJob {
                 .setBootstrapServers(bootstrap)
                 .setTopics(sourceTopic)
                 .setGroupId("oddsmaker-risk-job")
-                .setStartingOffsets(OffsetsInitializer.latest())
+                .setStartingOffsets(OffsetsInitializer.committedOffsets(OffsetResetStrategy.LATEST))
                 .setDeserializer(new ApicurioAvroFlinkDeserializer(registry))
                 .build();
 

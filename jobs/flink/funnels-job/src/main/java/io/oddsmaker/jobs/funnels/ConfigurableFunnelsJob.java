@@ -2,6 +2,8 @@ package io.oddsmaker.jobs.funnels;
 
 import io.oddsmaker.jobs.enrich.ApicurioAvroFlinkDeserializer;
 import io.oddsmaker.jobs.enrich.RawEvent;
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.api.common.restartstrategy.RestartStrategies;
 import org.apache.flink.api.common.eventtime.SerializableTimestampAssigner;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.api.common.state.MapState;
@@ -14,6 +16,7 @@ import org.apache.flink.connector.jdbc.JdbcExecutionOptions;
 import org.apache.flink.connector.jdbc.JdbcSink;
 import org.apache.flink.connector.kafka.source.KafkaSource;
 import org.apache.flink.connector.kafka.source.enumerator.initializer.OffsetsInitializer;
+import org.apache.kafka.clients.consumer.OffsetResetStrategy;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.functions.KeyedProcessFunction;
@@ -78,6 +81,13 @@ public class ConfigurableFunnelsJob {
      * 每个启用的漏斗配置一条处理链路。
      */
     static StreamExecutionEnvironment buildPipeline(StreamExecutionEnvironment env, String[] cfg, List<FunnelConfig> funnelConfigs) {
+        // 容错语义闭环:无 checkpoint 时 KafkaSource 从不提交 offset,重启后按回退策略重新初始化,
+        // 停机窗口事件全部丢失且 keyed state 全空。启用 checkpoint 后 offset 随 checkpoint 提交、
+        // state 持久恢复、重启从上次 checkpoint 续读(残余风险收敛为 JdbcSink at-least-once 的
+        // 检查点间隔窗口内重复,处理层重复由去重/聚合 state 恢复挡住);
+        // 回退 LATEST 保持既有首启动语义,避免已部署环境全量重放+state 空造成全量重复
+        env.enableCheckpointing(30_000L, CheckpointingMode.AT_LEAST_ONCE);
+        env.setRestartStrategy(RestartStrategies.fixedDelayRestart(3, Time.seconds(10)));
         String bootstrap = cfg[0], registry = cfg[1], topic = cfg[2], chUrl = cfg[3], chUser = cfg[4], chPass = cfg[5];
 
         // local executor 默认并行度=CPU 核数，而 events_raw 只有 1 个分区：
@@ -89,7 +99,7 @@ public class ConfigurableFunnelsJob {
                 .setBootstrapServers(bootstrap)
                 .setTopics(topic)
                 .setGroupId("oddsmaker-configurable-funnels")
-                .setStartingOffsets(OffsetsInitializer.latest())
+                .setStartingOffsets(OffsetsInitializer.committedOffsets(OffsetResetStrategy.LATEST))
                 .setDeserializer(new ApicurioAvroFlinkDeserializer(registry))
                 .build();
 

@@ -1,6 +1,8 @@
 package io.oddsmaker.jobs.identity;
 
 import io.oddsmaker.jobs.enrich.RawEvent;
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.api.common.restartstrategy.RestartStrategies;
 import org.apache.flink.api.common.eventtime.TimestampAssigner;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.api.common.state.ValueState;
@@ -43,6 +45,12 @@ class IdentityMergeJobTest {
         DataStream<IdentityMergeJob.IdentityRecord> tail = IdentityMergeJob.buildPipeline(env, IdentityMergeJob.config());
         assertNotNull(tail);
         assertTrue(env.getTransformations().size() >= 5, "expect >= 5 transformations, got " + env.getTransformations().size());
+        // 容错三件套生效:无 checkpoint 时 Kafka offset 从不提交,重启丢停机窗口数据(state 全空)
+        assertTrue(env.getCheckpointConfig().isCheckpointingEnabled());
+        assertEquals(30_000L, env.getCheckpointConfig().getCheckpointInterval());
+        assertEquals(CheckpointingMode.AT_LEAST_ONCE, env.getCheckpointConfig().getCheckpointingMode());
+        assertTrue(env.getRestartStrategy() instanceof RestartStrategies.FixedDelayRestartStrategyConfiguration,
+            "重启策略应为固定延迟自愈");
     }
 
     @Test
