@@ -1,15 +1,26 @@
 -- 死鉴权换血配套权限种子（id 用冒号——AccessGuard 按 PermissionEntity.id 精确匹配；code 沿用点号显示惯例）
+-- —— 前置修正：V0.2.3 遗留的 perm_* 样式 id ——
+-- game.read/user.read/audit.read/system.read 四个 code 在 V0.2.3 已落库(id=perm_*)，与本迁移撞 code；
+-- AccessGuard 按冒号 id 精确匹配，故原地换 id 并同步 role_permissions 绑定（FK 临时降级；本库 POSTGRES_USER 为 superuser）。
+SET session_replication_role = replica;
+UPDATE role_permissions SET permission_id='game:read'   WHERE permission_id='perm_game_read';
+UPDATE role_permissions SET permission_id='user:read'   WHERE permission_id='perm_user_read';
+UPDATE role_permissions SET permission_id='audit:read'  WHERE permission_id='perm_audit_read';
+UPDATE role_permissions SET permission_id='system:read' WHERE permission_id='perm_system_read';
+UPDATE permissions SET id='game:read', name='查看游戏数据', description='查看游戏维度数据（看板/指标/明细查询）', resource='GAME', operation='READ', applicable_scope='GAME_AND_BELOW', category='game_management', display_order=140, status='ACTIVE', is_system=TRUE, type='API', resource_type='game', action='READ', scope='GAME', enabled=TRUE, system=TRUE WHERE id='perm_game_read' AND code='game.read';
+UPDATE permissions SET id='user:read', name='查看用户', description='查看用户列表、详情与统计', resource='USER', operation='READ', applicable_scope='GLOBAL', category='security', display_order=146, status='ACTIVE', is_system=TRUE, type='API', resource_type='user', action='READ', scope='GLOBAL', enabled=TRUE, system=TRUE WHERE id='perm_user_read' AND code='user.read';
+UPDATE permissions SET id='audit:read', name='查看审计日志', description='查询审计日志与统计', resource='AUDIT_LOG', operation='READ', applicable_scope='GLOBAL', category='audit', display_order=177, status='ACTIVE', is_system=TRUE, type='API', resource_type='audit', action='READ', scope='GLOBAL', enabled=TRUE, system=TRUE WHERE id='perm_audit_read' AND code='audit.read';
+UPDATE permissions SET id='system:read', name='查看系统配置', description='查看系统配置/功能开关/系统状态', resource='SYSTEM', operation='READ', applicable_scope='GLOBAL', category='system', display_order=188, status='ACTIVE', is_system=TRUE, type='API', resource_type='system', action='READ', scope='GLOBAL', enabled=TRUE, system=TRUE WHERE id='perm_system_read' AND code='system.read';
+SET session_replication_role = default;
 -- Part A：23 个已转换控制器已引用但从未落库的 id（initializeDefaults() 仅测试调用，生产库此前不存在 → 非 admin 恒 403 死锁）
 INSERT INTO permissions (id, code, name, description, resource, operation, applicable_scope,
                          category, display_order, status, is_system,
                          type, resource_type, action, scope, enabled, system) VALUES
-('game:read','game.read','查看游戏数据','查看游戏维度数据（看板/指标/明细查询）','GAME','READ','GAME_AND_BELOW','game_management',140,'ACTIVE',TRUE,'API','game','READ','GAME',TRUE,TRUE),
 ('game:update','game.update','更新游戏数据','写入游戏维度数据（兑换码/配置等）','GAME','WRITE','GAME_AND_BELOW','game_management',141,'ACTIVE',TRUE,'API','game','UPDATE','GAME',TRUE,TRUE),
 ('risk_rule:read','riskrule.read','查看风控规则','查看风控规则列表与详情','RISK_RULE','READ','GAME_AND_BELOW','risk',142,'ACTIVE',TRUE,'API','risk_rule','READ','GAME',TRUE,TRUE),
 ('risk_rule:create','riskrule.create','创建风控规则','创建风控规则','RISK_RULE','CREATE','GAME_AND_BELOW','risk',143,'ACTIVE',TRUE,'API','risk_rule','CREATE','GAME',TRUE,TRUE),
 ('risk_rule:update','riskrule.update','更新风控规则','修改/启停风控规则','RISK_RULE','UPDATE','GAME_AND_BELOW','risk',144,'ACTIVE',TRUE,'API','risk_rule','UPDATE','GAME',TRUE,TRUE),
 ('risk_rule:delete','riskrule.delete','删除风控规则','删除风控规则','RISK_RULE','DELETE','GAME_AND_BELOW','risk',145,'ACTIVE',TRUE,'API','risk_rule','DELETE','GAME',TRUE,TRUE),
-('user:read','user.read','查看用户','查看用户列表、详情与统计','USER','READ','GLOBAL','security',146,'ACTIVE',TRUE,'API','user','READ','GLOBAL',TRUE,TRUE),
 ('user:update','user.update','管理用户','创建/更新/删除用户、角色、锁定与 2FA','USER','UPDATE','GLOBAL','security',147,'ACTIVE',TRUE,'API','user','UPDATE','GLOBAL',TRUE,TRUE);
 
 -- Part B：18 控制器死 @PreAuthorize 换 AccessGuard 的新域词汇
@@ -45,7 +56,6 @@ INSERT INTO permissions (id, code, name, description, resource, operation, appli
 ('export:execute','export.execute','执行数据导出','创建/处理/取消导出任务','EXPORT','EXECUTE','GAME_AND_BELOW','analytics',174,'ACTIVE',TRUE,'API','export','EXECUTE','GAME',TRUE,TRUE),
 ('funnel:read','funnel.read','查看漏斗','查看漏斗配置与统计','FUNNEL','READ','GAME_AND_BELOW','analytics',175,'ACTIVE',TRUE,'API','funnel','READ','GAME',TRUE,TRUE),
 ('funnel:manage','funnel.manage','管理漏斗','创建/更新/删除漏斗与步骤','FUNNEL','WRITE','GAME_AND_BELOW','analytics',176,'ACTIVE',TRUE,'API','funnel','UPDATE','GAME',TRUE,TRUE),
-('audit:read','audit.read','查看审计日志','查询审计日志与统计','AUDIT_LOG','READ','GLOBAL','audit',177,'ACTIVE',TRUE,'API','audit','READ','GLOBAL',TRUE,TRUE),
 ('audit:sensitive','audit.sensitive','查看敏感审计','查看失败/认证/敏感操作审计','AUDIT_LOG','READ','GLOBAL','audit',178,'ACTIVE',TRUE,'API','audit','READ_SENSITIVE','GLOBAL',TRUE,TRUE),
 ('audit:manage','audit.manage','管理审计日志','清理历史审计日志','AUDIT_LOG','WRITE','GLOBAL','audit',179,'ACTIVE',TRUE,'API','audit','UPDATE','GLOBAL',TRUE,TRUE),
 ('security:read','security.read','查看安全配置','查看 MFA/SSO/会话/安全策略','SECURITY','READ','GLOBAL','security',180,'ACTIVE',TRUE,'API','security','READ','GLOBAL',TRUE,TRUE),
@@ -56,7 +66,6 @@ INSERT INTO permissions (id, code, name, description, resource, operation, appli
 ('health:manage','health.manage','管理健康检查','手动执行健康检查','HEALTH','WRITE','GLOBAL','monitoring',185,'ACTIVE',TRUE,'API','health','UPDATE','GLOBAL',TRUE,TRUE),
 ('maintenance:read','maintenance.read','查看维护窗口','查看维护窗口','MAINTENANCE','READ','GLOBAL','system',186,'ACTIVE',TRUE,'API','maintenance','READ','GLOBAL',TRUE,TRUE),
 ('maintenance:manage','maintenance.manage','管理维护窗口','创建/启动/完成/取消维护窗口','MAINTENANCE','WRITE','GLOBAL','system',187,'ACTIVE',TRUE,'API','maintenance','UPDATE','GLOBAL',TRUE,TRUE),
-('system:read','system.read','查看系统配置','查看系统配置/功能开关/系统状态','SYSTEM','READ','GLOBAL','system',188,'ACTIVE',TRUE,'API','system','READ','GLOBAL',TRUE,TRUE),
 ('system:manage','system.manage','管理系统配置','修改系统配置','SYSTEM','WRITE','GLOBAL','system',189,'ACTIVE',TRUE,'API','system','UPDATE','GLOBAL',TRUE,TRUE),
 ('featureflag:read','featureflag.read','查看功能开关','查看功能开关列表与状态','FEATURE_FLAG','READ','GLOBAL','system',190,'ACTIVE',TRUE,'API','feature_flag','READ','GLOBAL',TRUE,TRUE),
 ('featureflag:manage','featureflag.manage','管理功能开关','启用/禁用功能开关与灰度设置','FEATURE_FLAG','WRITE','GLOBAL','system',191,'ACTIVE',TRUE,'API','feature_flag','UPDATE','GLOBAL',TRUE,TRUE);
@@ -75,7 +84,7 @@ WHERE p.id IN ('game:read','game:update','risk_rule:read','risk_rule:create','ri
   'audit:read','audit:sensitive','audit:manage','security:read','security:manage',
   'metrics:read','metrics:infra','health:read','health:manage',
   'maintenance:read','maintenance:manage','system:read','system:manage','featureflag:read','featureflag:manage')
-  AND r.id IN ('role_operator','role_game_admin');
+  AND r.id IN ('role_operator','role_game_admin') ON CONFLICT DO NOTHING;
 
 -- 2) 六只读角色：read 类 19 条
 INSERT INTO role_permissions (role_id, permission_id)
@@ -84,18 +93,18 @@ WHERE p.id IN ('game:read','risk_rule:read','ml:read','sdkkey:read','sdkversion:
   'integration:read','pipeline:read','qualityrule:read','ratelimit:read','quota:read',
   'funnel:read','audit:read','security:read','metrics:read','health:read',
   'maintenance:read','system:read','featureflag:read')
-  AND r.id IN ('role_analyst','role_finance','role_viewer','role_marketing','role_qa','role_developer');
+  AND r.id IN ('role_analyst','role_finance','role_viewer','role_marketing','role_qa','role_developer') ON CONFLICT DO NOTHING;
 
 -- 3) analyst 扩展：分群/管线执行/模型使用/导出/集成触发/风控评审
 INSERT INTO role_permissions (role_id, permission_id)
 SELECT r.id, p.id FROM roles r, permissions p
 WHERE p.id IN ('cohort:manage','pipeline:execute','ml:use','export:execute','integration:trigger','risk:review')
-  AND r.id = 'role_analyst';
+  AND r.id = 'role_analyst' ON CONFLICT DO NOTHING;
 
 -- 4) finance 扩展：数据导出
 INSERT INTO role_permissions (role_id, permission_id)
 SELECT r.id, p.id FROM roles r, permissions p
-WHERE p.id = 'export:execute' AND r.id = 'role_finance';
+WHERE p.id = 'export:execute' AND r.id = 'role_finance' ON CONFLICT DO NOTHING;
 
 -- 5) developer 扩展：模型训练/使用、SDK 版本与遥测管理
 INSERT INTO role_permissions (role_id, permission_id)
