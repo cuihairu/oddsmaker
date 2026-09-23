@@ -16,23 +16,32 @@ This guide covers:
 
 ## Quick Links
 
+- [Startup Guide (Tested)](/operations/startup) - 本机从零拉起全栈的实测步骤与踩坑记录
 - [Incident Response](/operations/incident-response) - Handle incidents
 - [Troubleshooting](/operations/troubleshooting) - Debug issues
 
 ## Deployment Options
 
-### Docker Compose (Development)
+### Docker Compose (Recommended, Tested)
 
 ```bash
-# Start local infrastructure
-docker-compose -f infra/docker-compose.yml up -d
+# 一次性前置：podman socket + 镜像加速（详见 Startup Guide）
+systemctl --user start podman.socket
 
-# View logs
-docker-compose logs -f
+# 全栈（根 compose，14 容器，含 postgres/control/gateway）
+podman compose up -d --build
 
-# Stop services
-docker-compose down
+# 健康检查（双 UP 即成功）
+curl -s http://127.0.0.1:28080/actuator/health   # gateway
+curl -s http://127.0.0.1:28085/actuator/health   # control
+
+# Stop services（数据卷保留）
+podman compose down
 ```
+
+> 分体 dev 模式（`make infra-up`）只起中间件不含 postgres，
+> `make gateway/control` 的 bootRun 需自备本地 PG，否则请用根 compose。坑位清单见
+> [Startup Guide](/operations/startup)。
 
 ### Kubernetes (Production)
 

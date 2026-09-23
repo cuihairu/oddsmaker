@@ -6,7 +6,7 @@ help:
 	@echo "Targets: infra-up infra-down gateway control flink e2e superset-import test perf-matrix perf-report"
 
 infra-up:
-	cd infra && docker compose up -d zookeeper kafka clickhouse apicurio otel-collector superset prometheus grafana
+	cd infra && docker compose up -d kafka clickhouse apicurio otel-collector superset prometheus grafana
 
 infra-down:
 	cd infra && docker compose down
