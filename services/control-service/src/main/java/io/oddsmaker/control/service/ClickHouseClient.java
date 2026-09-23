@@ -2,6 +2,7 @@ package io.oddsmaker.control.service;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.ConnectionCallback;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -23,6 +24,8 @@ public class ClickHouseClient {
 
     private final JdbcTemplate jdbc;
 
+    // 多构造器必须显式 @Autowired 指定生产构造器（否则 Spring 找无参构造失败）
+    @Autowired
     public ClickHouseClient(
             @Value("${oddsmaker.clickhouse.url:}") String url,
             @Value("${oddsmaker.clickhouse.user:default}") String user,
