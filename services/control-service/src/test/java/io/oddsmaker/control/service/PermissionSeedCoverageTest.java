@@ -67,14 +67,15 @@ class PermissionSeedCoverageTest {
     void v098SeedsAllIdsPresentAndOperatorBound() throws IOException {
         String sql = readMigration("V0.9.8__rbac_guard_permission_seeds.sql");
 
-        // 1) 每个 id 作为权限定义出现
+        // 1) 每个 id 作为权限定义出现：INSERT 行，或非幂等改造（b64f0b6）后的原地换 id UPDATE 行
+        //    （game:read/user:read/audit:read/system:read 四条由 V0.2.3 的 perm_* 行改名而来，无 INSERT）
         List<String> missingInsert = new ArrayList<>();
         for (String id : V098_IDS) {
-            if (!sql.contains("('" + id + "',")) {
+            if (!sql.contains("('" + id + "',") && !sql.contains("SET id='" + id + "'")) {
                 missingInsert.add(id);
             }
         }
-        assertTrue(missingInsert.isEmpty(), "permissions INSERT 缺失 id: " + missingInsert);
+        assertTrue(missingInsert.isEmpty(), "permissions 定义缺失 id（INSERT 与换 id UPDATE 均无）: " + missingInsert);
 
         // 2) 每个 id 都出现在含 role_operator 的绑定 INSERT..SELECT 的 IN 列表中
         String operatorBound = operatorBindingClause(sql);
@@ -133,21 +134,29 @@ class PermissionSeedCoverageTest {
     @DisplayName("PermissionAction 枚举覆盖 V0.9.8 种子全部 action 字面量（EAGER 水化炸弹防线）")
     void permissionActionEnumCoversSeedLiterals() throws IOException {
         String sql = readMigration("V0.9.8__rbac_guard_permission_seeds.sql");
-        // INSERT 行尾形态 …,'resource_type','ACTION','SCOPE',TRUE,TRUE) —— 抽每一行的 action 列字面量。
+        // 落库行有两种形态，都要扫到（各自抽 action 列字面量）：
+        //   INSERT 行尾 …,'resource_type','ACTION','SCOPE',TRUE,TRUE)  —— 48 行
+        //   换 id UPDATE 行 … SET id='x:y', … action='ACTION', scope='SCOPE', enabled=TRUE, system=TRUE
+        //     —— game/user/audit/system 四个 read 由 perm_* 改名而来（b64f0b6 非幂等改造），4 行
         // roles.permissions 是 EAGER @ManyToMany：枚举缺任一落库值 → 加载绑定角色即水化炸（非 admin 鉴权全挂）
-        Matcher m = Pattern.compile("'([a-z_]+)','([A-Z_]+)','(?:GAME|GLOBAL|ENVIRONMENT)',TRUE,TRUE\\)")
-            .matcher(sql);
+        List<Matcher> rows = List.of(
+            Pattern.compile("'([a-z_]+)','([A-Z_]+)','(?:GAME|GLOBAL|ENVIRONMENT)',TRUE,TRUE\\)")
+                .matcher(sql),
+            Pattern.compile("SET id='([a-z_]+:[a-z_]+)'.*action='([A-Z_]+)', scope='(?:GAME|GLOBAL|ENVIRONMENT)', enabled=TRUE, system=TRUE")
+                .matcher(sql));
         Set<String> constants = Arrays.stream(PermissionEntity.PermissionAction.values())
             .map(Enum::name).collect(Collectors.toSet());
         int checked = 0;
         List<String> illegal = new ArrayList<>();
-        while (m.find()) {
-            checked++;
-            if (!constants.contains(m.group(2))) {
-                illegal.add(m.group(2));
+        for (Matcher m : rows) {
+            while (m.find()) {
+                checked++;
+                if (!constants.contains(m.group(2))) {
+                    illegal.add(m.group(2));
+                }
             }
         }
-        assertTrue(checked >= 52, "正则仅匹配 " + checked + " 行（种子 ≥52 行）——行尾格式漂移导致测试失灵");
+        assertTrue(checked >= 52, "两种行形态合计仅匹配 " + checked + " 行（48 INSERT + 4 换 id UPDATE = 52）——行尾格式漂移导致测试失灵");
         assertTrue(illegal.isEmpty(), "permissions.action 枚举外值（水化即炸）: " + illegal);
     }
 
