@@ -7,6 +7,18 @@
 -- users 五个资料字段（name/company/title/phone/display_name）是自由输入且前端无 maxlength，超长即 500；
 -- two_factor_secret 当前 Base32(20B)=32 字符恰好占满零余量；id/审计列为防御一致性对齐。
 
+-- 视图依赖处理：v_user_permissions 的 _RETURN 规则依赖 users.id，直接改型报
+-- "cannot alter type of a column used by a view or rule"（仅此一个视图，先摘再戴）。
+DO $$
+DECLARE vdef text;
+BEGIN
+  SELECT regexp_replace(pg_get_viewdef('public.v_user_permissions'::regclass, true), E';\s*$', '')
+    INTO vdef;
+  CREATE TEMP TABLE _v911_viewdef(def text);
+  INSERT INTO _v911_viewdef VALUES (vdef);
+  DROP VIEW public.v_user_permissions;
+END $$;
+
 ALTER TABLE users ALTER COLUMN id TYPE VARCHAR(64);
 ALTER TABLE users ALTER COLUMN name TYPE VARCHAR(200);
 ALTER TABLE users ALTER COLUMN display_name TYPE VARCHAR(200);
@@ -21,3 +33,12 @@ ALTER TABLE audit_logs ALTER COLUMN request_id TYPE VARCHAR(100);
 
 ALTER TABLE roles ALTER COLUMN id TYPE VARCHAR(50);
 ALTER TABLE permissions ALTER COLUMN id TYPE VARCHAR(100);
+
+-- 重建视图（新列宽下重新物化定义）
+DO $$
+DECLARE vdef text;
+BEGIN
+  SELECT def INTO vdef FROM _v911_viewdef;
+  EXECUTE 'CREATE VIEW public.v_user_permissions AS ' || vdef;
+  DROP TABLE _v911_viewdef;
+END $$;
