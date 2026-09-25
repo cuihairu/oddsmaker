@@ -107,6 +107,12 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: '/analytics/dashboards',
+      name: 'custom-dashboards',
+      component: () => import('@/views/DashboardsView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
       path: '/analytics/finance',
       name: 'finance',
       component: () => import('@/views/FinanceView.vue'),

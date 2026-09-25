@@ -69,7 +69,7 @@
 
 - [x] P7-1 实时事件检视器（Live Inspector / Debug View）：Gateway 内存环形缓冲记录每条事件结局（accepted/rejected/sampled_out/duplicate + 拒绝原因与 schema 明细）+ `/v1/inspector/recent` 检视 API（API Key 作用域过滤）+ Control 代理端点 + 控制台 Live Inspector 页（轮询刷新）
 - [x] P7-2 可复用用户分群（Segments）：分群定义（属性 + 行为条件）→ ClickHouse 物化（segment_members ReplacingMergeTree）→ 在线报表注入 segment 过滤（留存/漏斗/财务待接入）→ 控制台分群管理页（创建/计算/成员预览/启停/软删）；权限 segment:read / segment:manage
-- [ ] P7-3 自定义仪表盘 widget 化：Report 模块补 widget 卡片（折线/柱状/KPI/表格）自由组合与保存
+- [x] P7-3 自定义仪表盘 widget 化：仪表盘 CRUD（V0.9.13 迁移 + dashboard:read/manage 权限）+ 布局 JSON 校验（widget 类型/数据源白名单、params 数值钳制、span 规范化）+ 控制台 widget 编辑器（KPI/折线/柱状/表格 × 在线/留存/付费漏斗/Crash 四数据源、12 栅格布局、按游戏保存）；权限 dashboard:read / dashboard:manage
 - [ ] P7-4 全量原始数据导出：events 按日分区导出对象存储（归档基建已在架构内），供 Superset/Metabase 下钻
 - [ ] P7-5 MMP 归因接入评估：AppsFlyer/Adjust 数据源与建表调研（先调研后立项）
 
