@@ -31,8 +31,9 @@ public class OnlineMetricsController {
     public ResponseEntity<Map<String, Object>> overview(
             @PathVariable String gameId,
             @RequestParam(value = "environment", required = false) String environment,
-            @RequestParam(value = "minutes", required = false) Integer minutes) {
+            @RequestParam(value = "minutes", required = false) Integer minutes,
+            @RequestParam(value = "segment_id", required = false) String segmentId) {
         accessGuard.requireGamePermission(gameId, "game:read");
-        return ResponseEntity.ok(onlineMetricsService.overview(gameId, environment, minutes));
+        return ResponseEntity.ok(onlineMetricsService.overview(gameId, environment, minutes, segmentId));
     }
 }

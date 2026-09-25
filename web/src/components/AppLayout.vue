@@ -19,6 +19,7 @@ const navigation = [
   { name: '漏斗分析', href: '/analytics/funnels', icon: 'steps' },
   { name: '在线监控', href: '/analytics/online', icon: 'bolt' },
   { name: '实时事件检视', href: '/analytics/inspector', icon: 'terminal' },
+  { name: '用户分群', href: '/analytics/segments', icon: 'users' },
   { name: '财务报表', href: '/analytics/finance', icon: 'dollar' },
   { name: 'Crash 监控', href: '/analytics/crash', icon: 'bug' },
   { name: '业务告警', href: '/alerts', icon: 'bell' },

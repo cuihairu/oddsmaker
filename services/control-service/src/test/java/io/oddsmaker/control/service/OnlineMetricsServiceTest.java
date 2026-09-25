@@ -104,4 +104,33 @@ class OnlineMetricsServiceTest {
         assertEquals(5, OnlineMetricsService.clampMinutes(-1));
     }
 
+    @Test
+    @DisplayName("分群过滤：segment_id 注入成员子查询，参数尾接 (segmentId, gameId)")
+    void segmentFilterAppendsMembershipSubquery() {
+        when(client.isAvailable()).thenReturn(true);
+        org.mockito.ArgumentCaptor<Object[]> args =
+                org.mockito.ArgumentCaptor.forClass(Object[].class);
+        when(client.query(anyString(), any(Object[].class))).thenReturn(List.of());
+
+        service.overview("g", "prod", 5, "seg9");
+
+        verify(client, org.mockito.Mockito.times(5)).query(
+                contains("IN (SELECT subject_id FROM segment_members"), args.capture());
+        Object[] last = args.getValue();
+        assertEquals("seg9", last[last.length - 2]);
+        assertEquals("g", last[last.length - 1]);
+    }
+
+    @Test
+    @DisplayName("无 segment_id：不注入成员子查询（对侧）")
+    void noSegmentFilterWithoutSegmentId() {
+        when(client.isAvailable()).thenReturn(true);
+        when(client.query(anyString(), any(Object[].class))).thenReturn(List.of());
+
+        service.overview("g", "prod", 5, null);
+
+        verify(client, org.mockito.Mockito.never()).query(
+                contains("segment_members"), any(Object[].class));
+    }
+
 }

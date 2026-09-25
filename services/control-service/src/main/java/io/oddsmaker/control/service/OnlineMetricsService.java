@@ -3,6 +3,7 @@ package io.oddsmaker.control.service;
 import org.springframework.stereotype.Service;
 
 import java.sql.Timestamp;
+import java.util.ArrayList;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -39,6 +40,14 @@ public class OnlineMetricsService {
     }
 
     public Map<String, Object> overview(String gameId, String environment, Integer minutes) {
+        return overview(gameId, environment, minutes, null);
+    }
+
+    /**
+     * P7-2：segmentId 非空时按分群成员过滤（主体口径与分群一致，
+     * segment_members 已按物化环境收敛，环境不匹配时分群集合为空属预期语义）。
+     */
+    public Map<String, Object> overview(String gameId, String environment, Integer minutes, String segmentId) {
         int m = clampMinutes(minutes);
         int trendMinutes = Math.max(60, m);
         Map<String, Object> resp = base(gameId, environment, m, trendMinutes);
@@ -46,33 +55,48 @@ public class OnlineMetricsService {
             resp.put("available", false);
             return resp;
         }
+        String segmentFilter = segmentId == null || segmentId.isBlank()
+                ? "" : SegmentService.segmentFilterFragment(SUBJECT);
+        resp.put("segmentId", segmentId);
 
         String totalSql = "SELECT uniqExact(" + SUBJECT + ") AS online "
-                + "FROM events WHERE game_id = ?" + envFilter(environment) + " AND ts_server >= ?";
-        resp.put("online", OnlineMetricsAssembler.toTotal(query(totalSql, gameId, environment, minutesAgo(m))));
+                + "FROM events WHERE game_id = ?" + envFilter(environment) + " AND ts_server >= ?"
+                + segmentFilter;
+        resp.put("online", OnlineMetricsAssembler.toTotal(
+                query(totalSql, gameId, environment, minutesAgo(m), segmentId)));
 
         String dimSql = "SELECT %s AS dim, uniqExact(" + SUBJECT + ") AS online "
                 + "FROM events WHERE game_id = ?" + envFilter(environment)
-                + " AND ts_server >= ? GROUP BY dim ORDER BY online DESC LIMIT " + BREAKDOWN_LIMIT;
+                + " AND ts_server >= ?" + segmentFilter
+                + " GROUP BY dim ORDER BY online DESC LIMIT " + BREAKDOWN_LIMIT;
         for (Map.Entry<String, String> dimension : DIMENSIONS.entrySet()) {
             List<Map<String, Object>> rows = query(String.format(dimSql, dimension.getValue()),
-                    gameId, environment, minutesAgo(m));
+                    gameId, environment, minutesAgo(m), segmentId);
             resp.put("by" + Character.toUpperCase(dimension.getKey().charAt(0)) + dimension.getKey().substring(1),
                     OnlineMetricsAssembler.toDimensionBreakdown(rows));
         }
 
         String trendSql = "SELECT toStartOfMinute(ts_server) AS bucket, uniqExact(" + SUBJECT + ") AS online "
                 + "FROM events WHERE game_id = ?" + envFilter(environment)
-                + " AND ts_server >= ? GROUP BY bucket ORDER BY bucket";
+                + " AND ts_server >= ?" + segmentFilter + " GROUP BY bucket ORDER BY bucket";
         resp.put("trend", OnlineMetricsAssembler.toTrendPoints(
-                query(trendSql, gameId, environment, minutesAgo(trendMinutes))));
+                query(trendSql, gameId, environment, minutesAgo(trendMinutes), segmentId)));
         return resp;
     }
 
-    private List<Map<String, Object>> query(String sql, String gameId, String environment, Timestamp since) {
-        return environment == null || environment.isBlank()
-                ? client.query(sql, gameId, since)
-                : client.query(sql, gameId, environment, since);
+    private List<Map<String, Object>> query(String sql, String gameId, String environment, Timestamp since,
+                                            String segmentId) {
+        List<Object> args = new ArrayList<>();
+        args.add(gameId);
+        if (environment != null && !environment.isBlank()) {
+            args.add(environment);
+        }
+        args.add(since);
+        if (segmentId != null && !segmentId.isBlank()) {
+            args.add(segmentId);
+            args.add(gameId);
+        }
+        return client.query(sql, args.toArray());
     }
 
     static int clampMinutes(Integer minutes) {

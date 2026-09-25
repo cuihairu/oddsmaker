@@ -73,12 +73,12 @@ class MetricsControllersTest {
     }
 
     @Test
-    @DisplayName("在线监控：game:read 鉴权 + 委托")
+    @DisplayName("在线监控：game:read 鉴权 + 委托（含分群过滤参数）")
     void onlineOverview() {
         Map<String, Object> resp = Map.of("online", 12L);
-        when(onlineService.overview("g", null, 5)).thenReturn(resp);
+        when(onlineService.overview("g", null, 5, null)).thenReturn(resp);
 
-        assertEquals(resp, onlineController.overview("g", null, 5).getBody());
+        assertEquals(resp, onlineController.overview("g", null, 5, null).getBody());
         verify(accessGuard).requireGamePermission("g", "game:read");
     }
 
