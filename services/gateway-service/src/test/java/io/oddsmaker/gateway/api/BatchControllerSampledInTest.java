@@ -27,7 +27,8 @@ class BatchControllerSampledInTest {
     @DisplayName("MessageDigest.getInstance 抛异常时采样放行（fail-open）")
     void sampledInFailsOpenWhenSha256Unavailable() {
         BatchController controller = new BatchController(
-                null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null,
+                new io.oddsmaker.gateway.inspector.EventInspectorBuffer(10, 4, 600_000L));
         try (MockedStatic<MessageDigest> md = mockStatic(MessageDigest.class)) {
             md.when(() -> MessageDigest.getInstance(anyString()))
                     .thenThrow(new NoSuchAlgorithmException("test-only"));
@@ -42,7 +43,8 @@ class BatchControllerSampledInTest {
     @DisplayName("sampledIn：deviceId null 与空串时回退 event_id 作种子（!isEmpty 短路两侧）")
     void sampledInFallsBackToEventIdSeed() {
         BatchController controller = new BatchController(
-                null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null,
+                new io.oddsmaker.gateway.inspector.EventInspectorBuffer(10, 4, 600_000L));
         // rate=1.0 → 桶阈值 10000，任意 seed 恒采样保留：验证种子回退路径不抛异常
         Event nullDevice = new Event();
         nullDevice.eventId = "01JSEED00001";
@@ -60,7 +62,8 @@ class BatchControllerSampledInTest {
     @DisplayName("toJsonSilently：序列化异常静默返回 null 不抛出")
     void toJsonSilentlySwallowsSerializationFailure() {
         BatchController controller = new BatchController(
-                new com.fasterxml.jackson.databind.ObjectMapper(), null, null, null, null, null, null, null, null);
+                new com.fasterxml.jackson.databind.ObjectMapper(), null, null, null, null, null, null, null, null,
+                new io.oddsmaker.gateway.inspector.EventInspectorBuffer(10, 4, 600_000L));
         // new Object() 无任何可序列化属性，默认 FAIL_ON_EMPTY_BEANS 抛 InvalidDefinitionException → catch → null
         Object result = ReflectionTestUtils.invokeMethod(controller, "toJsonSilently", new Object());
         assertNull(result);

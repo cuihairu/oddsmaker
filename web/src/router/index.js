@@ -95,6 +95,12 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: '/analytics/inspector',
+      name: 'live-inspector',
+      component: () => import('@/views/LiveInspectorView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
       path: '/analytics/finance',
       name: 'finance',
       component: () => import('@/views/FinanceView.vue'),

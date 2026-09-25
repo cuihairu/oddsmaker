@@ -12,6 +12,7 @@ import io.oddsmaker.gateway.config.PiiPolicy;
 import io.oddsmaker.gateway.config.PolicyService;
 import io.oddsmaker.gateway.config.PropsPolicy;
 import io.oddsmaker.gateway.crash.CrashFingerprinter;
+import io.oddsmaker.gateway.inspector.EventInspectorBuffer;
 import io.oddsmaker.gateway.kafka.AvroPublisher;
 import io.oddsmaker.gateway.kafka.DlqPublisher;
 import org.springframework.http.MediaType;
@@ -49,6 +50,7 @@ public class BatchController {
     private final PiiPolicy piiPolicy;
     private final BlockListClient blockListClient;
     private final io.oddsmaker.gateway.security.ReplayGuard replayGuard;
+    private final EventInspectorBuffer inspector;
 
     public BatchController(
             ObjectMapper om,
@@ -59,7 +61,8 @@ public class BatchController {
             PolicyService policyService,
             PiiPolicy piiPolicy,
             BlockListClient blockListClient,
-            io.oddsmaker.gateway.security.ReplayGuard replayGuard
+            io.oddsmaker.gateway.security.ReplayGuard replayGuard,
+            EventInspectorBuffer inspector
     ) {
         this.om = om;
         this.publisher = publisher;
@@ -70,6 +73,7 @@ public class BatchController {
         this.piiPolicy = piiPolicy;
         this.blockListClient = blockListClient;
         this.replayGuard = replayGuard;
+        this.inspector = inspector;
     }
 
     public static class BatchResponse {
@@ -117,16 +121,19 @@ public class BatchController {
                 normalizeCompatFields(event);
                 if (event.eventId == null || event.eventName == null || event.gameId == null || event.environment == null || event.deviceId == null) {
                     reject(resp, event, "invalid_schema");
+                    inspect(event, keyContext, EventInspectorBuffer.OUTCOME_REJECTED, "invalid_schema", null);
                     continue;
                 }
                 if (!matchesApiKeyScope(event, keyContext)) {
                     reject(resp, event, "api_key_scope_mismatch");
+                    inspect(event, keyContext, EventInspectorBuffer.OUTCOME_REJECTED, "api_key_scope_mismatch", null);
                     continue;
                 }
                 // eventType 兜底已由上方 normalizeCompatFields 完成，此处必非空
                 // 风控前置：事件时间戳信差检查（默认 ±24h，可配 oddsmaker.risk.max-event-ts-drift-ms）
                 if (!replayGuard.isTimestampPlausible(event.tsClient, System.currentTimeMillis())) {
                     reject(resp, event, "invalid_timestamp");
+                    inspect(event, keyContext, EventInspectorBuffer.OUTCOME_REJECTED, "invalid_timestamp", null);
                     continue;
                 }
                 if (event.tsServer == null) {
@@ -141,6 +148,7 @@ public class BatchController {
                 applyPropsFilter(event, policy);
                 if (event.props != null && piiPolicy.hasBlockedKeys(event.props, piiOverrides)) {
                     reject(resp, event, "pii_blocked");
+                    inspect(event, keyContext, EventInspectorBuffer.OUTCOME_REJECTED, "pii_blocked", null);
                     continue;
                 }
                 if (event.props != null) {
@@ -149,11 +157,14 @@ public class BatchController {
                 event.clientIp = piiPolicy.sanitizeClientIp(event.clientIp, piiOverrides);
                 if (propsPolicy.exceedsEventLimit(event)) {
                     reject(resp, event, "payload_too_large");
+                    inspect(event, keyContext, EventInspectorBuffer.OUTCOME_REJECTED, "payload_too_large", null);
                     continue;
                 }
                 String schemaError = schemaValidator.validate(event);
                 if (schemaError != null) {
                     reject(resp, event, "invalid_schema");
+                    // schema 校验明细进检视面（响应体只回笼统 reason，明细是 Debug View 的核心价值）
+                    inspect(event, keyContext, EventInspectorBuffer.OUTCOME_REJECTED, "invalid_schema", schemaError);
                     continue;
                 }
                 // 风控前置：event_id 幂等吸收——schema 合法后才占用幂等位，
@@ -161,6 +172,7 @@ public class BatchController {
                 if (!replayGuard.consumeEventId(event.eventId)) {
                     resp.duplicates++;
                     resp.accepted.add(event.eventId);
+                    inspect(event, keyContext, EventInspectorBuffer.OUTCOME_DUPLICATE, null, null);
                     continue;
                 }
                 // 崩溃指纹：error 类型事件注入 crash_hash/crash_message（SDK 已提供则保留），
@@ -184,6 +196,7 @@ public class BatchController {
                         sampledEvents.add(event);
                     } else {
                         resp.sampled_out++;
+                        inspect(event, keyContext, EventInspectorBuffer.OUTCOME_SAMPLED_OUT, null, null);
                     }
                 }
                 if (sampledEvents.isEmpty()) {
@@ -215,13 +228,16 @@ public class BatchController {
                         for (Event event : eventsToPublish) {
                             if (isBlocked(event, blockedMap)) {
                                 reject(resp, event, "blocked");
+                                inspect(event, keyContext, EventInspectorBuffer.OUTCOME_REJECTED, "blocked", null);
                                 continue;
                             }
                             try {
                                 publisher.publish(event);
                                 resp.accepted.add(event.eventId);
+                                inspect(event, keyContext, EventInspectorBuffer.OUTCOME_ACCEPTED, null, null);
                             } catch (Exception ex) {
                                 reject(resp, event, "kafka_error");
+                                inspect(event, keyContext, EventInspectorBuffer.OUTCOME_REJECTED, "kafka_error", null);
                             }
                         }
                         return resp;
@@ -569,12 +585,29 @@ public class BatchController {
     }
 
     private void reject(BatchResponse resp, Event event, String reason) {
+        reject(resp, event, reason, null);
+    }
+
+    private void reject(BatchResponse resp, Event event, String reason, String detail) {
         // 全部调用点均传入非 null event（循环内构造），无需判空
         HashMap<String, String> rej = new HashMap<>();
         rej.put("event_id", String.valueOf(event.eventId));
         rej.put("reason", reason);
         resp.rejected.add(rej);
         dlq.publish(event.eventId, reason, toJsonSilently(event));
+    }
+
+    /**
+     * 检视记录（Live Inspector）：作用域优先取 key 作用域而非事件自带字段——
+     * 携带错误 game_id/environment 的事件（api_key_scope_mismatch）恰恰是接入调试
+     * 最需要看到的，落在开发者自己作用域的视图里才可见。keyContext 由 HmacFilter
+     * 保证非 null；路由字段缺失时 record 内部跳过（DLQ 已有全量）。
+     */
+    private void inspect(Event event, AuthService.ApiKeyContext keyContext,
+                         String outcome, String reason, String detail) {
+        String gameId = keyContext.isScoped() ? keyContext.gameId : event.gameId;
+        String environment = keyContext.isScoped() ? keyContext.environment : event.environment;
+        inspector.record(gameId, environment, outcome, reason, detail, event);
     }
 
     private String toJsonSilently(Object o) {

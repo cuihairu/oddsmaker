@@ -1,5 +1,6 @@
 package io.oddsmaker.gateway.api;
 
+import io.oddsmaker.gateway.inspector.EventInspectorBuffer;
 import io.oddsmaker.gateway.kafka.AvroPublisher;
 import io.oddsmaker.gateway.kafka.DlqPublisher;
 import org.junit.jupiter.api.Test;
@@ -22,6 +23,9 @@ class BatchControllerTest {
 
     @MockBean
     DlqPublisher dlqPublisher;
+
+    @Autowired
+    EventInspectorBuffer inspectorBuffer;
 
     @Test
     void acceptValidNdjson() {
@@ -66,5 +70,50 @@ class BatchControllerTest {
                 .expectBody()
                 .jsonPath("$.rejected[0].event_id").isEqualTo("01JPII0001")
                 .jsonPath("$.rejected[0].reason").isEqualTo("pii_blocked");
+    }
+
+    @Test
+    void inspectorRecordsAcceptedAndRejectedOutcomes() {
+        inspectorBuffer.clear();
+        // 一条合法（accepted）+ 一条缺 device_id（invalid_schema rejected）
+        String ok = "{\"event_id\":\"01JINSP0001\",\"event_name\":\"level_start\",\"game_id\":\"game_demo\",\"environment\":\"prod\",\"device_id\":\"d1\",\"ts_client\":1730000000000}";
+        client.post().uri("/v1/batch")
+                .contentType(MediaType.valueOf("application/x-ndjson"))
+                .header("x-api-key", "pk_test_example")
+                .bodyValue(ok)
+                .exchange()
+                .expectStatus().is2xxSuccessful()
+                .expectBody().jsonPath("$.accepted[0]").isEqualTo("01JINSP0001");
+        String bad = "{\"event_id\":\"01JINSP0002\",\"event_name\":\"level_start\",\"game_id\":\"game_demo\",\"environment\":\"prod\",\"ts_client\":1730000000000}";
+        client.post().uri("/v1/batch")
+                .contentType(MediaType.valueOf("application/x-ndjson"))
+                .header("x-api-key", "pk_test_example")
+                .bodyValue(bad)
+                .exchange()
+                .expectStatus().is2xxSuccessful()
+                .expectBody().jsonPath("$.rejected[0].reason").isEqualTo("invalid_schema");
+
+        // 本地静态 key 无作用域 → 检视需显式传参；accepted 与 rejected 均可查
+        client.get().uri(b -> b.path("/v1/inspector/recent")
+                        .queryParam("game_id", "game_demo")
+                        .queryParam("environment", "prod")
+                        .queryParam("outcome", "rejected").build())
+                .header("x-api-key", "pk_test_example")
+                .exchange()
+                .expectStatus().is2xxSuccessful()
+                .expectBody()
+                .jsonPath("$.count").isEqualTo(1)
+                .jsonPath("$.events[0].event_id").isEqualTo("01JINSP0002")
+                .jsonPath("$.events[0].reason").isEqualTo("invalid_schema");
+
+        client.get().uri(b -> b.path("/v1/inspector/recent")
+                        .queryParam("game_id", "game_demo")
+                        .queryParam("environment", "prod")
+                        .queryParam("outcome", "accepted").build())
+                .header("x-api-key", "pk_test_example")
+                .exchange()
+                .expectStatus().is2xxSuccessful()
+                .expectBody()
+                .jsonPath("$.events[0].event_id").isEqualTo("01JINSP0001");
     }
 }
