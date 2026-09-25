@@ -65,6 +65,16 @@
 - [x] Remote Config / LiveOps 联动：游戏级键值配置 CRUD + 环境覆盖解析（环境特定 key 覆盖全环境）+ 聚合版本增量拉取（304），V0.8.6 remote_configs 表
 - [x] 测试覆盖率：引入 JaCoCo（test 后自动生成 XML/HTML/CSV 报告），P5/P6 新代码指令覆盖率 98.3%（control）/96.7%（gateway CrashFingerprinter，剩余为不可达防御分支）；gateway config/kafka 组件包补齐（89.4%/76.3%，剩余为需真实 broker 的初始化分支）
 
+## P7 竞品差距收敛（依据 `docs/competitive-analysis.md`，2026-09 竞品调研）
+
+- [ ] P7-1 实时事件检视器（Live Inspector / Debug View）：Gateway 内存环形缓冲记录每条事件结局（accepted/rejected/sampled_out/duplicate + 拒绝原因与 schema 明细）+ `/v1/inspector/recent` 检视 API（API Key 作用域过滤）+ Control 代理端点 + 控制台 Live Inspector 页（轮询刷新）
+- [ ] P7-2 可复用用户分群（Segments）：分群定义（属性 + 行为条件）→ ClickHouse 物化 → 留存/漏斗/财务/在线报表注入 segment 过滤 → 公告/邮件定向投放
+- [ ] P7-3 自定义仪表盘 widget 化：Report 模块补 widget 卡片（折线/柱状/KPI/表格）自由组合与保存
+- [ ] P7-4 全量原始数据导出：events 按日分区导出对象存储（归档基建已在架构内），供 Superset/Metabase 下钻
+- [ ] P7-5 MMP 归因接入评估：AppsFlyer/Adjust 数据源与建表调研（先调研后立项）
+
+明确不跟进（详见竞品分析 §4）：Session Replay、行业基准、游戏后端（排行榜/成就/多人服务器）、自建推送通道、广告平台直连、多租户 SaaS 化。
+
 ## 暂停项
 
 - [ ] 不继续实现 Organization/Tenant 相关新功能
