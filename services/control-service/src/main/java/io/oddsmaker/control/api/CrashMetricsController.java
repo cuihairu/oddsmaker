@@ -35,27 +35,30 @@ public class CrashMetricsController {
     public ResponseEntity<Map<String, Object>> topGroups(
             @PathVariable String gameId,
             @RequestParam(value = "environment", required = false) String environment,
-            @RequestParam(value = "days", required = false) Integer days) {
+            @RequestParam(value = "days", required = false) Integer days,
+            @RequestParam(value = "segment_id", required = false) String segmentId) {
         accessGuard.requireGamePermission(gameId, "game:read");
-        return ResponseEntity.ok(crashMetricsService.topGroups(gameId, environment, days));
+        return ResponseEntity.ok(crashMetricsService.topGroups(gameId, environment, days, segmentId));
     }
 
     @GetMapping("/{gameId}/trend")
     public ResponseEntity<Map<String, Object>> trend(
             @PathVariable String gameId,
             @RequestParam(value = "environment", required = false) String environment,
-            @RequestParam(value = "days", required = false) Integer days) {
+            @RequestParam(value = "days", required = false) Integer days,
+            @RequestParam(value = "segment_id", required = false) String segmentId) {
         accessGuard.requireGamePermission(gameId, "game:read");
-        return ResponseEntity.ok(crashMetricsService.trend(gameId, environment, days));
+        return ResponseEntity.ok(crashMetricsService.trend(gameId, environment, days, segmentId));
     }
 
     @GetMapping("/{gameId}/rate-by-version")
     public ResponseEntity<Map<String, Object>> rateByVersion(
             @PathVariable String gameId,
             @RequestParam(value = "environment", required = false) String environment,
-            @RequestParam(value = "days", required = false) Integer days) {
+            @RequestParam(value = "days", required = false) Integer days,
+            @RequestParam(value = "segment_id", required = false) String segmentId) {
         accessGuard.requireGamePermission(gameId, "game:read");
-        return ResponseEntity.ok(crashMetricsService.rateByVersion(gameId, environment, days));
+        return ResponseEntity.ok(crashMetricsService.rateByVersion(gameId, environment, days, segmentId));
     }
 
     public static class SymbolicateRequest {

@@ -4,8 +4,10 @@ import api from '@/services/api'
 import GameSelector from '@/components/GameSelector.vue'
 import TrendChart from '@/components/TrendChart.vue'
 import { useGameList } from '@/composables/useGameList'
+import { useSegments } from '@/composables/useSegments'
 
 const { currentGameId } = useGameList()
+const { segments, segmentId, loadSegments } = useSegments()
 
 const days = ref(14)
 const groups = ref([])
@@ -34,9 +36,9 @@ async function load() {
   error.value = ''
   try {
     const [groupsResp, trendResp, versionResp] = await Promise.all([
-      api.get(`/api/crash-metrics/${currentGameId.value}/top-groups`, { params: { days: days.value } }),
-      api.get(`/api/crash-metrics/${currentGameId.value}/trend`, { params: { days: days.value } }),
-      api.get(`/api/crash-metrics/${currentGameId.value}/rate-by-version`, { params: { days: days.value } })
+      api.get(`/api/crash-metrics/${currentGameId.value}/top-groups`, { params: { days: days.value, segment_id: segmentId.value || undefined } }),
+      api.get(`/api/crash-metrics/${currentGameId.value}/trend`, { params: { days: days.value, segment_id: segmentId.value || undefined } }),
+      api.get(`/api/crash-metrics/${currentGameId.value}/rate-by-version`, { params: { days: days.value, segment_id: segmentId.value || undefined } })
     ])
     groups.value = groupsResp.data.groups || []
     trendPoints.value = trendResp.data.points || []
@@ -71,8 +73,11 @@ function pct(v) {
   return `${(v * 100).toFixed(2)}%`
 }
 
-onMounted(load)
-watch([currentGameId, days], load)
+onMounted(() => {
+  load()
+  loadSegments()
+})
+watch([currentGameId, days, segmentId], load)
 </script>
 
 <template>
@@ -86,6 +91,10 @@ watch([currentGameId, days], load)
         <GameSelector />
         <select v-model="days" class="input !w-auto">
           <option v-for="d in dayOptions" :key="d" :value="d">近 {{ d }} 天</option>
+        </select>
+        <select v-model="segmentId" class="input !w-auto">
+          <option value="">全部分群</option>
+          <option v-for="s in segments" :key="s.id" :value="s.id">{{ s.displayName || s.name }}</option>
         </select>
         <button @click="load" class="btn btn-secondary">刷新</button>
       </div>

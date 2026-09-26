@@ -725,19 +725,19 @@ class FinalSweep3Test {
     @DisplayName("CrashMetricsService.topGroups 不可用 / 带环境 / 不带环境")
     void testTopGroups() {
         when(clickHouseClient.isAvailable()).thenReturn(false);
-        Map<String, Object> unavailable = crashMetricsService.topGroups("g1", null, 30);
+        Map<String, Object> unavailable = crashMetricsService.topGroups("g1", null, 30, null);
         assertEquals(false, unavailable.get("available"));
 
         when(clickHouseClient.isAvailable()).thenReturn(true);
         when(clickHouseClient.query(anyString(), eq("g1"), eq("prod"), any(LocalDate.class)))
             .thenReturn(List.of());
-        Map<String, Object> withEnv = crashMetricsService.topGroups("g1", "prod", 30);
+        Map<String, Object> withEnv = crashMetricsService.topGroups("g1", "prod", 30, null);
         assertEquals(true, withEnv.get("available"));
         assertEquals(List.of(), withEnv.get("groups"));
 
         when(clickHouseClient.query(anyString(), eq("g1"), any(LocalDate.class)))
             .thenReturn(List.of());
-        Map<String, Object> noEnv = crashMetricsService.topGroups("g1", "  ", 0);
+        Map<String, Object> noEnv = crashMetricsService.topGroups("g1", "  ", 0, null);
         assertEquals(true, noEnv.get("available"));
         assertEquals(14, noEnv.get("days"));
     }

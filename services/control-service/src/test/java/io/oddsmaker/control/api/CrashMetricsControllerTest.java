@@ -44,13 +44,13 @@ class CrashMetricsControllerTest {
         Map<String, Object> groups = Map.of("groups", java.util.List.of());
         Map<String, Object> trend = Map.of("points", java.util.List.of());
         Map<String, Object> rates = Map.of("versions", java.util.List.of());
-        when(service.topGroups("g", null, 14)).thenReturn(groups);
-        when(service.trend("g", "prod", 7)).thenReturn(trend);
-        when(service.rateByVersion("g", null, 30)).thenReturn(rates);
+        when(service.topGroups("g", null, 14, null)).thenReturn(groups);
+        when(service.trend("g", "prod", 7, null)).thenReturn(trend);
+        when(service.rateByVersion("g", null, 30, null)).thenReturn(rates);
 
-        assertEquals(groups, controller.topGroups("g", null, 14).getBody());
-        assertEquals(trend, controller.trend("g", "prod", 7).getBody());
-        assertEquals(rates, controller.rateByVersion("g", null, 30).getBody());
+        assertEquals(groups, controller.topGroups("g", null, 14, null).getBody());
+        assertEquals(trend, controller.trend("g", "prod", 7, null).getBody());
+        assertEquals(rates, controller.rateByVersion("g", null, 30, null).getBody());
         verify(accessGuard, org.mockito.Mockito.times(3)).requireGamePermission("g", "game:read");
     }
 

@@ -809,7 +809,7 @@ class Group1FinalBranchTest {
         when(clickHouse.isAvailable()).thenReturn(true);
         when(clickHouse.query(anyString(), any(Object[].class))).thenReturn(List.of());
 
-        crashMetricsService.topGroups("g", null, 14);
+        crashMetricsService.topGroups("g", null, 14, null);
 
         // 参数只含 gameId + since（2 个），无 env
         ArgumentCaptor<Object[]> params = ArgumentCaptor.forClass(Object[].class);

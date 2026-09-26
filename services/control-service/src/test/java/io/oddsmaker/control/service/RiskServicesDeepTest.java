@@ -737,7 +737,7 @@ class RiskServicesDeepTest {
             .thenReturn(List.of(
                 row("bucket", LocalDateTime.of(2026, 9, 9, 10, 0), "severity", "HIGH", "c", 2),
                 row("bucket", LocalDateTime.of(2026, 9, 9, 10, 0), "severity", "low", "c", 3)));
-        Map<String, Object> trend = riskMetricsService.trend("g", null, null);
+        Map<String, Object> trend = riskMetricsService.trend("g", null, null, null);
         assertEquals(Boolean.TRUE, trend.get("available"));
         assertEquals(24, trend.get("hours"));
         List<Map<String, Object>> points = (List<Map<String, Object>>) trend.get("points");
@@ -746,7 +746,7 @@ class RiskServicesDeepTest {
         assertEquals(2L, points.get(0).get("high"));
         assertEquals(3L, points.get(0).get("low"));
 
-        Map<String, Object> envTrend = riskMetricsService.trend("g", "prod", 5000);
+        Map<String, Object> envTrend = riskMetricsService.trend("g", "prod", 5000, null);
         assertEquals(2160, envTrend.get("hours"));
         assertTrue(((List<?>) envTrend.get("points")).isEmpty());
         verify(client).query(anyString(), eq("g"), eq("prod"), any(Timestamp.class));
@@ -756,7 +756,7 @@ class RiskServicesDeepTest {
                 row("rule_id", "rr_1", "risk_type", "payment", "hits", 10L, "subjects", 4L,
                     "avg_score", 88.5, "last_hit_at", Timestamp.valueOf("2026-09-09 10:00:00")),
                 row("rule_id", "", "hits", 1L)));
-        Map<String, Object> hits = riskMetricsService.ruleHits("g", null, 24);
+        Map<String, Object> hits = riskMetricsService.ruleHits("g", null, 24, null);
         List<Map<String, Object>> rules = (List<Map<String, Object>>) hits.get("rules");
         assertEquals(2, rules.size());
         assertEquals("rr_1", rules.get(0).get("ruleId"));
@@ -769,7 +769,7 @@ class RiskServicesDeepTest {
             .thenReturn(List.of(row("severity", "critical", "c", 7), row("severity", "high", "c", 3)));
         lenient().when(client.query(contains("GROUP BY risk_type"), eq("g"), any(Timestamp.class)))
             .thenReturn(List.of(row("risk_type", "payment", "c", 2)));
-        Map<String, Object> severity = riskMetricsService.severity("g", null, null);
+        Map<String, Object> severity = riskMetricsService.severity("g", null, null, null);
         assertEquals(10L, severity.get("total"));
         List<Map<String, Object>> bySeverity = (List<Map<String, Object>>) severity.get("bySeverity");
         assertEquals("critical", bySeverity.get(0).get("severity"));
@@ -785,7 +785,7 @@ class RiskServicesDeepTest {
                 "risk_event_id", "ev1", "risk_case_id", "rc1", "rule_id", "rr_1",
                 "action", "block", "state", "executed",
                 "subject_type", "user", "subject_id", "u1", "severity", "high")));
-        Map<String, Object> actions = riskMetricsService.actions("g", null, null);
+        Map<String, Object> actions = riskMetricsService.actions("g", null, null, null);
         List<Map<String, Object>> byAction = (List<Map<String, Object>>) actions.get("byAction");
         assertEquals("block", byAction.get(0).get("action"));
         assertEquals(5L, byAction.get(0).get("count"));
@@ -802,13 +802,13 @@ class RiskServicesDeepTest {
     void riskMetricsUnavailable() {
         lenient().when(client.isAvailable()).thenReturn(false);
 
-        Map<String, Object> trend = riskMetricsService.trend("g", null, null);
+        Map<String, Object> trend = riskMetricsService.trend("g", null, null, null);
         assertEquals(Boolean.FALSE, trend.get("available"));
         assertEquals(24, trend.get("hours"));
-        assertEquals(Boolean.FALSE, riskMetricsService.ruleHits("g", "prod", 1).get("available"));
-        assertEquals(Boolean.FALSE, riskMetricsService.severity("g", null, 0).get("available"));
-        assertEquals(24, riskMetricsService.severity("g", null, 0).get("hours"));
-        Map<String, Object> actions = riskMetricsService.actions("g", null, 24 * 90 + 1);
+        assertEquals(Boolean.FALSE, riskMetricsService.ruleHits("g", "prod", 1, null).get("available"));
+        assertEquals(Boolean.FALSE, riskMetricsService.severity("g", null, 0, null).get("available"));
+        assertEquals(24, riskMetricsService.severity("g", null, 0, null).get("hours"));
+        Map<String, Object> actions = riskMetricsService.actions("g", null, 24 * 90 + 1, null);
         assertEquals(Boolean.FALSE, actions.get("available"));
         assertEquals(2160, actions.get("hours"));
     }
@@ -819,13 +819,13 @@ class RiskServicesDeepTest {
         lenient().when(client.isAvailable()).thenReturn(true);
         lenient().when(client.query(anyString(), eq("g"), any(Timestamp.class))).thenReturn(List.of());
 
-        Map<String, Object> trend = riskMetricsService.trend("g", "  ", null);
+        Map<String, Object> trend = riskMetricsService.trend("g", "  ", null, null);
         assertEquals(Boolean.TRUE, trend.get("available"));
         assertTrue(((List<?>) trend.get("points")).isEmpty());
 
-        assertTrue(((List<?>) riskMetricsService.ruleHits("g", " ", 24).get("rules")).isEmpty());
-        assertTrue(((List<?>) riskMetricsService.severity("g", " ", null).get("bySeverity")).isEmpty());
-        assertTrue(((List<?>) riskMetricsService.actions("g", " ", null).get("byAction")).isEmpty());
+        assertTrue(((List<?>) riskMetricsService.ruleHits("g", " ", 24, null).get("rules")).isEmpty());
+        assertTrue(((List<?>) riskMetricsService.severity("g", " ", null, null).get("bySeverity")).isEmpty());
+        assertTrue(((List<?>) riskMetricsService.actions("g", " ", null, null).get("byAction")).isEmpty());
 
         // envFilter(" ") 视为未指定：所有查询均为 2 个绑定参数，不含环境值
         verify(client, never()).query(anyString(), eq("g"), eq(" "), any(Timestamp.class));
@@ -903,6 +903,36 @@ class RiskServicesDeepTest {
         Map<String, Long> byCategory = (Map<String, Long>) stats.get("byCategory");
         assertEquals(1L, byCategory.get("unknown"));
         assertEquals(1L, byCategory.get("fraud"));
+    }
+
+    @Test
+    @DisplayName("风控指标分群过滤：subject_id 成员子查询注入四接口，参数尾插 (seg, g)")
+    void riskMetricsSegmentFilter() {
+        lenient().when(client.isAvailable()).thenReturn(true);
+        lenient().when(client.query(anyString(), any(Object[].class))).thenReturn(List.of());
+
+        Map<String, Object> trend = riskMetricsService.trend("g", "prod", 24, "seg1");
+        assertEquals("seg1", trend.get("segmentId"));
+        Map<String, Object> hits = riskMetricsService.ruleHits("g", null, 24, "seg1");
+        assertEquals("seg1", hits.get("segmentId"));
+        Map<String, Object> sev = riskMetricsService.severity("g", null, 24, "seg1");
+        assertEquals("seg1", sev.get("segmentId"));
+        Map<String, Object> act = riskMetricsService.actions("g", null, 24, "seg1");
+        assertEquals("seg1", act.get("segmentId"));
+
+        // subject_id 键成员过滤片段：trend/ruleHits/severity(2 查询)/actions(3 查询)
+        verify(client, org.mockito.Mockito.times(7))
+            .query(org.mockito.ArgumentMatchers.contains("subject_id IN (SELECT subject_id FROM segment_members"),
+                any(Object[].class));
+        // 参数顺序：blank 环境 (g, since, seg1, g)；带环境 (g, prod, since, seg1, g)
+        org.mockito.ArgumentCaptor<Object[]> envArgs = org.mockito.ArgumentCaptor.forClass(Object[].class);
+        verify(client).query(org.mockito.ArgumentMatchers.contains("GROUP BY bucket"), (Object[]) envArgs.capture());
+        Object[] a = envArgs.getValue();
+        assertEquals(5, a.length);
+        assertEquals("g", a[0]);
+        assertEquals("prod", a[1]);
+        assertEquals("seg1", a[3]);
+        assertEquals("g", a[4]);
     }
 
 }

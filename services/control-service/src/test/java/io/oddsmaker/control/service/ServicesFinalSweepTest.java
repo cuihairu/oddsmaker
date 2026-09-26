@@ -1166,9 +1166,9 @@ class ServicesFinalSweepTest {
         lenient().when(clickHouseClient.query(anyString(), any(), any(), any(Timestamp.class)))
             .thenReturn(List.of());
 
-        Map<String, Object> hits = riskMetricsService.ruleHits("g", "prod", 24);
-        Map<String, Object> severity = riskMetricsService.severity("g", "prod", 24);
-        Map<String, Object> actions = riskMetricsService.actions("g", "prod", 24);
+        Map<String, Object> hits = riskMetricsService.ruleHits("g", "prod", 24, null);
+        Map<String, Object> severity = riskMetricsService.severity("g", "prod", 24, null);
+        Map<String, Object> actions = riskMetricsService.actions("g", "prod", 24, null);
 
         assertEquals(Boolean.TRUE, hits.get("available"));
         assertTrue(((List<?>) hits.get("rules")).isEmpty());

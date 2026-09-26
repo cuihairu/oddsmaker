@@ -199,15 +199,15 @@ class RiskControllersTest {
     @DisplayName("风控指标：4 个端点委托与鉴权")
     void riskMetricsEndpoints() {
         Map<String, Object> resp = Map.of("available", true);
-        when(riskMetricsService.trend("g", null, 24)).thenReturn(resp);
-        when(riskMetricsService.ruleHits("g", "prod", 48)).thenReturn(resp);
-        when(riskMetricsService.severity("g", null, null)).thenReturn(resp);
-        when(riskMetricsService.actions("g", null, null)).thenReturn(resp);
+        when(riskMetricsService.trend("g", null, 24, null)).thenReturn(resp);
+        when(riskMetricsService.ruleHits("g", "prod", 48, null)).thenReturn(resp);
+        when(riskMetricsService.severity("g", null, null, null)).thenReturn(resp);
+        when(riskMetricsService.actions("g", null, null, null)).thenReturn(resp);
 
-        assertEquals(resp, riskMetricsController.trend("g", null, 24).getBody());
-        assertEquals(resp, riskMetricsController.ruleHits("g", "prod", 48).getBody());
-        assertEquals(resp, riskMetricsController.severity("g", null, null).getBody());
-        assertEquals(resp, riskMetricsController.actions("g", null, null).getBody());
+        assertEquals(resp, riskMetricsController.trend("g", null, 24, null).getBody());
+        assertEquals(resp, riskMetricsController.ruleHits("g", "prod", 48, null).getBody());
+        assertEquals(resp, riskMetricsController.severity("g", null, null, null).getBody());
+        assertEquals(resp, riskMetricsController.actions("g", null, null, null).getBody());
         verify(accessGuard, org.mockito.Mockito.times(4)).requireGamePermission("g", "risk_rule:read");
     }
 

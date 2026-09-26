@@ -34,35 +34,39 @@ public class RiskMetricsController {
     public ResponseEntity<Map<String, Object>> trend(
             @PathVariable String gameId,
             @RequestParam(value = "environment", required = false) String environment,
-            @RequestParam(value = "hours", required = false) Integer hours) {
+            @RequestParam(value = "hours", required = false) Integer hours,
+            @RequestParam(value = "segment_id", required = false) String segmentId) {
         accessGuard.requireGamePermission(gameId, "risk_rule:read");
-        return ResponseEntity.ok(riskMetricsService.trend(gameId, environment, hours));
+        return ResponseEntity.ok(riskMetricsService.trend(gameId, environment, hours, segmentId));
     }
 
     @GetMapping("/{gameId}/rule-hits")
     public ResponseEntity<Map<String, Object>> ruleHits(
             @PathVariable String gameId,
             @RequestParam(value = "environment", required = false) String environment,
-            @RequestParam(value = "hours", required = false) Integer hours) {
+            @RequestParam(value = "hours", required = false) Integer hours,
+            @RequestParam(value = "segment_id", required = false) String segmentId) {
         accessGuard.requireGamePermission(gameId, "risk_rule:read");
-        return ResponseEntity.ok(riskMetricsService.ruleHits(gameId, environment, hours));
+        return ResponseEntity.ok(riskMetricsService.ruleHits(gameId, environment, hours, segmentId));
     }
 
     @GetMapping("/{gameId}/severity")
     public ResponseEntity<Map<String, Object>> severity(
             @PathVariable String gameId,
             @RequestParam(value = "environment", required = false) String environment,
-            @RequestParam(value = "hours", required = false) Integer hours) {
+            @RequestParam(value = "hours", required = false) Integer hours,
+            @RequestParam(value = "segment_id", required = false) String segmentId) {
         accessGuard.requireGamePermission(gameId, "risk_rule:read");
-        return ResponseEntity.ok(riskMetricsService.severity(gameId, environment, hours));
+        return ResponseEntity.ok(riskMetricsService.severity(gameId, environment, hours, segmentId));
     }
 
     @GetMapping("/{gameId}/actions")
     public ResponseEntity<Map<String, Object>> actions(
             @PathVariable String gameId,
             @RequestParam(value = "environment", required = false) String environment,
-            @RequestParam(value = "hours", required = false) Integer hours) {
+            @RequestParam(value = "hours", required = false) Integer hours,
+            @RequestParam(value = "segment_id", required = false) String segmentId) {
         accessGuard.requireGamePermission(gameId, "risk_rule:read");
-        return ResponseEntity.ok(riskMetricsService.actions(gameId, environment, hours));
+        return ResponseEntity.ok(riskMetricsService.actions(gameId, environment, hours, segmentId));
     }
 }
