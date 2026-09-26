@@ -35,6 +35,14 @@ public final class AgentConfig {
     /** 首次运行的起始水位（epoch millis / ISO 时间 / 原始字符串），空则从 cursorColumn 最小值起 */
     public String cursorInitial;
     public String csvDir;
+    public String excelDir;
+    // kafka 源（消息体 = JSON 对象，字段语义同控制列；位点 checkpoint 自管，不依赖 group offset）
+    public String kafkaBootstrap;
+    public String kafkaTopic;
+    public String kafkaGroupId = "oddsmaker-dimension-sync";
+    public long kafkaPollTimeoutMs = 3000;
+    /** 起始位点（"0=42;1=57" 或 earliest/latest），缺省 earliest */
+    public String kafkaCursorInitial;
     // 同步状态上报（Control /api/dimensions/sync-status；url 空则跳过）
     public String statusUrl;
     public String statusToken;
@@ -75,6 +83,12 @@ public final class AgentConfig {
         c.cursorColumn = trim(p.getProperty("source.jdbc.cursor-column"));
         c.cursorInitial = trim(p.getProperty("source.jdbc.cursor-initial"));
         c.csvDir = trim(p.getProperty("source.csv.dir"));
+        c.excelDir = trim(p.getProperty("source.excel.dir"));
+        c.kafkaBootstrap = trim(p.getProperty("source.kafka.bootstrap-servers"));
+        c.kafkaTopic = trim(p.getProperty("source.kafka.topic"));
+        c.kafkaGroupId = orDefault(p.getProperty("source.kafka.group-id"), "oddsmaker-dimension-sync");
+        c.kafkaPollTimeoutMs = longOf(p.getProperty("source.kafka.poll-timeout-ms"), 3000);
+        c.kafkaCursorInitial = trim(p.getProperty("source.kafka.cursor-initial"));
         c.statusUrl = trim(p.getProperty("status.url"));
         c.statusToken = trim(p.getProperty("status.token"));
         c.sourceKey = trim(p.getProperty("status.source-key"));
@@ -106,7 +120,16 @@ public final class AgentConfig {
                 }
             }
             case "csv" -> require(csvDir, "source.csv.dir");
-            default -> throw new IllegalArgumentException("source.type 仅支持 mysql/postgres/csv，当前: " + sourceType);
+            case "excel" -> require(excelDir, "source.excel.dir");
+            case "kafka" -> {
+                require(kafkaBootstrap, "source.kafka.bootstrap-servers");
+                require(kafkaTopic, "source.kafka.topic");
+                if (kafkaPollTimeoutMs <= 0) {
+                    throw new IllegalArgumentException("source.kafka.poll-timeout-ms 必须为正数");
+                }
+            }
+            default -> throw new IllegalArgumentException(
+                    "source.type 仅支持 mysql/postgres/csv/excel/kafka，当前: " + sourceType);
         }
     }
 
@@ -130,6 +153,10 @@ public final class AgentConfig {
 
     private static int intOf(String v, int dft) {
         return v == null || v.isBlank() ? dft : Integer.parseInt(v.trim());
+    }
+
+    private static long longOf(String v, long dft) {
+        return v == null || v.isBlank() ? dft : Long.parseLong(v.trim());
     }
 
     /** SQL 允许换行排版，压成单行比较/绑定。 */

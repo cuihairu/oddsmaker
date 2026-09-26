@@ -9,6 +9,8 @@ plugins {
 
 dependencies {
   implementation("com.fasterxml.jackson.core:jackson-databind:2.17.2")
+  // kafka 源：仅 KafkaConsumerAdapter 触达（真实 broker 路径）；离线逻辑由假端口单测覆盖
+  implementation("org.apache.kafka:kafka-clients:3.7.1")
   // 驱动仅运行期按 jdbc url 加载；单测不触达真实 DB，不上测classpath
   runtimeOnly("com.mysql:mysql-connector-j:8.4.0")
   runtimeOnly("org.postgresql:postgresql:42.7.4")

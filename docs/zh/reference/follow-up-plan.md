@@ -16,7 +16,7 @@
 | 1 | identity-merge Flink job | P2.2 | 后端作业 | SDK identify 真正生效 | ✅ 已完成 |
 | 2 | risk-job 规则动态化 | P3.2 | 作业增强 | 加规则不重启 | ✅ 已完成（RuleFetcher 定时拉取 + `-D` fallback） |
 | 3 | risk-job 规则类型扩展 | P3.2 | 作业增强 | 覆盖更多风控场景 | ✅ 已完成：THRESHOLD/FREQUENCY/VELOCITY/RATIO/DUPLICATE_RECEIPT/AD_REWARD/PATTERN 七类全上线（PATTERN 为 keyed 状态机实现，免 flink-cep 依赖） |
-| 4 | 维度同步 Agent | 横向 | 新模块 | 维度同步落地 | ✅ 已交付：`agents/dimension-sync-agent/`（mysql/postgres/csv source）+ sync-status API（V0.9.14）+ dimension-sync-job（excel/kafka source 按需再加） |
+| 4 | 维度同步 Agent | 横向 | 新模块 | 维度同步落地 | ✅ 已交付：`agents/dimension-sync-agent/`（mysql/postgres/csv/excel/kafka 五类 source）+ sync-status API（V0.9.14）+ dimension-sync-job + 控制台维度同步管理页（web `/dimensions`，心跳/两口径延迟观测） |
 | 5 | 符号化服务 | P4.3 | 新服务 | Crash 可读 | ✅ 以替代方案完成：仓库内符号化引擎（symbol_mappings.mapping_rules 正则规则，V0.8.5）+ CrashFingerprinter；独立微服务方案不再跟进 |
 | 6 | 预测模型训练管线 | P4.4 | 管线 | ML 模型实际可用 | ✅ 已交付：`ml/` 可训练管线（churn/pltv/risk/propensity，产物 JSON 自带启发式基线对照）+ Control 侧注册回写链路 + 训练调度（自动重训再注册）；GBDT / 实时打分按需扩展 |
 
@@ -162,7 +162,7 @@ risk-job 检测逻辑（按规则配置执行）
 
 ## 4. 维度同步 Agent
 
-> **状态（2026-09）：已交付**——本仓库侧（`jobs/flink/dimension-sync-job/` SCD2 写维度表 + `schema/sql/clickhouse/dimensions.sql`）先期完成；本批交付 Control 侧 `dimension_sync_status` 表（V0.9.14）+ `/api/dimensions/sync-status` 心跳上报/查询 API（dimension:read / dimension:manage 权限），以及 Agent 本体 `agents/dimension-sync-agent/`——**零仓库内依赖的独立 Gradle 模块**（仅 Jackson + JDK HttpClient + runtimeOnly JDBC 驱动），mysql/postgres 增量查询与 CSV 目录两类 source 已实现，excel/kafka 按接入需要再加；需要独立仓库时对 `agents/dimension-sync-agent/` 目录做 git subtree split 即可，无需改动任何代码。
+> **状态（2026-09）：已交付**——本仓库侧（`jobs/flink/dimension-sync-job/` SCD2 写维度表 + `schema/sql/clickhouse/dimensions.sql`）先期完成；本批交付 Control 侧 `dimension_sync_status` 表（V0.9.14）+ `/api/dimensions/sync-status` 心跳上报/查询 API（dimension:read / dimension:manage 权限），以及 Agent 本体 `agents/dimension-sync-agent/`——**零仓库内依赖的独立 Gradle 模块**（仅 Jackson + kafka-clients + JDK HttpClient + runtimeOnly JDBC 驱动）。source 五类齐备：mysql/postgres 增量查询、csv/excel 目录扫描（excel 为标准库 zip+xml 最小 xlsx 解析，无 POI，文件粒度断点同 csv）、kafka 订阅（位点 checkpoint 自管 `k:0=42;1=57`，不依赖 broker group offset；位点推进/drain/坏消息跳过经假端口单测覆盖——**真实 broker 路径 `KafkaConsumerAdapter` 仅编译期验证，尚无端到端**，接真实 broker 后需核对 earliest 起步/扩分区/断点 seek 三点）。控制台管理页（web `/dimensions`）按 `dimension:read` 只读展示心跳健康度与两口径延迟，无数据诚实降级。需要独立仓库时对 `agents/dimension-sync-agent/` 目录做 git subtree split 即可，无需改动任何代码。
 
 ### 目标
 

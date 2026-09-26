@@ -36,13 +36,26 @@ public final class AgentMain {
         System.out.println("[agent] 启动 source=" + cfg.sourceType
                 + " game=" + cfg.gameId + "/" + cfg.environment
                 + " poll=" + cfg.pollSeconds + "s");
-        AgentMain agent = new AgentMain(cfg,
-                cfg.isJdbc() ? new JdbcSource(cfg) : new CsvSource(cfg),
+        AgentMain agent = new AgentMain(cfg, sourceOf(cfg),
                 new GatewaySink(cfg),
                 new StatusReporter(cfg),
                 new CheckpointStore(java.nio.file.Path.of(cfg.checkpointPath)));
         Runtime.getRuntime().addShutdownHook(new Thread(() -> agent.running.set(false)));
         agent.run();
+    }
+
+    /** 按配置构造数据源；validate 已保证 source.type 合法。 */
+    static DimensionSource sourceOf(AgentConfig cfg) {
+        if (cfg.isJdbc()) {
+            return new JdbcSource(cfg);
+        }
+        return switch (cfg.sourceType) {
+            case "csv" -> new CsvSource(cfg);
+            case "excel" -> new ExcelSource(cfg);
+            case "kafka" -> new KafkaSource(cfg, new KafkaConsumerAdapter(
+                    cfg.kafkaBootstrap, cfg.kafkaGroupId, cfg.kafkaTopic));
+            default -> throw new IllegalArgumentException("未知 source.type: " + cfg.sourceType);
+        };
     }
 
     /** 轮询主循环；shutdown hook 置 running=false 后最迟一个 poll 周期内退出。 */

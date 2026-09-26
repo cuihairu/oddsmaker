@@ -124,14 +124,14 @@ Content-Type: application/x-ndjson
 
 ### Sync Agent（`oddsmaker-agent`）
 
-Oddsmaker 提供的开源同步 Agent，游戏方在自己网络内部署。Agent 读本地源头，通过 HTTPS 推到 Gateway。**已实现**：仓库 `agents/dimension-sync-agent/`——零仓库内依赖的独立 Gradle 模块（仅 Jackson + JDK HttpClient + runtimeOnly JDBC 驱动），支持 `mysql` / `postgres` / `csv` 三类 source（`excel-file` / `kafka` 按需扩展），可整体目录 git subtree 拆出为独立仓库。
+Oddsmaker 提供的开源同步 Agent，游戏方在自己网络内部署。Agent 读本地源头，通过 HTTPS 推到 Gateway。**已实现**：仓库 `agents/dimension-sync-agent/`——零仓库内依赖的独立 Gradle 模块（仅 Jackson + kafka-clients + JDK HttpClient + runtimeOnly JDBC 驱动），支持 `mysql` / `postgres` / `csv` / `excel` / `kafka` 五类 source（excel 为标准库 zip+xml 最小 xlsx 解析，无 POI；kafka 位点 checkpoint 自管、真实 broker 路径尚无端到端验证），可整体目录 git subtree 拆出为独立仓库。
 
 ```
 游戏方内网:
   oddsmaker-agent
-    ├─ source: mysql | postgres | csv          （excel/kafka 按需扩展）
+    ├─ source: mysql | postgres | csv | excel | kafka
     ├─ transform: 控制列映射（dim_type/resource_id/op/version_ts，其余列进 attributes）
-    ├─ checkpoint: 本地 checkpoint.json（原子落盘）
+    ├─ checkpoint: 本地 checkpoint.json（原子落盘；kafka 位点同为 checkpoint 自管）
     └─ sink: HTTPS POST /v1/batch（NDJSON，event_name=dimension_define）
 ```
 
@@ -158,6 +158,18 @@ source.jdbc.cursor-column=updated_at
 # 数据源之二：csv 目录（按文件名序扫 *.csv，处理完整文件才记断点；增量 = 投递新文件）
 # source.type=csv
 # source.csv.dir=/data/dimension-exports
+
+# 数据源之三：excel 目录（扫 *.xlsx 取首个工作表，首行为表头；断点语义同 CSV）
+# source.type=excel
+# source.excel.dir=/data/dimension-exports
+
+# 数据源之四：kafka topic（消息体 = JSON 对象，控制列语义同上；位点 checkpoint 自管）
+# source.type=kafka
+# source.kafka.bootstrap-servers=broker1:9092,broker2:9092
+# source.kafka.topic=game-dimensions
+# source.kafka.group-id=oddsmaker-dimension-sync
+# source.kafka.poll-timeout-ms=3000
+# source.kafka.cursor-initial=0=42;1=57
 
 # Agent 行为
 agent.batch-size=500

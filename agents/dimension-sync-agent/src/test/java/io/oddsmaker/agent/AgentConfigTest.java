@@ -50,6 +50,23 @@ class AgentConfigTest {
         // SQL 排版换行/多空白压成单行
         assertEquals("SELECT id, name FROM item WHERE updated_at > ? ORDER BY updated_at", c.jdbcQuery);
         assertTrue(c.isJdbc());
+
+        // kafka 键映射与缺省值
+        Path k = write(
+                "gateway.endpoint=http://gw:8080",
+                "gateway.api-key=k1",
+                "game.id=g1",
+                "game.environment=prod",
+                "source.type=kafka",
+                "source.kafka.bootstrap-servers=b:9092",
+                "source.kafka.topic=dims",
+                "source.kafka.cursor-initial=0=42");
+        AgentConfig kc = AgentConfig.load(new String[]{"--config=" + k});
+        assertEquals("b:9092", kc.kafkaBootstrap);
+        assertEquals("dims", kc.kafkaTopic);
+        assertEquals("oddsmaker-dimension-sync", kc.kafkaGroupId);
+        assertEquals(3000L, kc.kafkaPollTimeoutMs);
+        assertEquals("0=42", kc.kafkaCursorInitial);
     }
 
     @Test
@@ -125,7 +142,7 @@ class AgentConfigTest {
     }
 
     @Test
-    @DisplayName("validate：mysql / postgres / csv 完整配置通过；isJdbc 区分")
+    @DisplayName("validate：mysql / postgres / csv / excel / kafka 完整配置通过；isJdbc 区分")
     void validatesHappyPaths() {
         AgentConfig jdbc = fullJdbc();
         jdbc.validate();
@@ -134,6 +151,49 @@ class AgentConfigTest {
         AgentConfig csv = fullCsv();
         csv.validate();
         assertFalse(csv.isJdbc());
+
+        AgentConfig excel = fullCsv();
+        excel.sourceType = "excel";
+        excel.csvDir = null;
+        excel.excelDir = "/data/dim";
+        excel.validate();
+
+        AgentConfig kafka = fullCsv();
+        kafka.sourceType = "kafka";
+        kafka.csvDir = null;
+        kafka.kafkaBootstrap = "b:9092";
+        kafka.kafkaTopic = "dims";
+        kafka.validate();
+    }
+
+    @Test
+    @DisplayName("validate：excel 缺目录 / kafka 缺 bootstrap 或 topic / 非法 poll-timeout")
+    void validatesExcelAndKafkaFailFast() {
+        AgentConfig base = fullCsv();
+        base.csvDir = null;
+
+        AgentConfig missingExcelDir = copy(base);
+        missingExcelDir.sourceType = "excel";
+        assertTrue(assertThrows(IllegalArgumentException.class, missingExcelDir::validate)
+                .getMessage().contains("source.excel.dir"));
+
+        AgentConfig missingBootstrap = copy(base);
+        missingBootstrap.sourceType = "kafka";
+        missingBootstrap.kafkaTopic = "dims";
+        assertTrue(assertThrows(IllegalArgumentException.class, missingBootstrap::validate)
+                .getMessage().contains("source.kafka.bootstrap-servers"));
+
+        AgentConfig missingTopic = copy(missingBootstrap);
+        missingTopic.kafkaBootstrap = "b:9092";
+        missingTopic.kafkaTopic = null;
+        assertTrue(assertThrows(IllegalArgumentException.class, missingTopic::validate)
+                .getMessage().contains("source.kafka.topic"));
+
+        AgentConfig badTimeout = copy(missingTopic);   // bootstrap 已补齐，隔离验证 poll-timeout
+        badTimeout.kafkaTopic = "dims";
+        badTimeout.kafkaPollTimeoutMs = 0;
+        assertTrue(assertThrows(IllegalArgumentException.class, badTimeout::validate)
+                .getMessage().contains("poll-timeout-ms"));
     }
 
     private AgentConfig fullJdbc() {
@@ -174,6 +234,11 @@ class AgentConfigTest {
         c.jdbcQuery = src.jdbcQuery;
         c.cursorColumn = src.cursorColumn;
         c.csvDir = src.csvDir;
+        c.excelDir = src.excelDir;
+        c.kafkaBootstrap = src.kafkaBootstrap;
+        c.kafkaTopic = src.kafkaTopic;
+        c.kafkaGroupId = src.kafkaGroupId;
+        c.kafkaPollTimeoutMs = src.kafkaPollTimeoutMs;
         return c;
     }
 }
