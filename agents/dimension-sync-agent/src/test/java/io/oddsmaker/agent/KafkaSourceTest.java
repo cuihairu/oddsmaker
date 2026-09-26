@@ -123,6 +123,21 @@ class KafkaSourceTest {
     }
 
     @Test
+    @DisplayName("有位点的分区本轮无新数据：位点保留进 cursor（不丢条目、不触发下轮重放）")
+    void partitionsWithoutNewDataKeepCheckpointOffsets() throws Exception {
+        FakePort port = new FakePort();
+        port.batches.add(List.of(rec(1, 0, "{\"resource_id\":\"only-p1\"}")));
+        KafkaSource s = new KafkaSource(cfg(), port);
+
+        Checkpoint current = new Checkpoint();
+        current.cursor = "k:0=5;1=0";
+        DimensionSource.PollResult r = s.poll(current);
+
+        assertEquals(1, r.changes().size());
+        assertEquals("k:0=5;1=1", r.next().cursor);   // p0 无记录但 0=5 保留
+    }
+
+    @Test
     @DisplayName("坏消息跳过、offset 照常前进；usable 变更与坏消息混排")
     void badMessagesSkippedButOffsetsAdvance() throws Exception {
         FakePort port = new FakePort();

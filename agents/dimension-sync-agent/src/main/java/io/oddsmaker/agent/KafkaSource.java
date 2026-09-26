@@ -11,7 +11,7 @@ import java.util.TreeMap;
  * 不依赖 broker group offset 提交——checkpoint.json 是唯一位点事实源，
  * 重启时按断点 assign+seek 确定性恢复。消费端口抽象为 {@link KafkaConsumerPort}，
  * 本类位点推进/drain/坏消息跳过逻辑全部可离线测试（真实实现见 {@link KafkaConsumerAdapter}，
- * 该路径仅编译期验证，尚无 broker 端到端）。
+ * 该路径已对真实 broker（apache/kafka:3.7.0）端到端实测，见 KafkaSourceBrokerE2ETest）。
  *
  * <p>坏消息（解析失败/缺 resource_id）跳过但 offset 照常前进，防毒丸消息卡死位点——
  * 与 Csv/Excel 源「跳过坏行但文件照常记断点」同语义。
@@ -49,7 +49,9 @@ public final class KafkaSource implements DimensionSource {
         port.assign(start);
 
         List<DimensionChange> changes = new java.util.ArrayList<>();
-        SortedMap<Integer, Long> nextOffsets = new TreeMap<>();
+        // 位点簿记以断点起点为底：本轮无新数据的分区保留原位点——否则 cursor 丢条目后
+        // 下一轮该分区会被 seekToBeginning 整段重放（扩分区场景实测踩中）
+        SortedMap<Integer, Long> nextOffsets = new TreeMap<>(start);
         boolean consumedAny = false;
         long now = System.currentTimeMillis();
         for (int round = 0; round < MAX_DRAIN_ROUNDS; round++) {

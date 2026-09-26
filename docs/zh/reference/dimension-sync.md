@@ -124,7 +124,7 @@ Content-Type: application/x-ndjson
 
 ### Sync Agent（`oddsmaker-agent`）
 
-Oddsmaker 提供的开源同步 Agent，游戏方在自己网络内部署。Agent 读本地源头，通过 HTTPS 推到 Gateway。**已实现**：仓库 `agents/dimension-sync-agent/`——零仓库内依赖的独立 Gradle 模块（仅 Jackson + kafka-clients + JDK HttpClient + runtimeOnly JDBC 驱动），支持 `mysql` / `postgres` / `csv` / `excel` / `kafka` 五类 source（excel 为标准库 zip+xml 最小 xlsx 解析，无 POI；kafka 位点 checkpoint 自管、真实 broker 路径尚无端到端验证），可整体目录 git subtree 拆出为独立仓库。
+Oddsmaker 提供的开源同步 Agent，游戏方在自己网络内部署。Agent 读本地源头，通过 HTTPS 推到 Gateway。**已实现**：仓库 `agents/dimension-sync-agent/`——零仓库内依赖的独立 Gradle 模块（仅 Jackson + kafka-clients + JDK HttpClient + runtimeOnly JDBC 驱动），支持 `mysql` / `postgres` / `csv` / `excel` / `kafka` 五类 source（excel 为标准库 zip+xml 最小 xlsx 解析，无 POI；kafka 位点 checkpoint 自管、真实 broker 端到端已实测），可整体目录 git subtree 拆出为独立仓库。
 
 ```
 游戏方内网:

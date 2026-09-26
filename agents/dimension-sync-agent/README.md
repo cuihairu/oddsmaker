@@ -18,7 +18,7 @@
 **验证边界（如实说明）**：
 
 - excel：`XlsxParser` 为标准库最小实现（首个工作表；共享/内联字符串、数值、布尔、`r` 列引用定位、大数 E 记法还原；禁 DTD 防 XXE）。不支持公式重算（取缓存值）、样式/合并单元格/日期格式化——日期列建议源头导出 epoch millis 或 ISO 文本。已单测覆盖。
-- kafka：位点推进/drain/坏消息跳过逻辑经假端口单测覆盖；`KafkaConsumerAdapter`（真实 broker 路径）**仅编译期验证，尚无 broker 端到端**。接真实 broker 后建议核对三点：`auto.offset.reset=earliest` 首轮行为、topic 扩分区后新分区从 earliest 起步、断点续传 seek 正确性。坏消息（解析失败/缺 resource_id）跳过但 offset 照常前进，防毒丸卡死位点。
+- kafka：**端到端已实测**（2026-09-26，apache/kafka:3.7.0 单节点 KRaft，`KafkaSourceBrokerE2ETest` 六用例，broker 不可达自动 SKIP 不误报）：earliest 起步、断点 seek 续传（checkpoint 位点优先于 broker group offset，旧断点可重放）、运行中扩分区追赶、坏消息（解析失败/缺 resource_id）跳过但 offset 前进（防毒丸卡死）、drain 上限 100 轮有界分批且续传无丢失——五项核对点全绿。实测暴露并修复两点：① `KafkaSource` 位点簿记缺陷——本轮无新数据的分区曾在 cursor 丢条目，下一轮被 seekToBeginning 整段重放；② 扩分区感知默认依赖 metadata.max.age（5min）过于迟钝，压到 1s + assign 前 listTopics 全刷。未覆盖：TLS/SASL 鉴权、多 broker 集群、长稳/性能压测。
 
 ## 快速开始
 
