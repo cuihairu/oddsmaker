@@ -3,6 +3,7 @@ package io.oddsmaker.jobs.risk;
 import java.math.BigDecimal;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -17,6 +18,14 @@ public final class RuleConfig {
 
     /** 按 ruleType 索引的规则快照（不可变） */
     public final Map<String, RuleSpec> byType;
+
+    /** PATTERN 默认序列解析：逗号分隔事件名，至少 2 步 */
+    static List<String> defaultPatternSequence() {
+        String raw = System.getProperty("risk.pattern.sequence", "login,purchase,refund");
+        return java.util.Arrays.stream(raw.split(","))
+                .map(String::trim).filter(s -> !s.isEmpty()).distinct()
+                .collect(java.util.stream.Collectors.toUnmodifiableList());
+    }
 
     /** 默认兜底规则（均 action="ALERT"） */
     private static final Map<String, RuleSpec> DEFAULTS;
@@ -47,6 +56,12 @@ public final class RuleConfig {
                 null, "AD_REWARD",
                 Integer.parseInt(System.getProperty("risk.adreward.max-per-window", "60")),
                 "ALERT", 70, "HIGH"));
+        int patternWindowSeconds = Integer.parseInt(System.getProperty("risk.pattern.window-minutes", "5")) * 60;
+        defs.put("PATTERN", new RuleSpec(
+                null, "PATTERN",
+                patternWindowSeconds,   // triggerThreshold 借用为窗口秒数（序列规则无金额阈值）
+                "REVIEW", 85, "HIGH",
+                defaultPatternSequence(), patternWindowSeconds));
         DEFAULTS = Collections.unmodifiableMap(defs);
     }
 
@@ -73,9 +88,9 @@ public final class RuleConfig {
     public static final class RuleSpec {
         /** 规则 ID（来自 control API） */
         public final String ruleId;
-        /** 规则类型：THRESHOLD / FREQUENCY / VELOCITY / RATIO */
+        /** 规则类型：THRESHOLD / FREQUENCY / VELOCITY / RATIO / DUPLICATE_RECEIPT / AD_REWARD / PATTERN */
         public final String ruleType;
-        /** 触发阈值（金额为分/元单位计数值） */
+        /** 触发阈值（金额为分/元单位计数值；PATTERN 借用为窗口秒数） */
         public final int triggerThreshold;
         /** 处置动作：ALERT / BLOCK / REVIEW / THROTTLE / WEBHOOK */
         public final String actionType;
@@ -83,15 +98,32 @@ public final class RuleConfig {
         public final int riskScore;
         /** 风险等级：LOW / MEDIUM / HIGH / CRITICAL */
         public final String riskLevel;
+        /** PATTERN 专属：有序事件名序列（≥2 步）；其他类型为空列表 */
+        public final List<String> sequence;
+        /** PATTERN 专属：整段序列允许的时间窗（秒，自第一步起算）；其他类型为 0 */
+        public final int windowSeconds;
 
         public RuleSpec(String ruleId, String ruleType, int triggerThreshold,
                         String actionType, int riskScore, String riskLevel) {
+            this(ruleId, ruleType, triggerThreshold, actionType, riskScore, riskLevel, List.of(), 0);
+        }
+
+        public RuleSpec(String ruleId, String ruleType, int triggerThreshold,
+                        String actionType, int riskScore, String riskLevel, List<String> sequence) {
+            this(ruleId, ruleType, triggerThreshold, actionType, riskScore, riskLevel, sequence, 0);
+        }
+
+        public RuleSpec(String ruleId, String ruleType, int triggerThreshold,
+                        String actionType, int riskScore, String riskLevel,
+                        List<String> sequence, int windowSeconds) {
             this.ruleId = ruleId;
             this.ruleType = ruleType;
             this.triggerThreshold = triggerThreshold;
             this.actionType = actionType;
             this.riskScore = riskScore;
             this.riskLevel = riskLevel;
+            this.sequence = sequence != null ? List.copyOf(sequence) : List.of();
+            this.windowSeconds = windowSeconds;
         }
     }
 }

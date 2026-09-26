@@ -2,7 +2,7 @@
 
 本文档记录 Oddsmaker 当前未完成的功能项，按优先级排列，包含设计、实现方案和验收标准。每项推进前先在此登记，避免散落讨论。
 
-> **2026-09 状态同步**：本清单为早期行动项视角，现按各项落地结果标注状态（详见下表与各节状态行）。阶段级进度以仓库根 `todo.md` 为活跃跟踪表——P7 竞品差距收敛已全部完成（发布说明见 [release-notes/v0.2.0.md](../../release-notes/v0.2.0.md)），P8 MMP 归因有条件立项处于暂停项。真正剩余的独立事项只有三个：PATTERN（CEP）规则类型、维度同步独立 Agent 仓库、Python 训练管线，均按业务需要再排。
+> **2026-09 状态同步**：本清单为早期行动项视角，现按各项落地结果标注状态（详见下表与各节状态行）。阶段级进度以仓库根 `todo.md` 为活跃跟踪表——P7 竞品差距收敛已全部完成（发布说明见 [release-notes/v0.2.0.md](../../release-notes/v0.2.0.md)），P8 MMP 归因有条件立项处于暂停项。真正剩余的独立事项只剩两个：维度同步独立 Agent 仓库、Python 训练管线，均按业务需要再排（原第三项 PATTERN 规则类型已于本批完成）。
 
 已完成的功能见各阶段文档：
 - [资源事件设计](../analysis/jobs)（事实数据）
@@ -15,7 +15,7 @@
 |---|---|---|---|---|---|
 | 1 | identity-merge Flink job | P2.2 | 后端作业 | SDK identify 真正生效 | ✅ 已完成 |
 | 2 | risk-job 规则动态化 | P3.2 | 作业增强 | 加规则不重启 | ✅ 已完成（RuleFetcher 定时拉取 + `-D` fallback） |
-| 3 | risk-job 规则类型扩展 | P3.2 | 作业增强 | 覆盖更多风控场景 | 🔶 大部分完成：THRESHOLD/FREQUENCY/VELOCITY/RATIO/AD_REWARD 已上线，缺 PATTERN（CEP） |
+| 3 | risk-job 规则类型扩展 | P3.2 | 作业增强 | 覆盖更多风控场景 | ✅ 已完成：THRESHOLD/FREQUENCY/VELOCITY/RATIO/DUPLICATE_RECEIPT/AD_REWARD/PATTERN 七类全上线（PATTERN 为 keyed 状态机实现，免 flink-cep 依赖） |
 | 4 | 维度同步 Agent | 横向 | 新模块 | 维度同步落地 | 🔶 本仓库侧已落地（dimension-sync-job + item_dim/level_dim），sync-status API 与独立 Agent 仓库未做 |
 | 5 | 符号化服务 | P4.3 | 新服务 | Crash 可读 | ✅ 以替代方案完成：仓库内符号化引擎（symbol_mappings.mapping_rules 正则规则，V0.8.5）+ CrashFingerprinter；独立微服务方案不再跟进 |
 | 6 | 预测模型训练管线 | P4.4 | 管线 | ML 模型实际可用 | 🔶 以可解释启发式替代落地（ChurnScorer / pLTV 乘数法 / RiskScorer，predictions 归档）；Python 训练管线暂缓 |
@@ -121,7 +121,7 @@ risk-job 检测逻辑（按规则配置执行）
 
 ## 3. risk-job 规则类型扩展
 
-> **状态（2026-09）：大部分完成**——THRESHOLD / FREQUENCY / VELOCITY / RATIO / AD_REWARD 均已在 `RiskJob` 上线（含单测）；仅 **PATTERN（CEP 序列规则）** 未实现，依赖 flink-cep，作为独立剩余项按需再排。
+> **状态（2026-09）：✅ 全部完成**——THRESHOLD / FREQUENCY / VELOCITY / RATIO / DUPLICATE_RECEIPT / AD_REWARD / PATTERN 七类规则均已在 `RiskJob` 上线（含单测）。PATTERN 序列规则最终采用 **KeyedProcessFunction + ValueState 状态机**（`PatternFunction.advance` 纯函数核心）：有序序列 ≥2 步、窗口自第一步起算、超窗惰性作废、第一步重复自动重启、命中后重置可再匹配；规则经 control 侧 `ruleConditions.sequence` + `timeWindowMinutes` 下发，create/update 均做 2-8 步序列校验。未引入 flink-cep 依赖（免新增依赖、免额外状态后端负担，逻辑可纯函数单测）。
 
 ### 目标
 
@@ -135,13 +135,13 @@ risk-job 检测逻辑（按规则配置执行）
 | FREQUENCY | 窗口内事件数 > N | sliding window count（已实现） |
 | **VELOCITY** | 窗口内资源变动总和 > N | sliding window sum(resource_amount) |
 | **RATIO** | 窗口内 source/sink 比例超阈值 | 双流 join 或同窗口聚合 |
-| **PATTERN** | 多事件序列（如 login→purchase→refund 短时间内） | CEP（Flink Complex Event Processing） |
+| **PATTERN** | 多事件序列（如 login→purchase→refund 短时间内） | CEP（设计稿；实际以 keyed 状态机实现，已上线） |
 
 ### 实现要点
 
 - VELOCITY：在现有 FREQUENCY 的 window 里把 `count()` 换成 `sum(resource_amount)`。
 - RATIO：同一窗口内分 `flow_type='source'` 和 `'sink'` 两个聚合，比值判断。
-- PATTERN：用 `org.apache.flink.cep` 库，定义 `Pattern<RiskInput, ?>`，超时和匹配都输出 RiskHit。
+- PATTERN：~~用 `org.apache.flink.cep` 库~~ → 实际实现：`inputs.filter(inPatternSequence).keyBy(subjectWindowKey).process(new PatternFunction(rules))`，`PatternFunction` 内 `ValueState`（带 1 天 TTL 兜底回收）维护「下一步索引 + 第一步时间戳」，逐事件增量推进，命中输出 RiskHit 并重置。
 - 每种规则类型实现一个 `RuleDetector` 接口，`RuleBroadcaster` 根据规则类型分发。
 
 ### 涉及文件
@@ -150,7 +150,7 @@ risk-job 检测逻辑（按规则配置执行）
 - `jobs/flink/risk-job/.../detector/FrequencyDetector.java`
 - `jobs/flink/risk-job/.../detector/VelocityDetector.java`（新）
 - `jobs/flink/risk-job/.../detector/RatioDetector.java`（新）
-- `jobs/flink/risk-job/.../detector/PatternDetector.java`（新，依赖 flink-cep）
+- ~~`jobs/flink/risk-job/.../detector/PatternDetector.java`（新，依赖 flink-cep）~~ → 实际实现于 `RiskJob.PatternFunction`（与既有六类规则同文件，未另建 detector 包）
 
 ### 验收
 
@@ -301,9 +301,8 @@ predictions 表（user_id, model_id, score, predicted_at）
 
 ## 推进节奏建议（2026-09 更新）
 
-原清单 1/2/5 已完成、3 完成大部分、4/6 部分落地。当前实际剩余与排期建议：
+原清单 1/2/3/5 已完成、4/6 部分落地。当前实际剩余与排期建议：
 
-1. **PATTERN（CEP）规则类型**：风控最后一块拼图（多事件序列检测），依赖 flink-cep，独立可做。
-2. **维度同步独立 Agent 仓库 + sync-status API**：本仓库侧已就绪，有真实维度接入需求时再启动。
-3. **Python 训练管线**：现有启发式打分可解释且够用，有明确精度诉求时再立项。
-4. **P8 MMP 归因**：有条件立项（前置：任一 MMP 原始数据导出权限，Data Locker / CSV uploads 任一），达成前不启动，见 todo.md 暂停项与 `docs/mmp-attribution-evaluation.md`。
+1. **维度同步独立 Agent 仓库 + sync-status API**：本仓库侧已就绪，有真实维度接入需求时再启动。
+2. **Python 训练管线**：现有启发式打分可解释且够用，有明确精度诉求时再立项。
+3. **P8 MMP 归因**：有条件立项（前置：任一 MMP 原始数据导出权限，Data Locker / CSV uploads 任一），达成前不启动，见 todo.md 暂停项与 `docs/mmp-attribution-evaluation.md`。

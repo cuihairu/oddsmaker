@@ -17,9 +17,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class RuleConfigTest {
 
     @Test
-    @DisplayName("DEFAULTS：六类规则全覆盖 + 关键默认值 + 未知类型 null")
-    void defaultsCoverAllSixTypes() {
-        for (String t : List.of("THRESHOLD", "FREQUENCY", "VELOCITY", "RATIO", "DUPLICATE_RECEIPT", "AD_REWARD")) {
+    @DisplayName("DEFAULTS：七类规则全覆盖 + 关键默认值 + 未知类型 null")
+    void defaultsCoverAllSevenTypes() {
+        for (String t : List.of("THRESHOLD", "FREQUENCY", "VELOCITY", "RATIO", "DUPLICATE_RECEIPT", "AD_REWARD", "PATTERN")) {
             assertNotNull(RuleConfig.byType(t), t);
         }
         assertNull(RuleConfig.byType("NOPE"));
@@ -38,6 +38,37 @@ class RuleConfigTest {
         assertEquals("REVIEW", RuleConfig.byType("DUPLICATE_RECEIPT").actionType);
         assertEquals(90, RuleConfig.byType("DUPLICATE_RECEIPT").riskScore);
         assertEquals(70, RuleConfig.byType("AD_REWARD").riskScore);
+
+        RuleConfig.RuleSpec pat = RuleConfig.byType("PATTERN");
+        assertNull(pat.ruleId);
+        assertEquals(300, pat.triggerThreshold);   // 借用为窗口秒数（默认 5min）
+        assertEquals(300, pat.windowSeconds);
+        assertEquals("REVIEW", pat.actionType);
+        assertEquals(85, pat.riskScore);
+        assertEquals("HIGH", pat.riskLevel);
+        assertEquals(List.of("login", "purchase", "refund"), pat.sequence);
+    }
+
+    @Test
+    @DisplayName("RuleSpec：6/7/8 参构造——sequence 防御拷贝、null 归一空表")
+    void ruleSpecConstructorVariants() {
+        java.util.ArrayList<String> src = new java.util.ArrayList<>(List.of("login", "purchase", "refund"));
+        RuleConfig.RuleSpec full = new RuleConfig.RuleSpec("r1", "PATTERN", 300, "REVIEW", 85, "HIGH", src, 300);
+        assertEquals(List.of("login", "purchase", "refund"), full.sequence);
+        assertEquals(300, full.windowSeconds);
+        src.set(0, "hacked");   // 外部改不透
+        assertEquals("login", full.sequence.get(0));
+
+        RuleConfig.RuleSpec seqOnly = new RuleConfig.RuleSpec("r2", "PATTERN", 0, "REVIEW", 85, "HIGH", List.of("a", "b"));
+        assertEquals(List.of("a", "b"), seqOnly.sequence);
+        assertEquals(0, seqOnly.windowSeconds);   // 7 参侧窗口缺省 0
+
+        RuleConfig.RuleSpec plain = new RuleConfig.RuleSpec("r3", "THRESHOLD", 100, "ALERT", 80, "HIGH");
+        assertTrue(plain.sequence.isEmpty());
+        assertEquals(0, plain.windowSeconds);
+
+        RuleConfig.RuleSpec nullSeq = new RuleConfig.RuleSpec(null, "PATTERN", 0, "REVIEW", 85, "HIGH", null);
+        assertTrue(nullSeq.sequence.isEmpty());   // null 序列归一空表
     }
 
     @Test

@@ -7,6 +7,9 @@ import org.apache.flink.api.common.restartstrategy.RestartStrategies;
 import org.apache.flink.api.common.eventtime.SerializableTimestampAssigner;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.api.common.functions.FlatMapFunction;
+import org.apache.flink.api.common.state.StateTtlConfig;
+import org.apache.flink.api.common.state.ValueState;
+import org.apache.flink.api.common.state.ValueStateDescriptor;
 import org.apache.flink.api.common.typeinfo.Types;
 import org.apache.flink.connector.jdbc.JdbcConnectionOptions;
 import org.apache.flink.connector.jdbc.JdbcExecutionOptions;
@@ -19,6 +22,7 @@ import org.apache.kafka.clients.consumer.OffsetResetStrategy;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.datastream.WindowedStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.api.functions.KeyedProcessFunction;
 import org.apache.flink.streaming.api.functions.windowing.ProcessWindowFunction;
 import org.apache.flink.streaming.api.windowing.assigners.SlidingEventTimeWindows;
 import org.apache.flink.streaming.api.windowing.time.Time;
@@ -30,6 +34,7 @@ import java.math.RoundingMode;
 import java.sql.Timestamp;
 import java.time.Duration;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -75,6 +80,7 @@ public class RiskJob {
                 System.getProperty("control.gameId", "default"),
                 System.getProperty("control.token", ""),
                 Long.parseLong(System.getProperty("rule.refresh-ms", "60000")),
+                // PATTERN 窗口不在此处：DEFAULTS/spec.windowSeconds 直接读 risk.pattern.window-minutes
         };
     }
 
@@ -95,7 +101,7 @@ public class RiskJob {
     }
 
     /**
-     * 搭建六类风控规则管道（惰性：source/sink 均到 execute 才连接，单测可用本地环境直跑）。
+     * 搭建七类风控规则管道（惰性：source/sink 均到 execute 才连接，单测可用本地环境直跑）。
      */
     static DataStream<RiskHit> buildPipeline(StreamExecutionEnvironment env, Object[] cfg) {
         // 容错语义闭环:无 checkpoint 时 KafkaSource 从不提交 offset,重启后按回退策略重新初始化,
@@ -158,8 +164,15 @@ public class RiskJob {
                 .process(new AdRewardFunction(freqWindowMin, rules))
                 .returns(Types.POJO(RiskHit.class));
 
+        // PATTERN：序列匹配无需开窗，keyed 状态机增量推进（见 PatternFunction）
+        DataStream<RiskHit> patternHits = inputs
+                .filter(RiskJob::inPatternSequence)
+                .keyBy(RiskJob::subjectWindowKey)
+                .process(new PatternFunction(rules))
+                .returns(Types.POJO(RiskHit.class));
+
         DataStream<RiskHit> allHits = thresholdHits.union(frequencyHits).union(velocityHits).union(ratioHits)
-                .union(duplicateReceiptHits).union(adRewardHits);
+                .union(duplicateReceiptHits).union(adRewardHits).union(patternHits);
 
         KafkaSink<String> kafkaSink = KafkaSink.<String>builder()
                 .setBootstrapServers(bootstrap)
@@ -499,6 +512,126 @@ public class RiskJob {
         }
     }
 
+    /** PATTERN 口径：事件名属于当前序列规则的事件集合。 */
+    static boolean inPatternSequence(RiskInput i) {
+        RuleConfig.RuleSpec spec = RuleConfig.byType("PATTERN");
+        return i.eventName != null && spec.sequence.contains(i.eventName);
+    }
+
+    /**
+     * PATTERN：keyed 有序序列状态机。与窗口类算子不同，序列匹配是逐事件增量推进，
+     * 用 KeyedProcessFunction + ValueState 维护「下一步期望索引 + 第一步时间戳」，
+     * 窗口自第一步起算、惰性过期；命中后重置，可再次从头匹配。
+     * 状态机核心在纯函数 {@link #advance}，不依赖 Flink 运行时，单测直测。
+     */
+    static class PatternFunction extends KeyedProcessFunction<String, RiskInput, RiskHit> {
+        private final RuleSource rules;
+        private transient ValueState<Integer> progress;
+        private transient ValueState<Long> startedAt;
+
+        PatternFunction(RuleSource rules) {
+            this.rules = rules;
+        }
+
+        @Override
+        public void open(org.apache.flink.configuration.Configuration parameters) {
+            RuleFetcher.startOnce(rules.controlUrl, rules.gameId, rules.token, rules.refreshMs);
+            progress = keyedState("pattern-progress", Types.INT);
+            startedAt = keyedState("pattern-started-at", Types.LONG);
+        }
+
+        /** 带 TTL 的 keyed 状态：惰性过期之外，主体再无后续事件的僵尸 key 由 TTL 兜底回收。 */
+        private <T> ValueState<T> keyedState(String name, org.apache.flink.api.common.typeinfo.TypeInformation<T> type) {
+            ValueStateDescriptor<T> desc = new ValueStateDescriptor<>(name, type);
+            desc.enableTimeToLive(StateTtlConfig.newBuilder(org.apache.flink.api.common.time.Time.days(1)).build());
+            return getRuntimeContext().getState(desc);
+        }
+
+        @Override
+        public void processElement(RiskInput i, Context ctx, Collector<RiskHit> out) throws Exception {
+            RuleConfig.RuleSpec spec = RuleConfig.byType("PATTERN");
+            SeqState st = new SeqState();
+            st.nextIdx = progress.value();
+            st.startTs = startedAt.value();
+            RiskHit hit = advance(spec, i, st);
+            if (hit != null) out.collect(hit);
+            if (st.nextIdx == null) progress.clear();
+            else progress.update(st.nextIdx);
+            if (st.startTs == null) startedAt.clear();
+            else startedAt.update(st.startTs);
+        }
+    }
+
+    /** PATTERN 状态机进行中的状态（nextIdx=null 表示空闲）。 */
+    static final class SeqState {
+        /** 下一个期望步的索引；null=空闲 */
+        Integer nextIdx;
+        /** 第一步命中时间戳（毫秒）；空闲为 null */
+        Long startTs;
+    }
+
+    /**
+     * PATTERN 单步转移（纯函数）：按当前状态推进序列匹配，原地更新 st；
+     * 序列完成时返回命中事件（st 已重置为空闲），否则返回 null。
+     * 语义：窗口自第一步起算，超窗惰性作废；非期望步事件若是第一步则重新起序，否则忽略。
+     */
+    static RiskHit advance(RuleConfig.RuleSpec spec, RiskInput i, SeqState st) {
+        List<String> seq = spec.sequence;
+        if (i.eventName == null || seq.size() < 2) return null;
+        long ts = i.ts.getTime();
+
+        // 惰性过期：进行中的序列超出窗口则作废
+        if (st.nextIdx != null && st.startTs != null && ts - st.startTs > spec.windowSeconds * 1000L) {
+            st.nextIdx = null;
+            st.startTs = null;
+        }
+
+        if (st.nextIdx == null) {
+            // 空闲：只有第一步能起序
+            if (seq.get(0).equals(i.eventName)) {
+                st.nextIdx = 1;
+                st.startTs = ts;
+            }
+            return null;
+        }
+
+        if (seq.get(st.nextIdx).equals(i.eventName)) {
+            if (st.nextIdx == seq.size() - 1) {
+                long start = st.startTs;
+                st.nextIdx = null;
+                st.startTs = null;
+                return patternHit(spec, i, seq, start);
+            }
+            st.nextIdx++;
+            return null;
+        }
+
+        // 非期望步：第一步重新起序（含第一步重复出现 → 以最新为起点），其余忽略
+        if (seq.get(0).equals(i.eventName)) {
+            st.nextIdx = 1;
+            st.startTs = ts;
+        }
+        return null;
+    }
+
+    /** PATTERN 命中事件构造。 */
+    static RiskHit patternHit(RuleConfig.RuleSpec spec, RiskInput last, List<String> seq, long startTs) {
+        int windowMin = Math.max(1, spec.windowSeconds / 60);
+        String seqText = String.join(" -> ", seq);
+        Map<String, String> ev = new HashMap<>();
+        ev.put("sequence", seqText);
+        ev.put("window_minutes", String.valueOf(windowMin));
+        ev.put("first_ts", String.valueOf(startTs));
+        ev.put("subject", subjectKey(last));
+        return new RiskHit(
+                last.gameId, last.environment, last.ts, UUID.randomUUID().toString(), last.eventId,
+                spec.ruleId != null ? spec.ruleId : "risk-pattern-sequence", "PATTERN", spec.riskLevel,
+                subjectType(last), subjectId(last),
+                spec.riskScore, spec.actionType,
+                "sequence matched in " + windowMin + "min: " + seqText,
+                ev);
+    }
+
     /** 控制面规则拉取参数（窗口算子 open 时启动单例 fetcher）。 */
     static class RuleSource implements java.io.Serializable {
         final String controlUrl;
@@ -566,6 +699,7 @@ public class RiskJob {
     }
 
     static boolean isAdReward(RiskInput i) { return i.adReward; }
+
 
     static BigDecimal parseAmount(Object v) {
         if (v == null) return null;

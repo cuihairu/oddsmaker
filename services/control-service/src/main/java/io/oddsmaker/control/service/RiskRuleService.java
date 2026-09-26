@@ -90,6 +90,7 @@ public class RiskRuleService {
         rule.name = rule.name.trim();
         if (rule.status == null) rule.status = RiskRuleEntity.RuleStatus.DRAFT;
         if (rule.status == RiskRuleEntity.RuleStatus.ACTIVE) rule.activatedAt = LocalDateTime.now();
+        validatePatternConditions(rule.ruleType, rule.ruleConditions);
         rule.totalTriggeredCount = 0L;
         rule.totalBlockedCount = 0L;
         rule.totalReviewCount = 0L;
@@ -127,6 +128,11 @@ public class RiskRuleService {
         if (req.cooldownMinutes != null) existing.cooldownMinutes = Math.max(0, req.cooldownMinutes);
         if (req.priority != null) existing.priority = req.priority;
         if (req.testMode != null) existing.testMode = req.testMode;
+        // 仅在本请求触及类型/条件时校验合并后的终态：
+        // 无关字段编辑不应被历史遗留的坏数据卡住（存量非法序列由 job 侧跳过兜底）
+        if (req.ruleType != null || req.ruleConditions != null) {
+            validatePatternConditions(existing.ruleType, existing.ruleConditions);
+        }
 
         RiskRuleEntity saved = ruleRepo.save(existing);
         auditLog.logUpdate(operator, operator, "risk_rule", saved.id, saved.name, oldValue,
@@ -161,5 +167,39 @@ public class RiskRuleService {
         auditLog.logDelete(operator, operator, "risk_rule", existing.id, existing.name,
             "gameId=" + existing.gameId, null);
         return true;
+    }
+
+    private static final com.fasterxml.jackson.databind.ObjectMapper SEQUENCE_JSON =
+        new com.fasterxml.jackson.databind.ObjectMapper();
+
+    /**
+     * PATTERN 规则约束：ruleConditions 必须是 {"sequence": [事件名...]}，2-8 个非空事件名（各 ≤100 字符）。
+     * 非法即抛 IllegalArgumentException（create/update 的 4xx 语义）；其他类型不校验。
+     */
+    private static void validatePatternConditions(RiskRuleEntity.RuleType ruleType, String ruleConditions) {
+        if (ruleType != RiskRuleEntity.RuleType.PATTERN) return;
+        if (parseSequence(ruleConditions).isEmpty()) {
+            throw new IllegalArgumentException(
+                "PATTERN rule requires ruleConditions {\"sequence\": [...]} with 2-8 non-blank event names");
+        }
+    }
+
+    /** ruleConditions JSON → sequence 数组；非法 JSON / 非数组 / 空·超长名 / 数量越界返回空列表。 */
+    private static java.util.List<String> parseSequence(String ruleConditions) {
+        if (ruleConditions == null || ruleConditions.isBlank()) return java.util.List.of();
+        try {
+            com.fasterxml.jackson.databind.JsonNode arr = SEQUENCE_JSON.readTree(ruleConditions).path("sequence");
+            if (!arr.isArray()) return java.util.List.of();
+            java.util.List<String> seq = new java.util.ArrayList<>();
+            for (com.fasterxml.jackson.databind.JsonNode n : arr) {
+                String s = n.asText("").trim();
+                if (s.isEmpty() || s.length() > 100) return java.util.List.of();
+                seq.add(s);
+            }
+            if (seq.size() < 2 || seq.size() > 8) return java.util.List.of();
+            return java.util.List.copyOf(seq);
+        } catch (Exception e) {
+            return java.util.List.of();
+        }
     }
 }

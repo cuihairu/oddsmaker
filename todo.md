@@ -24,7 +24,7 @@
 
 - [x] RiskRule API：阈值、黑名单、速度、序列、模型规则
 - [x] Gateway 风控前置：黑名单、重放、时间窗、非法环境、body size
-- [x] Flink risk job：高频事件、重复收据、资源异常、广告 reward 异常
+- [x] Flink risk job：高频事件、重复收据、资源异常、广告 reward 异常、有序事件序列（PATTERN，keyed 状态机实现，control 侧 ruleConditions.sequence 下发 2-8 步序列）
 - [x] ClickHouse 表：`risk_events`、`risk_scores`、`risk_actions`（risk_events/scores 原有；新增 risk_actions 处置归档表 + Control 处置链路写入 + risk_scores 主体风险分联动更新）
 - [x] 风控 Webhook：输出 block/review/mark/throttle 到游戏服
 - [x] 风控大屏：风险趋势、规则命中、严重等级、处置状态（`/api/risk-metrics/*`，ClickHouse 数据源，CH 未配置时降级返回空数据）

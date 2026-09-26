@@ -67,7 +67,7 @@ WHERE game_id = 'game_demo' AND environment = 'prod';
 
 ## risk-job（实时风控）
 
-消费 `oddsmaker.events_raw`，对每条事件做两类规则检测，命中后输出 `risk_events` 到 Kafka（供 Control Service 实时告警/审核）和 ClickHouse（供风控看板和审计）。
+消费 `oddsmaker.events_raw`，对每条事件做七类规则检测，命中后输出 `risk_events` 到 Kafka（供 Control Service 实时告警/审核）和 ClickHouse（供风控看板和审计）。
 
 当前内置规则（参数通过 `-D` 系统属性注入）：
 
@@ -77,8 +77,11 @@ WHERE game_id = 'game_demo' AND environment = 'prod';
 | `risk-frequency-burst` | FREQUENCY | 同 subject 滑动窗口内事件数超阈值 | `risk.frequency.window-minutes=10`<br>`risk.frequency.max-events=1000` |
 | `risk-velocity-amount` | VELOCITY | 同 subject 窗口内资源变动总和超阈值 | `risk.velocity.max-amount=1000000` |
 | `risk-ratio-source-sink` | RATIO | 同 subject 窗口内 source/sink 比例超阈值 | `risk.ratio.max-source-sink=10` |
+| `risk-duplicate-receipt` | DUPLICATE_RECEIPT | 同收据键窗口内重复提交达次数 | `risk.receipt.max-occurrences=2` |
+| `risk-ad-reward-abuse` | AD_REWARD | 激励广告 reward 窗口内爆发 | `risk.adreward.max-per-window=60` |
+| `risk-pattern-sequence` | PATTERN | 同 subject 有序事件序列在窗口内完成 | `risk.pattern.sequence=login,purchase,refund`<br>`risk.pattern.window-minutes=5` |
 
-VELOCITY 检测窗口内资源总量异常（如 10 分钟内产出金币超 100 万），RATIO 检测产出/消耗比异常（如 source/sink > 10 说明只产不耗，疑似刷资源）。PATTERN（多事件序列，如登录→购买→退款）后续用 Flink CEP 实现。
+VELOCITY 检测窗口内资源总量异常（如 10 分钟内产出金币超 100 万），RATIO 检测产出/消耗比异常（如 source/sink > 10 说明只产不耗，疑似刷资源）。PATTERN（多事件序列，如登录→购买→退款）用 keyed 状态机实现：序列自 control 侧 `ruleConditions.sequence`（2-8 步）+ `timeWindowMinutes` 下发，窗口自第一步起算、超窗惰性作废、第一步重复自动重启、命中后重置可再匹配，未引入 flink-cep 依赖。
 
 **阈值动态化**：所有阈值默认从 `-D` 系统属性读取，但若配置了 Control Service 地址，risk-job 会定时（默认 60s）拉取活跃 `RiskRuleEntity`，按 `ruleType` + `triggerThreshold` 覆盖默认阈值。运营在 Control Service 改了规则阈值，60s 内生效，无需重启 job。Control Service 不可用时自动回退到 `-D` 默认值。
 
@@ -116,7 +119,7 @@ kafka-console-consumer --bootstrap-server localhost:9092 --topic oddsmaker.risk_
 
 扩展规划：
 - 规则参数后续接入 Control Service 的 `RiskRuleEntity`，按 `game_id + environment` 拉取活跃规则（HTTP 定时刷新）。**✅ 已实现：RuleFetcher 定时拉取 `/api/risk-dashboard/rules/{gameId}`，按 ruleType 覆盖阈值。**
-- 规则类型扩展：VELOCITY（窗口内资源变动总和）、RATIO（source/sink 比例）、PATTERN（多事件序列）。**✅ VELOCITY/RATIO 已实现；PATTERN 待 Flink CEP。**
+- 规则类型扩展：VELOCITY（窗口内资源变动总和）、RATIO（source/sink 比例）、PATTERN（多事件序列）。**✅ 全部实现；PATTERN 采用 KeyedProcessFunction 状态机（免 flink-cep）。**
 - 命中后动作接入 Control Service 的 ReviewQueue 和 Webhook 通知。
 
 启动方式

@@ -99,13 +99,26 @@ public class RuleFetcher implements Runnable {
         for (JsonNode rule : arr) {
             String type = rule.path("ruleType").asText("");
             if (type.isEmpty()) continue;
-            int threshold = rule.path("triggerThreshold").asInt(0);
-            if (threshold <= 0) continue;
 
             String ruleId = rule.path("id").asText(null);
             String actionType = rule.path("actionType").asText("ALERT");
             int riskScore = rule.path("riskScore").asInt(0);
             String riskLevel = rule.path("riskLevel").asText("MEDIUM");
+
+            if ("PATTERN".equals(type)) {
+                // PATTERN：序列取 ruleConditions.sequence，窗口取 timeWindowMinutes；
+                // 无有效序列（<2 步）跳过该规则，不设阈值门槛
+                java.util.List<String> sequence = parseSequence(rule.path("ruleConditions"));
+                if (sequence.size() < 2) continue;
+                int windowSeconds = Math.max(1, rule.path("timeWindowMinutes").asInt(5)) * 60;
+                collected.merge(type, new RuleConfig.RuleSpec(
+                                ruleId, type, windowSeconds, actionType, riskScore, riskLevel, sequence, windowSeconds),
+                        (a, b) -> b.riskScore > a.riskScore ? b : a);
+                continue;
+            }
+
+            int threshold = rule.path("triggerThreshold").asInt(0);
+            if (threshold <= 0) continue;
 
             // 同类型取 riskScore 最高的
             RuleConfig.RuleSpec existing = collected.get(type);
@@ -120,5 +133,21 @@ public class RuleFetcher implements Runnable {
         RuleConfig.update(new RuleConfig(collected));
         System.out.println("[rule-fetcher] rules refreshed from " + url
                 + " (" + arr.size() + " rules, " + collected.size() + " types active)");
+    }
+
+    /** ruleConditions JSON 节点 → sequence 数组（去空白，保序）；非对象/非数组/含空名返回空列表。 */
+    static java.util.List<String> parseSequence(JsonNode ruleConditions) {
+        if (ruleConditions == null || !ruleConditions.isObject()) {
+            return java.util.List.of();
+        }
+        JsonNode arr = ruleConditions.path("sequence");
+        if (!arr.isArray()) return java.util.List.of();
+        java.util.List<String> seq = new java.util.ArrayList<>();
+        for (JsonNode n : arr) {
+            String s = n.asText("").trim();
+            if (s.isEmpty()) return java.util.List.of();
+            seq.add(s);
+        }
+        return java.util.List.copyOf(seq);
     }
 }

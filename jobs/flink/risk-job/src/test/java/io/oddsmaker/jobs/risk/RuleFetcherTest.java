@@ -224,6 +224,47 @@ class RuleFetcherTest {
     }
 
     @Test
+    @DisplayName("fetchAndApply：PATTERN 序列取 ruleConditions.sequence、窗口取 timeWindowMinutes；<2 步跳过")
+    void fetchAppliesPatternRules() throws Exception {
+        HttpServer server = serverResponding(200, """
+                [
+                  {"id":"p1","ruleType":"PATTERN","ruleConditions":{"sequence":["login","purchase","refund"]},"timeWindowMinutes":10,"actionType":"REVIEW","riskScore":85,"riskLevel":"HIGH"},
+                  {"id":"p2","ruleType":"PATTERN","ruleConditions":{"sequence":["login"]},"timeWindowMinutes":5,"riskScore":95,"riskLevel":"CRITICAL"},
+                  {"id":"p3","ruleType":"PATTERN","ruleConditions":{"sequence":[]},"timeWindowMinutes":5,"riskScore":95,"riskLevel":"CRITICAL"},
+                  {"id":"p4","ruleType":"PATTERN","ruleConditions":"not-object","timeWindowMinutes":5,"riskScore":95,"riskLevel":"CRITICAL"},
+                  {"id":"p5","ruleType":"PATTERN","ruleConditions":{"sequence":["a","  "]},"timeWindowMinutes":5,"riskScore":95,"riskLevel":"CRITICAL"}
+                ]
+                """, new ArrayList<>(), new ArrayList<>());
+        try {
+            RuleFetcher f = new RuleFetcher("http://127.0.0.1:" + server.getAddress().getPort(), "g1", "", 60_000L);
+            invokeFetch(f);
+            RuleConfig.RuleSpec p = RuleConfig.byType("PATTERN");
+            assertEquals("p1", p.ruleId);   // 仅 p1 有效；p2-p5 序列 <2 步被跳过（即使分更高）
+            assertEquals(List.of("login", "purchase", "refund"), p.sequence);
+            assertEquals(600, p.triggerThreshold);   // 借用为窗口秒数：10min × 60
+            assertEquals(600, p.windowSeconds);
+            assertEquals("REVIEW", p.actionType);
+            assertEquals(85, p.riskScore);
+            assertEquals("HIGH", p.riskLevel);
+        } finally {
+            server.stop(0);
+            resetRules();
+        }
+    }
+
+    @Test
+    @DisplayName("parseSequence：非对象/非数组/缺 sequence/含空名返回空表；有效数组去空白保序")
+    void parseSequenceVariants() throws Exception {
+        com.fasterxml.jackson.databind.ObjectMapper m = new com.fasterxml.jackson.databind.ObjectMapper();
+        assertTrue(RuleFetcher.parseSequence(null).isEmpty());
+        assertTrue(RuleFetcher.parseSequence(m.readTree("\"str\"")).isEmpty());
+        assertTrue(RuleFetcher.parseSequence(m.readTree("{}")).isEmpty());
+        assertTrue(RuleFetcher.parseSequence(m.readTree("{\"sequence\":\"a\"}")).isEmpty());
+        assertTrue(RuleFetcher.parseSequence(m.readTree("{\"sequence\":[\"a\",\"\"]}")).isEmpty());
+        assertEquals(List.of("a", "b"), RuleFetcher.parseSequence(m.readTree("{\"sequence\":[\" a \",\"b\"]}")));
+    }
+
+    @Test
     @DisplayName("构造器：去尾斜杠；无斜杠原样")
     void constructorStripsTrailingSlash() throws Exception {
         RuleFetcher f = new RuleFetcher("http://localhost:8085/", "g", "t", 1000L);
