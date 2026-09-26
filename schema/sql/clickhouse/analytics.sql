@@ -18,7 +18,8 @@ PARTITION BY (game_id, environment, toYYYYMM(cohort_date))
 -- subject_id 必须进排序键：SummingMergeTree 按 ORDER BY 键折叠同键行对 users 求和，
 -- 不进键会把不同主体合并成"去重前计数"。进键后每主体一行（users=1），
 -- 上层 sum(users) 聚合口径不变，且支持 subject_id IN (SELECT ... segment_members) 分群下推。
--- 已有部署需重建表迁移（SummingMergeTree 不支持修改排序键）：建新表 → 双写/回填 → 换名。
+-- 已有部署需重建表迁移（SummingMergeTree 不支持修改排序键）：
+-- 脚本见 migrations/2026-09-retention-daily-subject-id.sql（停旧 job → 迁移 → 换名 → 起新 job）。
 ORDER BY (game_id, environment, cohort_date, d, subject_id);
 
 CREATE TABLE IF NOT EXISTS funnels_2step
