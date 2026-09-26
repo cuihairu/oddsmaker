@@ -1,0 +1,37 @@
+# oddsmaker-agent 配置样例（复制为 agent.properties 后按需修改）
+# 同名 System property 可逐键覆盖本文件（密钥不落盘：java -Dgateway.api-key=... -jar ...）
+
+# ── 推送目标（Gateway /v1/batch）──────────────────────────────
+gateway.endpoint=https://ingest.oddsmaker.local
+gateway.api-key=pk_game_xxx
+
+# ── 维度归属 ─────────────────────────────────────────────
+game.id=game_demo
+game.environment=prod
+dimension.type=item
+
+# ── 数据源（mysql / postgres / csv 三选一，单进程单源）─────────
+source.type=mysql
+
+# 方式 A：DB 增量查询（只读账号 + 从库；查询单 ? 占位，必须 ORDER BY <水位列> 结尾）
+source.jdbc.url=jdbc:mysql://replica.internal:3306/game?useSSL=true
+source.jdbc.user=oddsmaker_ro
+source.jdbc.password=change-me
+source.jdbc.query=SELECT item_code AS resource_id, item_name AS name, category, rarity, updated_at, UNIX_TIMESTAMP(updated_at)*1000 AS version_ts FROM items WHERE updated_at > ? ORDER BY updated_at LIMIT 1000
+source.jdbc.cursor-column=updated_at
+# 首次运行起始水位（epoch millis / ISO-8601 / 原样字符串），缺省从头拉
+# source.jdbc.cursor-initial=0
+
+# 方式 B：CSV 目录（按文件名序扫 *.csv；处理完整文件才记断点，增量 = 投递新文件）
+# source.type=csv
+# source.csv.dir=/data/dimension-exports
+
+# ── Agent 行为 ─────────────────────────────────────────────
+agent.batch-size=500
+agent.poll-seconds=300
+agent.checkpoint-path=/var/lib/oddsmaker-agent/checkpoint.json
+
+# ── 同步状态上报（Control；url 留空则跳过）────────────────────
+status.url=https://control.oddsmaker.local/api/dimensions/sync-status
+status.token=change-me
+status.source-key=agent-mysql-main

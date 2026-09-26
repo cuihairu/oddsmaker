@@ -14,4 +14,5 @@ include(
   ,"jobs:flink:risk-job"
   ,"jobs:flink:identity-merge-job"
   ,"jobs:flink:dimension-sync-job"
+  ,"agents:dimension-sync-agent"
 )

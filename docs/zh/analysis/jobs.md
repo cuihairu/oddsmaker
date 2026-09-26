@@ -65,6 +65,8 @@ SELECT resource_id, name, type, rarity FROM item_dim FINAL
 WHERE game_id = 'game_demo' AND environment = 'prod';
 ```
 
+生产数据通常由同步 Agent 推入（见 [维度数据同步](../reference/dimension-sync) 的 Sync Agent 一节）：Agent 在游戏方内网读 DB/CSV，以 `event_name=dimension_define`、`event_type=dimension` 推 Gateway `/v1/batch`；同步位点与心跳经 `POST /api/dimensions/sync-status` 上报 Control，`GET /api/dimensions/sync-status?gameId=` 可查每个 source 的延迟与错误计数。
+
 ## risk-job（实时风控）
 
 消费 `oddsmaker.events_raw`，对每条事件做七类规则检测，命中后输出 `risk_events` 到 Kafka（供 Control Service 实时告警/审核）和 ClickHouse（供风控看板和审计）。

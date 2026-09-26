@@ -2,7 +2,7 @@
 
 本文档记录 Oddsmaker 当前未完成的功能项，按优先级排列，包含设计、实现方案和验收标准。每项推进前先在此登记，避免散落讨论。
 
-> **2026-09 状态同步**：本清单为早期行动项视角，现按各项落地结果标注状态（详见下表与各节状态行）。阶段级进度以仓库根 `todo.md` 为活跃跟踪表——P7 竞品差距收敛已全部完成（发布说明见 [release-notes/v0.2.0.md](../../release-notes/v0.2.0.md)），P8 MMP 归因有条件立项处于暂停项。真正剩余的独立事项只剩两个：维度同步独立 Agent 仓库、Python 训练管线，均按业务需要再排（原第三项 PATTERN 规则类型已于本批完成）。
+> **2026-09 状态同步**：本清单为早期行动项视角，现按各项落地结果标注状态（详见下表与各节状态行）。阶段级进度以仓库根 `todo.md` 为活跃跟踪表——P7 竞品差距收敛已全部完成（发布说明见 [release-notes/v0.2.0.md](../../release-notes/v0.2.0.md)），P8 MMP 归因有条件立项处于暂停项。维度同步 Agent 已交付（见 §4），真正剩余的独立事项只剩 Python 训练管线一项，按业务需要再排（PATTERN 规则类型已于本批早些时候完成）。
 
 已完成的功能见各阶段文档：
 - [资源事件设计](../analysis/jobs)（事实数据）
@@ -16,7 +16,7 @@
 | 1 | identity-merge Flink job | P2.2 | 后端作业 | SDK identify 真正生效 | ✅ 已完成 |
 | 2 | risk-job 规则动态化 | P3.2 | 作业增强 | 加规则不重启 | ✅ 已完成（RuleFetcher 定时拉取 + `-D` fallback） |
 | 3 | risk-job 规则类型扩展 | P3.2 | 作业增强 | 覆盖更多风控场景 | ✅ 已完成：THRESHOLD/FREQUENCY/VELOCITY/RATIO/DUPLICATE_RECEIPT/AD_REWARD/PATTERN 七类全上线（PATTERN 为 keyed 状态机实现，免 flink-cep 依赖） |
-| 4 | 维度同步 Agent | 横向 | 新模块 | 维度同步落地 | 🔶 本仓库侧已落地（dimension-sync-job + item_dim/level_dim），sync-status API 与独立 Agent 仓库未做 |
+| 4 | 维度同步 Agent | 横向 | 新模块 | 维度同步落地 | ✅ 已交付：`agents/dimension-sync-agent/`（mysql/postgres/csv source）+ sync-status API（V0.9.14）+ dimension-sync-job（excel/kafka source 按需再加） |
 | 5 | 符号化服务 | P4.3 | 新服务 | Crash 可读 | ✅ 以替代方案完成：仓库内符号化引擎（symbol_mappings.mapping_rules 正则规则，V0.8.5）+ CrashFingerprinter；独立微服务方案不再跟进 |
 | 6 | 预测模型训练管线 | P4.4 | 管线 | ML 模型实际可用 | 🔶 以可解释启发式替代落地（ChurnScorer / pLTV 乘数法 / RiskScorer，predictions 归档）；Python 训练管线暂缓 |
 
@@ -162,7 +162,7 @@ risk-job 检测逻辑（按规则配置执行）
 
 ## 4. 维度同步 Agent
 
-> **状态（2026-09）：本仓库侧已落地**——`jobs/flink/dimension-sync-job/`（SCD2 写维度表）与 `schema/sql/clickhouse/dimensions.sql` 已交付；未做：Control 侧 `dimension_sync_status` 表与 `/api/dimensions/sync-status` API、独立 Agent 仓库（mysql/postgres/csv source）。按接入需求再启动。
+> **状态（2026-09）：已交付**——本仓库侧（`jobs/flink/dimension-sync-job/` SCD2 写维度表 + `schema/sql/clickhouse/dimensions.sql`）先期完成；本批交付 Control 侧 `dimension_sync_status` 表（V0.9.14）+ `/api/dimensions/sync-status` 心跳上报/查询 API（dimension:read / dimension:manage 权限），以及 Agent 本体 `agents/dimension-sync-agent/`——**零仓库内依赖的独立 Gradle 模块**（仅 Jackson + JDK HttpClient + runtimeOnly JDBC 驱动），mysql/postgres 增量查询与 CSV 目录两类 source 已实现，excel/kafka 按接入需要再加；需要独立仓库时对 `agents/dimension-sync-agent/` 目录做 git subtree split 即可，无需改动任何代码。
 
 ### 目标
 
@@ -182,10 +182,11 @@ risk-job 检测逻辑（按规则配置执行）
 - Control Service：加 `dimension_sync_status` 表记录每个游戏的最后同步时间/位点。
 - ClickHouse：新增 `item_dim` / `level_dim` 表（SCD2，见 dimension-sync.md）。
 
-Agent 本身（独立仓库）提供：
-- `mysql` / `postgres` source（增量查询）
-- `csv-file` / `excel-file` source（watch 目录）
-- 推送到 Gateway 的 sink
+Agent 本体（`agents/dimension-sync-agent/`，零仓库内依赖可拆独立仓库）提供：
+- `mysql` / `postgres` source（增量查询：单 ? 占位 + ORDER BY 水位列）
+- `csv` source（按文件名序扫描目录，文件粒度断点）
+- 推送到 Gateway `/v1/batch` 的 sink（NDJSON，`event_name=dimension_define`）
+- 每轮心跳上报 Control `/api/dimensions/sync-status`
 
 ### 涉及文件（本仓库）
 
@@ -301,8 +302,7 @@ predictions 表（user_id, model_id, score, predicted_at）
 
 ## 推进节奏建议（2026-09 更新）
 
-原清单 1/2/3/5 已完成、4/6 部分落地。当前实际剩余与排期建议：
+原清单 1/2/3/4/5 已完成、6 部分落地。当前实际剩余与排期建议：
 
-1. **维度同步独立 Agent 仓库 + sync-status API**：本仓库侧已就绪，有真实维度接入需求时再启动。
-2. **Python 训练管线**：现有启发式打分可解释且够用，有明确精度诉求时再立项。
-3. **P8 MMP 归因**：有条件立项（前置：任一 MMP 原始数据导出权限，Data Locker / CSV uploads 任一），达成前不启动，见 todo.md 暂停项与 `docs/mmp-attribution-evaluation.md`。
+1. **Python 训练管线**：现有启发式打分可解释且够用，有明确精度诉求时再立项。
+2. **P8 MMP 归因**：有条件立项（前置：任一 MMP 原始数据导出权限，Data Locker / CSV uploads 任一），达成前不启动，见 todo.md 暂停项与 `docs/mmp-attribution-evaluation.md`。

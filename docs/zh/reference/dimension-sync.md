@@ -124,51 +124,65 @@ Content-Type: application/x-ndjson
 
 ### Sync Agent（`oddsmaker-agent`）
 
-Oddsmaker 提供的开源同步 Agent，游戏方在自己网络内部署。Agent 读本地源头，通过 HTTPS 推到 Gateway。
+Oddsmaker 提供的开源同步 Agent，游戏方在自己网络内部署。Agent 读本地源头，通过 HTTPS 推到 Gateway。**已实现**：仓库 `agents/dimension-sync-agent/`——零仓库内依赖的独立 Gradle 模块（仅 Jackson + JDK HttpClient + runtimeOnly JDBC 驱动），支持 `mysql` / `postgres` / `csv` 三类 source（`excel-file` / `kafka` 按需扩展），可整体目录 git subtree 拆出为独立仓库。
 
 ```
 游戏方内网:
   oddsmaker-agent
-    ├─ source: mysql | postgres | csv-file | excel-file | kafka
-    ├─ transform: 按 mapping 配置转换字段
-    ├─ checkpoint: 本地断点续传
-    └─ sink: HTTPS POST /v1/dimension → Oddsmaker Gateway
+    ├─ source: mysql | postgres | csv          （excel/kafka 按需扩展）
+    ├─ transform: 控制列映射（dim_type/resource_id/op/version_ts，其余列进 attributes）
+    ├─ checkpoint: 本地 checkpoint.json（原子落盘）
+    └─ sink: HTTPS POST /v1/batch（NDJSON，event_name=dimension_define）
 ```
 
-配置示例（`agent.yaml`）：
+配置示例（`agent.properties`；同名 System property 可逐键覆盖文件值，便于密钥不落盘 `-Dgateway.api-key=...`）：
 
-```yaml
-source:
-  type: mysql
-  dsn: "readonly:***@tcp(127.0.0.1:3306)/game?parseTime=true"
-  query: "SELECT item_code AS resource_id, item_name AS name, category, rarity, updated_at FROM items WHERE updated_at > ? ORDER BY updated_at LIMIT 1000"
-  schedule: "*/5 * * * *"
+```properties
+# 推送目标（Gateway /v1/batch）
+gateway.endpoint=https://ingest.oddsmaker.local
+gateway.api-key=pk_game_xxx
 
-transform:
-  mapping:
-    resource_id: "${resource_id}"
-    name: "${name}"
-    type: "${category}"
-    rarity: "${rarity}"
-    version_ts: "${updated_at_unix_millis}"
+# 维度归属
+game.id=game_demo
+game.environment=prod
+dimension.type=item
 
-sink:
-  type: oddsmaker-gateway
-  endpoint: https://ingest.oddsmaker.local
-  api_key: pk_game_xxx
-  batch_size: 100
+# 数据源之一：mysql / postgres（增量查询——单 ? 占位，必须以 ORDER BY <水位列> 结尾）
+source.type=mysql
+source.jdbc.url=jdbc:mysql://replica.internal:3306/game?useSSL=true
+source.jdbc.user=oddsmaker_ro
+source.jdbc.password=***
+source.jdbc.query=SELECT item_code AS resource_id, item_name AS name, category, rarity, updated_at, UNIX_TIMESTAMP(updated_at)*1000 AS version_ts FROM items WHERE updated_at > ? ORDER BY updated_at LIMIT 1000
+source.jdbc.cursor-column=updated_at
+
+# 数据源之二：csv 目录（按文件名序扫 *.csv，处理完整文件才记断点；增量 = 投递新文件）
+# source.type=csv
+# source.csv.dir=/data/dimension-exports
+
+# Agent 行为
+agent.batch-size=500
+agent.poll-seconds=300
+agent.checkpoint-path=/var/lib/oddsmaker-agent/checkpoint.json
+
+# 同步状态上报（Control /api/dimensions/sync-status；url 缺省则跳过）
+status.url=https://control.oddsmaker.local/api/dimensions/sync-status
+status.token=<admin-token>
+status.source-key=agent-mysql-main
 ```
 
-关键约束：
+启动：`./gradlew :agents:dimension-sync-agent:installDist` 后运行 `build/install/dimension-sync-agent/bin/dimension-sync-agent --config=/etc/oddsmaker/agent.properties`。
+
+关键约束（均为已实现行为）：
 
 - **只读账号**：Agent 持有的 DB 账号只授 SELECT 权限。
-- **强制读从库**：配置项禁止指向主库，避免影响线上。
-- **增量查询**：必须基于 `updated_at` 或自增 ID，禁止全表扫。
-- **限频 + 批量**：默认 5 分钟一次、每批 1000 条，可按游戏配置。
-- **断点续传**：checkpoint 存本地 SQLite，并定期上报到 Control Service 做容灾。
-- **凭证不出游戏网络**：DB 凭证只在 Agent 本地，Oddsmaker 侧永远拿不到。
+- **读从库**：连接串指向从库，避免影响线上。
+- **增量查询**：必须基于 `updated_at` 或自增 ID，禁止全表扫。水位以类型标签存 checkpoint（`n:` 整型 / `t:` 时间 / `s:` 字符串），恢复时按原类型绑定 PreparedStatement（PG 的 timestamp 列拒绝 bigint 字面量）。
+- **限频 + 批量**：默认 5 分钟一轮、每批 500 条，可按需配置。
+- **断点续传**：checkpoint 为本地 JSON 文件，原子落盘（tmp + move）；**推送全部成功才前进**，失败下一轮以旧水位重放同窗口——下游 item_dim/level_dim 是 `ReplacingMergeTree(version_ts)`，重放幂等。
+- **凭证不出游戏网络**：DB 凭证只在 Agent 本地；上报 Control 的只有位点与计数，拿不到任何源数据。
+- **心跳可观测**：每轮上报 `POST /api/dimensions/sync-status`（camelCase JSON：`gameId`/`environment`/`sourceKey`/`sourceType`/`cursor`/`lastEventTs`/`pushedCount`/`errorCount`/`lastError`，`x-admin-token` 鉴权）；Control 侧 `GET /api/dimensions/sync-status?gameId=` 返回两口径延迟——`sinceLastPushSeconds`（Agent 存活）与 `sinceLastEventSeconds`（源头新鲜度）。
 
-Agent 是一个独立的 `oddsmaker-agent` 项目，支持多种 source 适配器（DB / 文件 / Kafka）。这也是 **FileImport 方案的归宿**——文件导入本质是 Agent 的一个 source 类型，不用单独立项。
+这也是 **FileImport 方案的归宿**——文件导入本质是 Agent 的一个 source 类型，不用单独立项。
 
 ### HTTP Pull
 

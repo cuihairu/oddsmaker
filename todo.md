@@ -76,6 +76,10 @@
 
 明确不跟进（详见竞品分析 §4）：Session Replay、行业基准、游戏后端（排行榜/成就/多人服务器）、自建推送通道、广告平台直连、多租户 SaaS 化。
 
+## P7 后续批次（2026-09）
+
+- [x] 维度同步 Agent + sync-status API：`agents/dimension-sync-agent/`（零仓库内依赖的独立 Gradle 模块，可 subtree 拆出）——mysql/postgres 增量查询 source（单 ? 占位、ORDER BY 水位列、`n:/t:/s:` 类型标签水位按原类型绑定）+ CSV 目录 source（RFC 4180、文件粒度断点）；checkpoint.json 原子落盘、推送成功才前进（失败重放，ReplacingMergeTree 幂等）；NDJSON 推 Gateway `/v1/batch`（event_name=dimension_define）；Control 侧 V0.9.14 `dimension_sync_status` 表 + `/api/dimensions/sync-status` 心跳上报/查询（dimension:read/manage 权限，两口径延迟 sinceLastPushSeconds / sinceLastEventSeconds）；excel/kafka source 与控制台管理页按接入需要再加
+
 ## 暂停项
 
 - [ ] 不继续实现 Organization/Tenant 相关新功能
