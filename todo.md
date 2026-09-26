@@ -79,3 +79,4 @@
 
 - [ ] 不继续实现 Organization/Tenant 相关新功能
 - [ ] 不继续做租户套餐、租户升级、跨公司 Row Policy
+- [ ] P8 MMP 归因接入（有条件立项，2026-09-26 核对）：前置条件为拿到任一 MMP 的原始数据导出权限（Data Locker / CSV uploads 任一），当前未达成——仅保留调研文档 `docs/mmp-attribution-evaluation.md`，达成前不启动
