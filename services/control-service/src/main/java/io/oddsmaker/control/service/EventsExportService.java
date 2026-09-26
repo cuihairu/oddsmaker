@@ -24,7 +24,6 @@ import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.zip.GZIPOutputStream;
 
@@ -234,9 +233,5 @@ public class EventsExportService {
         } catch (Exception ignore) {
             // 清理失败不影响错误上报
         }
-    }
-
-    static String normalize(String s) {
-        return s == null ? "" : s.trim().toLowerCase(Locale.ROOT);
     }
 }

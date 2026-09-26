@@ -149,6 +149,12 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: '/raw-export',
+      name: 'raw-export',
+      component: () => import('@/views/RawDataExportView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
       path: '/data-retention',
       name: 'data-retention',
       component: () => import('@/views/DataRetentionView.vue'),
