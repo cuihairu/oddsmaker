@@ -14,7 +14,7 @@ def test_train_all_synthetic_e2e(tmp_path, capsys):
     code = main(["train", "--model", "all", "--source", "synthetic",
                  "--out", str(out)])
     assert code == 0
-    for name in ("churn", "pltv", "risk"):
+    for name in ("churn", "pltv", "risk", "propensity"):
         artifact = load_artifact(out / f"{name}.json")
         assert artifact["source"] == "synthetic"
         assert artifact["training_rows"] > 0
@@ -28,6 +28,10 @@ def test_train_all_synthetic_e2e(tmp_path, capsys):
 
     pltv = load_artifact(out / "pltv.json")
     assert pltv["multiplier"] > 0                       # extra 字段合并到产物顶层
+
+    propensity = load_artifact(out / "propensity.json")
+    assert propensity["metrics"]["auc"] > 0.7
+    assert propensity["auc_gain_vs_heuristic"] > 0      # 付费倾向 LR 严格跑赢启发式
 
     stdout = capsys.readouterr().out
     assert "训练完成" in stdout and "启发式基线" in stdout

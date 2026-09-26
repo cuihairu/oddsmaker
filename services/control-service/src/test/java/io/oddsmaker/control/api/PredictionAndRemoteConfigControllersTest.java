@@ -76,6 +76,18 @@ class PredictionAndRemoteConfigControllersTest {
         verify(accessGuard).requireGamePermission("g", "game:read");
     }
 
+    @Test
+    @DisplayName("付费倾向：刷新 game:update、榜单 game:read")
+    void propensityEndpoints() {
+        when(predictionService.refreshPropensity("g", null)).thenReturn(Map.of("scored", 1));
+        when(predictionService.topPropensity("g", null, 100)).thenReturn(Map.of("users", List.of()));
+
+        predictionController.refreshPropensity("g", null);
+        verify(accessGuard).requireGamePermission("g", "game:update");
+        predictionController.topPropensity("g", null, 100);
+        verify(accessGuard).requireGamePermission("g", "game:read");
+    }
+
     // ===== Remote Config =====
 
     @Mock

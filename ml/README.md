@@ -4,15 +4,16 @@
 
 依赖保持轻量（numpy / pandas / scikit-learn），全部离线可跑：演示与测试用种子合成的合成数据，不联网下载任何模型/资源。
 
-## 三个模型
+## 四个模型
 
 | model | 预测目标 | 特征（口径对齐） | Java 启发式基线 | 可训练版 |
 |---|---|---|---|---|
 | `churn` | 快照后 14 天无事件（§6 目标定义） | `v_user_features_30d`：不活跃天数 / 30 天会话数 / 事件数 / 收入 | `ChurnScorer`：0.7×不活跃 + 0.3×会话衰减 − 付费缓冲 | StandardScaler + LogisticRegression |
 | `risk` | 主体被升级处置（`risk_actions` 中 block/review） | `risk_events` 30 天：各严重度命中数 + 规则多样性 | `RiskScorer`：固定 4/3/2/1 严重度加权 / 40 | LR（class_weight=balanced，学习严重度权重） |
 | `pltv` | 成熟 cohort 的 D30 ARPU | `v_ltv_by_cohort_day` + `v_user_first_seen`：D7 ARPU → D30 ARPU | `LtvForecastAssembler`：成熟 cohort 比值等权均值 | 过原点 WLS（w = cohort 人数），留出 cohort 上与基线比 MAPE |
+| `propensity` | 快照后 14 天内有付费事件 | `v_user_features_30d`（与 churn 同特征同口径，仅标签不同） | `PropensityScorer`：历史付费为主因子 + 会话正向 − 不活跃衰减 | StandardScaler + LogisticRegression |
 
-设计原则：**可解释优先**。三个可训练版都是线性模型（系数即权重），产物 JSON 直接给出 `feature_names + coefficients + intercept`，Java 侧做点积 + sigmoid 即可打分，无需 Python 运行时。
+设计原则：**可解释优先**。四个可训练版都是线性模型（系数即权重），产物 JSON 直接给出 `feature_names + coefficients + intercept`，Java 侧做点积 + sigmoid 即可打分，无需 Python 运行时。
 
 ## 一键跑通（合成数据，无需 ClickHouse）
 
@@ -23,13 +24,13 @@ cd ml   # 仓库 ml/ 目录（本目录）
 
 # 全链路：数据 → 特征 → 训练 → 评估（含启发式基线对打）→ 产物导出
 .venv/bin/python -m oddsmaker_ml train --model all --source synthetic --out artifacts
-# → artifacts/churn.json / pltv.json / risk.json
+# → artifacts/churn.json / pltv.json / risk.json / propensity.json
 
 # 校验产物
 .venv/bin/python -m oddsmaker_ml validate artifacts/*.json
 ```
 
-单模型：`--model churn|pltv|risk`；换种子：`--seed`（同种子结果完全可复现）。
+单模型：`--model churn|pltv|risk|propensity`；换种子：`--seed`（同种子结果完全可复现）。
 
 ## 真实数据（ClickHouse HTTP）
 
@@ -67,7 +68,13 @@ cd ml   # 仓库 ml/ 目录（本目录）
 }
 ```
 
-写回链路（已交付，Control 侧）：`POST /api/ml-artifacts` 注册版本化产物（校验语义对齐 Python `validate_artifact`，同版本重训覆盖，写审计）→ `PredictionMetricsService` 的 `refreshChurn / refreshRiskScore / refreshPltv` 批量打分（按 `feature_names` 从 ClickHouse 取特征，线性点积 + sigmoid；pltv 为 D7 收入 × 产物乘数）→ 写 `predictions` 表（TTL 语义照旧）。产物在场且特征口径匹配时优先模型分（`path=model`，落库 `model_id/model_version`），缺失、损坏或不匹配回落既有启发式（`path=heuristic`，`heuristic_churn_v1 / rule_aggregate_v1 / cohort_ratio_v1`），两条路径在返回体与落库行上均可区分。ClickHouse 未配置时诚实降级（`available=false`），不伪造结果。
+写回链路（已交付，Control 侧）：`POST /api/ml-artifacts` 注册版本化产物（校验语义对齐 Python `validate_artifact`，同版本重训覆盖，写审计）→ `PredictionMetricsService` 的 `refreshChurn / refreshRiskScore / refreshPltv / refreshPropensity` 批量打分（按 `feature_names` 从 ClickHouse 取特征，线性点积 + sigmoid；pltv 为 D7 收入 × 产物乘数）→ 写 `predictions` 表（TTL 语义照旧）。产物在场且特征口径匹配时优先模型分（`path=model`，落库 `model_id/model_version`），缺失、损坏或不匹配回落既有启发式（`path=heuristic`，`heuristic_churn_v1 / rule_aggregate_v1 / cohort_ratio_v1 / heuristic_propensity_v1`），两条路径在返回体与落库行上均可区分。ClickHouse 未配置时诚实降级（`available=false`），不伪造结果。
+
+## 训练调度（Control 侧自动重训，已交付）
+
+`MLModelService.scheduledMlRetrain()`（cron `oddsmaker.ml.retrain.cron`，默认每日 04:20）委托 `MlRetrainScheduler`：发现 `ml_model_artifacts` 里已注册的游戏 → 触发本包训练子进程（`python3 -m oddsmaker_ml train --model all`，数据源优先 ClickHouse 真实数据：CH 可用且 HTTP url 可推导——显式 `oddsmaker.ml.retrain.clickhouse-url` 优先，否则从 JDBC url 推导；不可用时按开关回落合成数据跑通）→ 产物逐个校验并注册（同版本覆盖即幂等）→ 触发四类批量打分回写 predictions。诚实降级：训练失败 / 产物非法 / 打分异常只写审计（FAILURE / PARTIAL / SKIPPED，actor=`ml-retrain`）与日志，不阻塞既有链路；单游戏失败不阻断其余游戏。
+
+开关与配置（`oddsmaker.ml.retrain.*`，默认关闭）：`enabled` / `cron` / `python-bin` / `ml-dir` / `model-version` / `environment` / `clickhouse-url` / `timeout-seconds`（默认 900）/ `allow-synthetic`（默认 true；设 false 时 CH 不可用即跳过，不落合成产物污染真实打分）。冷启动：对某游戏手动 `POST /api/ml-artifacts` 注册一次产物，即进入自动重训循环。
 
 ## 开发
 
@@ -80,5 +87,4 @@ cd ml   # 仓库 ml/ 目录（本目录）
 
 - 仅线性可解释模型；GBDT（XGBoost/LightGBM）等精度升级按需再加（接口不变，替换 `models_*` 内部即可）。
 - churn 评估在单快照上做（时间外推验证需多快照滚动截取，真实数据接入时再加）。
-- propensity（付费倾向，§6 列出的第三类）未含在本批，可按 churn 管线复制扩展。
 - 实时打分（Flink 消费事件查模型）不在本批：先批量日打分回写 predictions。

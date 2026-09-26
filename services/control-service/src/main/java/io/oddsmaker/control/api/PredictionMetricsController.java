@@ -13,6 +13,8 @@ import java.util.Map;
  * - GET  /{gameId}/churn                高流失风险用户榜
  * - POST /{gameId}/risk-score/refresh   重算主体模型风险分（risk_events 严重度加权）
  * - GET  /{gameId}/risk-score           高模型风险分主体榜
+ * - POST /{gameId}/propensity/refresh   付费倾向批量预测（PropensityScorer 启发式，可替换 ML）
+ * - GET  /{gameId}/propensity           高付费倾向用户榜
  */
 @RestController
 @RequestMapping("/api/prediction-metrics")
@@ -77,5 +79,23 @@ public class PredictionMetricsController {
             @RequestParam(value = "limit", required = false) Integer limit) {
         accessGuard.requireGamePermission(gameId, "game:read");
         return ResponseEntity.ok(predictionMetricsService.topPltv(gameId, environment, limit));
+    }
+
+    /** 付费倾向批量预测（30 天特征，产物优先 / PropensityScorer 回落） */
+    @PostMapping("/{gameId}/propensity/refresh")
+    public ResponseEntity<Map<String, Object>> refreshPropensity(
+            @PathVariable String gameId,
+            @RequestParam(value = "environment", required = false) String environment) {
+        accessGuard.requireGamePermission(gameId, "game:update");
+        return ResponseEntity.ok(predictionMetricsService.refreshPropensity(gameId, environment));
+    }
+
+    @GetMapping("/{gameId}/propensity")
+    public ResponseEntity<Map<String, Object>> topPropensity(
+            @PathVariable String gameId,
+            @RequestParam(value = "environment", required = false) String environment,
+            @RequestParam(value = "limit", required = false) Integer limit) {
+        accessGuard.requireGamePermission(gameId, "game:read");
+        return ResponseEntity.ok(predictionMetricsService.topPropensity(gameId, environment, limit));
     }
 }

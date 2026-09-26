@@ -17,15 +17,16 @@ import java.util.Map;
  * 智能化预测服务（ClickHouse 数据源）：
  * - 流失预测：v_user_features_30d 特征 → 打分 → 归档 predictions（type=churn）；
  * - 风险评分模型：risk_events 30 天严重度加权聚合 → 打分 → 归档 predictions（type=risk_model）；
- * - pLTV：未成熟用户（注册 7-30 天）D7 收入 × D7→D30 乘数 → 归档 predictions（type=pltv）。
+ * - pLTV：未成熟用户（注册 7-30 天）D7 收入 × D7→D30 乘数 → 归档 predictions（type=pltv）；
+ * - 付费倾向：v_user_features_30d 特征 → 打分 → 归档 predictions（type=propensity）。
  *
  * <p>打分算子解析（P4.4 收尾，与 ml/ 训练产物打通）：注册且校验通过的产物
  * （MlArtifactRegistry）优先——线性模型 sigmoid(intercept + Σ coef×feature)，
  * pltv 用产物乘数；产物缺失、特征口径不匹配或产物损坏时回落启发式
- * （ChurnScorer / RiskScorer / LtvForecastAssembler）。两条路径可区分：
+ * （ChurnScorer / RiskScorer / LtvForecastAssembler / PropensityScorer）。两条路径可区分：
  * 返回体 path 字段（model / heuristic）+ predictions 落库的 model_id / model_version
  * （产物路径为注册 id + 产物版本，启发式为 heuristic_churn_v1 / rule_aggregate_v1 /
- * cohort_ratio_v1 + v1）。
+ * cohort_ratio_v1 / heuristic_propensity_v1 + v1）。
  * ClickHouse 未配置时统一降级 available=false，不伪造结果。
  */
 @Service
@@ -39,14 +40,24 @@ public class PredictionMetricsService {
     static final String CHURN_HEURISTIC_MODEL = "heuristic_churn_v1";
     static final String RISK_HEURISTIC_MODEL = "rule_aggregate_v1";
     static final String PLTV_HEURISTIC_MODEL = "cohort_ratio_v1";
+    static final String PROPENSITY_HEURISTIC_MODEL = "heuristic_propensity_v1";
     static final String HEURISTIC_VERSION = "v1";
 
     /** churn 特征口径（顺序对齐 ml 产物 feature_names：CHURN_FEATURES） */
     static final List<String> CHURN_FEATURES = List.of(
             "days_inactive_30d", "session_count_30d", "event_count_30d", "revenue_total_30d");
+    /** propensity 特征口径与 churn 相同（同视图同列序，标签不同） */
+    static final List<String> PROPENSITY_FEATURES = CHURN_FEATURES;
     /** risk 特征口径（顺序对齐 ml 产物 RISK_FEATURES） */
     static final List<String> RISK_FEATURES = List.of(
             "critical_30d", "high_30d", "medium_30d", "low_30d", "distinct_rules_30d");
+
+    /** churn/propensity 共用的 30 天特征查询（口径 = v_user_features_30d） */
+    private static final String USER_FEATURES_SQL = "SELECT user_id AS user_id, "
+            + "days_inactive_30d AS days_inactive, session_count_30d AS session_count, "
+            + "event_count_30d AS event_count, revenue_total_30d AS revenue_total "
+            + "FROM v_user_features_30d WHERE game_id = ?%s"
+            + " AND days_inactive_30d >= 3 ORDER BY days_inactive_30d DESC LIMIT " + REFRESH_LIMIT;
 
     private final ClickHouseClient client;
     private final MlArtifactRegistry registry;
@@ -74,11 +85,7 @@ public class PredictionMetricsService {
             resp.put("modelVersion", modelVersion);
         }
 
-        String sql = "SELECT user_id AS user_id, days_inactive_30d AS days_inactive, "
-                + "session_count_30d AS session_count, event_count_30d AS event_count, "
-                + "revenue_total_30d AS revenue_total "
-                + "FROM v_user_features_30d WHERE game_id = ?" + envFilter(environment)
-                + " AND days_inactive_30d >= 3 ORDER BY days_inactive_30d DESC LIMIT " + REFRESH_LIMIT;
+        String sql = String.format(USER_FEATURES_SQL, envFilter(environment));
         List<Map<String, Object>> rows = environment == null || environment.isBlank()
                 ? client.query(sql, gameId)
                 : client.query(sql, gameId, environment);
@@ -144,6 +151,80 @@ public class PredictionMetricsService {
                 : client.query(sql, gameId, environment);
         resp.put("users", toUsers(rows));
         return resp;
+    }
+
+    // ========== 付费倾向（propensity） ==========
+
+    /**
+     * 付费倾向批量预测：30 天特征 → 打分（产物优先，PropensityScorer 启发式回落）
+     * → 归档 predictions（type=propensity）。特征口径与 churn 相同（v_user_features_30d），
+     * 标签语义不同：付费倾向 = 未来 14 天内有付费事件的概率。
+     */
+    public Map<String, Object> refreshPropensity(String gameId, String environment) {
+        Map<String, Object> resp = base(gameId, environment, "propensity");
+        if (!client.isAvailable()) {
+            resp.put("available", false);
+            return resp;
+        }
+        ModelBundle model = resolveModel(gameId, "propensity", PROPENSITY_FEATURES);
+        String modelId = model != null ? model.artifact.id : PROPENSITY_HEURISTIC_MODEL;
+        String modelVersion = model != null ? model.artifact.modelVersion : HEURISTIC_VERSION;
+        resp.put("path", model != null ? "model" : "heuristic");
+        resp.put("model", modelId);
+        if (model != null) {
+            resp.put("modelVersion", modelVersion);
+        }
+
+        String sql = String.format(USER_FEATURES_SQL, envFilter(environment));
+        List<Map<String, Object>> rows = environment == null || environment.isBlank()
+                ? client.query(sql, gameId)
+                : client.query(sql, gameId, environment);
+
+        long high = 0, medium = 0, low = 0;
+        double scoreSum = 0;
+        for (Map<String, Object> row : rows) {
+            String userId = RiskMetricsAssembler.asString(row.get("user_id"));
+            if (userId.isEmpty()) {
+                continue;
+            }
+            double score;
+            if (model != null) {
+                double[] features = {
+                        RiskMetricsAssembler.asDouble(row.get("days_inactive")),
+                        RiskMetricsAssembler.asDouble(row.get("session_count")),
+                        RiskMetricsAssembler.asDouble(row.get("event_count")),
+                        RiskMetricsAssembler.asDouble(row.get("revenue_total"))};
+                score = MlArtifactScorer.score(model.coefficients, model.artifact.intercept, features);
+            } else {
+                PropensityScorer.Scored scored = PropensityScorer.score(
+                        RiskMetricsAssembler.asLong(row.get("days_inactive")),
+                        RiskMetricsAssembler.asLong(row.get("session_count")),
+                        RiskMetricsAssembler.asDouble(row.get("revenue_total")));
+                score = scored.score();
+            }
+            writePrediction(gameId, environment, userId, modelId, modelVersion, "propensity", score);
+            scoreSum += score;
+            String level = score >= PropensityScorer.HIGH ? "high"
+                    : score >= PropensityScorer.MEDIUM ? "medium" : "low";
+            switch (level) {
+                case "high" -> high++;
+                case "medium" -> medium++;
+                default -> low++;
+            }
+        }
+        resp.put("scored", rows.size());
+        resp.put("high", high);
+        resp.put("medium", medium);
+        resp.put("low", low);
+        resp.put("avgScore", rows.isEmpty() ? 0.0 : RetentionMetricsAssembler.round4(scoreSum / rows.size()));
+        logger.info("Propensity refresh: game={} path={} scored={} high={}",
+                gameId, resp.get("path"), rows.size(), high);
+        return resp;
+    }
+
+    /** 高付费倾向用户 */
+    public Map<String, Object> topPropensity(String gameId, String environment, Integer limit) {
+        return topByType(gameId, environment, limit, "propensity");
     }
 
     // ========== 风险评分模型 ==========

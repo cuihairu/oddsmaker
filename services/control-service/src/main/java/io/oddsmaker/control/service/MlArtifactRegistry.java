@@ -32,8 +32,8 @@ public class MlArtifactRegistry {
     private static final Logger logger = LoggerFactory.getLogger(MlArtifactRegistry.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
-    /** 支持的产物类型（对齐 ml 侧 MODEL_TYPES；propensity 训练管线落地后再加） */
-    public static final Set<String> SUPPORTED_TYPES = Set.of("churn", "pltv", "risk");
+    /** 支持的产物类型（对齐 ml 侧 MODEL_TYPES） */
+    public static final Set<String> SUPPORTED_TYPES = Set.of("churn", "pltv", "risk", "propensity");
 
     private final MlArtifactRepo repo;
     private final AuditLogService auditLogService;

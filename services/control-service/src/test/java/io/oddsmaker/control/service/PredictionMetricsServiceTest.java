@@ -81,6 +81,8 @@ class PredictionMetricsServiceTest {
         assertFalse((Boolean) service.topRiskScore("g", null, null).get("available"));
         assertFalse((Boolean) service.refreshPltv("g", null).get("available"));
         assertFalse((Boolean) service.topPltv("g", null, null).get("available"));
+        assertFalse((Boolean) service.refreshPropensity("g", null).get("available"));
+        assertFalse((Boolean) service.topPropensity("g", null, null).get("available"));
         verify(client, never()).query(anyString(), any(Object[].class));
     }
 
@@ -252,6 +254,69 @@ class PredictionMetricsServiceTest {
         assertEquals(0, resp.get("scored"));
         assertNotNull(resp.get("reason"));
         verify(client, never()).update(contains("INSERT INTO predictions"), any(Object[].class));
+    }
+
+    @Test
+    @DisplayName("付费倾向重算（模型路径）：golden case 与 Python 同结果，type=propensity 归档")
+    void propensityUsesModelWhenArtifactMatches() {
+        when(client.isAvailable()).thenReturn(true);
+        when(registry.resolveActive("g", "propensity")).thenReturn(Optional.of(artifact("propensity",
+                CHURN_FEATURES_JSON, "[0.5,-0.2,0.001,0.01]", -1.0, null)));
+        // golden case 与 Python 侧同输入：z = -0.63 → sigmoid = 0.34751053780725555
+        when(client.query(contains("v_user_features_30d"), any(Object[].class)))
+            .thenReturn(List.of(Map.of("user_id", "u1", "days_inactive", 2L,
+                "session_count", 5L, "event_count", 120L, "revenue_total", 25.0)));
+
+        Map<String, Object> resp = service.refreshPropensity("g", "prod");
+
+        assertEquals("model", resp.get("path"));
+        assertEquals("mla_propensity_test", resp.get("model"));
+        assertEquals("v0.1.0", resp.get("modelVersion"));
+
+        ArgumentCaptor<Object[]> args = ArgumentCaptor.forClass(Object[].class);
+        verify(client).update(contains("INSERT INTO predictions"), args.capture());
+        assertEquals("mla_propensity_test", args.getValue()[3]);
+        assertEquals("propensity", args.getValue()[5]);
+        assertEquals(0.34751053780725555, ((Number) args.getValue()[6]).doubleValue(), 1e-6);  // 落库为 float32
+    }
+
+    @Test
+    @DisplayName("付费倾向重算（启发式回落）：PropensityScorer 分级统计并归档")
+    void refreshPropensityFallsBackToHeuristic() {
+        when(client.isAvailable()).thenReturn(true);
+        when(client.query(contains("v_user_features_30d"), any(Object[].class)))
+            .thenReturn(List.of(
+                Map.of("user_id", "u1", "days_inactive", 10L, "session_count", 20L,
+                    "event_count", 200L, "revenue_total", 50.0),
+                Map.of("user_id", "u2", "days_inactive", 5L, "session_count", 3L,
+                    "event_count", 40L, "revenue_total", 0.0),
+                Map.of("user_id", "", "days_inactive", 30L, "session_count", 0L,
+                    "event_count", 0L, "revenue_total", 0.0)));
+
+        Map<String, Object> resp = service.refreshPropensity("g", null);
+
+        assertEquals(3, resp.get("scored"));
+        assertEquals(1L, resp.get("high"));
+        assertEquals("heuristic", resp.get("path"));
+        assertEquals(PredictionMetricsService.PROPENSITY_HEURISTIC_MODEL, resp.get("model"));
+        assertFalse(resp.containsKey("modelVersion"));
+        // 空用户被跳过：仅 2 条写入
+        verify(client, times(2)).update(contains("INSERT INTO predictions"), any(Object[].class));
+    }
+
+    @Test
+    @DisplayName("付费倾向榜单：委托 propensity 类型查询 + 环境过滤")
+    void topPropensityDelegatesTypeAndEnv() {
+        when(client.isAvailable()).thenReturn(true);
+        when(client.query(contains("prediction_type = 'propensity'"), any(Object[].class)))
+            .thenReturn(List.of(Map.of("user_id", "p1", "score", 0.9f,
+                "predicted_at", Timestamp.valueOf("2026-09-09 08:00:00"))));
+
+        Map<String, Object> top = service.topPropensity("g", "prod", 10);
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> users = (List<Map<String, Object>>) top.get("users");
+        assertEquals("p1", users.get(0).get("userId"));
+        verify(client).query(contains("AND environment = ?"), eq("g"), eq("prod"));
     }
 
     @Test

@@ -10,6 +10,7 @@ from oddsmaker_ml.data_io import (
     ClickHouseClient,
     load_churn_rows,
     load_pltv_rows,
+    load_propensity_rows,
     load_risk_rows,
     read_json_each_row,
 )
@@ -122,6 +123,22 @@ def test_load_risk_rows_assembles_labels():
     # severity 字面量必须大写——对齐 risk-job 落库值（'CRITICAL' 等）
     assert "severity = 'CRITICAL'" in client.sqls[0]
     assert "severity = 'critical'" not in client.sqls[0]
+
+
+def test_load_propensity_rows_assembles_labels():
+    client = StaticClient([
+        {"user_id": "u1", "days_inactive_30d": 3, "session_count_30d": 15,
+         "event_count_30d": 120, "revenue_total_30d": 30.0, "forward_paid": 2},   # 未来付费
+        {"user_id": "u2", "days_inactive_30d": 20, "session_count_30d": 1,
+         "event_count_30d": 5, "revenue_total_30d": 0, "forward_paid": 0},
+    ])
+    data = load_propensity_rows(client, "g1", "prod", "2026-03-01")
+    assert data["user_ids"] == ["u1", "u2"]
+    assert data["labels"] == [1, 0]
+    assert data["feature_rows"][0]["revenue_total_30d"] == 30.0
+    sql = client.sqls[0]
+    assert "2026-03-01" in sql and "14" in sql     # 快照日与标签窗注入
+    assert "revenue_amount > 0" in sql             # 付费标签的过滤条件
 
 
 def test_load_pltv_rows_passthrough():

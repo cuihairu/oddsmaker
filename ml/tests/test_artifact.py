@@ -49,8 +49,28 @@ def test_build_artifact_fields_and_trained_at():
 
 def test_build_rejects_unknown_model_type():
     with pytest.raises(ArtifactError):
-        build_artifact("propensity", model_version="v", training_rows=1,
+        build_artifact("chaos", model_version="v", training_rows=1,
                        source="synthetic", metrics={"auc": 1.0}, extra={})
+
+
+def test_propensity_artifact_validates_like_churn():
+    """propensity 走线性分支：feature_names + 等长 coefficients + intercept。"""
+    a = build_artifact(
+        "propensity", model_version="v0.1.0", training_rows=10, source="synthetic",
+        metrics=METRICS, extra={"feature_names": ["a", "b"], "coefficients": [1.0, -2.0],
+                                "intercept": 0.5},
+        game_id="g1",
+    )
+    validate_artifact(a)  # 不抛
+
+    b = build_artifact(
+        "propensity", model_version="v0.1.0", training_rows=10, source="synthetic",
+        metrics=METRICS, extra={"feature_names": ["a", "b"], "coefficients": [1.0],
+                                "intercept": 0.5},
+        game_id="g1",
+    )
+    with pytest.raises(ArtifactError):
+        validate_artifact(b)   # 系数与特征名长度不一致同样拒绝
 
 
 def test_validate_failures():

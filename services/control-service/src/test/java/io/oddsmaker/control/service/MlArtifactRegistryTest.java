@@ -103,6 +103,28 @@ class MlArtifactRegistryTest {
     }
 
     @Test
+    @DisplayName("注册合法 propensity 产物：与 churn 同线性字段校验")
+    void registerValidPropensityArtifact() {
+        when(repo.findByGameIdAndModelTypeAndModelVersion("g", "propensity", "v0.1.0"))
+                .thenReturn(Optional.empty());
+        when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Map<String, Object> a = new HashMap<>();
+        a.put("schema_version", 1);
+        a.put("model_type", "propensity");
+        a.put("model_version", "v0.1.0");
+        a.put("feature_names", List.of("days_inactive_30d", "session_count_30d"));
+        a.put("coefficients", List.of(-0.02, 0.03));
+        a.put("intercept", 0.5);
+
+        MlArtifactEntity saved = registry().register("g", a, "op");
+
+        assertEquals("propensity", saved.modelType);
+        assertEquals("[\"days_inactive_30d\",\"session_count_30d\"]", saved.featureNames);
+        assertEquals(0.5, saved.intercept);
+    }
+
+    @Test
     @DisplayName("同 (game, type, version) 重训覆盖：复用既有行 id")
     void reregisterSameVersionReusesRow() {
         MlArtifactEntity existing = new MlArtifactEntity();
@@ -132,7 +154,7 @@ class MlArtifactRegistryTest {
         assertTrue(e1.getMessage().contains("schema_version"));
 
         Map<String, Object> badType = churnArtifact();
-        badType.put("model_type", "propensity");
+        badType.put("model_type", "chaos");
         assertTrue(assertThrows(IllegalArgumentException.class,
                 () -> r.register("g", badType, "op")).getMessage().contains("model_type"));
 
