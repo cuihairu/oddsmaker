@@ -81,7 +81,7 @@ class RetentionJobTest {
     // ===== 纯函数 =====
 
     @Test
-    @DisplayName("watermarks/retentionKey/uidOf/isNDay/isRolling：构件直测")
+    @DisplayName("watermarks/retentionKey/subjectOf/isNDay/isRolling：构件直测")
     void helpers() throws Exception {
         WatermarkStrategy<RawEvent> wm = RetentionJob.watermarks();
         assertNotNull(wm.createWatermarkGenerator(null));
@@ -103,8 +103,11 @@ class RetentionJobTest {
         assertEquals("g|prod|u1", RetentionJob.retentionKey(keyed));
         keyed.user_id = null;
         keyed.device_id = "d1";
-        assertEquals("g|prod|d1", RetentionJob.retentionKey(keyed));   // uidOf 回退 device_id
-        assertEquals("d1", RetentionJob.uidOf(keyed));
+        assertEquals("g|prod|d1", RetentionJob.retentionKey(keyed));   // subjectOf 回退 device_id
+        assertEquals("d1", RetentionJob.subjectOf(keyed));
+        keyed.player_id = "p1";
+        assertEquals("p1", RetentionJob.subjectOf(keyed));   // player_id 优先
+        assertEquals("g|prod|p1", RetentionJob.retentionKey(keyed));
 
         RetentionJob.RetentionEmit nDay = new RetentionJob.RetentionEmit();
         nDay.rolling = 0;
@@ -121,7 +124,7 @@ class RetentionJobTest {
     // ===== JdbcSink binder =====
 
     @Test
-    @DisplayName("bindRetention：5 个参数按序绑定（N-Day/Rolling 同构）")
+    @DisplayName("bindRetention：5 个参数按序绑定（Rolling 表）")
     void bindRetentionSetsAllParameters() throws Exception {
         RetentionJob.RetentionEmit row = new RetentionJob.RetentionEmit();
         row.gameId = "g";
@@ -145,6 +148,35 @@ class RetentionJobTest {
         assertEquals(7, calls.get("setInt:4"));
         assertEquals(1L, calls.get("setLong:5"));
         assertEquals(5, calls.size());
+    }
+
+    @Test
+    @DisplayName("bindRetentionDaily：6 个参数按序绑定（retention_daily 带 subject_id 维度）")
+    void bindRetentionDailySetsAllParameters() throws Exception {
+        RetentionJob.RetentionEmit row = new RetentionJob.RetentionEmit();
+        row.gameId = "g";
+        row.environment = "prod";
+        row.subjectId = "p1";
+        row.cohortEpochDay = 20_000L;
+        row.d = 7;
+        row.rolling = 0;
+
+        Map<String, Object> calls = new LinkedHashMap<>();
+        PreparedStatement ps = (PreparedStatement) Proxy.newProxyInstance(
+                RetentionJobTest.class.getClassLoader(), new Class<?>[]{PreparedStatement.class},
+                (Object p, Method m, Object[] a) -> {
+                    calls.put(m.getName() + ":" + a[0], a[1]);
+                    return null;
+                });
+        RetentionJob.bindRetentionDaily(ps, row);
+
+        assertEquals("g", calls.get("setString:1"));
+        assertEquals("prod", calls.get("setString:2"));
+        assertEquals("p1", calls.get("setString:3"));
+        assertNotNull(calls.get("setDate:4"));
+        assertEquals(7, calls.get("setInt:5"));
+        assertEquals(1L, calls.get("setLong:6"));
+        assertEquals(6, calls.size());
     }
 
     // ===== RetentionProcess 直测（内存 MapState） =====
@@ -380,12 +412,13 @@ class RetentionJobTest {
     // ===== 分支对侧补充（BRANCH 收口） =====
 
     @Test
-    @DisplayName("uidOf：user_id 非空空串回退 device_id（null 与非空已盖）")
-    void uidOfFallsBackOnEmptyUserId() {
+    @DisplayName("subjectOf：player/user 空串时回退 device_id（非空与 null 已盖）")
+    void subjectOfFallsBackOnBlankPlayerAndUser() {
         RawEvent r = new RawEvent();
+        r.player_id = "";
         r.user_id = "";
         r.device_id = "d1";
-        assertEquals("d1", RetentionJob.uidOf(r));
+        assertEquals("d1", RetentionJob.subjectOf(r));
     }
 
     @Test

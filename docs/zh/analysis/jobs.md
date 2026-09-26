@@ -3,7 +3,7 @@
 包含 7 个作业：
 - events-enrich-job：校验/去重/富化（UA/GeoIP）→ ClickHouse events
 - sessions-job：30 分钟会话窗口 → ClickHouse sessions
-- retention-job：D0/D1/D7/D30 留存 → ClickHouse retention_daily
+- retention-job：D0/D1/D7/D30 留存 → ClickHouse retention_daily（含 subject_id 主体维度，player>user>device，支撑分群过滤走预聚合）/ retention_rolling
 - funnels-job：两步漏斗（level_start→level_complete，超时 24h 可配）→ ClickHouse funnels_2step
 - risk-job：实时风控检测 → Kafka `oddsmaker.risk_events` + ClickHouse risk_events
 - identity-merge-job：消费 `$identify` 事件归并 device_id/player_id 到 identity_id → ClickHouse identities

@@ -8,13 +8,18 @@ CREATE TABLE IF NOT EXISTS retention_daily
 (
   game_id LowCardinality(String),
   environment LowCardinality(String),
+  subject_id String,
   cohort_date Date,
   d UInt16,
   users UInt64
 )
 ENGINE = SummingMergeTree
 PARTITION BY (game_id, environment, toYYYYMM(cohort_date))
-ORDER BY (game_id, environment, cohort_date, d);
+-- subject_id 必须进排序键：SummingMergeTree 按 ORDER BY 键折叠同键行对 users 求和，
+-- 不进键会把不同主体合并成"去重前计数"。进键后每主体一行（users=1），
+-- 上层 sum(users) 聚合口径不变，且支持 subject_id IN (SELECT ... segment_members) 分群下推。
+-- 已有部署需重建表迁移（SummingMergeTree 不支持修改排序键）：建新表 → 双写/回填 → 换名。
+ORDER BY (game_id, environment, cohort_date, d, subject_id);
 
 CREATE TABLE IF NOT EXISTS funnels_2step
 (

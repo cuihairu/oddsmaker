@@ -19,6 +19,9 @@ public class RetentionMetricsService {
 
     private static final int DEFAULT_DAYS = 90;
     private static final int MAX_DAYS = 730;
+    /** 分群实时回退路径的窗口钳制与查询超时（防 events 大窗口全表扫描）。 */
+    private static final int REALTIME_MAX_DAYS = 90;
+    private static final int REALTIME_TIMEOUT_SECONDS = 15;
 
     private final ClickHouseClient client;
 
@@ -50,7 +53,7 @@ public class RetentionMetricsService {
         return resp;
     }
 
-    /** 常规路径：Flink 预聚合的 retention_daily（无主体维度，不支持分群过滤） */
+    /** 常规路径（无分群）：直接聚合 retention_daily，不按主体过滤 */
     private List<Map<String, Object>> aggregateTrend(String gameId, String environment,
                                                      String bucket, LocalDate since) {
         String cohortExpr = bucket.isEmpty() ? "cohort_date" : bucket + "(cohort_date)";
@@ -63,15 +66,44 @@ public class RetentionMetricsService {
     }
 
     /**
-     * 分群路径（P7-2）：retention_daily 无主体维度，改从 events 实时计算。
-     * cohort = 主体首次出现日（与 v_user_first_seen 口径一致，但保留 player>user>device 主体表达式，
-     * 与分群物化口径对齐）；dX = 注册后第 X 天有事件。输出列形与 retention_daily 一致，复用同一 assembler。
+     * 分群路径：优先走 Flink 预聚合的 retention_daily（带 subject_id 维度），
+     * 成员过滤下推 ClickHouse；预聚合无数据（历史 cohort 未带主体维度）时
+     * 回退 events 实时计算（窗口钳制 90 天 + 15s 查询超时，防大窗口全表扫描）。
      */
     private List<Map<String, Object>> segmentTrend(String gameId, String environment,
                                                    String bucket, LocalDate since, String segmentId) {
+        String seg = SegmentService.segmentFilterFragment(SegmentService.SUBJECT_PLAYER);
+        String envF = envFilter(environment);
+        String cohortExpr = bucket.isEmpty() ? "cohort_date" : bucket + "(cohort_date)";
+        String sql = "SELECT " + cohortExpr + " AS cohort, d AS d, sum(users) AS users "
+                + "FROM retention_daily WHERE game_id = ?" + envF
+                + " AND cohort_date >= ? AND d IN (0, 1, 7, 30)"
+                + " AND subject_id != ''" + seg
+                + " GROUP BY cohort, d ORDER BY cohort, d";
+        boolean envBlank = environment == null || environment.isBlank();
+        // 占位符依 SQL 顺序：game → env → since → 成员子查询 (segmentId, gameId)
+        List<Object> args = new ArrayList<>(List.of(gameId));
+        if (!envBlank) args.add(environment);
+        args.add(since);
+        args.addAll(List.of(segmentId, gameId));
+        List<Map<String, Object>> rows = client.query(sql, args.toArray());
+        if (!rows.isEmpty()) {
+            return rows;
+        }
+        return realtimeSegmentTrend(gameId, environment, bucket, segmentId);
+    }
+
+    /**
+     * 实时回退（预聚合缺主体维度的历史数据时兜底）：
+     * cohort = 主体首次出现日（player>user>device 口径，与分群物化对齐）；dX = 注册后第 X 天有事件。
+     * 窗口钳制 90 天并加 max_execution_time，避免大窗口 events 全表扫描拖垮 CH。
+     */
+    private List<Map<String, Object>> realtimeSegmentTrend(String gameId, String environment,
+                                                           String bucket, String segmentId) {
         String subjectExpr = SegmentService.SUBJECT_PLAYER;
         String seg = SegmentService.segmentFilterFragment(subjectExpr);
         String envF = envFilter(environment);
+        LocalDate clampedSince = LocalDate.now(ZoneOffset.UTC).minusDays(REALTIME_MAX_DAYS);
         String cohortSub = "SELECT " + subjectExpr + " AS subject_id, min(event_date) AS cohort_date "
                 + "FROM events WHERE game_id = ?" + envF + seg + " GROUP BY subject_id";
         String activeSub = "SELECT DISTINCT " + subjectExpr + " AS subject_id, event_date "
@@ -82,7 +114,8 @@ public class RetentionMetricsService {
                 + "FROM (" + cohortSub + ") AS f ARRAY JOIN [0, 1, 7, 30] AS d "
                 + "LEFT JOIN (" + activeSub + ") AS e "
                 + "ON e.subject_id = f.subject_id AND dateDiff('day', f.cohort_date, e.event_date) = d "
-                + "WHERE f.cohort_date >= ? GROUP BY cohort, d ORDER BY cohort, d";
+                + "WHERE f.cohort_date >= ? GROUP BY cohort, d ORDER BY cohort, d "
+                + "SETTINGS max_execution_time = " + REALTIME_TIMEOUT_SECONDS;
         boolean envBlank = environment == null || environment.isBlank();
         // 占位符依 SQL 顺序：cohort 子查询 → 活跃子查询 → 外层 since
         List<Object> args = new ArrayList<>(List.of(gameId));
@@ -91,7 +124,7 @@ public class RetentionMetricsService {
         args.add(gameId);
         if (!envBlank) args.add(environment);
         args.addAll(List.of(segmentId, gameId));
-        args.add(since);
+        args.add(clampedSince);
         return client.query(sql, args.toArray());
     }
 

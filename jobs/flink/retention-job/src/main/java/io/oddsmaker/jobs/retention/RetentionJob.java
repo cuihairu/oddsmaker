@@ -94,11 +94,11 @@ public class RetentionJob {
                 .keyBy(RetentionJob::retentionKey)
                 .process(new RetentionProcess(policy));
 
-        // N-Day 留存：恰好第 N 天活跃
+        // N-Day 留存：恰好第 N 天活跃（带 subject_id 主体维度，供分群过滤走预聚合）
         emissions.filter(RetentionJob::isNDay)
                 .addSink(JdbcSink.sink(
-                        "INSERT INTO retention_daily (game_id, environment, cohort_date, d, users) VALUES (?,?,?,?,?)",
-                        RetentionJob::bindRetention,
+                        "INSERT INTO retention_daily (game_id, environment, subject_id, cohort_date, d, users) VALUES (?,?,?,?,?,?)",
+                        RetentionJob::bindRetentionDaily,
                         JdbcExecutionOptions.builder().withBatchIntervalMs(1000).withBatchSize(2000).withMaxRetries(3).build(),
                         new JdbcConnectionOptions.JdbcConnectionOptionsBuilder()
                                 .withUrl(chUrl).withDriverName("com.clickhouse.jdbc.ClickHouseDriver")
@@ -119,9 +119,9 @@ public class RetentionJob {
         return emissions;
     }
 
-    /** 留存分组键：game|environment|uid。 */
+    /** 留存分组键：game|environment|subject。 */
     static String retentionKey(RawEvent r) {
-        return r.game_id + "|" + r.environment + "|" + uidOf(r);
+        return r.game_id + "|" + r.environment + "|" + subjectOf(r);
     }
 
     /** N-Day 输出行（rolling == 0）。 */
@@ -134,7 +134,17 @@ public class RetentionJob {
         return e.rolling > 0;
     }
 
-    /** retention_daily / retention_rolling 写入绑定（两表参数同构）。 */
+    /** retention_daily 写入绑定（6 列，含主体维度）。 */
+    static void bindRetentionDaily(java.sql.PreparedStatement ps, RetentionEmit row) throws java.sql.SQLException {
+        ps.setString(1, row.gameId);
+        ps.setString(2, row.environment);
+        ps.setString(3, row.subjectId);
+        ps.setDate(4, new java.sql.Date(row.cohortEpochDay * 86400000L));
+        ps.setInt(5, row.d);
+        ps.setLong(6, 1L);
+    }
+
+    /** retention_rolling 写入绑定（5 列，无主体维度）。 */
     static void bindRetention(java.sql.PreparedStatement ps, RetentionEmit row) throws java.sql.SQLException {
         ps.setString(1, row.gameId);
         ps.setString(2, row.environment);
@@ -143,9 +153,10 @@ public class RetentionJob {
         ps.setLong(5, 1L);
     }
 
-    static String uidOf(RawEvent r) {
-        Object u = r.user_id;
-        if (u != null && !u.toString().isEmpty()) return u.toString();
+    /** 主体口径（与 SegmentService.SUBJECT_PLAYER 对齐）：player_id → user_id → device_id。 */
+    static String subjectOf(RawEvent r) {
+        if (r.player_id != null && !r.player_id.isEmpty()) return r.player_id;
+        if (r.user_id != null && !r.user_id.isEmpty()) return r.user_id;
         return String.valueOf(r.device_id);
     }
 
@@ -157,7 +168,7 @@ public class RetentionJob {
      * --add-opens java.base/java.time，裸 JVM 直接炸（InaccessibleObjectException）
      */
     public static class RetentionEmit {
-        public String gameId; public String environment; public long cohortEpochDay; public int d; public int rolling;
+        public String gameId; public String environment; public String subjectId; public long cohortEpochDay; public int d; public int rolling;
     }
 
     static class RetentionProcess extends KeyedProcessFunction<String, RawEvent, RetentionEmit> {
@@ -184,6 +195,7 @@ public class RetentionJob {
         public void processElement(RawEvent value, Context ctx, Collector<RetentionEmit> out) throws Exception {
             String gameId = value.game_id.toString();
             String environment = value.environment.toString();
+            String subjectId = subjectOf(value);
             long ms = tsMs(value);
             LocalDate day = LocalDate.ofEpochDay(ms / 86_400_000L);
 
@@ -193,7 +205,8 @@ public class RetentionJob {
                 state.put("first", epochDay);
                 state.put("last", epochDay);
                 RetentionEmit r0 = new RetentionEmit();
-                r0.gameId = gameId; r0.environment = environment; r0.cohortEpochDay = day.toEpochDay(); r0.d = 0; r0.rolling = 0;
+                r0.gameId = gameId; r0.environment = environment; r0.subjectId = subjectId;
+                r0.cohortEpochDay = day.toEpochDay(); r0.d = 0; r0.rolling = 0;
                 out.collect(r0);
                 return;
             }
@@ -205,7 +218,7 @@ public class RetentionJob {
             if (n > 0 && state.get("seen_d_" + n) == null) {
                 state.put("seen_d_" + n, 1L);
                 RetentionEmit r = new RetentionEmit();
-                r.gameId = gameId; r.environment = environment;
+                r.gameId = gameId; r.environment = environment; r.subjectId = subjectId;
                 r.cohortEpochDay = first; r.d = n; r.rolling = 0;
                 out.collect(r);
             }
@@ -217,7 +230,7 @@ public class RetentionJob {
                     if (state.get("seen_r_" + rn) == null) {
                         state.put("seen_r_" + rn, 1L);
                         RetentionEmit r = new RetentionEmit();
-                        r.gameId = gameId; r.environment = environment;
+                        r.gameId = gameId; r.environment = environment; r.subjectId = subjectId;
                         r.cohortEpochDay = first; r.d = rn; r.rolling = rn;
                         out.collect(r);
                     }

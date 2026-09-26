@@ -68,7 +68,7 @@
 ## P7 竞品差距收敛（依据 `docs/competitive-analysis.md`，2026-09 竞品调研）
 
 - [x] P7-1 实时事件检视器（Live Inspector / Debug View）：Gateway 内存环形缓冲记录每条事件结局（accepted/rejected/sampled_out/duplicate + 拒绝原因与 schema 明细）+ `/v1/inspector/recent` 检视 API（API Key 作用域过滤）+ Control 代理端点 + 控制台 Live Inspector 页（轮询刷新）
-- [x] P7-2 可复用用户分群（Segments）：分群定义（属性 + 行为条件）→ ClickHouse 物化（segment_members ReplacingMergeTree）→ 报表注入 segment 过滤（在线/留存/付费漏斗/财务；留存走 events 实时计算路径，报表键 user_id 与 player/device 主体成员不匹配时为空集属预期口径）→ 控制台分群管理页（创建/计算/成员预览/启停/软删）；权限 segment:read / segment:manage
+- [x] P7-2 可复用用户分群（Segments）：分群定义（属性 + 行为条件）→ ClickHouse 物化（segment_members ReplacingMergeTree）→ 报表注入 segment 过滤（在线/留存/付费漏斗/财务/Crash/风控）；留存分群优先走 retention_daily 预聚合（表已加 subject_id 维度并进排序键，SummingMergeTree 需重建表迁移），预聚合无数据时回退 events 实时计算（窗口钳制 90 天 + max_execution_time 15s 限流）→ 控制台分群管理页（创建/计算/成员预览/启停/软删）；权限 segment:read / segment:manage
 - [x] P7-3 自定义仪表盘 widget 化：仪表盘 CRUD（V0.9.13 迁移 + dashboard:read/manage 权限）+ 布局 JSON 校验（widget 类型/数据源白名单、params 数值钳制、span 规范化）+ 控制台 widget 编辑器（KPI/折线/柱状/表格 × 在线/留存/付费漏斗/Crash 四数据源、12 栅格布局、按游戏保存）；权限 dashboard:read / dashboard:manage
 - [x] P7-4 全量原始数据导出：events 按日分区导出 JSONL（gzip 可选）到导出目录（对象存储由运维同步该目录），分批游标读取（单分区上限 500 万行）+ manifest（行数/字节/SHA-256）原子写 + 分区列表 API + 控制台导出页；权限复用 export:execute
 - [x] P7-5 MMP 归因接入评估：AppsFlyer/Adjust 数据源与建表调研（`docs/mmp-attribution-evaluation.md`）——调研结论：三家主流 MMP 均支持 Webhook 实时推 + 定时落自有云存储两类原始数据通道；推荐方案 B（定时云存储导出 → 加载 job → `attribution_installs` 表，与 P7-4 导出目录模式对称），有条件立项进 P8（前置：真实 MMP 原始数据套餐权限）；不做广告平台直连
