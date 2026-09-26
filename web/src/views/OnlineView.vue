@@ -4,8 +4,10 @@ import api from '@/services/api'
 import GameSelector from '@/components/GameSelector.vue'
 import TrendChart from '@/components/TrendChart.vue'
 import { useGameList } from '@/composables/useGameList'
+import { useSegments } from '@/composables/useSegments'
 
 const { currentGameId } = useGameList()
+const { segments, segmentId, loadSegments } = useSegments()
 
 const minutes = ref(5)
 const autoRefresh = ref(true)
@@ -33,7 +35,7 @@ async function load() {
   error.value = ''
   try {
     const response = await api.get(`/api/online-metrics/${currentGameId.value}`, {
-      params: { minutes: minutes.value }
+      params: { minutes: minutes.value, segment_id: segmentId.value || undefined }
     })
     data.value = response.data
   } catch (e) {
@@ -57,10 +59,11 @@ function setupTimer() {
 
 onMounted(() => {
   load()
+  loadSegments()
   setupTimer()
 })
 onUnmounted(() => clearInterval(timer))
-watch([currentGameId, minutes], load)
+watch([currentGameId, minutes, segmentId], load)
 watch(autoRefresh, setupTimer)
 </script>
 
@@ -75,6 +78,10 @@ watch(autoRefresh, setupTimer)
         <GameSelector />
         <select v-model="minutes" class="input !w-auto">
           <option v-for="m in minuteOptions" :key="m" :value="m">近 {{ m }} 分钟</option>
+        </select>
+        <select v-model="segmentId" class="input !w-auto">
+          <option value="">全部分群</option>
+          <option v-for="s in segments" :key="s.id" :value="s.id">{{ s.displayName || s.name }}</option>
         </select>
         <label class="flex items-center gap-2 text-sm text-gray-600">
           <input type="checkbox" v-model="autoRefresh" class="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />

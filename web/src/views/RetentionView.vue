@@ -4,8 +4,10 @@ import api from '@/services/api'
 import GameSelector from '@/components/GameSelector.vue'
 import TrendChart from '@/components/TrendChart.vue'
 import { useGameList } from '@/composables/useGameList'
+import { useSegments } from '@/composables/useSegments'
 
 const { currentGameId } = useGameList()
+const { segments, segmentId, loadSegments } = useSegments()
 
 const granularity = ref('day')
 const days = ref(90)
@@ -36,7 +38,7 @@ async function load() {
   error.value = ''
   try {
     const response = await api.get(`/api/retention-metrics/${currentGameId.value}/trend`, {
-      params: { granularity: granularity.value, days: days.value }
+      params: { granularity: granularity.value, days: days.value, segment_id: segmentId.value || undefined }
     })
     data.value = response.data
   } catch (e) {
@@ -51,8 +53,11 @@ function pct(v) {
   return `${(v * 100).toFixed(2)}%`
 }
 
-onMounted(load)
-watch([currentGameId, granularity, days], load)
+onMounted(() => {
+  load()
+  loadSegments()
+})
+watch([currentGameId, granularity, days, segmentId], load)
 </script>
 
 <template>
@@ -69,6 +74,10 @@ watch([currentGameId, granularity, days], load)
         </select>
         <select v-model="days" class="input !w-auto">
           <option v-for="d in dayOptions" :key="d" :value="d">近 {{ d }} 天</option>
+        </select>
+        <select v-model="segmentId" class="input !w-auto">
+          <option value="">全部分群</option>
+          <option v-for="s in segments" :key="s.id" :value="s.id">{{ s.displayName || s.name }}</option>
         </select>
         <button @click="load" class="btn btn-secondary">刷新</button>
       </div>

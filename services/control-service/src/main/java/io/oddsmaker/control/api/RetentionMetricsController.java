@@ -32,8 +32,9 @@ public class RetentionMetricsController {
             @PathVariable String gameId,
             @RequestParam(value = "environment", required = false) String environment,
             @RequestParam(value = "granularity", defaultValue = "day") String granularity,
-            @RequestParam(value = "days", required = false) Integer days) {
+            @RequestParam(value = "days", required = false) Integer days,
+            @RequestParam(value = "segment_id", required = false) String segmentId) {
         accessGuard.requireGamePermission(gameId, "game:read");
-        return ResponseEntity.ok(retentionMetricsService.trend(gameId, environment, granularity, days));
+        return ResponseEntity.ok(retentionMetricsService.trend(gameId, environment, granularity, days, segmentId));
     }
 }

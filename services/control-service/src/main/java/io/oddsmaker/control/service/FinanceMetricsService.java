@@ -4,6 +4,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -30,33 +31,42 @@ public class FinanceMetricsService {
         this.client = client;
     }
 
-    public Map<String, Object> report(String gameId, String environment, String granularity, Integer days) {
+    public Map<String, Object> report(String gameId, String environment, String granularity, Integer days,
+                                      String segmentId) {
         String g = normalizeGranularity(granularity);
         int d = clampDays(days);
         Map<String, Object> resp = base(gameId, environment, g, d);
+        if (segmentId != null && !segmentId.isBlank()) {
+            resp.put("segmentId", segmentId);
+        }
         if (!client.isAvailable()) {
             resp.put("available", false);
             return resp;
         }
-        List<Map<String, Object>> rows = queryRows(gameId, environment, g, d);
+        List<Map<String, Object>> rows = queryRows(gameId, environment, g, d, segmentId);
         resp.put("rows", rows);
         resp.put("summary", FinanceMetricsAssembler.toSummary(rows));
         return resp;
     }
 
     /** CSV 导出内容（UTF-8 文本，Controller 负责 BOM 与下载头） */
-    public String exportCsv(String gameId, String environment, String granularity, Integer days) {
+    public String exportCsv(String gameId, String environment, String granularity, Integer days, String segmentId) {
         String g = normalizeGranularity(granularity);
         int d = clampDays(days);
         if (!client.isAvailable()) {
             throw new IllegalStateException("ClickHouse not configured, finance export unavailable");
         }
-        return FinanceMetricsAssembler.toCsv(gameId, g, queryRows(gameId, environment, g, d));
+        return FinanceMetricsAssembler.toCsv(gameId, g, queryRows(gameId, environment, g, d, segmentId));
     }
 
-    private List<Map<String, Object>> queryRows(String gameId, String environment, String granularity, int days) {
+    private List<Map<String, Object>> queryRows(String gameId, String environment, String granularity, int days,
+                                                String segmentId) {
         LocalDate since = LocalDate.now(ZoneOffset.UTC).minusDays(days);
         String bucket = "month".equals(granularity) ? "toStartOfMonth" : "";
+        // P7-2：分群过滤——activity 走 events 主体口径；new_users 键为 user_id（与分群 subject_id 匹配）
+        boolean hasSegment = segmentId != null && !segmentId.isBlank();
+        String subjectSeg = hasSegment ? SegmentService.segmentFilterFragment(SUBJECT) : "";
+        String userIdSeg = hasSegment ? SegmentService.segmentFilterFragment("user_id") : "";
 
         String activitySql = "SELECT " + bucketApply(bucket, "event_date") + " AS stat_date, "
                 + "uniqExact(" + SUBJECT + ") AS dau, "
@@ -64,18 +74,22 @@ public class FinanceMetricsService {
                 + "uniqExactIf(" + SUBJECT + ", revenue_amount > 0) AS payers, "
                 + "uniqExactIf(order_id, order_id != '') AS orders "
                 + "FROM events WHERE game_id = ?" + envFilter(environment)
-                + " AND event_date >= ? GROUP BY stat_date ORDER BY stat_date";
-        List<Map<String, Object>> activityRows = environment == null || environment.isBlank()
-                ? client.query(activitySql, gameId, since)
-                : client.query(activitySql, gameId, environment, since);
+                + " AND event_date >= ?" + subjectSeg + " GROUP BY stat_date ORDER BY stat_date";
+        List<Object> activityArgs = new ArrayList<>(List.of(gameId));
+        if (environment != null && !environment.isBlank()) activityArgs.add(environment);
+        activityArgs.add(since);
+        if (hasSegment) activityArgs.addAll(List.of(segmentId, gameId));
+        List<Map<String, Object>> activityRows = client.query(activitySql, activityArgs.toArray());
 
         String newUsersSql = "SELECT " + bucketApply(bucket, "cohort_date") + " AS stat_date, "
                 + "count() AS new_users "
                 + "FROM v_user_first_seen WHERE game_id = ?" + envFilter(environment)
-                + " AND cohort_date >= ? GROUP BY stat_date ORDER BY stat_date";
-        List<Map<String, Object>> newUserRows = environment == null || environment.isBlank()
-                ? client.query(newUsersSql, gameId, since)
-                : client.query(newUsersSql, gameId, environment, since);
+                + " AND cohort_date >= ?" + userIdSeg + " GROUP BY stat_date ORDER BY stat_date";
+        List<Object> newUserArgs = new ArrayList<>(List.of(gameId));
+        if (environment != null && !environment.isBlank()) newUserArgs.add(environment);
+        newUserArgs.add(since);
+        if (hasSegment) newUserArgs.addAll(List.of(segmentId, gameId));
+        List<Map<String, Object>> newUserRows = client.query(newUsersSql, newUserArgs.toArray());
 
         return FinanceMetricsAssembler.toRows(activityRows, newUserRows);
     }

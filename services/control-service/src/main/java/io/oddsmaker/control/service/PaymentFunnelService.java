@@ -4,6 +4,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -25,9 +26,12 @@ public class PaymentFunnelService {
         this.client = client;
     }
 
-    public Map<String, Object> funnel(String gameId, String environment, Integer days) {
+    public Map<String, Object> funnel(String gameId, String environment, Integer days, String segmentId) {
         int d = clampDays(days);
         Map<String, Object> resp = base(gameId, environment, d);
+        if (segmentId != null && !segmentId.isBlank()) {
+            resp.put("segmentId", segmentId);
+        }
         if (!client.isAvailable()) {
             resp.put("available", false);
             return resp;
@@ -35,6 +39,12 @@ public class PaymentFunnelService {
         LocalDate since = LocalDate.now(ZoneOffset.UTC).minusDays(d);
         // 月留存窗口已关闭的 cohort 截止日（30 天窗口 + 1 天缓冲）
         String matureCutoff = LocalDate.now(ZoneOffset.UTC).minusDays(31).toString();
+        // P7-2：segmentId 非空时按分群成员过滤（报表键为 user_id，与分群 subject_id 匹配；
+        // 主体为 player/device 的成员不参与该报表口径）
+        boolean hasSegment = segmentId != null && !segmentId.isBlank();
+        boolean envSet = environment != null && !environment.isBlank();
+        String outerSeg = hasSegment ? SegmentService.segmentFilterFragment("f.user_id") : "";
+        String innerSeg = hasSegment ? SegmentService.segmentFilterFragment("user_id") : "";
 
         // 注册/首充/二充：按 cohort 聚合（首充=付费事件≥1，二充=≥2）
         String funnelSql = "SELECT f.cohort_date AS cohort, uniqExact(f.user_id) AS registered, "
@@ -42,14 +52,20 @@ public class PaymentFunnelService {
                 + "uniqExactIf(f.user_id, p.pay_events >= 2) AS second_pay "
                 + "FROM v_user_first_seen AS f "
                 + "LEFT JOIN (SELECT game_id, environment, user_id, count() AS pay_events FROM events "
-                + "WHERE game_id = ? AND user_id != '' AND revenue_amount > 0" + envFilter(environment)
+                + "WHERE game_id = ? AND user_id != '' AND revenue_amount > 0" + envFilter(environment) + innerSeg
                 + " GROUP BY game_id, environment, user_id) AS p "
                 + "ON f.game_id = p.game_id AND f.environment = p.environment AND f.user_id = p.user_id "
-                + "WHERE f.game_id = ?" + envFilter(environment) + " AND f.cohort_date >= ? "
+                + "WHERE f.game_id = ?" + envFilter(environment) + " AND f.cohort_date >= ?" + outerSeg + " "
                 + "GROUP BY cohort ORDER BY cohort";
-        List<Map<String, Object>> funnelRows = environment == null || environment.isBlank()
-                ? client.query(funnelSql, gameId, gameId, since)
-                : client.query(funnelSql, gameId, environment, gameId, environment, since);
+        // 占位符依 SQL 顺序：p 子查询 (game_id[, env][, 分群]) → 外层 (game_id[, env], since[, 分群])
+        List<Object> funnelArgs = new ArrayList<>(List.of(gameId));
+        if (envSet) funnelArgs.add(environment);
+        if (hasSegment) funnelArgs.addAll(List.of(segmentId, gameId));
+        funnelArgs.add(gameId);
+        if (envSet) funnelArgs.add(environment);
+        funnelArgs.add(since);
+        if (hasSegment) funnelArgs.addAll(List.of(segmentId, gameId));
+        List<Map<String, Object>> funnelRows = client.query(funnelSql, funnelArgs.toArray());
 
         // 月留存：注册后 1-30 天内活跃过的用户
         String retainedSql = "SELECT f.cohort_date AS cohort, uniqExact(f.user_id) AS retained_30 "
@@ -57,11 +73,14 @@ public class PaymentFunnelService {
                 + "INNER JOIN v_user_first_seen AS f "
                 + "ON e.game_id = f.game_id AND e.environment = f.environment AND e.user_id = f.user_id "
                 + "WHERE f.game_id = ?" + envFilter(environment)
-                + " AND f.cohort_date >= ? AND dateDiff('day', f.cohort_date, e.event_date) BETWEEN 1 AND 30 "
+                + " AND f.cohort_date >= ? AND dateDiff('day', f.cohort_date, e.event_date) BETWEEN 1 AND 30"
+                + outerSeg + " "
                 + "GROUP BY cohort ORDER BY cohort";
-        List<Map<String, Object>> retainedRows = environment == null || environment.isBlank()
-                ? client.query(retainedSql, gameId, since)
-                : client.query(retainedSql, gameId, environment, since);
+        List<Object> retainedArgs = new ArrayList<>(List.of(gameId));
+        if (envSet) retainedArgs.add(environment);
+        retainedArgs.add(since);
+        if (hasSegment) retainedArgs.addAll(List.of(segmentId, gameId));
+        List<Map<String, Object>> retainedRows = client.query(retainedSql, retainedArgs.toArray());
 
         List<Map<String, Object>> points =
                 PaymentFunnelAssembler.toCohortPoints(funnelRows, retainedRows, matureCutoff);

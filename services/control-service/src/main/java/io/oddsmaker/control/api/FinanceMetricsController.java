@@ -45,9 +45,10 @@ public class FinanceMetricsController {
             @PathVariable String gameId,
             @RequestParam(value = "environment", required = false) String environment,
             @RequestParam(value = "granularity", defaultValue = "day") String granularity,
-            @RequestParam(value = "days", required = false) Integer days) {
+            @RequestParam(value = "days", required = false) Integer days,
+            @RequestParam(value = "segment_id", required = false) String segmentId) {
         accessGuard.requireGamePermission(gameId, "game:read");
-        return ResponseEntity.ok(financeMetricsService.report(gameId, environment, granularity, days));
+        return ResponseEntity.ok(financeMetricsService.report(gameId, environment, granularity, days, segmentId));
     }
 
     @GetMapping("/{gameId}/export")
@@ -55,9 +56,10 @@ public class FinanceMetricsController {
             @PathVariable String gameId,
             @RequestParam(value = "environment", required = false) String environment,
             @RequestParam(value = "granularity", defaultValue = "day") String granularity,
-            @RequestParam(value = "days", required = false) Integer days) {
+            @RequestParam(value = "days", required = false) Integer days,
+            @RequestParam(value = "segment_id", required = false) String segmentId) {
         accessGuard.requireGamePermission(gameId, "game:read");
-        String csv = financeMetricsService.exportCsv(gameId, environment, granularity, days);
+        String csv = financeMetricsService.exportCsv(gameId, environment, granularity, days, segmentId);
         auditLog.logDataExport("finance_export", gameId,
                 "finance_" + gameId + "_" + granularity + ".csv",
                 currentOperator(), currentOperator(), null);

@@ -42,7 +42,7 @@ class PaymentFunnelServiceTest {
     @DisplayName("CH 未配置降级 available=false")
     void degrades() {
         when(client.isAvailable()).thenReturn(false);
-        Map<String, Object> resp = service.funnel("g", null, 90);
+        Map<String, Object> resp = service.funnel("g", null, 90, null);
         assertEquals(false, resp.get("available"));
         verify(client, never()).query(anyString(), any(Object[].class));
     }
@@ -59,7 +59,7 @@ class PaymentFunnelServiceTest {
         when(client.query(contains("dateDiff"), any(Object[].class)))
             .thenReturn(List.of(Map.of("cohort", Date.valueOf(matureCohort), "retained_30", 35L)));
 
-        Map<String, Object> resp = service.funnel("g", null, 90);
+        Map<String, Object> resp = service.funnel("g", null, 90, null);
 
         @SuppressWarnings("unchecked")
         Map<String, Object> funnel = (Map<String, Object>) resp.get("funnel");
@@ -80,7 +80,7 @@ class PaymentFunnelServiceTest {
         when(client.query(contains("pay_events"), any(Object[].class))).thenReturn(List.of());
         when(client.query(contains("dateDiff"), any(Object[].class))).thenReturn(List.of());
 
-        Map<String, Object> resp = service.funnel("g", "prod", 90);
+        Map<String, Object> resp = service.funnel("g", "prod", 90, null);
 
         assertEquals(true, resp.get("available"));
         verify(client).query(contains("AND environment = ?"), eq("g"), eq("prod"), eq("g"), eq("prod"), any());
@@ -98,13 +98,48 @@ class PaymentFunnelServiceTest {
     void blankEnvironmentAndNonPositiveDays() {
         when(client.isAvailable()).thenReturn(true);
         when(client.query(anyString(), any(Object[].class))).thenReturn(List.of());
-        service.funnel("g", "   ", 90);
+        service.funnel("g", "   ", 90, null);
         // blank 环境：pay_events 查询 varargs 为 (gameId, gameId, since)，dateDiff 为 (gameId, since)
         verify(client).query(contains("pay_events"), org.mockito.ArgumentMatchers.eq("g"),
             org.mockito.ArgumentMatchers.eq("g"), any());
         verify(client).query(contains("dateDiff"), org.mockito.ArgumentMatchers.eq("g"), any());
         assertEquals(90, PaymentFunnelService.clampDays(0));
         assertEquals(90, PaymentFunnelService.clampDays(-7));
+    }
+
+    @Test
+    @DisplayName("分群过滤：漏斗与留存查询注入 segment_members 子查询，参数按 SQL 顺序插入")
+    void segmentFilterInjectsMembershipSubquery() {
+        when(client.isAvailable()).thenReturn(true);
+        when(client.query(contains("pay_events"), any(Object[].class))).thenReturn(List.of());
+        when(client.query(contains("dateDiff"), any(Object[].class))).thenReturn(List.of());
+
+        Map<String, Object> resp = service.funnel("g", "prod", 90, "seg1");
+
+        assertEquals("seg1", resp.get("segmentId"));
+        // 漏斗 SQL：外层 f.user_id 过滤 + p 子查询 user_id 过滤
+        verify(client, org.mockito.Mockito.times(2)).query(contains("f.user_id IN (SELECT subject_id FROM segment_members"), any(Object[].class));
+        verify(client).query(contains("AND user_id IN (SELECT subject_id FROM segment_members"), any(Object[].class));
+        // 漏斗参数依 SQL 顺序：p 子查询 (g, prod, seg1, g) → 外层 (g, prod, since, seg1, g)
+        org.mockito.ArgumentCaptor<Object[]> funnelArgs = org.mockito.ArgumentCaptor.forClass(Object[].class);
+        verify(client).query(contains("pay_events"), (Object[]) funnelArgs.capture());
+        Object[] fa = funnelArgs.getValue();
+        assertEquals(9, fa.length);
+        assertEquals("g", fa[0]);
+        assertEquals("prod", fa[1]);
+        assertEquals("seg1", fa[2]);
+        assertEquals("g", fa[3]);
+        assertEquals("g", fa[4]);
+        assertEquals("prod", fa[5]);
+        assertEquals("seg1", fa[7]);
+        assertEquals("g", fa[8]);
+        // 留存参数：(g, prod, since, seg1, g)
+        org.mockito.ArgumentCaptor<Object[]> retainedArgs = org.mockito.ArgumentCaptor.forClass(Object[].class);
+        verify(client).query(contains("dateDiff"), (Object[]) retainedArgs.capture());
+        Object[] ra = retainedArgs.getValue();
+        assertEquals(5, ra.length);
+        assertEquals("seg1", ra[3]);
+        assertEquals("g", ra[4]);
     }
 
 }

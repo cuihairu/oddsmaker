@@ -3,8 +3,10 @@ import { ref, computed, watch, onMounted } from 'vue'
 import api from '@/services/api'
 import GameSelector from '@/components/GameSelector.vue'
 import { useGameList } from '@/composables/useGameList'
+import { useSegments } from '@/composables/useSegments'
 
 const { currentGameId } = useGameList()
+const { segments, segmentId, loadSegments } = useSegments()
 
 const granularity = ref('day')
 const days = ref(90)
@@ -28,7 +30,7 @@ async function load() {
   error.value = ''
   try {
     const response = await api.get(`/api/finance-metrics/${currentGameId.value}/report`, {
-      params: { granularity: granularity.value, days: days.value }
+      params: { granularity: granularity.value, days: days.value, segment_id: segmentId.value || undefined }
     })
     data.value = response.data
   } catch (e) {
@@ -44,7 +46,7 @@ async function exportCsv() {
   exporting.value = true
   try {
     const response = await api.get(`/api/finance-metrics/${currentGameId.value}/export`, {
-      params: { granularity: granularity.value, days: days.value },
+      params: { granularity: granularity.value, days: days.value, segment_id: segmentId.value || undefined },
       responseType: 'blob'
     })
     const url = window.URL.createObjectURL(new Blob([response.data], { type: 'text/csv;charset=utf-8' }))
@@ -65,8 +67,11 @@ function pct(v) {
   return `${(v * 100).toFixed(2)}%`
 }
 
-onMounted(load)
-watch([currentGameId, granularity, days], load)
+onMounted(() => {
+  load()
+  loadSegments()
+})
+watch([currentGameId, granularity, days, segmentId], load)
 </script>
 
 <template>
@@ -83,6 +88,10 @@ watch([currentGameId, granularity, days], load)
         </select>
         <select v-model="days" class="input !w-auto">
           <option v-for="d in dayOptions" :key="d" :value="d">近 {{ d }} 天</option>
+        </select>
+        <select v-model="segmentId" class="input !w-auto">
+          <option value="">全部分群</option>
+          <option v-for="s in segments" :key="s.id" :value="s.id">{{ s.displayName || s.name }}</option>
         </select>
         <button @click="load" class="btn btn-secondary">刷新</button>
         <button @click="exportCsv" class="btn btn-primary" :disabled="exporting || (data && data.available === false)">

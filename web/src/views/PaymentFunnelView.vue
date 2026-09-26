@@ -3,8 +3,10 @@ import { ref, computed, watch, onMounted } from 'vue'
 import api from '@/services/api'
 import GameSelector from '@/components/GameSelector.vue'
 import { useGameList } from '@/composables/useGameList'
+import { useSegments } from '@/composables/useSegments'
 
 const { currentGameId } = useGameList()
+const { segments, segmentId, loadSegments } = useSegments()
 
 const days = ref(90)
 const data = ref(null)
@@ -37,7 +39,7 @@ async function load() {
   error.value = ''
   try {
     const response = await api.get(`/api/payment-metrics/${currentGameId.value}/funnel`, {
-      params: { days: days.value }
+      params: { days: days.value, segment_id: segmentId.value || undefined }
     })
     data.value = response.data
   } catch (e) {
@@ -52,8 +54,11 @@ function pct(v) {
   return v == null ? '-' : `${(v * 100).toFixed(2)}%`
 }
 
-onMounted(load)
-watch([currentGameId, days], load)
+onMounted(() => {
+  load()
+  loadSegments()
+})
+watch([currentGameId, days, segmentId], load)
 </script>
 
 <template>
@@ -67,6 +72,10 @@ watch([currentGameId, days], load)
         <GameSelector />
         <select v-model="days" class="input !w-auto">
           <option v-for="d in dayOptions" :key="d" :value="d">近 {{ d }} 天</option>
+        </select>
+        <select v-model="segmentId" class="input !w-auto">
+          <option value="">全部分群</option>
+          <option v-for="s in segments" :key="s.id" :value="s.id">{{ s.displayName || s.name }}</option>
         </select>
         <button @click="load" class="btn btn-secondary">刷新</button>
       </div>

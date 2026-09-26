@@ -31,8 +31,9 @@ public class PaymentFunnelController {
     public ResponseEntity<Map<String, Object>> funnel(
             @PathVariable String gameId,
             @RequestParam(value = "environment", required = false) String environment,
-            @RequestParam(value = "days", required = false) Integer days) {
+            @RequestParam(value = "days", required = false) Integer days,
+            @RequestParam(value = "segment_id", required = false) String segmentId) {
         accessGuard.requireGamePermission(gameId, "game:read");
-        return ResponseEntity.ok(paymentFunnelService.funnel(gameId, environment, days));
+        return ResponseEntity.ok(paymentFunnelService.funnel(gameId, environment, days, segmentId));
     }
 }

@@ -41,7 +41,7 @@ class RetentionMetricsServiceTest {
     @DisplayName("CH 未配置降级 available=false")
     void degrades() {
         when(client.isAvailable()).thenReturn(false);
-        Map<String, Object> resp = service.trend("g", null, "day", 30);
+        Map<String, Object> resp = service.trend("g", null, "day", 30, null);
         assertEquals(false, resp.get("available"));
         verify(client, never()).query(anyString(), any(Object[].class));
     }
@@ -55,7 +55,7 @@ class RetentionMetricsServiceTest {
                 Map.of("cohort", Date.valueOf("2026-09-01"), "d", 0, "users", 100L),
                 Map.of("cohort", Date.valueOf("2026-09-01"), "d", 1, "users", 40L)));
 
-        Map<String, Object> resp = service.trend("g", null, "day", 30);
+        Map<String, Object> resp = service.trend("g", null, "day", 30, null);
 
         assertEquals(true, resp.get("available"));
         assertEquals("day", resp.get("granularity"));
@@ -74,10 +74,10 @@ class RetentionMetricsServiceTest {
         when(client.query(contains("toMonday"), any(Object[].class))).thenReturn(List.of());
         when(client.query(contains("toStartOfMonth"), any(Object[].class))).thenReturn(List.of());
 
-        service.trend("g", "prod", "week", 30);
+        service.trend("g", "prod", "week", 30, null);
         verify(client).query(contains("toMonday"), eq("g"), eq("prod"), any());
 
-        service.trend("g", "prod", "month", 30);
+        service.trend("g", "prod", "month", 30, null);
         verify(client).query(contains("toStartOfMonth"), eq("g"), eq("prod"), any());
     }
 
@@ -102,10 +102,45 @@ class RetentionMetricsServiceTest {
     void blankEnvironmentAndNonPositiveDays() {
         when(client.isAvailable()).thenReturn(true);
         when(client.query(anyString(), any(Object[].class))).thenReturn(List.of());
-        service.trend("g", "   ", "day", 30);
+        service.trend("g", "   ", "day", 30, null);
         verify(client).query(contains("FROM retention_daily"), org.mockito.ArgumentMatchers.eq("g"), any());
         assertEquals(90, RetentionMetricsService.clampDays(0));
         assertEquals(90, RetentionMetricsService.clampDays(-7));
+    }
+
+    @Test
+    @DisplayName("分群过滤：不走 retention_daily，从 events 实时计算（ARRAY JOIN d0/1/7/30）")
+    void segmentTrendComputesFromEvents() {
+        when(client.isAvailable()).thenReturn(true);
+        when(client.query(contains("ARRAY JOIN [0, 1, 7, 30]"), any(Object[].class)))
+            .thenReturn(List.of(
+                Map.of("cohort", Date.valueOf("2026-09-01"), "d", 0, "users", 50L),
+                Map.of("cohort", Date.valueOf("2026-09-01"), "d", 1, "users", 20L)));
+
+        Map<String, Object> resp = service.trend("g", "prod", "day", 30, "seg1");
+
+        assertEquals("seg1", resp.get("segmentId"));
+        verify(client, never()).query(contains("retention_daily"), any(Object[].class));
+        // cohort 子查询与活跃子查询都按主体口径过滤分群成员
+        verify(client).query(contains("if(player_id != '', player_id"), any(Object[].class));
+        verify(client).query(contains("IN (SELECT subject_id FROM segment_members"), any(Object[].class));
+        // 参数依 SQL 顺序：cohort(g, prod, seg1, g) → 活跃(g, prod, seg1, g) → since
+        org.mockito.ArgumentCaptor<Object[]> args = org.mockito.ArgumentCaptor.forClass(Object[].class);
+        verify(client).query(contains("ARRAY JOIN [0, 1, 7, 30]"), (Object[]) args.capture());
+        Object[] a = args.getValue();
+        assertEquals(9, a.length);
+        assertEquals("g", a[0]);
+        assertEquals("prod", a[1]);
+        assertEquals("seg1", a[2]);
+        assertEquals("g", a[3]);
+        assertEquals("g", a[4]);
+        assertEquals("prod", a[5]);
+        assertEquals("seg1", a[6]);
+        assertEquals("g", a[7]);
+        // 输出列形与 retention_daily 一致，复用同一 assembler
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> points = (List<Map<String, Object>>) resp.get("points");
+        assertEquals(0.4, points.get(0).get("d1Rate"));
     }
 
 }

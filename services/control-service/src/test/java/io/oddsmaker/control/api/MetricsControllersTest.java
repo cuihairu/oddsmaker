@@ -56,9 +56,9 @@ class MetricsControllersTest {
     @DisplayName("留存趋势：game:read 鉴权 + 参数透传")
     void retentionTrend() {
         Map<String, Object> resp = Map.of("available", true);
-        when(retentionService.trend("g", "prod", "week", 30)).thenReturn(resp);
+        when(retentionService.trend("g", "prod", "week", 30, null)).thenReturn(resp);
 
-        assertEquals(resp, retentionController.trend("g", "prod", "week", 30).getBody());
+        assertEquals(resp, retentionController.trend("g", "prod", "week", 30, null).getBody());
         verify(accessGuard).requireGamePermission("g", "game:read");
     }
 
@@ -66,9 +66,9 @@ class MetricsControllersTest {
     @DisplayName("付费漏斗：game:read 鉴权 + 委托")
     void paymentFunnel() {
         Map<String, Object> resp = Map.of("funnel", Map.of());
-        when(funnelService.funnel("g", null, 90)).thenReturn(resp);
+        when(funnelService.funnel("g", null, 90, null)).thenReturn(resp);
 
-        assertEquals(resp, funnelController.funnel("g", null, 90).getBody());
+        assertEquals(resp, funnelController.funnel("g", null, 90, null).getBody());
         verify(accessGuard).requireGamePermission("g", "game:read");
     }
 

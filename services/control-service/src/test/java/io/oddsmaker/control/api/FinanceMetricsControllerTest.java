@@ -44,21 +44,21 @@ class FinanceMetricsControllerTest {
     @DisplayName("报表：game:read 鉴权 + 委托")
     void reportDelegates() {
         Map<String, Object> resp = Map.of("available", true);
-        when(service.report("g", null, "day", 30)).thenReturn(resp);
+        when(service.report("g", null, "day", 30, null)).thenReturn(resp);
 
-        assertEquals(resp, controller.report("g", null, "day", 30).getBody());
+        assertEquals(resp, controller.report("g", null, "day", 30, null).getBody());
         verify(accessGuard).requireGamePermission("g", "game:read");
 
-        when(service.report("g", "prod", "month", 90)).thenReturn(resp);
-        assertEquals(resp, controller.report("g", "prod", "month", 90).getBody());
+        when(service.report("g", "prod", "month", 90, null)).thenReturn(resp);
+        assertEquals(resp, controller.report("g", "prod", "month", 90, null).getBody());
     }
 
     @Test
     @DisplayName("导出：UTF-8 BOM + CSV 头 + 附件名 + EXPORT 审计")
     void exportReturnsCsvWithBomAndAudits() {
-        when(service.exportCsv("g", null, "month", 90)).thenReturn("a,b\n1,2\n");
+        when(service.exportCsv("g", null, "month", 90, null)).thenReturn("a,b\n1,2\n");
 
-        var response = controller.export("g", null, "month", 90);
+        var response = controller.export("g", null, "month", 90, null);
 
         assertEquals(200, response.getStatusCode().value());
         String fileName = response.getHeaders().getContentDisposition().getFilename();
@@ -75,13 +75,13 @@ class FinanceMetricsControllerTest {
     @Test
     @DisplayName("导出：认证主体存在时操作者取 getName（currentOperator auth!=null 侧）")
     void exportOperatorFromPrincipal() {
-        when(service.exportCsv("g", null, "day", 30)).thenReturn("a,b\n");
+        when(service.exportCsv("g", null, "day", 30, null)).thenReturn("a,b\n");
         var auth = new org.springframework.security.authentication.TestingAuthenticationToken(
             "alice", "n", "ROLE_ADMIN");
         try {
             org.springframework.security.core.context.SecurityContextHolder
                 .getContext().setAuthentication(auth);
-            assertEquals(200, controller.export("g", null, "day", 30).getStatusCode().value());
+            assertEquals(200, controller.export("g", null, "day", 30, null).getStatusCode().value());
             verify(auditLog).logDataExport(eq("finance_export"), eq("g"), contains("finance_g_day.csv"),
                 eq("alice"), eq("alice"), isNull());
         } finally {
