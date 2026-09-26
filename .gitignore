@@ -59,3 +59,11 @@ bin/
 
 # 部署 jar 是本机 gradle 构建产物，rsync 传远端，不进 git（GitHub 100MB 硬限）
 deploy-rt/jars/
+
+# Python（ml/ 训练管线）
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+ml/.venv/
+ml/artifacts/
