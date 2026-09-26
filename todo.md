@@ -79,6 +79,7 @@
 ## P7 后续批次（2026-09）
 
 - [x] 维度同步 Agent + sync-status API：`agents/dimension-sync-agent/`（零仓库内依赖的独立 Gradle 模块，可 subtree 拆出）——mysql/postgres 增量查询 source（单 ? 占位、ORDER BY 水位列、`n:/t:/s:` 类型标签水位按原类型绑定）+ CSV 目录 source（RFC 4180、文件粒度断点）；checkpoint.json 原子落盘、推送成功才前进（失败重放，ReplacingMergeTree 幂等）；NDJSON 推 Gateway `/v1/batch`（event_name=dimension_define）；Control 侧 V0.9.14 `dimension_sync_status` 表 + `/api/dimensions/sync-status` 心跳上报/查询（dimension:read/manage 权限，两口径延迟 sinceLastPushSeconds / sinceLastEventSeconds）；excel/kafka source 与控制台管理页按接入需要再加
+- [x] Python 训练管线（P4.4）：`ml/`（`oddsmaker-ml`，numpy/pandas/scikit-learn）——churn（LR，标签=快照后 14 天无事件）/ pltv（D7→D30 乘数过原点 WLS，w=cohort 人数，留出 cohort MAPE 对照等权比值均值基线）/ risk（LR balanced，标签=risk_actions block/review 升级处置）；产物为版本化 JSON（feature_names + coefficients + intercept，Java 点积 + sigmoid 打分、无需 Python 运行时），自带启发式基线对照（auc_gain_vs_heuristic / holdout MAPE）；`python3 -m oddsmaker_ml train --source synthetic` 种子合成数据离线一键跑通且可复现，ClickHouse HTTP 真实数据入口仅依赖标准库 urllib（JSONEachRow）；propensity / GBDT / 产物注册回写 predictions 按需再加
 
 ## 暂停项
 

@@ -193,10 +193,10 @@ ORDER BY created_at DESC;
 ### 2.1 PII处理完善
 
 **现状**:
-- ✓ Gateway中有PII策略 (allow/mask/drop)
-- ✗ Flink中PII处理不完整
-- ✗ 无加密存储方案
-- ✗ 无数据最小化策略
+- [Gateway中有PII策略 (allow/mask/drop)]
+- [Flink中PII处理不完整]
+- [无加密存储方案]
+- [无数据最小化策略]
 
 **改进方案**:
 

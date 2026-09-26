@@ -122,7 +122,9 @@ event_id     = 单事件唯一 ID
 
 - `services/gateway-service/`：采集入口、协议校验、限流、PII、前置风控
 - `services/control-service/`：游戏、环境、密钥、策略、实验、风控管理
-- `jobs/flink/`：富化、去重、会话、留存、漏斗、风控等流式作业
+- `jobs/flink/`：富化、去重、会话、留存、漏斗、风控、维度同步等流式作业
+- `agents/`：`dimension-sync-agent`——游戏方内网部署的维度同步器（零仓库内依赖）
+- `ml/`：`oddsmaker-ml` 训练管线——churn / pltv / risk 可训练模型（Python，含启发式基线对照）
 - `libs/`：公共模型、鉴权、Kafka、可观测性组件
 - `schema/`：Avro、JSON Schema、ClickHouse DDL、查询脚本
 - `sdks/`：Web、Android、iOS、Unity SDK

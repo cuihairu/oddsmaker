@@ -44,14 +44,14 @@
 
 ## 3. 接入路径对比（oddsmaker 视角）
 
-### 方案 A：实时 Webhook → 自建接收端点
+### 方案 A：实时 Webhook [自建接收端点]
 
 MMP Push API / callbacks 打到 Gateway 或 control 新增 ingestion 端点。
 
 - 优点：秒级新鲜度，可实时反哺风控（渠道作弊识别）。
 - 缺点：需处理签名验证、重放、幂等、限流；MMP 侧重试语义各家不一；端点暴露面 +1。与 P0 安全修复（Gateway 收敛前置校验）方向有张力。
 
-### 方案 B（推荐）：定时云存储导出 → 加载 job → ClickHouse
+### 方案 B（推荐）：定时云存储导出 [加载 job → ClickHouse]
 
 MMP 定时写 S3/GCS（Data Locker / CSV uploads），运维用**与 P7-4 导出目录相同的对象存储同步机制**把文件落到 oddsmaker 侧，新增一个定时加载 job 解析入库。
 

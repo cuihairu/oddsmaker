@@ -2,7 +2,7 @@
 
 本文档记录 Oddsmaker 当前未完成的功能项，按优先级排列，包含设计、实现方案和验收标准。每项推进前先在此登记，避免散落讨论。
 
-> **2026-09 状态同步**：本清单为早期行动项视角，现按各项落地结果标注状态（详见下表与各节状态行）。阶段级进度以仓库根 `todo.md` 为活跃跟踪表——P7 竞品差距收敛已全部完成（发布说明见 [release-notes/v0.2.0.md](../../release-notes/v0.2.0.md)），P8 MMP 归因有条件立项处于暂停项。维度同步 Agent 已交付（见 §4），真正剩余的独立事项只剩 Python 训练管线一项，按业务需要再排（PATTERN 规则类型已于本批早些时候完成）。
+> **2026-09 状态同步**：本清单为早期行动项视角，现按各项落地结果标注状态（详见下表与各节状态行）。阶段级进度以仓库根 `todo.md` 为活跃跟踪表——P7 竞品差距收敛已全部完成（发布说明见 [release-notes/v0.2.0.md](../../release-notes/v0.2.0.md)），其后维度同步 Agent（§4）与 Python 训练管线（§6）也已交付。本清单所列事项至此全部闭环，唯一在册的是 P8 MMP 归因（有条件立项暂停，未达前置不动）。
 
 已完成的功能见各阶段文档：
 - [资源事件设计](../analysis/jobs)（事实数据）
@@ -18,7 +18,7 @@
 | 3 | risk-job 规则类型扩展 | P3.2 | 作业增强 | 覆盖更多风控场景 | ✅ 已完成：THRESHOLD/FREQUENCY/VELOCITY/RATIO/DUPLICATE_RECEIPT/AD_REWARD/PATTERN 七类全上线（PATTERN 为 keyed 状态机实现，免 flink-cep 依赖） |
 | 4 | 维度同步 Agent | 横向 | 新模块 | 维度同步落地 | ✅ 已交付：`agents/dimension-sync-agent/`（mysql/postgres/csv source）+ sync-status API（V0.9.14）+ dimension-sync-job（excel/kafka source 按需再加） |
 | 5 | 符号化服务 | P4.3 | 新服务 | Crash 可读 | ✅ 以替代方案完成：仓库内符号化引擎（symbol_mappings.mapping_rules 正则规则，V0.8.5）+ CrashFingerprinter；独立微服务方案不再跟进 |
-| 6 | 预测模型训练管线 | P4.4 | 管线 | ML 模型实际可用 | 🔶 以可解释启发式替代落地（ChurnScorer / pLTV 乘数法 / RiskScorer，predictions 归档）；Python 训练管线暂缓 |
+| 6 | 预测模型训练管线 | P4.4 | 管线 | ML 模型实际可用 | ✅ 已交付：P6 启发式 + `ml/` 可训练管线（churn/pltv/risk，产物 JSON 自带启发式基线对照）；propensity / GBDT / 回写调度按需 |
 
 ---
 
@@ -250,7 +250,7 @@ Symbolicator Service (独立微服务)
 
 ## 6. 预测模型训练管线
 
-> **状态（2026-09）：以启发式方案替代落地，训练管线暂缓**——P6 已交付可解释启发式：pLTV D7→D30 乘数法（成熟 cohort 拟合外推）、流失预测（v_user_features_30d 特征 → ChurnScorer 打分 + reasons）、风险评分模型（risk_events 30 天严重度加权 → RiskScorer），predictions 统一归档（TTL 30 天）。Python（XGBoost/MLflow）训练管线在现有精度够用前不启动。
+> **状态（2026-09）：已交付**——P6 可解释启发式（pLTV D7→D30 乘数法 / ChurnScorer / RiskScorer）先期落地；本批补上可训练管线 `ml/`（`oddsmaker-ml` Python 包，numpy/pandas/scikit-learn）：churn（标签 = 快照后 14 天无事件，LR）、pltv（D7→D30 乘数过原点 WLS，留出 cohort MAPE 对照等权比值均值基线）、risk（标签 = risk_actions block/review，class_weight=balanced LR）。全部线性可解释——产物为版本化 JSON（feature_names + coefficients + intercept），Java 侧点积 + sigmoid 即可打分、无需 Python 运行时；每模型产物自带启发式基线对照（auc_gain_vs_heuristic / holdout MAPE 增益可审计）。合成数据 `python3 -m oddsmaker_ml train --source synthetic` 离线一键跑通；ClickHouse HTTP（JSONEachRow，仅标准库 urllib）真实数据入口。propensity（付费倾向）与 GBDT 精度升级按需扩展；MLModelService 产物注册与批量回写 predictions 为后续衔接点。
 
 ### 目标
 
@@ -302,7 +302,6 @@ predictions 表（user_id, model_id, score, predicted_at）
 
 ## 推进节奏建议（2026-09 更新）
 
-原清单 1/2/3/4/5 已完成、6 部分落地。当前实际剩余与排期建议：
+原清单 1/2/3/4/5/6 已全部交付。当前仅剩一项：
 
-1. **Python 训练管线**：现有启发式打分可解释且够用，有明确精度诉求时再立项。
-2. **P8 MMP 归因**：有条件立项（前置：任一 MMP 原始数据导出权限，Data Locker / CSV uploads 任一），达成前不启动，见 todo.md 暂停项与 `docs/mmp-attribution-evaluation.md`。
+1. **P8 MMP 归因**：有条件立项（前置：任一 MMP 原始数据导出权限，Data Locker / CSV uploads 任一），达成前不启动，见 todo.md 暂停项与 `docs/mmp-attribution-evaluation.md`。

@@ -13,49 +13,49 @@ PIT 是一个事件驱动的游戏分析平台，包含：
 
 ## 1. 多租户支持现状
 
-### 1.1 Project_ID 支持程度 ✓ 85%
+### 1.1 Project_ID 支持程度 [85%]
 
 **已实现**:
-- ✓ 事件模型核心支持 (Avro/JSON schema)
-- ✓ Gateway服务完整的project_id验证
-- ✓ ClickHouse分区设计 (project_id, toYYYYMM)
-- ✓ Control API - 项目创建/编辑/删除
-- ✓ 所有Flink作业按project_id处理
-- ✓ API密钥绑定到项目
-- ✓ 实验隔离（per project）
+- [事件模型核心支持 (Avro/JSON schema)]
+- [Gateway服务完整的project_id验证]
+- [ClickHouse分区设计 (project_id, toYYYYMM)]
+- [Control API - 项目创建/编辑/删除]
+- [所有Flink作业按project_id处理]
+- [API密钥绑定到项目]
+- [实验隔离（per project）]
 
 **缺失**:
-- ✗ 项目间权限隔离未实现 (API密钥在Gateway中验证但无基于project的权限)
-- ✗ 跨项目数据访问控制 (Superset/ClickHouse中)
-- ✗ 项目级配额/限流管理
-- ✗ 项目间数据导出防护
+- [项目间权限隔离未实现 (API密钥在Gateway中验证但无基于project的权限)]
+- [跨项目数据访问控制 (Superset/ClickHouse中)]
+- [项目级配额/限流管理]
+- [项目间数据导出防护]
 
 **建议**: 中优先级 - 当前单一客户/多项目场景可用，企业多客户场景需完善
 
 ---
 
-### 1.2 用户权限管理现状 ✗ 15%
+### 1.2 用户权限管理现状 [15%]
 
 **已实现**:
-- ✓ AdminToken认证 (x-admin-token header)
-- ✓ API密钥生成和撤销
-- ✓ 基本API密钥策略 (RPM限流、PII策略)
+- [AdminToken认证 (x-admin-token header)]
+- [API密钥生成和撤销]
+- [基本API密钥策略 (RPM限流、PII策略)]
 
 **缺失**:
-- ✗ 无用户/账户系统
-- ✗ 无RBAC (角色based权限控制)
-- ✗ 无资源级权限 (谁可以修改某项目)
-- ✗ Web UI认证 (HTML页面完全开放)
-- ✗ 无审计日志
-- ✗ 无会话管理
-- ✗ OAuth/SSO支持
+- [无用户/账户系统]
+- [无RBAC (角色based权限控制)]
+- [无资源级权限 (谁可以修改某项目)]
+- [Web UI认证 (HTML页面完全开放)]
+- [无审计日志]
+- [无会话管理]
+- [OAuth/SSO支持]
 
 **完成度**: 15% | **优先级**: 高 (生产环保必需)
 **推荐方案**: 引入Keycloak/Auth0或自建轻量认证系统
 
 ---
 
-### 1.3 组织层级支持情况 ✗ 0%
+### 1.3 组织层级支持情况 [0%]
 
 **缺失**:
 - 无组织(Organization)概念
@@ -70,7 +70,7 @@ PIT 是一个事件驱动的游戏分析平台，包含：
 
 ## 2. 数据模型现状
 
-### 2.1 现有的事件表结构 ✓ 90%
+### 2.1 现有的事件表结构 [90%]
 
 **核心事件表** (`events`):
 ```
@@ -84,44 +84,44 @@ Fields:
 **完成度**: 90%
 
 **细节**:
-- ✓ Avro schema完整定义
-- ✓ JSON schema验证
-- ✓ 通用字段覆盖完整
-- ✓ Revenue字段支持
-- ✗ 缺少client_ip和user_agent持久化 (仅在Gateway处理，不入库)
-- ✗ 缺少session表的完整性保证
+- [Avro schema完整定义]
+- [JSON schema验证]
+- [通用字段覆盖完整]
+- [Revenue字段支持]
+- [缺少client_ip和user_agent持久化 (仅在Gateway处理，不入库)]
+- [缺少session表的完整性保证]
 
 **相关视图/表**:
-- ✓ mv_events_by_day (每日事件聚合)
-- ✓ mv_dau (日活用户)
-- ✓ mv_revenue_by_day (收入聚合)
-- ✓ mv_ua_os_by_day (浏览器/OS分布)
-- ✓ sessions 表 (Flink输出)
-- ✓ retention_daily (留存按cohort)
-- ✓ funnels_2step (漏斗分析)
+- [mv_events_by_day (每日事件聚合)]
+- [mv_dau (日活用户)]
+- [mv_revenue_by_day (收入聚合)]
+- [mv_ua_os_by_day (浏览器/OS分布)]
+- [sessions 表 (Flink输出)]
+- [retention_daily (留存按cohort)]
+- [funnels_2step (漏斗分析)]
 
 ---
 
-### 2.2 游戏专业字段支持情况 ✓ 60%
+### 2.2 游戏专业字段支持情况 [60%]
 
 **现有游戏相关字段**:
-- ✓ revenue_amount + revenue_currency (内购)
-- ✓ props_json (自定义属性)
-- ✓ platform/app_version (平台版本分布)
-- ✓ country (地域)
-- ✓ session_id (会话)
-- ✓ Flink提取的device_class (从UA)
+- [revenue_amount + revenue_currency (内购)]
+- [props_json (自定义属性)]
+- [platform/app_version (平台版本分布)]
+- [country (地域)]
+- [session_id (会话)]
+- [Flink提取的device_class (从UA)]
 
 **缺失关键游戏字段**:
-- ✗ level/stage (关卡进度)
-- ✗ character_id (角色)
-- ✗ battle_result (战斗胜负)
-- ✗ dungeon_type (副本类型)
-- ✗ loot_items (掉落物品)
-- ✗ achievement_id (成就)
-- ✗ premium_currency (高级货币)
-- ✗ A/B测试分组字段 (仅在props中软实现)
-- ✗ 无针对游戏的预定义事件类型
+- [level/stage (关卡进度)]
+- [character_id (角色)]
+- [battle_result (战斗胜负)]
+- [dungeon_type (副本类型)]
+- [loot_items (掉落物品)]
+- [achievement_id (成就)]
+- [premium_currency (高级货币)]
+- [A/B测试分组字段 (仅在props中软实现)]
+- [无针对游戏的预定义事件类型]
 
 **完成度**: 60% | **优先级**: 中
 **建议方案**:
@@ -156,7 +156,7 @@ Fields:
 
 ## 3. 分析能力现状
 
-### 3.1 Flink 作业分析能力 ✓ 75%
+### 3.1 Flink 作业分析能力 [75%]
 
 **已实现的作业**:
 
@@ -191,39 +191,39 @@ Fields:
 
 ---
 
-### 3.2 ClickHouse 聚合表和视图 ✓ 80%
+### 3.2 ClickHouse 聚合表和视图 [80%]
 
 **物化视图**(Materialized Views):
-- ✓ mv_events_by_day (按日/事件聚合)
-- ✓ mv_dau (日活)
-- ✓ mv_revenue_by_day (收入)
-- ✓ mv_ua_os_by_day (UA/OS维度)
+- [mv_events_by_day (按日/事件聚合)]
+- [mv_dau (日活)]
+- [mv_revenue_by_day (收入)]
+- [mv_ua_os_by_day (UA/OS维度)]
 
 **普通视图**(Views):
-- ✓ v_events_trend (事件趋势)
-- ✓ v_dau_trend (DAU趋势)
-- ✓ v_revenue_by_day (收入视图)
-- ✓ v_ua_by_day, v_os_by_day
+- [v_events_trend (事件趋势)]
+- [v_dau_trend (DAU趋势)]
+- [v_revenue_by_day (收入视图)]
+- [v_ua_by_day, v_os_by_day]
 
 **实验相关视图**:
-- ✓ v_exp_exposures_by_day (曝光日聚合)
-- ✓ v_exp_exposures_by_day_dim (曝光含维度)
-- ✓ v_exp_conversion_same_day (同日转化)
-- ✓ v_exp_conversion_24h, v_exp_conversion_7d (转化率)
-- ✓ 含维度的转化视图 (_dim后缀)
+- [v_exp_exposures_by_day (曝光日聚合)]
+- [v_exp_exposures_by_day_dim (曝光含维度)]
+- [v_exp_conversion_same_day (同日转化)]
+- [v_exp_conversion_24h, v_exp_conversion_7d (转化率)]
+- [含维度的转化视图 (_dim后缀)]
 
 **缺失**:
-- ✗ 用户路径分析视图
-- ✗ 成本 ROI 视图
-- ✗ 均值/分位数聚合表 (p50/p95等)
-- ✗ 按custom dimensions的预聚合
-- ✗ 实时(5分钟级)视图
+- [用户路径分析视图]
+- [成本 ROI 视图]
+- [均值/分位数聚合表 (p50/p95等)]
+- [按custom dimensions的预聚合]
+- [实时(5分钟级)视图]
 
 **完成度**: 80% | **优先级**: 低 (基础覆盖，优化后期)
 
 ---
 
-### 3.3 Superset 中的图表和仪表板 ✓ 70%
+### 3.3 Superset 中的图表和仪表板 [70%]
 
 **已实现仪表板**:
 - `oddsmaker_overview` - 概览仪表板
@@ -245,19 +245,19 @@ Fields:
 - Variant Performance by Platform (平台表现)
 
 **图表功能完成度**:
-- ✓ 时间范围过滤 (Last 90 days默认)
-- ✓ 全局过滤器
-- ✓ 下钻表格 (部分图表)
-- ✓ 导出CSV
+- [时间范围过滤 (Last 90 days默认)]
+- [全局过滤器]
+- [下钻表格 (部分图表)]
+- [导出CSV]
 
 **缺失**:
-- ✗ 用户留存曲线
-- ✗ 漏斗分析图表
-- ✗ 用户分群对比
-- ✗ 自定义指标计算
-- ✗ 预警规则
-- ✗ 移动端优化
-- ✗ 实时更新(仅每日)
+- [用户留存曲线]
+- [漏斗分析图表]
+- [用户分群对比]
+- [自定义指标计算]
+- [预警规则]
+- [移动端优化]
+- [实时更新(仅每日)]
 
 **完成度**: 70% | **优先级**: 中 (基础可用，需增强分析深度)
 
@@ -265,68 +265,68 @@ Fields:
 
 ## 4. 控制面功能现状
 
-### 4.1 现有的管理 API ✓ 85%
+### 4.1 现有的管理 API [85%]
 
 **项目管理**:
-- ✓ POST /api/projects (创建/更新)
-- ✓ GET /api/projects (列表/搜索)
-- ✓ DELETE /api/projects/{id}
+- [POST /api/projects (创建/更新)]
+- [GET /api/projects (列表/搜索)]
+- [DELETE /api/projects/{id}]
 
 **API密钥管理**:
-- ✓ POST /api/keys (创建)
-- ✓ GET /api/keys (列表/搜索含分页)
-- ✓ GET /api/keys/{apiKey} (获取详情)
-- ✓ PUT /api/keys/{apiKey}/policy (更新策略)
-- ✓ DELETE /api/keys/{apiKey}
-- ✓ POST /api/keys/batch-delete
+- [POST /api/keys (创建)]
+- [GET /api/keys (列表/搜索含分页)]
+- [GET /api/keys/{apiKey} (获取详情)]
+- [PUT /api/keys/{apiKey}/policy (更新策略)]
+- [DELETE /api/keys/{apiKey}]
+- [POST /api/keys/batch-delete]
 
 **实验管理**:
-- ✓ POST /api/experiments (创建/更新)
-- ✓ GET /api/experiments (列表含过滤/分页)
-- ✓ POST /api/experiments/{id}/publish
-- ✓ POST /api/experiments/{id}/pause
-- ✓ DELETE /api/experiments/{id}
-- ✓ GET /api/experiments/export (导出)
-- ✓ GET /api/config/{projectId} (SDK获取运行中的实验)
-- ✓ POST /api/experiments/validate (校验)
+- [POST /api/experiments (创建/更新)]
+- [GET /api/experiments (列表含过滤/分页)]
+- [POST /api/experiments/{id}/publish]
+- [POST /api/experiments/{id}/pause]
+- [DELETE /api/experiments/{id}]
+- [GET /api/experiments/export (导出)]
+- [GET /api/config/{projectId} (SDK获取运行中的实验)]
+- [POST /api/experiments/validate (校验)]
 
 **API密钥策略**:
-- ✓ rpm (每个key的requests/min)
-- ✓ ipRpm (每个IP的requests/min)
-- ✓ propsAllowlist (白名单属性)
-- ✓ piiEmail/piiPhone/piiIp (PII处理模式)
-- ✓ denyKeys (拒绝属性)
-- ✓ maskKeys (掩盖属性)
+- [rpm (每个key的requests/min)]
+- [ipRpm (每个IP的requests/min)]
+- [propsAllowlist (白名单属性)]
+- [piiEmail/piiPhone/piiIp (PII处理模式)]
+- [denyKeys (拒绝属性)]
+- [maskKeys (掩盖属性)]
 
 **缺失**:
-- ✗ 用户/权限API
-- ✗ 审计日志API
-- ✗ 指标查询API (ad-hoc)
-- ✗ 报表导出
-- ✗ 告警规则API
+- [用户/权限API]
+- [审计日志API]
+- [指标查询API (ad-hoc)]
+- [报表导出]
+- [告警规则API]
 
 **完成度**: 85% | **优先级**: 低 (基础覆盖完整)
 
 ---
 
-### 4.2 Web UI 的完成度 ✓ 70%
+### 4.2 Web UI 的完成度 [70%]
 
 **已实现功能** (位于 /services/control-service/static/index.html):
 
 **管理区块**:
-- ✓ Admin Token设置
-- ✓ 项目CRUD (创建/编辑/删除/列表)
-- ✓ 分页搜索
-- ✓ API密钥CRUD
-- ✓ 批量删除
-- ✓ CSV导出
-- ✓ 密钥复制到剪贴板
-- ✓ 策略编辑 (RPM/PII/白名单等)
-- ✓ 实验CRUD
-- ✓ 实验发布/暂停
-- ✓ 实验JSON导出
-- ✓ 实验配置实时验证
-- ✓ 错误提示与高亮
+- [Admin Token设置]
+- [项目CRUD (创建/编辑/删除/列表)]
+- [分页搜索]
+- [API密钥CRUD]
+- [批量删除]
+- [CSV导出]
+- [密钥复制到剪贴板]
+- [策略编辑 (RPM/PII/白名单等)]
+- [实验CRUD]
+- [实验发布/暂停]
+- [实验JSON导出]
+- [实验配置实时验证]
+- [错误提示与高亮]
 
 **UI特点**:
 - 纯HTML+JavaScript (无框架)
@@ -335,15 +335,15 @@ Fields:
 - 分页导航
 
 **缺失**:
-- ✗ 响应式设计/移动适配
-- ✗ 暗黑主题
-- ✗ 实时搜索
-- ✗ 快捷键
-- ✗ 国际化 (部分中文)
-- ✗ 权限控制UI
-- ✗ 实验结果可视化预览
-- ✗ Dashboard定制化
-- ✗ 通知系统
+- [响应式设计/移动适配]
+- [暗黑主题]
+- [实时搜索]
+- [快捷键]
+- [国际化 (部分中文)]
+- [权限控制UI]
+- [实验结果可视化预览]
+- [Dashboard定制化]
+- [通知系统]
 
 **完成度**: 70% | **优先级**: 低 (MVP功能足够，UX可优化)
 
@@ -377,24 +377,24 @@ Fields:
 
 ### 5.1 各平台 SDK 的完成度
 
-#### 5.1.1 Web SDK ✓ 90%
+#### 5.1.1 Web SDK [90%]
 
 **位置**: `/sdks/web/src/index.ts` (TypeScript)
 
 **已实现**:
-- ✓ 事件采集 (track)
-- ✓ 用户识别 (setUserId/setUserProps)
-- ✓ 收入事件 (revenue)
-- ✓ 自动会话管理 (30min gap)
-- ✓ 批量发送 (可配置batch大小)
-- ✓ 本地队列持久化 (localStorage)
-- ✓ 离线支持 + 重连机制
-- ✓ Gzip压缩
-- ✓ 实验分配辅助函数
-- ✓ 实验配置缓存 + 后台刷新
-- ✓ 版本比较函数 (semver)
-- ✓ 目标人群匹配 (platform/appVersion/country)
-- ✓ HMAC签名支持 (可选)
+- [事件采集 (track)]
+- [用户识别 (setUserId/setUserProps)]
+- [收入事件 (revenue)]
+- [自动会话管理 (30min gap)]
+- [批量发送 (可配置batch大小)]
+- [本地队列持久化 (localStorage)]
+- [离线支持 + 重连机制]
+- [Gzip压缩]
+- [实验分配辅助函数]
+- [实验配置缓存 + 后台刷新]
+- [版本比较函数 (semver)]
+- [目标人群匹配 (platform/appVersion/country)]
+- [HMAC签名支持 (可选)]
 
 **质量指标**:
 - ~370 LOC
@@ -403,126 +403,126 @@ Fields:
 - 充分的注释
 
 **缺失**:
-- ✗ Service Worker离线模式
-- ✗ IndexedDB大容量队列
-- ✗ 性能监控集成
-- ✗ 自定义事件验证
+- [Service Worker离线模式]
+- [IndexedDB大容量队列]
+- [性能监控集成]
+- [自定义事件验证]
 
 **完成度**: 90% | **品质**: 高
 
 ---
 
-#### 5.1.2 Android SDK ✓ 85%
+#### 5.1.2 Android SDK [85%]
 
 **位置**: `/sdks/android/oddsmaker-android/src/main/java/io/oddsmaker/android/Oddsmaker.kt`
 
 **已实现**:
-- ✓ 事件采集 (track)
-- ✓ 用户识别
-- ✓ 收入事件
-- ✓ 会话管理
-- ✓ SharedPreferences持久化
-- ✓ OkHttp3集成
-- ✓ 批量发送 + NDJSON
-- ✓ Gzip压缩
-- ✓ HMAC签名 (可选)
-- ✓ 实验相关函数
-- ✓ TTL缓存
+- [事件采集 (track)]
+- [用户识别]
+- [收入事件]
+- [会话管理]
+- [SharedPreferences持久化]
+- [OkHttp3集成]
+- [批量发送 + NDJSON]
+- [Gzip压缩]
+- [HMAC签名 (可选)]
+- [实验相关函数]
+- [TTL缓存]
 
 **缺失**:
-- ✗ 完整的JSON序列化 (手写StringBuilder)
-- ✗ WorkManager后台同步
-- ✗ Lifecycle感知
-- ✗ ProGuard规则文件
-- ✗ 网络诊断
-- ✗ 错误上报
+- [完整的JSON序列化 (手写StringBuilder)]
+- [WorkManager后台同步]
+- [Lifecycle感知]
+- [ProGuard规则文件]
+- [网络诊断]
+- [错误上报]
 
 **完成度**: 85% | **优先级**: 中 (需完善序列化)
 
 ---
 
-#### 5.1.3 iOS SDK ✓ 80%
+#### 5.1.3 iOS SDK [80%]
 
 **位置**: `/sdks/ios/Sources/Oddsmaker/Oddsmaker.swift`
 
 **已实现** (部分代码):
-- ✓ 事件采集
-- ✓ 用户识别
-- ✓ 会话管理
-- ✓ 队列持久化
-- ✓ URLSession发送
-- ✓ Gzip压缩 (CryptoKit)
-- ✓ 后台保存
-- ✓ 生命周期感知
-- ✓ 实验辅助
+- [事件采集]
+- [用户识别]
+- [会话管理]
+- [队列持久化]
+- [URLSession发送]
+- [Gzip压缩 (CryptoKit)]
+- [后台保存]
+- [生命周期感知]
+- [实验辅助]
 
 **缺失**:
-- ✗ 缓存实现 (部分代码被截断)
-- ✗ 完整的HMAC签名
-- ✗ Combine/async-await现代API
-- ✗ 本地数据库支持 (仅文件)
-- ✗ 网络监控
+- [缓存实现 (部分代码被截断)]
+- [完整的HMAC签名]
+- [Combine/async-await现代API]
+- [本地数据库支持 (仅文件)]
+- [网络监控]
 
 **完成度**: 80% | **优先级**: 中 (代码未完整)
 
 ---
 
-#### 5.1.4 Unity SDK ✓ 60%
+#### 5.1.4 Unity SDK [60%]
 
 **位置**: `/sdks/unity/Runtime/Oddsmaker.cs`
 
 **已实现**:
-- ✓ 基础事件采集
-- ✓ 用户识别
-- ✓ 会话管理 (仅概念)
-- ✓ 收入事件
+- [基础事件采集]
+- [用户识别]
+- [会话管理 (仅概念)]
+- [收入事件]
 
 **缺失**:
-- ✗ 批量发送
-- ✗ 持久化 (PlayerPrefs)
-- ✗ HTTP客户端集成
-- ✗ 离线支持
-- ✗ 实验功能
-- ✗ 完整实现
+- [批量发送]
+- [持久化 (PlayerPrefs)]
+- [HTTP客户端集成]
+- [离线支持]
+- [实验功能]
+- [完整实现]
 
 **完成度**: 60% | **优先级**: 低 (MVP阶段)
 
 ---
 
-### 5.2 实验分流功能 ✓ 85%
+### 5.2 实验分流功能 [85%]
 
 **核心算法** (FNV-1a 32位哈希):
-- ✓ hash32函数 (所有SDK实现一致)
-- ✓ 一致的分配结果
-- ✓ 权重支持
-- ✓ Salt参数化
+- [hash32函数 (所有SDK实现一致)]
+- [一致的分配结果]
+- [权重支持]
+- [Salt参数化]
 
 **功能完成度**:
-- ✓ assignVariant() - 基础分配
-- ✓ 目标人群过滤 (platform/appVersion/country)
-- ✓ 缓存机制 (localStorage/SharedPreferences)
-- ✓ 后台刷新 (不阻塞)
-- ✓ SDK获取实验配置
-- ✓ 曝光事件自动上报
+- [assignVariant() - 基础分配]
+- [目标人群过滤 (platform/appVersion/country)]
+- [缓存机制 (localStorage/SharedPreferences)]
+- [后台刷新 (不阻塞)]
+- [SDK获取实验配置]
+- [曝光事件自动上报]
 
 **缺失**:
-- ✗ 流量分层 (traffic layers)
-- ✗ 互斥分组 (mutually exclusive groups)
-- ✗ 动态权重调整
-- ✗ 统计假设检验
-- ✗ 自适应分配 (bandit算法)
+- [流量分层 (traffic layers)]
+- [互斥分组 (mutually exclusive groups)]
+- [动态权重调整]
+- [统计假设检验]
+- [自适应分配 (bandit算法)]
 
 **完成度**: 85% | **优先级**: 低 (基础完整，高级功能后续)
 
 ---
 
-### 5.3 游戏专业事件支持 ✓ 50%
+### 5.3 游戏专业事件支持 [50%]
 
 **现状**:
-- ✓ 通用事件模型 (event_name + props)
-- ✓ 收入事件 (revenue)
-- ✓ 实验事件 (experiment_exposure)
-- ✗ 无预定义游戏事件类型
+- [通用事件模型 (event_name + props)]
+- [收入事件 (revenue)]
+- [实验事件 (experiment_exposure)]
+- [无预定义游戏事件类型]
 
 **缺失的游戏事件**:
 ```
