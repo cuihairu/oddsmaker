@@ -15,14 +15,16 @@ import numpy as np
 
 from . import __version__
 from .artifact import build_artifact, load_artifact, save_artifact
-from .features import churn_feature_frame, risk_feature_frame
+from .features import churn_feature_frame, propensity_feature_frame, risk_feature_frame
 from .models_churn import artifact_extra as churn_extra
 from .models_churn import train_churn
 from .models_pltv import artifact_extra as pltv_extra
 from .models_pltv import train_pltv
+from .models_propensity import artifact_extra as propensity_extra
+from .models_propensity import train_propensity
 from .models_risk import artifact_extra as risk_extra
 from .models_risk import train_risk
-from .synthetic import synthetic_churn, synthetic_pltv, synthetic_risk
+from .synthetic import synthetic_churn, synthetic_pltv, synthetic_propensity, synthetic_risk
 
 SYNTHETIC_TODAY = date(2026, 3, 1)  # 合成 cohort 覆盖 2026-01-01 起约 2 个月，留足成熟/未成熟两段
 DEFAULT_MODEL_VERSION = "v0.1.0"
@@ -31,13 +33,13 @@ DEFAULT_MODEL_VERSION = "v0.1.0"
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="oddsmaker_ml",
-        description="Oddsmaker 训练管线：churn / pltv / risk（启发式的可训练升级）",
+        description="Oddsmaker 训练管线：churn / pltv / risk / propensity（启发式的可训练升级）",
     )
     parser.add_argument("--version", action="version", version=f"oddsmaker-ml {__version__}")
     sub = parser.add_subparsers(dest="command", required=True)
 
     train = sub.add_parser("train", help="数据 → 特征 → 训练 → 评估 → 产物导出")
-    train.add_argument("--model", choices=["churn", "pltv", "risk", "all"], default="all")
+    train.add_argument("--model", choices=["churn", "pltv", "risk", "propensity", "all"], default="all")
     train.add_argument("--source", choices=["synthetic", "clickhouse"], default="synthetic")
     train.add_argument("--out", default="artifacts", help="产物输出目录（默认 ./artifacts）")
     train.add_argument("--seed", type=int, default=42)
@@ -60,7 +62,7 @@ def build_parser() -> argparse.ArgumentParser:
 def run_train(args: argparse.Namespace) -> int:
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
-    models = ["churn", "pltv", "risk"] if args.model == "all" else [args.model]
+    models = ["churn", "pltv", "risk", "propensity"] if args.model == "all" else [args.model]
     exit_code = 0
     for name in models:
         try:
@@ -107,6 +109,22 @@ def _train_one(name: str, args: argparse.Namespace) -> dict:
         return build_artifact(
             "risk", training_rows=int(X.shape[0]), game_id=args.game_id,
             metrics=result["metrics"], extra=risk_extra(result), **common,
+        )
+    if name == "propensity":
+        if args.source == "synthetic":
+            X, y = synthetic_propensity(args.n_users, seed=args.seed + 3)
+        else:
+            from .data_io import ClickHouseClient, load_propensity_rows
+
+            client = ClickHouseClient(args.clickhouse_url)
+            data = load_propensity_rows(client, args.game_id, args.environment, args.snapshot)
+            frame = propensity_feature_frame(data["feature_rows"])
+            X = frame.to_numpy()
+            y = np.asarray(data["labels"], dtype=int)
+        result = train_propensity(X, y, seed=args.seed + 3)
+        return build_artifact(
+            "propensity", training_rows=int(X.shape[0]), game_id=args.game_id,
+            metrics=result["metrics"], extra=propensity_extra(result), **common,
         )
     # pltv
     if args.source == "synthetic":

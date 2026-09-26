@@ -17,6 +17,10 @@ CHURN_FEATURES = [
     "revenue_total_30d",
 ]
 
+# propensity（付费倾向）与 churn 同特征同口径：30 天行为聚合足以刻画
+# 付费倾向，标签不同（未来付费 vs 未来流失），无需另起特征列
+PROPENSITY_FEATURES = CHURN_FEATURES
+
 RISK_FEATURES = [
     "critical_30d",
     "high_30d",
@@ -56,6 +60,11 @@ def _to_frame(rows: Iterable[Mapping[str, Any]], columns: list[str]) -> pd.DataF
 def churn_feature_frame(rows: Iterable[Mapping[str, Any]]) -> pd.DataFrame:
     """用户 30 天特征（口径 = v_user_features_30d）。"""
     return _to_frame(rows, CHURN_FEATURES)
+
+
+def propensity_feature_frame(rows: Iterable[Mapping[str, Any]]) -> pd.DataFrame:
+    """付费倾向特征（口径同 churn = v_user_features_30d，列序 = PROPENSITY_FEATURES）。"""
+    return _to_frame(rows, PROPENSITY_FEATURES)
 
 
 def risk_feature_frame(rows: Iterable[Mapping[str, Any]]) -> pd.DataFrame:

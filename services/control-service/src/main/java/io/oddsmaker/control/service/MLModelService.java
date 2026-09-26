@@ -38,6 +38,9 @@ public class MLModelService {
     @Autowired
     private WebhookService webhookService;
 
+    @Autowired(required = false)
+    private MlRetrainScheduler mlRetrainScheduler;
+
     // ==================== 模型管理 ====================
 
     /**
@@ -913,5 +916,19 @@ public class MLModelService {
                 logger.error("Failed to detect drift for model: {}", model.id, e);
             }
         }
+    }
+
+    /**
+     * ml 产物周期自动重训（P4.4 训练调度衔接点）：
+     * 编排在 {@link MlRetrainScheduler#retrainAll()}——训练 ml/ 产物 → 校验注册 →
+     * 批量打分回写 predictions。开关 oddsmaker.ml.retrain.enabled 默认关闭，
+     * cron 可配；失败/跳过写审计，不阻塞其他游戏与其余链路。
+     */
+    @Scheduled(cron = "${oddsmaker.ml.retrain.cron:0 20 4 * * ?}")
+    public void scheduledMlRetrain() {
+        if (mlRetrainScheduler == null) {
+            return;  // 装配缺失（如单元测试）时诚实跳过
+        }
+        mlRetrainScheduler.retrainAll();
     }
 }

@@ -158,6 +158,64 @@ def load_risk_rows(client, game_id: str, environment: str) -> dict[str, Any]:
     return {"feature_rows": feature_rows, "subject_ids": subject_ids, "labels": labels}
 
 
+PROPENSITY_TRAINING_SQL = """
+/* 付费倾向训练集：快照日 = {snapshot}，特征窗 = 快照前 30 天，标签窗 = 快照后 {horizon} 天 */
+/* 特征口径与流失训练集一致（v_user_features_30d 四特征），标签 = 未来 {horizon} 天内有付费 */
+SELECT
+  f.user_id,
+  f.days_inactive_30d,
+  f.session_count_30d,
+  f.event_count_30d,
+  f.revenue_total_30d,
+  ifNull(p.forward_paid, 0) AS forward_paid
+FROM
+(
+  SELECT
+    user_id,
+    dateDiff('day', max(event_date), toDate('{snapshot}')) AS days_inactive_30d,
+    uniqExactIf(session_id, session_id != '') AS session_count_30d,
+    count() AS event_count_30d,
+    sumIf(revenue_amount, revenue_amount > 0) AS revenue_total_30d
+  FROM events
+  WHERE game_id = '{game_id}' AND environment = '{environment}'
+    AND user_id != ''
+    AND event_date > toDate('{snapshot}') - 30 AND event_date <= toDate('{snapshot}')
+  GROUP BY user_id
+) AS f
+LEFT JOIN
+(
+  SELECT user_id, count() AS forward_paid
+  FROM events
+  WHERE game_id = '{game_id}' AND environment = '{environment}'
+    AND user_id != ''
+    AND revenue_amount > 0
+    AND event_date > toDate('{snapshot}') AND event_date <= toDate('{snapshot}') + {horizon}
+  GROUP BY user_id
+) AS p USING (user_id)
+"""
+
+
+def load_propensity_rows(client, game_id: str, environment: str, snapshot: str) -> dict[str, Any]:
+    """拉取付费倾向训练行；返回 {"feature_rows": [...], "user_ids": [...], "labels": [...]}。
+
+    标签 = forward_paid > 0（快照后 {horizon} 天内有付费事件）。特征口径同流失训练集。
+    """
+    sql = PROPENSITY_TRAINING_SQL.format(
+        game_id=game_id, environment=environment,
+        snapshot=snapshot, horizon=CHURN_HORIZON_DAYS,
+    )
+    rows = client.query(sql)
+    labels = []
+    feature_rows = []
+    user_ids = []
+    for row in rows:
+        user_ids.append(str(row.get("user_id") or ""))
+        feature_rows.append({k: row.get(k) for k in (
+            "days_inactive_30d", "session_count_30d", "event_count_30d", "revenue_total_30d")})
+        labels.append(1 if int(float(row.get("forward_paid") or 0)) > 0 else 0)
+    return {"feature_rows": feature_rows, "user_ids": user_ids, "labels": labels}
+
+
 def load_pltv_rows(client, game_id: str, environment: str,
                    mature_days: int = PLTV_MATURE_DAYS) -> dict[str, Any]:
     """拉取 pLTV 训练行：cohort 累计曲线 + cohort 人数。"""

@@ -123,3 +123,34 @@ def synthetic_pltv(
                 "revenue": (d30_revenue - d7_revenue) * float(w23[day - 7]),
             })
     return ltv_rows, cohort_rows
+
+
+def synthetic_propensity(n_users: int = 4000, seed: int = 45) -> tuple[np.ndarray, np.ndarray]:
+    """付费倾向训练集：X = 30 天特征（列序 = PROPENSITY_FEATURES），y = 未来 14 天有付费。
+
+    潜在状态：付费意愿高 → 会话多、不活跃天数低、历史付费概率高；
+    标签由特征的 logistic 函数生成，LR 可学出有含义的权重。
+    """
+    if n_users < 2:
+        raise ValueError("n_users 至少为 2")
+    rng = np.random.default_rng(seed)
+    willingness = rng.uniform(0.0, 1.0, n_users)
+    sessions = np.maximum(0, rng.poisson(2.0 + 24.0 * willingness))
+    # events 含独立成分：与 sessions 完全线性相关会触发 L2 正则的系数稀释，
+    # LR 学不满真实权重（churn 合成无此问题，因其标签非线性依赖 sessions）
+    events = sessions * rng.integers(5, 20, n_users) + rng.poisson(5.0, n_users)
+    paid_before = rng.random(n_users) < (0.05 + 0.4 * willingness)
+    revenue = np.where(
+        paid_before,
+        np.round(rng.exponential(50.0, n_users) * (0.3 + willingness)),
+        0.0,
+    )
+    days_inactive = np.maximum(0, rng.integers(0, 3, n_users)
+                               + (rng.random(n_users) > willingness * 0.9) * rng.integers(1, 25, n_users)).astype(float)
+
+    X = np.column_stack([days_inactive, sessions.astype(float), events.astype(float), revenue])
+    # 真实 logit 线性于未截断特征——LR 可完整恢复；启发式的 min() 截断是简化近似，
+    # 因此训练模型应稳定跑赢基线（增益为正是产物的核心卖点）
+    logit = -2.4 + 1.9 * (revenue > 0) + 0.05 * sessions - 0.06 * days_inactive
+    label = rng.random(n_users) < 1.0 / (1.0 + np.exp(-logit))
+    return X, label.astype(int)

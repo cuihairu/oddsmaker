@@ -1,6 +1,7 @@
 package io.oddsmaker.control.jpa;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 
 import java.util.List;
 import java.util.Optional;
@@ -17,4 +18,8 @@ public interface MlArtifactRepo extends JpaRepository<MlArtifactEntity, String> 
     List<MlArtifactEntity> findByGameIdAndModelTypeOrderByCreatedAtDescIdDesc(String gameId, String modelType);
 
     List<MlArtifactEntity> findByGameIdOrderByCreatedAtDescIdDesc(String gameId);
+
+    /** 已接入产物注册的游戏（调度重训按此发现目标，手动注册一次即进入自动循环）。 */
+    @Query("select distinct a.gameId from MlArtifactEntity a")
+    List<String> findDistinctGameIds();
 }

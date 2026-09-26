@@ -35,6 +35,9 @@ class MLModelServiceTest {
     @Mock
     private AuditLogService auditLogService;
 
+    @Mock
+    private MlRetrainScheduler mlRetrainScheduler;
+
     @InjectMocks
     private MLModelService mlModelService;
 
@@ -596,5 +599,12 @@ class MLModelServiceTest {
         assertThat(result.predictionClass).isEqualTo("churn");
         assertThat(result.predictionProbability).isEqualTo(0.9);
         assertThat(result.latencyMs).isEqualTo(12);
+    }
+
+    @Test
+    @DisplayName("调度入口：委托 MlRetrainScheduler.retrainAll")
+    void scheduledMlRetrainDelegates() {
+        mlModelService.scheduledMlRetrain();
+        verify(mlRetrainScheduler).retrainAll();
     }
 }

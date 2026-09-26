@@ -101,6 +101,22 @@ oddsmaker:
     user: ${CLICKHOUSE_USER:default}
     password: ${CLICKHOUSE_PASSWORD:}
 
+  # ml 产物自动重训调度（P4.4 训练调度）：对已注册产物的游戏周期性触发
+  # ml/（oddsmaker-ml）训练 → 注册 → 批量打分；默认关闭，显式开启才运行。
+  # 训练优先 ClickHouse 真实数据（clickhouse-url 显式配置，或从上方 jdbc url 推导），
+  # 不可用时按 allow-synthetic 回落合成数据跑通（合成产物 source 字段如实标记）。
+  ml:
+    retrain:
+      enabled: ${ODDSMAKER_ML_RETRAIN_ENABLED:false}
+      cron: ${ODDSMAKER_ML_RETRAIN_CRON:0 20 4 * * ?}
+      python-bin: ${ODDSMAKER_ML_PYTHON_BIN:python3}
+      ml-dir: ${ODDSMAKER_ML_DIR:ml}                          # oddsmaker_ml 包所在目录（-m 工作目录）
+      model-version: ${ODDSMAKER_ML_RETRAIN_VERSION:v0.1.0}   # 固定版本 → 同版本重训覆盖即幂等
+      environment: ${ODDSMAKER_ML_RETRAIN_ENV:prod}
+      clickhouse-url: ${ODDSMAKER_ML_CLICKHOUSE_URL:}          # 训练用 HTTP url；空则从 jdbc url 推导
+      timeout-seconds: ${ODDSMAKER_ML_RETRAIN_TIMEOUT:900}
+      allow-synthetic: ${ODDSMAKER_ML_ALLOW_SYNTHETIC:true}
+
   # 玩家数据导出（P4）：文件落盘目录与保留时长（到期 cleanup 删除）
   player-export:
     storage-dir: ${ODDSMAKER_PLAYER_EXPORT_DIR:data/player-exports}

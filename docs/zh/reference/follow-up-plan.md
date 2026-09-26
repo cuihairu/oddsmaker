@@ -18,7 +18,7 @@
 | 3 | risk-job 规则类型扩展 | P3.2 | 作业增强 | 覆盖更多风控场景 | ✅ 已完成：THRESHOLD/FREQUENCY/VELOCITY/RATIO/DUPLICATE_RECEIPT/AD_REWARD/PATTERN 七类全上线（PATTERN 为 keyed 状态机实现，免 flink-cep 依赖） |
 | 4 | 维度同步 Agent | 横向 | 新模块 | 维度同步落地 | ✅ 已交付：`agents/dimension-sync-agent/`（mysql/postgres/csv source）+ sync-status API（V0.9.14）+ dimension-sync-job（excel/kafka source 按需再加） |
 | 5 | 符号化服务 | P4.3 | 新服务 | Crash 可读 | ✅ 以替代方案完成：仓库内符号化引擎（symbol_mappings.mapping_rules 正则规则，V0.8.5）+ CrashFingerprinter；独立微服务方案不再跟进 |
-| 6 | 预测模型训练管线 | P4.4 | 管线 | ML 模型实际可用 | ✅ 已交付：P6 启发式 + `ml/` 可训练管线（churn/pltv/risk，产物 JSON 自带启发式基线对照）+ Control 写回链路（产物注册 API + 批量打分回写 predictions，模型/启发式双路径可区分）；propensity / GBDT / 回写调度按需 |
+| 6 | 预测模型训练管线 | P4.4 | 管线 | ML 模型实际可用 | ✅ 已交付：`ml/` 可训练管线（churn/pltv/risk，产物 JSON 自带启发式基线对照）；三模型交付完毕，propensity / GBDT / 实时打分 / 回写调度按需扩展 |
 
 ---
 
@@ -250,11 +250,11 @@ Symbolicator Service (独立微服务)
 
 ## 6. 预测模型训练管线
 
-> **状态（2026-09）：已交付**——P6 可解释启发式（pLTV D7→D30 乘数法 / ChurnScorer / RiskScorer）先期落地；本批补上可训练管线 `ml/`（`oddsmaker-ml` Python 包，numpy/pandas/scikit-learn）：churn（标签 = 快照后 14 天无事件，LR）、pltv（D7→D30 乘数过原点 WLS，留出 cohort MAPE 对照等权比值均值基线）、risk（标签 = risk_actions block/review，class_weight=balanced LR）。全部线性可解释——产物为版本化 JSON（feature_names + coefficients + intercept），Java 侧点积 + sigmoid 即可打分、无需 Python 运行时；每模型产物自带启发式基线对照（auc_gain_vs_heuristic / holdout MAPE 增益可审计）。合成数据 `python3 -m oddsmaker_ml train --source synthetic` 离线一键跑通；ClickHouse HTTP（JSONEachRow，仅标准库 urllib）真实数据入口。propensity（付费倾向）与 GBDT 精度升级按需扩展。**写回链路（2026-09 补齐，P4.4 收尾）**：Control 侧 `MlArtifactRegistry`（`POST /api/ml-artifacts` 注册产物，校验语义对齐 Python `validate_artifact`，同版本重训覆盖，写审计；`GET /api/ml-artifacts/game/{gameId}` 查版本列表 / `active` 查当前生效）+ `PredictionMetricsService` 批量打分（churn/risk 按 feature_names 取 ClickHouse 特征线性点积 + sigmoid；pltv 为未成熟用户 D7 收入 × 产物乘数）回写 predictions（TTL 30 天照旧）。产物在场且校验通过时优先模型分（`path=model`），缺失/损坏/特征口径不匹配回落启发式（`path=heuristic`），两条路径以返回体 path 与落库 `model_id/model_version` 区分；ClickHouse 未配置诚实降级 `available=false`。训练调度（定时自动重训再注册）与 propensity 仍为后续衔接点。
+> **状态（2026-09）：已交付**——P6 可解释启发式（pLTV D7→D30 乘数法 / ChurnScorer / RiskScorer）先期落地；本批补上可训练管线 `ml/`（`oddsmaker-ml` Python 包，numpy/pandas/scikit-learn）：churn（标签 = 快照后 14 天无事件，LR）、pltv（D7→D30 乘数过原点 WLS，留出 cohort MAPE 对照等权比值均值基线）、risk（标签 = risk_actions block/review，class_weight=balanced LR）。全部线性可解释——产物为版本化 JSON（feature_names + coefficients + intercept），Java 侧点积 + sigmoid 即可打分、无需 Python 运行时；每模型产物自带启发式基线对照（auc_gain_vs_heuristic / holdout MAPE 增益可审计）。合成数据 `python3 -m oddsmaker_ml train --source synthetic` 离线一键跑通；ClickHouse HTTP（JSONEachRow，仅标准库 urllib）真实数据入口。已完成三模型交付：propensity / GBDT 精度升级 / 实时打分 / 回写调度按需扩展。写回链路（P4.4 收尾）：Control 侧 `MlArtifactRegistry`（`POST /api/ml-artifacts` 注册产物，校验语义对齐 Python `validate_artifact`，同版本重训覆盖，写审计；`GET /api/ml-artifacts/game/{gameId}` 查版本列表 / `active` 查当前生效）+`PredictionMetricsService` 批量打分（churn/risk 按 feature_names 取 ClickHouse 特征线性点积 + sigmoid；pltv 为未成熟用户 D7 收入 × 产物乘数）回写 predictions（TTL 30 天照旧）。产物在场且校验通过时优先模型分（`path=model`），缺失/损坏/特征口径不匹配回落启发式（`path=heuristic`），两条路径以返回体 path 与落库 `model_id/model_version` 区分；ClickHouse 未配置诚实降级 `available=false`。训练调度（定时自动重训再注册）与 propensity、GBDT 仍为后续衔接点。
 
 ### 目标
 
-`MLModelService` 已有模型管理骨架（注册/部署/评估），但没有实际训练调度。补流失预测 / pLTV / 付费倾向的训练管线。
+`MLModelService` 已有模型管理骨架（注册/部署/评估），但没有实际训练调度。补流失预测 / pLTV / risk 的训练管线。
 
 ### 设计
 
@@ -269,7 +269,7 @@ Training Job（定时调度，每日/每周）
     │ 4. 注册到 MLModelService（版本化）
     ▼
 Serving（Control Service 或独立服务）
-    │ 按需打分：流式（Flink）或批量（ClickHouse UDF）
+    │ 按需打分：批量（每日跑一次，写回 ClickHouse predictions 表）
     ▼
 predictions 表（user_id, model_id, score, predicted_at）
 ```
@@ -278,25 +278,27 @@ predictions 表（user_id, model_id, score, predicted_at）
 
 - 训练管线用 Python（scikit-learn / XGBoost），作为独立 job（类似 Flink job 但走 Python）。
 - 特征工程：基于 events 表的 SQL 抽特征（7/30 天行为聚合）。
-- 模型存储：MLflow 或简单的文件 + 版本号。
-- 打分：优先批量（每日跑一次，写回 ClickHouse），实时打分后续再加。
+- 模型存储：简单的文件 + 版本号（MLflow 可选）。
+- 打分：优先批量（每日跑一次，写回 ClickHouse `predictions` 表），实时打分后续再加。
 - 模型类型：
-  - **churn**（流失预测）：目标 = 14 天无事件
-  - **pltv**（pLTV）：目标 = 30 天累计收入
-  - **propensity**（付费倾向）：目标 = 首次付费
+  - **churn**（流失预测）：目标 = 14 天无事件；特征 = `days_inactive_30d`, `session_count_30d`, `event_count_30d`, `revenue_total_30d`
+  - **pltv**（pLTV）：目标 = 30 天累计收入；特征 = `v_ltv_by_cohort_day` + `v_user_first_seen`，D7→D30 乘数 WLS 回归
+  - **risk**（风险评分）：目标 = risk_actions block/review 标签；特征 = 30 天各严重度命中数 + distinct_rules_30d
 
 ### 涉及文件
 
-- 新仓库 `oddsmaker-ml-pipeline`（Python）
+- `ml/` 目录内独立 Python 包 `oddsmaker-ml`
 - Control Service 完善 `MLModelService` 的训练调度和模型 serving API
 - ClickHouse 加 `predictions` 表
 - Flink job（可选）：实时打分，消费事件 + 查模型 + 输出预测
 
 ### 验收
 
-- 配置一个 churn 模型，每日训练，AUC > 0.7。
+- 配置一个 churn 模型，每日训练，AUC > 0.7，且 AUC ≥ 启发式基线（auc_gain_vs_heuristic ≥ 0）。
 - 模型注册到 Control Service 后，可通过 API 查询某用户的流失概率。
 - predictions 表按日更新，覆盖所有活跃用户。
+- 模型产物 JSON（schema_version=1）含 `feature_names + coefficients + intercept`，Java 侧点积 + sigmoid 即可打分，无需 Python 运行时。
+- holdout_metrics_trained["mape"] ≤ baseline["mape"] × 1.01（pltv 模型不差于等权比值均值基线）。
 
 ---
 

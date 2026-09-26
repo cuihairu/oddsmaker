@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 SCHEMA_VERSION = 1
-MODEL_TYPES = {"churn", "pltv", "risk"}
+MODEL_TYPES = {"churn", "pltv", "risk", "propensity"}
 
 
 class ArtifactError(ValueError):
@@ -62,7 +62,7 @@ def validate_artifact(artifact: Mapping[str, Any]) -> None:
     if not isinstance(artifact["metrics"], Mapping) or not artifact["metrics"]:
         raise ArtifactError("metrics 必须为非空对象")
     model_type = artifact["model_type"]
-    if model_type in ("churn", "risk"):
+    if model_type in ("churn", "risk", "propensity"):
         names = artifact.get("feature_names")
         coefs = artifact.get("coefficients")
         if not names or not isinstance(names, list):
