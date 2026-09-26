@@ -2,6 +2,8 @@
 
 本文档记录 Oddsmaker 当前未完成的功能项，按优先级排列，包含设计、实现方案和验收标准。每项推进前先在此登记，避免散落讨论。
 
+> **2026-09 状态同步**：本清单为早期行动项视角，现按各项落地结果标注状态（详见下表与各节状态行）。阶段级进度以仓库根 `todo.md` 为活跃跟踪表——P7 竞品差距收敛已全部完成（发布说明见 [release-notes/v0.2.0.md](../../release-notes/v0.2.0.md)），P8 MMP 归因有条件立项处于暂停项。真正剩余的独立事项只有三个：PATTERN（CEP）规则类型、维度同步独立 Agent 仓库、Python 训练管线，均按业务需要再排。
+
 已完成的功能见各阶段文档：
 - [资源事件设计](../analysis/jobs)（事实数据）
 - [维度数据同步](./dimension-sync)（维度数据）
@@ -9,18 +11,20 @@
 
 ## 优先级总览
 
-| # | 项目 | 阶段 | 类型 | 解锁价值 |
-|---|---|---|---|---|
-| 1 | identity-merge Flink job | P2.2 | 后端作业 | SDK identify 真正生效 |
-| 2 | risk-job 规则动态化 | P3.2 | 作业增强 | 加规则不重启 |
-| 3 | risk-job 规则类型扩展 | P3.2 | 作业增强 | 覆盖更多风控场景 |
-| 4 | 维度同步 Agent | 横向 | 新模块 | 维度同步落地 |
-| 5 | 符号化服务 | P4.3 | 新服务 | Crash 可读 |
-| 6 | 预测模型训练管线 | P4.4 | 管线 | ML 模型实际可用 |
+| # | 项目 | 阶段 | 类型 | 解锁价值 | 状态（2026-09） |
+|---|---|---|---|---|---|
+| 1 | identity-merge Flink job | P2.2 | 后端作业 | SDK identify 真正生效 | ✅ 已完成 |
+| 2 | risk-job 规则动态化 | P3.2 | 作业增强 | 加规则不重启 | ✅ 已完成（RuleFetcher 定时拉取 + `-D` fallback） |
+| 3 | risk-job 规则类型扩展 | P3.2 | 作业增强 | 覆盖更多风控场景 | 🔶 大部分完成：THRESHOLD/FREQUENCY/VELOCITY/RATIO/AD_REWARD 已上线，缺 PATTERN（CEP） |
+| 4 | 维度同步 Agent | 横向 | 新模块 | 维度同步落地 | 🔶 本仓库侧已落地（dimension-sync-job + item_dim/level_dim），sync-status API 与独立 Agent 仓库未做 |
+| 5 | 符号化服务 | P4.3 | 新服务 | Crash 可读 | ✅ 以替代方案完成：仓库内符号化引擎（symbol_mappings.mapping_rules 正则规则，V0.8.5）+ CrashFingerprinter；独立微服务方案不再跟进 |
+| 6 | 预测模型训练管线 | P4.4 | 管线 | ML 模型实际可用 | 🔶 以可解释启发式替代落地（ChurnScorer / pLTV 乘数法 / RiskScorer，predictions 归档）；Python 训练管线暂缓 |
 
 ---
 
 ## 1. identity-merge Flink job
+
+> **状态（2026-09）：已完成**——`jobs/flink/identity-merge-job/`，行为见 [jobs.md](../analysis/jobs.md)。下文为当时设计，供回溯。
 
 ### 目标
 
@@ -73,6 +77,8 @@ ClickHouse identities (ReplacingMergeTree by last_seen)
 
 ## 2. risk-job 规则动态化
 
+> **状态（2026-09）：已完成**——`RuleFetcher`（Runnable 单例 + refreshMs 间隔定时拉取 Control 活跃规则，`-D` 静态规则兜底），未用 Broadcast State 而是共享 AtomicReference 规则集，效果等同（加规则不重启）。
+
 ### 目标
 
 risk-job 当前用 `-D` 系统属性配规则（`risk.threshold.amount` 等），加规则要重启。改为从 Control Service 按 `game_id + environment` 拉取活跃 `RiskRuleEntity`，定时刷新。
@@ -115,6 +121,8 @@ risk-job 检测逻辑（按规则配置执行）
 
 ## 3. risk-job 规则类型扩展
 
+> **状态（2026-09）：大部分完成**——THRESHOLD / FREQUENCY / VELOCITY / RATIO / AD_REWARD 均已在 `RiskJob` 上线（含单测）；仅 **PATTERN（CEP 序列规则）** 未实现，依赖 flink-cep，作为独立剩余项按需再排。
+
 ### 目标
 
 当前只支持 THRESHOLD + FREQUENCY。补充 VELOCITY / RATIO / PATTERN 三种规则类型，覆盖路线图 P3.2 列举的全部检测场景。
@@ -154,6 +162,8 @@ risk-job 检测逻辑（按规则配置执行）
 
 ## 4. 维度同步 Agent
 
+> **状态（2026-09）：本仓库侧已落地**——`jobs/flink/dimension-sync-job/`（SCD2 写维度表）与 `schema/sql/clickhouse/dimensions.sql` 已交付；未做：Control 侧 `dimension_sync_status` 表与 `/api/dimensions/sync-status` API、独立 Agent 仓库（mysql/postgres/csv source）。按接入需求再启动。
+
 ### 目标
 
 落地 [dimension-sync.md](./dimension-sync) 设计的 `oddsmaker-agent`，提供 DB / 文件 / Push 三类 source 适配器，让游戏方零代码接入维度同步。
@@ -192,6 +202,8 @@ Agent 本身（独立仓库）提供：
 ---
 
 ## 5. 符号化服务
+
+> **状态（2026-09）：以替代方案完成，原方案关闭**——未建独立 Python/Go 微服务，而是在 P6 落地仓库内轻量方案：Gateway CrashFingerprinter（堆栈前 8 帧规范化 SHA-256 指纹）+ Control 符号化引擎（`symbol_mappings.mapping_rules` 正则规则，V0.8.5 迁移）+ `/api/crash-metrics/{gameId}/symbolicate`。满足"Crash 可读"目标，避免引入额外服务栈。
 
 ### 目标
 
@@ -236,6 +248,8 @@ Symbolicator Service (独立微服务)
 ---
 
 ## 6. 预测模型训练管线
+
+> **状态（2026-09）：以启发式方案替代落地，训练管线暂缓**——P6 已交付可解释启发式：pLTV D7→D30 乘数法（成熟 cohort 拟合外推）、流失预测（v_user_features_30d 特征 → ChurnScorer 打分 + reasons）、风险评分模型（risk_events 30 天严重度加权 → RiskScorer），predictions 统一归档（TTL 30 天）。Python（XGBoost/MLflow）训练管线在现有精度够用前不启动。
 
 ### 目标
 
@@ -285,10 +299,11 @@ predictions 表（user_id, model_id, score, predicted_at）
 
 ---
 
-## 推进节奏建议
+## 推进节奏建议（2026-09 更新）
 
-1. **先做 1（identity-merge）**：让刚做的 SDK identify 形成闭环，工作量小（一个 Flink job）。
-2. **再做 2（risk 规则动态化）**：让 risk-job 进入生产可用状态。
-3. **接着 3（规则类型扩展）**：补全风控能力。
-4. **4（维度同步 Agent）**：横向能力，解锁维度数据接入。
-5. **5（符号化）和 6（ML 管线）**：独立大件，按业务需要再排。
+原清单 1/2/5 已完成、3 完成大部分、4/6 部分落地。当前实际剩余与排期建议：
+
+1. **PATTERN（CEP）规则类型**：风控最后一块拼图（多事件序列检测），依赖 flink-cep，独立可做。
+2. **维度同步独立 Agent 仓库 + sync-status API**：本仓库侧已就绪，有真实维度接入需求时再启动。
+3. **Python 训练管线**：现有启发式打分可解释且够用，有明确精度诉求时再立项。
+4. **P8 MMP 归因**：有条件立项（前置：任一 MMP 原始数据导出权限，Data Locker / CSV uploads 任一），达成前不启动，见 todo.md 暂停项与 `docs/mmp-attribution-evaluation.md`。
