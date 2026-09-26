@@ -39,6 +39,11 @@ source.jdbc.cursor-column=updated_at
 # source.kafka.poll-timeout-ms=3000
 # 首次运行起始位点（"0=42;1=57" 分区=offset 映射），缺省 earliest
 # source.kafka.cursor-initial=0=42;1=57
+# 鉴权（可选；SASL_* 时下面三键必填，启动即校验。机制仅支持 SCRAM-SHA-256/SCRAM-SHA-512）
+# source.kafka.security-protocol=PLAINTEXT
+# source.kafka.sasl-mechanism=SCRAM-SHA-256
+# source.kafka.username=dim_sync_ro
+# source.kafka.password=***
 
 # ── Agent 行为 ─────────────────────────────────────────────
 agent.batch-size=500

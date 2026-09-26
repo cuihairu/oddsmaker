@@ -43,6 +43,12 @@ public final class AgentConfig {
     public long kafkaPollTimeoutMs = 3000;
     /** 起始位点（"0=42;1=57" 或 earliest/latest），缺省 earliest */
     public String kafkaCursorInitial;
+    // kafka 鉴权（可选）：PLAINTEXT（默认明文）/ SSL（证书，不走账号）/ SASL_PLAINTEXT / SASL_SSL
+    public String kafkaSecurityProtocol = "PLAINTEXT";
+    /** SASL 机制：仅支持 SCRAM-SHA-256 / SCRAM-SHA-512（SASL_* 协议必填） */
+    public String kafkaSaslMechanism;
+    public String kafkaUsername;
+    public String kafkaPassword;
     // 同步状态上报（Control /api/dimensions/sync-status；url 空则跳过）
     public String statusUrl;
     public String statusToken;
@@ -89,6 +95,10 @@ public final class AgentConfig {
         c.kafkaGroupId = orDefault(p.getProperty("source.kafka.group-id"), "oddsmaker-dimension-sync");
         c.kafkaPollTimeoutMs = longOf(p.getProperty("source.kafka.poll-timeout-ms"), 3000);
         c.kafkaCursorInitial = trim(p.getProperty("source.kafka.cursor-initial"));
+        c.kafkaSecurityProtocol = orDefault(p.getProperty("source.kafka.security-protocol"), "PLAINTEXT");
+        c.kafkaSaslMechanism = trim(p.getProperty("source.kafka.sasl-mechanism"));
+        c.kafkaUsername = trim(p.getProperty("source.kafka.username"));
+        c.kafkaPassword = p.getProperty("source.kafka.password", "");
         c.statusUrl = trim(p.getProperty("status.url"));
         c.statusToken = trim(p.getProperty("status.token"));
         c.sourceKey = trim(p.getProperty("status.source-key"));
@@ -127,6 +137,7 @@ public final class AgentConfig {
                 if (kafkaPollTimeoutMs <= 0) {
                     throw new IllegalArgumentException("source.kafka.poll-timeout-ms 必须为正数");
                 }
+                validateKafkaSecurity();
             }
             default -> throw new IllegalArgumentException(
                     "source.type 仅支持 mysql/postgres/csv/excel/kafka，当前: " + sourceType);
@@ -135,6 +146,25 @@ public final class AgentConfig {
 
     public boolean isJdbc() {
         return "mysql".equals(sourceType) || "postgres".equals(sourceType);
+    }
+
+    /** kafka 鉴权 fail-fast：协议白名单 + SASL_* 必须带齐机制与凭证（PLAIN 明文机制不支持）。 */
+    private void validateKafkaSecurity() {
+        switch (kafkaSecurityProtocol) {
+            case "PLAINTEXT", "SSL" -> { /* 无账号凭证 */ }
+            case "SASL_PLAINTEXT", "SASL_SSL" -> {
+                require(kafkaSaslMechanism, "source.kafka.sasl-mechanism");
+                if (!"SCRAM-SHA-256".equals(kafkaSaslMechanism)
+                        && !"SCRAM-SHA-512".equals(kafkaSaslMechanism)) {
+                    throw new IllegalArgumentException("source.kafka.sasl-mechanism 仅支持 "
+                            + "SCRAM-SHA-256/SCRAM-SHA-512，当前: " + kafkaSaslMechanism);
+                }
+                require(kafkaUsername, "source.kafka.username");
+                require(kafkaPassword, "source.kafka.password");
+            }
+            default -> throw new IllegalArgumentException("source.kafka.security-protocol 仅支持 "
+                    + "PLAINTEXT/SSL/SASL_PLAINTEXT/SASL_SSL，当前: " + kafkaSecurityProtocol);
+        }
     }
 
     private static void require(String v, String key) {

@@ -53,7 +53,9 @@ public final class AgentMain {
             case "csv" -> new CsvSource(cfg);
             case "excel" -> new ExcelSource(cfg);
             case "kafka" -> new KafkaSource(cfg, new KafkaConsumerAdapter(
-                    cfg.kafkaBootstrap, cfg.kafkaGroupId, cfg.kafkaTopic));
+                    cfg.kafkaBootstrap, cfg.kafkaGroupId, cfg.kafkaTopic,
+                    cfg.kafkaSecurityProtocol, cfg.kafkaSaslMechanism,
+                    cfg.kafkaUsername, cfg.kafkaPassword));
             default -> throw new IllegalArgumentException("未知 source.type: " + cfg.sourceType);
         };
     }

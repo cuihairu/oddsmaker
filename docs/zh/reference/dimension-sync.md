@@ -170,6 +170,11 @@ source.jdbc.cursor-column=updated_at
 # source.kafka.group-id=oddsmaker-dimension-sync
 # source.kafka.poll-timeout-ms=3000
 # source.kafka.cursor-initial=0=42;1=57
+# 鉴权（可选）：SASL_* 协议时 sasl-mechanism/username/password 必填（机制仅 SCRAM-SHA-256/512）
+# source.kafka.security-protocol=SASL_PLAINTEXT
+# source.kafka.sasl-mechanism=SCRAM-SHA-256
+# source.kafka.username=oddsmaker_ro
+# source.kafka.password=***
 
 # Agent 行为
 agent.batch-size=500

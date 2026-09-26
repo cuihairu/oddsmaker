@@ -18,7 +18,10 @@
 **验证边界（如实说明）**：
 
 - excel：`XlsxParser` 为标准库最小实现（首个工作表；共享/内联字符串、数值、布尔、`r` 列引用定位、大数 E 记法还原；禁 DTD 防 XXE）。不支持公式重算（取缓存值）、样式/合并单元格/日期格式化——日期列建议源头导出 epoch millis 或 ISO 文本。已单测覆盖。
-- kafka：**端到端已实测**（2026-09-26，apache/kafka:3.7.0 单节点 KRaft，`KafkaSourceBrokerE2ETest` 六用例，broker 不可达自动 SKIP 不误报）：earliest 起步、断点 seek 续传（checkpoint 位点优先于 broker group offset，旧断点可重放）、运行中扩分区追赶、坏消息（解析失败/缺 resource_id）跳过但 offset 前进（防毒丸卡死）、drain 上限 100 轮有界分批且续传无丢失——五项核对点全绿。实测暴露并修复两点：① `KafkaSource` 位点簿记缺陷——本轮无新数据的分区曾在 cursor 丢条目，下一轮被 seekToBeginning 整段重放；② 扩分区感知默认依赖 metadata.max.age（5min）过于迟钝，压到 1s + assign 前 listTopics 全刷。未覆盖：TLS/SASL 鉴权、多 broker 集群、长稳/性能压测。
+- kafka：**端到端已实测**（2026-09-26，apache/kafka:3.7.0 单节点 KRaft，`KafkaSourceBrokerE2ETest` 六用例，broker 不可达自动 SKIP 不误报）：earliest 起步、断点 seek 续传（checkpoint 位点优先于 broker group offset，旧断点可重放）、运行中扩分区追赶、坏消息（解析失败/缺 resource_id）跳过但 offset 前进（防毒丸卡死）、drain 上限 100 轮有界分批且续传无丢失——五项核对点全绿。实测暴露并修复两点：① `KafkaSource` 位点簿记缺陷——本轮无新数据的分区曾在 cursor 丢条目，下一轮被 seekToBeginning 整段重放；② 扩分区感知默认依赖 metadata.max.age（5min）过于迟钝，压到 1s + assign 前 listTopics 全刷。
+- kafka SASL 鉴权：**端到端已实测**（2026-09-26，SASL_PLAINTEXT + SCRAM-SHA-256 用户，`KafkaSourceSaslBrokerE2ETest`，鉴权 broker 不可达自动 SKIP）：配置键 `source.kafka.security-protocol`（默认 PLAINTEXT）/ `sasl-mechanism`（仅 SCRAM-SHA-256/512）/ `username` / `password`，SASL_* 缺机制或凭证启动即 fail-fast；错误凭证实测同步抛 `SaslAuthenticationException`（进 agent errorCount/lastError，非静默空轮询）。配置键映射与校验另有离线单测（`AgentConfigTest`/`KafkaConsumerAdapterPropsTest`，含 JAAS 转义）。
+- kafka 多 broker：**端到端已实测**（2026-09-26，3 节点 KRaft 多数派 2/3，`KafkaSourceMultiBrokerE2ETest`，集群不可达自动 SKIP）：多地址 bootstrap、列表含死地址仍正常消费；**停一台 broker（2/3 存活）重复套件全绿**——RF=2 + acks=all 在 min.insync.replicas=1 下由存活 broker 继续服务读写。运维注意（实测）：2 节点 KRaft 无此容错——voters 多数派 = 2/2，任一宕机即丢 controller quorum，createTopics 等元数据操作挂起（TimeoutException）；需要单节点容错至少 3 节点。
+- kafka 吞吐量级（独立探针测量，不入测试套件，2026-09-26 单节点容器/宿主 docker）：200,000 条（3 分区、~120B/条）produce 34,447 msg/s（lz4），drain 16,013 msg/s 全量零丢失（cursor 三分区合计恰 200,000），`-Xmx256m` 下 drain 峰值堆 139MB 有界。未覆盖：TLS(SSL) 证书链模式（配置项已就位但未起 SSL broker 实测）、更长时间长稳。
 
 ## 快速开始
 

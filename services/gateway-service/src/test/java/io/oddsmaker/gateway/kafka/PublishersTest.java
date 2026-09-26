@@ -222,6 +222,32 @@ class PublishersTest {
     }
 
     @Test
+    @DisplayName("DlqPublisher：broker 不可达时 send() 挂满 max.block.ms 后静默吞掉失败（future 被忽略）")
+    void dlqPublishBlocksSilentlyWhenBrokerUnreachable() {
+        // fire-and-forget 的两层实测语义（kafka-clients 3.7，运维发现）：
+        // 1) 阻塞：KafkaProducer#send 在调用线程等 metadata（waitOnMetadata），broker 不可达时
+        //    挂满 max.block.ms——生产默认 60s，即 Gateway API 线程的最坏拖挂时长；
+        // 2) 静默：TimeoutException 属 ApiException 族，doSend 不抛而是返回 FutureFailure——
+        //    DlqPublisher 忽略 future，该条 DLQ 消息无声丢失（无日志无指标）。
+        // 此处用死端口 + 2s max.block.ms 离线锁定该行为；真实回路见 PublishersBrokerE2ETest
+        java.util.Properties p = new java.util.Properties();
+        p.put("bootstrap.servers", "127.0.0.1:19092");
+        p.put("max.block.ms", "2000");
+        p.put("key.serializer", org.apache.kafka.common.serialization.StringSerializer.class.getName());
+        p.put("value.serializer", org.apache.kafka.common.serialization.StringSerializer.class.getName());
+        try (KafkaProducer<String, String> deadBroker = new KafkaProducer<>(p)) {
+            DlqPublisher dlq = new DlqPublisher();
+            ReflectionTestUtils.setField(dlq, "producer", deadBroker);
+            ReflectionTestUtils.setField(dlq, "dlqTopic", "oddsmaker.deadletter");
+            long start = System.currentTimeMillis();
+            dlq.publish("evt_1", "invalid_schema", "{}");  // 不抛：失败在 future 里被忽略
+            long elapsed = System.currentTimeMillis() - start;
+            assertTrue(elapsed >= 1500,
+                    "send() 应在调用线程挂满 max.block.ms（实测 " + elapsed + "ms），而非立刻返回");
+        }
+    }
+
+    @Test
     @DisplayName("DlqPublisher init：按配置装配 KafkaProducer（String 序列化，惰性建连）")
     void dlqPublisherInitBuildsProducer() {
         DlqPublisher dlq = new DlqPublisher();

@@ -9,6 +9,7 @@ import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -60,13 +61,33 @@ class AgentConfigTest {
                 "source.type=kafka",
                 "source.kafka.bootstrap-servers=b:9092",
                 "source.kafka.topic=dims",
-                "source.kafka.cursor-initial=0=42");
+                "source.kafka.cursor-initial=0=42",
+                "source.kafka.security-protocol=SASL_PLAINTEXT",
+                "source.kafka.sasl-mechanism=SCRAM-SHA-256",
+                "source.kafka.username=dim_ro",
+                "source.kafka.password=secret");
         AgentConfig kc = AgentConfig.load(new String[]{"--config=" + k});
         assertEquals("b:9092", kc.kafkaBootstrap);
         assertEquals("dims", kc.kafkaTopic);
         assertEquals("oddsmaker-dimension-sync", kc.kafkaGroupId);
         assertEquals(3000L, kc.kafkaPollTimeoutMs);
         assertEquals("0=42", kc.kafkaCursorInitial);
+        assertEquals("SASL_PLAINTEXT", kc.kafkaSecurityProtocol);
+        assertEquals("SCRAM-SHA-256", kc.kafkaSaslMechanism);
+        assertEquals("dim_ro", kc.kafkaUsername);
+        assertEquals("secret", kc.kafkaPassword);
+        // 未配置鉴权时缺省明文
+        Path plain = write(
+                "gateway.endpoint=http://gw:8080",
+                "gateway.api-key=k1",
+                "game.id=g1",
+                "game.environment=prod",
+                "source.type=kafka",
+                "source.kafka.bootstrap-servers=b:9092",
+                "source.kafka.topic=dims");
+        AgentConfig pc = AgentConfig.load(new String[]{"--config=" + plain});
+        assertEquals("PLAINTEXT", pc.kafkaSecurityProtocol);
+        assertNull(pc.kafkaSaslMechanism);
     }
 
     @Test
@@ -196,6 +217,60 @@ class AgentConfigTest {
                 .getMessage().contains("poll-timeout-ms"));
     }
 
+    @Test
+    @DisplayName("validate：kafka 鉴权——协议白名单 / SASL 必须带齐机制与 SCRAM 凭证 / 齐备通过")
+    void validatesKafkaSecurityFailFast() {
+        AgentConfig base = fullCsv();
+        base.csvDir = null;
+        base.sourceType = "kafka";
+        base.kafkaBootstrap = "b:9092";
+        base.kafkaTopic = "dims";
+
+        // 协议白名单
+        AgentConfig badProtocol = copy(base);
+        badProtocol.kafkaSecurityProtocol = "Kerberos";
+        assertTrue(assertThrows(IllegalArgumentException.class, badProtocol::validate)
+                .getMessage().contains("security-protocol"));
+
+        // SASL 缺机制
+        AgentConfig missingMech = copy(base);
+        missingMech.kafkaSecurityProtocol = "SASL_PLAINTEXT";
+        missingMech.kafkaUsername = "u";
+        missingMech.kafkaPassword = "p";
+        assertTrue(assertThrows(IllegalArgumentException.class, missingMech::validate)
+                .getMessage().contains("sasl-mechanism"));
+
+        // 机制仅支持 SCRAM（PLAIN 凭证明文传输，不做支持面）
+        AgentConfig plainMech = copy(missingMech);
+        plainMech.kafkaSaslMechanism = "PLAIN";
+        assertTrue(assertThrows(IllegalArgumentException.class, plainMech::validate)
+                .getMessage().contains("sasl-mechanism"));
+
+        // SASL 缺账号 / 缺密码
+        AgentConfig missingUser = copy(missingMech);
+        missingUser.kafkaSaslMechanism = "SCRAM-SHA-256";
+        missingUser.kafkaUsername = null;
+        assertTrue(assertThrows(IllegalArgumentException.class, missingUser::validate)
+                .getMessage().contains("source.kafka.username"));
+        AgentConfig missingPassword = copy(missingUser);
+        missingPassword.kafkaUsername = "u";
+        missingPassword.kafkaPassword = null;   // copy 链带着 missingMech 的 "p"，显式清掉隔离验证
+        assertTrue(assertThrows(IllegalArgumentException.class, missingPassword::validate)
+                .getMessage().contains("source.kafka.password"));
+
+        // 齐备通过（SASL_SSL + SCRAM-SHA-512）
+        AgentConfig fullSasl = copy(missingPassword);
+        fullSasl.kafkaPassword = "p";
+        fullSasl.kafkaSecurityProtocol = "SASL_SSL";
+        fullSasl.kafkaSaslMechanism = "SCRAM-SHA-512";
+        fullSasl.validate();
+
+        // PLAINTEXT/SSL 不要求账号凭证
+        AgentConfig ssl = copy(base);
+        ssl.kafkaSecurityProtocol = "SSL";
+        ssl.validate();
+    }
+
     private AgentConfig fullJdbc() {
         AgentConfig c = new AgentConfig();
         c.gatewayEndpoint = "http://gw";
@@ -239,6 +314,11 @@ class AgentConfigTest {
         c.kafkaTopic = src.kafkaTopic;
         c.kafkaGroupId = src.kafkaGroupId;
         c.kafkaPollTimeoutMs = src.kafkaPollTimeoutMs;
+        c.kafkaCursorInitial = src.kafkaCursorInitial;
+        c.kafkaSecurityProtocol = src.kafkaSecurityProtocol;
+        c.kafkaSaslMechanism = src.kafkaSaslMechanism;
+        c.kafkaUsername = src.kafkaUsername;
+        c.kafkaPassword = src.kafkaPassword;
         return c;
     }
 }
