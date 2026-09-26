@@ -71,6 +71,7 @@ LEFT JOIN
 
 RISK_TRAINING_SQL = """
 /* 主体风险训练集：30 天严重度命中 + 规则多样性 + 升级处置标签 */
+/* severity 字面量为大写——对齐 risk-job 落库值（'CRITICAL'/'HIGH'/'MEDIUM'/'LOW'） */
 SELECT
   f.subject_id,
   f.critical_30d,
@@ -83,10 +84,10 @@ FROM
 (
   SELECT
     subject_id,
-    countIf(severity = 'critical') AS critical_30d,
-    countIf(severity = 'high') AS high_30d,
-    countIf(severity = 'medium') AS medium_30d,
-    countIf(severity = 'low') AS low_30d,
+    countIf(severity = 'CRITICAL') AS critical_30d,
+    countIf(severity = 'HIGH') AS high_30d,
+    countIf(severity = 'MEDIUM') AS medium_30d,
+    countIf(severity = 'LOW') AS low_30d,
     uniqExact(rule_id) AS distinct_rules_30d
   FROM risk_events
   WHERE game_id = '{game_id}' AND environment = '{environment}'

@@ -119,6 +119,9 @@ def test_load_risk_rows_assembles_labels():
     assert data["subject_ids"] == ["s1", "s2"]
     assert data["labels"] == [1, 0]
     assert "risk_events" in client.sqls[0] and "risk_actions" in client.sqls[0]
+    # severity 字面量必须大写——对齐 risk-job 落库值（'CRITICAL' 等）
+    assert "severity = 'CRITICAL'" in client.sqls[0]
+    assert "severity = 'critical'" not in client.sqls[0]
 
 
 def test_load_pltv_rows_passthrough():

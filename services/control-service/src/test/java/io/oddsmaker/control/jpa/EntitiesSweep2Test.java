@@ -2386,4 +2386,21 @@ class EntitiesSweep2Test {
         assertEquals("v2", target.schemaVersion);
         assertEquals("cfg-2", target.configVersion);
     }
+
+    @Test
+    @DisplayName("MlArtifactEntity：生命周期回调补默认值且不覆盖已有值")
+    void mlArtifactEntity() {
+        MlArtifactEntity fresh = new MlArtifactEntity();
+        fresh.status = null;
+        fresh.onCreate();
+        assertNotNull(fresh.createdAt);
+        assertEquals("ACTIVE", fresh.status);
+
+        LocalDateTime pre = LocalDateTime.now().minusDays(1);
+        fresh.createdAt = pre;
+        fresh.status = "RETIRED";
+        fresh.onCreate();
+        assertEquals(pre, fresh.createdAt);
+        assertEquals("RETIRED", fresh.status);
+    }
 }

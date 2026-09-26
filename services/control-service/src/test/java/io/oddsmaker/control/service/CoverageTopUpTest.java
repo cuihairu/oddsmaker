@@ -319,7 +319,8 @@ class CoverageTopUpTest {
         when(client.isAvailable()).thenReturn(true);
         when(client.query(anyString(), any(Object[].class))).thenReturn(List.of(
             Map.of("user_id", "u1", "days_inactive", 3L, "session_count", 100L, "revenue_total", 100.0)));
-        PredictionMetricsService service = new PredictionMetricsService(client);
+        PredictionMetricsService service = new PredictionMetricsService(client,
+                org.mockito.Mockito.mock(io.oddsmaker.control.service.MlArtifactRegistry.class));
 
         Map<String, Object> resp = service.refreshChurn("g1", null);
 

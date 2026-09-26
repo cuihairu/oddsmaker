@@ -64,6 +64,18 @@ class PredictionAndRemoteConfigControllersTest {
         verify(accessGuard).requireGamePermission("g", "risk_rule:read");
     }
 
+    @Test
+    @DisplayName("pLTV：刷新 game:update、榜单 game:read")
+    void pltvEndpoints() {
+        when(predictionService.refreshPltv("g", null)).thenReturn(Map.of("scored", 1));
+        when(predictionService.topPltv("g", null, 100)).thenReturn(Map.of("users", List.of()));
+
+        predictionController.refreshPltv("g", null);
+        verify(accessGuard).requireGamePermission("g", "game:update");
+        predictionController.topPltv("g", null, 100);
+        verify(accessGuard).requireGamePermission("g", "game:read");
+    }
+
     // ===== Remote Config =====
 
     @Mock

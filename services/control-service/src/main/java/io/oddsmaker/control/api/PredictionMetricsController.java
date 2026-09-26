@@ -60,4 +60,22 @@ public class PredictionMetricsController {
         accessGuard.requireGamePermission(gameId, "risk_rule:read");
         return ResponseEntity.ok(predictionMetricsService.topRiskScore(gameId, environment, limit));
     }
+
+    /** pLTV 批量预测（未成熟用户 D7 收入 × D7→D30 乘数，产物优先 / 启发式回落） */
+    @PostMapping("/{gameId}/pltv/refresh")
+    public ResponseEntity<Map<String, Object>> refreshPltv(
+            @PathVariable String gameId,
+            @RequestParam(value = "environment", required = false) String environment) {
+        accessGuard.requireGamePermission(gameId, "game:update");
+        return ResponseEntity.ok(predictionMetricsService.refreshPltv(gameId, environment));
+    }
+
+    @GetMapping("/{gameId}/pltv")
+    public ResponseEntity<Map<String, Object>> topPltv(
+            @PathVariable String gameId,
+            @RequestParam(value = "environment", required = false) String environment,
+            @RequestParam(value = "limit", required = false) Integer limit) {
+        accessGuard.requireGamePermission(gameId, "game:read");
+        return ResponseEntity.ok(predictionMetricsService.topPltv(gameId, environment, limit));
+    }
 }

@@ -67,7 +67,7 @@ cd ml   # 仓库 ml/ 目录（本目录）
 }
 ```
 
-写回链路（后续接 Control `MLModelService`）：产物注册 → 批量打分（ClickHouse 特征 × 系数）→ `predictions` 表（`schema/sql/clickhouse/ml.sql`，TTL 语义已有）。
+写回链路（已交付，Control 侧）：`POST /api/ml-artifacts` 注册版本化产物（校验语义对齐 Python `validate_artifact`，同版本重训覆盖，写审计）→ `PredictionMetricsService` 的 `refreshChurn / refreshRiskScore / refreshPltv` 批量打分（按 `feature_names` 从 ClickHouse 取特征，线性点积 + sigmoid；pltv 为 D7 收入 × 产物乘数）→ 写 `predictions` 表（TTL 语义照旧）。产物在场且特征口径匹配时优先模型分（`path=model`，落库 `model_id/model_version`），缺失、损坏或不匹配回落既有启发式（`path=heuristic`，`heuristic_churn_v1 / rule_aggregate_v1 / cohort_ratio_v1`），两条路径在返回体与落库行上均可区分。ClickHouse 未配置时诚实降级（`available=false`），不伪造结果。
 
 ## 开发
 

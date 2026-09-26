@@ -767,10 +767,13 @@ class FinalSweep6Test {
     @Mock
     private ClickHouseClient clickHouseClient;
 
+    @Mock
+    private io.oddsmaker.control.service.MlArtifactRegistry mlArtifactRegistry;
+
     @Test
     @DisplayName("refreshRiskScore：空主体跳过 + high/low 分级分支")
     void predictionRefreshRiskScoreBranches() {
-        PredictionMetricsService service = new PredictionMetricsService(clickHouseClient);
+        PredictionMetricsService service = new PredictionMetricsService(clickHouseClient, mlArtifactRegistry);
         when(clickHouseClient.isAvailable()).thenReturn(true);
         when(clickHouseClient.query(contains("risk_events"), any(Object[].class))).thenReturn(List.of(
             Map.of("subject_id", "", "c_critical", 9L, "c_high", 0L, "c_medium", 0L, "c_low", 0L),

@@ -27,10 +27,10 @@ def test_risk_frame_column_order():
 def test_aggregate_risk_events_counts_and_rules():
     events = [
         {"subject_id": "u1", "severity": "critical", "rule_id": "r1"},
-        {"subject_id": "u1", "severity": "critical", "rule_id": "r2"},
+        {"subject_id": "u1", "severity": "CRITICAL", "rule_id": "r2"},   # 大写（risk-job 落库值）同义
         {"subject_id": "u1", "severity": "high", "rule_id": "r1"},
         {"subject_id": "u1", "severity": "unknown", "rule_id": "r9"},   # 未知严重度不计数
-        {"subject_id": "u2", "severity": "low", "rule_id": "r3"},
+        {"subject_id": "u2", "severity": "LOW", "rule_id": "r3"},
         {"subject_id": "", "severity": "low", "rule_id": "r3"},         # 空主体跳过
     ]
     rows = f.aggregate_risk_events(events)
@@ -39,6 +39,7 @@ def test_aggregate_risk_events_counts_and_rules():
     assert by["u1"]["high_30d"] == 1
     assert by["u1"]["medium_30d"] == 0
     assert by["u1"]["distinct_rules_30d"] == 3   # r1/r2/r9
+    assert by["u2"]["low_30d"] == 1
     assert by["u2"]["low_30d"] == 1
     assert len(rows) == 2
 
