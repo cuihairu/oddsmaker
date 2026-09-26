@@ -64,6 +64,25 @@ class EventsExportServiceTest {
     }
 
     @Test
+    @DisplayName("exportDay：满批游标翻页——满批继续读、空批收口、行数累计")
+    void exportDayPaginatesFullBatches() throws Exception {
+        when(ch.isAvailable()).thenReturn(true);
+        List<Map<String, Object>> full = new java.util.ArrayList<>();
+        for (int i = 0; i < 10_000; i++) {
+            full.add(row("e" + i));
+        }
+        when(ch.query(anyString(), any(Object[].class)))
+                .thenReturn(full)
+                .thenReturn(List.of());
+
+        Map<String, Object> manifest = service.exportDay("game_a", "prod", "2026-09-20", false);
+
+        assertEquals(10_000L, manifest.get("rows"));
+        // 第一次满批（== BATCH_SIZE 继续游标翻页）+ 第二次空批（break 收口）
+        verify(ch, org.mockito.Mockito.times(2)).query(anyString(), any(Object[].class));
+    }
+
+    @Test
     @DisplayName("exportDay：JSONL 分批写出 + manifest（行数/SHA-256/字节数）+ 游标分页 SQL")
     void exportDayWritesJsonlAndManifest() throws Exception {
         when(ch.isAvailable()).thenReturn(true);

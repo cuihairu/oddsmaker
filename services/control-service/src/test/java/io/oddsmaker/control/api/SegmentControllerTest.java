@@ -87,6 +87,19 @@ class SegmentControllerTest {
     }
 
     @Test
+    @DisplayName("members：limit 缺省回落 100")
+    void membersDefaultsLimitTo100() {
+        when(segmentService.get("seg123")).thenReturn(entity());
+        when(segmentService.members("seg123", 100)).thenReturn(List.of());
+
+        Map<String, Object> resp = controller.members("seg123", null).getBody();
+
+        assertEquals(List.of(), resp.get("members"));
+        verify(accessGuard).requireGamePermission("game_a", "segment:read");
+        verify(segmentService).members("seg123", 100);
+    }
+
+    @Test
     @DisplayName("compute：segment:manage 门卫 + 结果透传")
     void computeGuardsAndReturns() {
         when(segmentService.get("seg123")).thenReturn(entity());

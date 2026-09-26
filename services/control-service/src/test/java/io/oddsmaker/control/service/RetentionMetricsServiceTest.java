@@ -176,4 +176,51 @@ class RetentionMetricsServiceTest {
         assertTrue(clamped.isBefore(java.time.LocalDate.now(java.time.ZoneOffset.UTC).minusDays(89)));
     }
 
+    @Test
+    @DisplayName("分群预聚合：week 粒度与 null 环境（bucket 拼接与 envBlank 分支）")
+    void segmentPreaggWeekGranularityAndNullEnvironment() {
+        when(client.isAvailable()).thenReturn(true);
+        when(client.query(contains("subject_id != ''"), any(Object[].class)))
+            .thenReturn(List.of(Map.of("cohort", Date.valueOf("2026-09-01"), "d", 0, "users", 10L)));
+
+        Map<String, Object> resp = service.trend("g", null, "week", 30, "seg1");
+
+        assertEquals("seg1", resp.get("segmentId"));
+        org.mockito.ArgumentCaptor<Object[]> args = org.mockito.ArgumentCaptor.forClass(Object[].class);
+        verify(client).query(contains("toMonday(cohort_date)"), (Object[]) args.capture());
+        Object[] a = args.getValue();
+        // null 环境不带 env 参数位：(g, since, seg1, g)
+        assertEquals(4, a.length);
+        assertEquals("g", a[0]);
+        assertEquals(java.time.LocalDate.class, a[1].getClass());
+        assertEquals("seg1", a[2]);
+        assertEquals("g", a[3]);
+    }
+
+    @Test
+    @DisplayName("分群回退：week 粒度与 null 环境（回退 SQL bucket 拼接 + envBlank 分支）")
+    void segmentFallbackWeekGranularityAndNullEnvironment() {
+        when(client.isAvailable()).thenReturn(true);
+        when(client.query(contains("subject_id != ''"), any(Object[].class))).thenReturn(List.of());
+        when(client.query(contains("ARRAY JOIN [0, 1, 7, 30]"), any(Object[].class)))
+            .thenReturn(List.of(Map.of("cohort", Date.valueOf("2026-09-01"), "d", 0, "users", 10L)));
+
+        Map<String, Object> resp = service.trend("g", null, "week", 30, "seg1");
+
+        assertEquals("seg1", resp.get("segmentId"));
+        verify(client).query(contains("toMonday(f.cohort_date)"), any(Object[].class));
+        org.mockito.ArgumentCaptor<Object[]> args = org.mockito.ArgumentCaptor.forClass(Object[].class);
+        verify(client).query(contains("ARRAY JOIN [0, 1, 7, 30]"), (Object[]) args.capture());
+        Object[] a = args.getValue();
+        // null 环境不带 env 参数位：cohort(g, seg1, g) → 活跃(g, seg1, g) → 钳制 since
+        assertEquals(7, a.length);
+        assertEquals("g", a[0]);
+        assertEquals("seg1", a[1]);
+        assertEquals("g", a[2]);
+        assertEquals("g", a[3]);
+        assertEquals("seg1", a[4]);
+        assertEquals("g", a[5]);
+        assertEquals(java.time.LocalDate.class, a[6].getClass());
+    }
+
 }

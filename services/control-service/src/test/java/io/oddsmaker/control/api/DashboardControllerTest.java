@@ -108,4 +108,23 @@ class DashboardControllerTest {
         verify(accessGuard).requireGamePermission("game_a", "dashboard:manage");
         verify(auditLog).logDelete(eq("dashboard"), eq("dash123"), eq("ops_daily"), isNull(), isNull(), isNull());
     }
+
+    @Test
+    @DisplayName("create：layout null 时审计 widgets 计 0")
+    void createWithNullLayoutAuditsZeroWidgets() {
+        DashboardEntity e = entity();
+        e.layout = null;
+        when(dashboardService.create(eq("game_a"), eq("ops_daily"), isNull(), isNull())).thenReturn(e);
+
+        DashboardController.CreateDashboardRequest req = new DashboardController.CreateDashboardRequest();
+        req.name = "ops_daily";
+
+        controller.create("game_a", req);
+
+        @SuppressWarnings("rawtypes")
+        org.mockito.ArgumentCaptor<Map> meta = org.mockito.ArgumentCaptor.forClass(Map.class);
+        verify(auditLog).logCreate(eq("dashboard"), eq("dash123"), eq("ops_daily"), isNull(), isNull(),
+                isNull(), meta.capture());
+        assertEquals(0, meta.getValue().get("widgets"));
+    }
 }

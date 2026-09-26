@@ -969,4 +969,29 @@ class EntitiesBranchTopUpTest {
         ep.status = EventPropertyDefinitionEntity.PropertyStatus.DISABLED;
         assertFalse(ep.isActive());
     }
+
+    @Test
+    @DisplayName("Segment/Dashboard：@PrePersist ensureId 的 null/空串/已有 id 三侧（同包直调）")
+    void segmentAndDashboardEnsureIdSides() {
+        SegmentEntity s = new SegmentEntity();
+        s.ensureId();
+        assertNotNull(s.id);
+        assertEquals(32, s.id.length());   // UUID 去连字符
+
+        SegmentEntity sBlank = new SegmentEntity();
+        sBlank.id = "";
+        sBlank.ensureId();
+        assertNotNull(sBlank.id);
+        assertEquals(32, sBlank.id.length());   // 空串侧同样生成
+
+        DashboardEntity d = new DashboardEntity();
+        d.ensureId();
+        assertNotNull(d.id);
+        assertEquals(32, d.id.length());
+
+        DashboardEntity dPreset = new DashboardEntity();
+        dPreset.id = "preset";
+        dPreset.ensureId();
+        assertEquals("preset", dPreset.id);   // 已有 id 不覆盖（false 侧）
+    }
 }

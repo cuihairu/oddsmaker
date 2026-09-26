@@ -379,4 +379,64 @@ class SegmentServiceTest {
                 .thenReturn(List.of());
         assertEquals(0L, service.countMembers(entity));
     }
+
+    @Test
+    @DisplayName("countMembers：CH 不可用直接返回 0（不触发查询）")
+    void countMembersReturnsZeroWhenChUnavailable() {
+        when(ch.isAvailable()).thenReturn(false);
+        SegmentEntity e = new SegmentEntity();
+        e.id = "seg123";
+        assertEquals(0L, service.countMembers(e));
+        verify(ch, never()).query(anyString(), any(Object[].class));
+    }
+
+    @Test
+    @DisplayName("条件校验分支：camelCase 键逐一打缺 kind/缺事件名/count/op/缺失条件/窗口越界")
+    void conditionValidationBranches() {
+        // snake_case 键（event_name 等）非映射属性，解析期即被拒（FAIL_ON_UNKNOWN_PROPERTIES 默认开启）
+        BusinessException unknownKey = assertThrows(BusinessException.class,
+                () -> service.parseAndValidate("{\"conditions\":[{\"kind\":\"event\",\"event_name\":\"x\",\"count\":1}]}"));
+        assertTrue(unknownKey.getMessage().contains("不是合法 JSON"));
+
+        record Case(String json, String msgFragment) {}
+        List<Case> cases = List.of(
+                // kind 缺失
+                new Case("{\"conditions\":[{}]}", "条件缺少 kind"),
+                // event：缺 eventName / count 缺失 / op 非法
+                new Case("{\"conditions\":[{\"kind\":\"event\"}]}", "事件条件缺少 event_name"),
+                new Case("{\"conditions\":[{\"kind\":\"event\",\"eventName\":\"x\"}]}", "count 需 >= 1"),
+                new Case("{\"conditions\":[{\"kind\":\"event\",\"eventName\":\"x\",\"count\":1,\"op\":\"between\"}]}",
+                        "事件条件 op 仅支持 gte/lte"),
+                // event_absent：缺 eventName / 缺 withinDays
+                new Case("{\"conditions\":[{\"kind\":\"event_absent\",\"withinDays\":7}]}", "事件缺失条件缺少 event_name"),
+                new Case("{\"conditions\":[{\"kind\":\"event_absent\",\"eventName\":\"x\"}]}", "事件缺失条件需指定 within_days"),
+                // withinDays 越界两侧：attribute+0 与 event+400
+                new Case("{\"conditions\":[{\"kind\":\"attribute\",\"field\":\"country\",\"op\":\"eq\",\"value\":\"US\",\"withinDays\":0}]}",
+                        "within_days 需在 1..365"),
+                new Case("{\"conditions\":[{\"kind\":\"event\",\"eventName\":\"x\",\"count\":1,\"withinDays\":400}]}",
+                        "within_days 需在 1..365"));
+        for (Case c : cases) {
+            BusinessException ex = assertThrows(BusinessException.class, () -> service.parseAndValidate(c.json()));
+            assertTrue(ex.getMessage().contains(c.msgFragment()),
+                    () -> "用例未命中预期分支: " + c.json() + " → " + ex.getMessage());
+        }
+    }
+
+    @Test
+    @DisplayName("compile：事件条件 op=lte 走 <=（缺省 op 走 >= 已在组合用例覆盖）")
+    void compileEventLteUsesLessEqual() {
+        SegmentService.Definition def = new SegmentService.Definition();
+        SegmentService.Condition lte = new SegmentService.Condition();
+        lte.kind = "event";
+        lte.eventName = "purchase";
+        lte.count = 3;
+        lte.op = "lte";
+        def.conditions = List.of(lte);
+
+        SegmentService.Compiled compiled = service.compile(def, SegmentEntity.SegmentSubject.PLAYER);
+
+        assertTrue(compiled.whereFragment.contains("HAVING c <= ?"));
+        // 基础窗口缺省 90：参数依序 (eventName, window, count)
+        assertEquals(List.of("purchase", 90, 3), compiled.args);
+    }
 }
