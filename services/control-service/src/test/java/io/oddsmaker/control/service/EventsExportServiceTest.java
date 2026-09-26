@@ -142,4 +142,51 @@ class EventsExportServiceTest {
         // 未知游戏 → 空
         assertTrue(service.listDays("game_b", "prod").isEmpty());
     }
+
+    // ---------------- 覆盖率补测：失败路径 ----------------
+
+    @Test
+    @DisplayName("exportDay：缺 gameId / 缺日期 在 CH 检查前被拒")
+    void exportDayRejectsMissingIds() {
+        assertThrows(BusinessException.class, () -> service.exportDay(null, "prod", "2026-09-20", false));
+        assertThrows(BusinessException.class, () -> service.exportDay(" ", "prod", "2026-09-20", false));
+        assertThrows(BusinessException.class, () -> service.exportDay("game_a", "prod", null, false));
+    }
+
+    @Test
+    @DisplayName("exportDay：CH 查询失败包装为 EXPORT_FAILED 且清理 tmp")
+    void exportDayWrapsQueryFailure() {
+        when(ch.isAvailable()).thenReturn(true);
+        when(ch.query(anyString(), any(Object[].class))).thenThrow(new RuntimeException("boom"));
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> service.exportDay("game_a", "prod", "2026-09-20", false));
+
+        assertTrue(ex.getMessage().contains("EXPORT_FAILED"));
+        assertFalse(Files.exists(tempDir.resolve("game_a/events/dt=2026-09-20/events-prod.jsonl.tmp")));
+    }
+
+    @Test
+    @DisplayName("exportDay：manifest 写入失败 → MANIFEST_FAILED")
+    void exportDayManifestFailure() throws Exception {
+        when(ch.isAvailable()).thenReturn(true);
+        when(ch.query(anyString(), any(Object[].class))).thenReturn(List.of(row("e1")));
+        Path dir = tempDir.resolve("game_a/events/dt=2026-09-20");
+        Files.createDirectories(dir);
+        Files.createDirectory(dir.resolve("manifest.json")); // 目录占位，写 manifest 必败
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> service.exportDay("game_a", "prod", "2026-09-20", false));
+
+        assertTrue(ex.getMessage().contains("MANIFEST_FAILED"));
+    }
+
+    @Test
+    @DisplayName("listDays：损坏的 manifest 被忽略")
+    void listDaysIgnoresCorruptManifest() throws Exception {
+        Path dir = tempDir.resolve("game_a/events/dt=2026-01-01");
+        Files.createDirectories(dir);
+        Files.writeString(dir.resolve("manifest.json"), "{not json");
+        assertTrue(service.listDays("game_a", "prod").isEmpty());
+    }
 }

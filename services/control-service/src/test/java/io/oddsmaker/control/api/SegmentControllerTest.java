@@ -18,6 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -108,5 +109,34 @@ class SegmentControllerTest {
         assertEquals(true, resp.get("deleted"));
         verify(accessGuard).requireGamePermission("game_a", "segment:manage");
         verify(auditLog).logDelete(eq("segment"), eq("seg123"), eq("whales"), isNull(), isNull(), isNull());
+    }
+
+    @Test
+    @DisplayName("update：segment:manage 门卫（按实体归属游戏）+ 审计")
+    void updateGuardsAndAudits() {
+        when(segmentService.get("seg123")).thenReturn(entity());
+        when(segmentService.update(eq("seg123"), any(), any(), any(), any())).thenReturn(entity());
+
+        SegmentController.UpdateSegmentRequest req = new SegmentController.UpdateSegmentRequest();
+        req.displayName = "新名称";
+
+        SegmentEntity resp = controller.update("seg123", req).getBody();
+
+        assertEquals("seg123", resp.id);
+        verify(accessGuard).requireGamePermission("game_a", "segment:manage");
+        verify(auditLog).logUpdate(eq("segment"), eq("seg123"), eq("whales"),
+                isNull(), isNull(), isNull(), isNull());
+    }
+
+    @Test
+    @DisplayName("delete：服务返回 false 时 deleted=false 且不审计")
+    void deleteNotRemovedSkipsAudit() {
+        when(segmentService.get("seg123")).thenReturn(entity());
+        when(segmentService.delete("seg123")).thenReturn(false);
+
+        Map<String, Object> resp = controller.delete("seg123").getBody();
+
+        assertEquals(false, resp.get("deleted"));
+        verify(auditLog, never()).logDelete(any(), any(), any(), any(), any(), any());
     }
 }

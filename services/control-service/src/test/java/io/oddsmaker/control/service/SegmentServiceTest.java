@@ -267,4 +267,116 @@ class SegmentServiceTest {
         assertEquals(SegmentEntity.SegmentStatus.INACTIVE, entity.status);
         verify(repo).save(entity);
     }
+
+    // ---------------- 更新与读取（覆盖率补测） ----------------
+
+    @Test
+    @DisplayName("update：部分字段更新（名称/描述/状态/定义）+ 时间戳回填")
+    void updatePartialFields() {
+        SegmentEntity entity = saved("prod", null);
+        when(repo.findByIdAndDeletedAtIsNull("seg123")).thenReturn(Optional.of(entity));
+        when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        SegmentEntity updated = service.update("seg123", "高价值设备", "备注", "inactive",
+                "{\"match\":\"any\",\"conditions\":[{\"kind\":\"event\",\"eventName\":\"purchase\",\"count\":3}]}");
+
+        assertEquals("高价值设备", updated.displayName);
+        assertEquals("备注", updated.description);
+        assertEquals(SegmentEntity.SegmentStatus.INACTIVE, updated.status);
+        assertTrue(updated.definition.contains("\"event\""));
+        assertNotNull(updated.updatedAt);
+    }
+
+    @Test
+    @DisplayName("update：非法状态 / 非法定义 均被拒")
+    void updateRejectsInvalidStatusAndDefinition() {
+        when(repo.findByIdAndDeletedAtIsNull("seg123")).thenReturn(Optional.of(saved("prod", null)));
+
+        assertThrows(BusinessException.class,
+                () -> service.update("seg123", null, null, "paused", null));
+        assertThrows(BusinessException.class,
+                () -> service.update("seg123", null, null, null, "{\"conditions\":[]}"));
+    }
+
+    @Test
+    @DisplayName("get：不存在抛 NOT_FOUND；listByGame 委托仓储")
+    void getNotFoundAndList() {
+        when(repo.findByIdAndDeletedAtIsNull("nope")).thenReturn(Optional.empty());
+        assertThrows(BusinessException.class, () -> service.get("nope"));
+
+        when(repo.findByGameIdAndDeletedAtIsNullOrderByNameAsc("game_a"))
+                .thenReturn(List.of(saved("prod", null)));
+        assertEquals(1, service.listByGame("game_a").size());
+    }
+
+    @Test
+    @DisplayName("subject 解析：device 合法入库，非法主体被拒；空/超长名称被拒")
+    void subjectAndNameValidation() {
+        String validDef = "{\"conditions\":[{\"kind\":\"attribute\",\"field\":\"platform\",\"op\":\"eq\",\"value\":\"ios\"}]}";
+        when(repo.findByGameIdAndNameAndDeletedAtIsNull(anyString(), anyString())).thenReturn(Optional.empty());
+        when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        SegmentEntity dev = service.create("game_a", "dev_seg", null, null, "prod", "device", validDef);
+        assertEquals(SegmentEntity.SegmentSubject.DEVICE, dev.subject);
+
+        assertThrows(BusinessException.class,
+                () -> service.create("game_a", "robot_seg", null, null, "prod", "robot", validDef));
+        assertThrows(BusinessException.class,
+                () -> service.create("game_a", "", null, null, "prod", null, validDef));
+        assertThrows(BusinessException.class,
+                () -> service.create("game_a", "长".repeat(101), null, null, "prod", null, validDef));
+    }
+
+    @Test
+    @DisplayName("定义校验补分支：in 空数组/含非字符串、eq 非字符串、event 计数 0/非法 op、缺失窗口 0、窗口超上限、条件超 20、match 非法规范为 all")
+    void definitionEdgeValidation() {
+        String attr = "{\"kind\":\"attribute\",\"field\":\"country\",\"op\":\"%s\",\"value\":%s}";
+        assertThrows(BusinessException.class, () -> service.create(
+                "game_a", "e1", null, null, "prod", null,
+                "{\"conditions\":[" + attr.formatted("in", "[]") + "]}"));
+        assertThrows(BusinessException.class, () -> service.create(
+                "game_a", "e2", null, null, "prod", null,
+                "{\"conditions\":[" + attr.formatted("in", "[\"US\",3]") + "]}"));
+        assertThrows(BusinessException.class, () -> service.create(
+                "game_a", "e3", null, null, "prod", null,
+                "{\"conditions\":[" + attr.formatted("eq", "7") + "]}"));
+        assertThrows(BusinessException.class, () -> service.create(
+                "game_a", "e4", null, null, "prod", null,
+                "{\"conditions\":[{\"kind\":\"event\",\"event_name\":\"purchase\",\"count\":0}]}"));
+        assertThrows(BusinessException.class, () -> service.create(
+                "game_a", "e5", null, null, "prod", null,
+                "{\"conditions\":[{\"kind\":\"event\",\"event_name\":\"purchase\",\"count\":1,\"op\":\"between\"}]}"));
+        assertThrows(BusinessException.class, () -> service.create(
+                "game_a", "e6", null, null, "prod", null,
+                "{\"conditions\":[{\"kind\":\"event_absent\",\"event_name\":\"session_start\",\"within_days\":0}]}"));
+        assertThrows(BusinessException.class, () -> service.create(
+                "game_a", "e7", null, null, "prod", null,
+                "{\"within_days\":9999,\"conditions\":[{\"kind\":\"event\",\"event_name\":\"purchase\",\"count\":1}]}"));
+
+        StringBuilder many = new StringBuilder("{\"conditions\":[");
+        for (int i = 0; i < 21; i++) {
+            if (i > 0) many.append(",");
+            many.append("{\"kind\":\"attribute\",\"field\":\"country\",\"op\":\"eq\",\"value\":\"US\"}");
+        }
+        many.append("]}");
+        assertThrows(BusinessException.class, () -> service.create(
+                "game_a", "e8", null, null, "prod", null, many.toString()));
+
+        // match 非法 → 规范为 all 入库
+        when(repo.findByGameIdAndNameAndDeletedAtIsNull("game_a", "e9")).thenReturn(Optional.empty());
+        when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        SegmentEntity m = service.create("game_a", "e9", null, null, "prod", null,
+                "{\"match\":\"sometimes\",\"conditions\":[{\"kind\":\"attribute\",\"field\":\"platform\",\"op\":\"eq\",\"value\":\"ios\"}]}");
+        assertTrue(m.definition.contains("\"all\""));
+    }
+
+    @Test
+    @DisplayName("countMembers：成员为空返回 0")
+    void countMembersEmptyRows() {
+        SegmentEntity entity = saved("prod", null);
+        when(ch.isAvailable()).thenReturn(true);
+        when(ch.query(contains("uniqExact(subject_id)"), any(Object[].class)))
+                .thenReturn(List.of());
+        assertEquals(0L, service.countMembers(entity));
+    }
 }

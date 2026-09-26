@@ -148,6 +148,54 @@ class DashboardServiceTest {
         assertThrows(BusinessException.class, () -> service.update("dash123", null, "PAUSED", null));
     }
 
+    // ---------------- 覆盖率补测：读取与校验分支 ----------------
+
+    @Test
+    @DisplayName("get：不存在抛 NOT_FOUND；listByGame 委托仓储")
+    void getNotFoundAndList() {
+        when(repo.findByIdAndDeletedAtIsNull("nope")).thenReturn(Optional.empty());
+        assertThrows(BusinessException.class, () -> service.get("nope"));
+
+        when(repo.findByGameIdAndDeletedAtIsNullOrderByNameAsc("game_a")).thenReturn(java.util.List.of(saved()));
+        assertEquals(1, service.listByGame("game_a").size());
+    }
+
+    @Test
+    @DisplayName("create：缺 gameId / 非法名称字符 被拒")
+    void nameAndGameValidation() {
+        assertThrows(BusinessException.class, () -> service.create(null, "s1", null, VALID_LAYOUT));
+        assertThrows(BusinessException.class, () -> service.create(" ", "s1", null, VALID_LAYOUT));
+        assertThrows(BusinessException.class, () -> service.create("game_a", "bad name!", null, VALID_LAYOUT));
+    }
+
+    @Test
+    @DisplayName("校验补分支：granularity/limit 非法、数值串合法、widget 超上限、null widget")
+    void paramsAndLayoutEdgeValidation() {
+        assertThrows(BusinessException.class, () -> service.create(
+                "game_a", "p1", null,
+                "{\"widgets\":[{\"type\":\"kpi\",\"source\":\"online-overview\",\"params\":{\"granularity\":\"month\"}}]}"));
+        assertThrows(BusinessException.class, () -> service.create(
+                "game_a", "p2", null,
+                "{\"widgets\":[{\"type\":\"kpi\",\"source\":\"online-overview\",\"params\":{\"limit\":51}}]}"));
+        assertThrows(BusinessException.class, () -> service.create(
+                "game_a", "p3", null, "{\"widgets\":[null]}"));
+
+        StringBuilder many = new StringBuilder("{\"widgets\":[");
+        for (int i = 0; i < 31; i++) {
+            if (i > 0) many.append(",");
+            many.append("{\"type\":\"kpi\",\"source\":\"online-overview\"}");
+        }
+        many.append("]}");
+        assertThrows(BusinessException.class, () -> service.create("game_a", "p4", null, many.toString()));
+
+        // 数值串参数合法通过校验（校验不回改原值，布局仍存字符串 "30"）
+        when(repo.findByGameIdAndNameAndDeletedAtIsNull(anyString(), anyString())).thenReturn(Optional.empty());
+        when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        DashboardEntity ok = service.create("game_a", "p5", null,
+                "{\"widgets\":[{\"type\":\"kpi\",\"source\":\"online-overview\",\"params\":{\"days\":\"30\"}}]}");
+        assertTrue(ok.layout.contains("\"days\":\"30\""));
+    }
+
     // ---------------- 删除 ----------------
 
     @Test
