@@ -16,6 +16,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -221,6 +222,57 @@ class RetentionMetricsServiceTest {
         assertEquals("seg1", a[4]);
         assertEquals("g", a[5]);
         assertEquals(java.time.LocalDate.class, a[6].getClass());
+    }
+
+    // ===== 分支对侧补充（BRANCH 收口）=====
+
+    @Test
+    @DisplayName("分支对侧：segmentId/environment 非空但空白串——segmentId 空白走 aggregateTrend、environment 空白视同无环境（预聚合+回退双路径）")
+    void blankSegmentIdAndBlankEnvironmentSides() {
+        lenient().when(client.isAvailable()).thenReturn(true);
+
+        // 1) segmentId = "   " → hasSegment=false → 走 aggregateTrend（无分群路径），响应无 segmentId 键
+        lenient().when(client.query(contains("FROM retention_daily"), eq("g"), eq("prod"), any()))
+            .thenReturn(List.of(Map.of("cohort", Date.valueOf("2026-09-01"), "d", 0, "users", 10L)));
+        Map<String, Object> resp1 = service.trend("g", "prod", "day", 30, "   ");
+        assertEquals(true, resp1.get("available"));
+        assertFalse(resp1.containsKey("segmentId"));
+        verify(client).query(contains("FROM retention_daily"), eq("g"), eq("prod"), any());
+
+        // 2) environment = "   " + 合法 segmentId → 预聚合分支 envBlank=true（不带 env 参数），不触发回退
+        lenient().when(client.query(contains("subject_id != ''"), any(Object[].class)))
+            .thenReturn(List.of(Map.of("cohort", Date.valueOf("2026-09-01"), "d", 0, "users", 50L)));
+        Map<String, Object> resp2 = service.trend("g", "   ", "day", 30, "seg1");
+        assertEquals("seg1", resp2.get("segmentId"));
+        org.mockito.ArgumentCaptor<Object[]> args2 = org.mockito.ArgumentCaptor.forClass(Object[].class);
+        verify(client).query(contains("subject_id != ''"), (Object[]) args2.capture());
+        Object[] a2 = args2.getValue();
+        // envBlank=true：参数为 (g, since, seg1, g) 四元，无 environment
+        assertEquals(4, a2.length);
+        assertEquals("g", a2[0]);
+        assertEquals(java.time.LocalDate.class, a2[1].getClass());
+        assertEquals("seg1", a2[2]);
+        assertEquals("g", a2[3]);
+
+        // 3) environment = "   " + 合法 segmentId → 预聚合无数据 → 回退 realtimeSegmentTrend，envBlank=true 同样不带 env 参数
+        lenient().when(client.query(contains("subject_id != ''"), any(Object[].class))).thenReturn(List.of());
+        lenient().when(client.query(contains("ARRAY JOIN [0, 1, 7, 30]"), any(Object[].class)))
+            .thenReturn(List.of(Map.of("cohort", Date.valueOf("2026-09-01"), "d", 0, "users", 20L)));
+        Map<String, Object> resp3 = service.trend("g", "   ", "day", 30, "seg1");
+        assertEquals("seg1", resp3.get("segmentId"));
+        verify(client).query(contains("SETTINGS max_execution_time = 15"), any(Object[].class));
+        org.mockito.ArgumentCaptor<Object[]> args3 = org.mockito.ArgumentCaptor.forClass(Object[].class);
+        verify(client).query(contains("ARRAY JOIN [0, 1, 7, 30]"), (Object[]) args3.capture());
+        Object[] a3 = args3.getValue();
+        // realtime 回退 envBlank=true：cohort(g, seg1, g) → 活跃(g, seg1, g) → 钳制 since = 7 参数
+        assertEquals(7, a3.length);
+        assertEquals("g", a3[0]);
+        assertEquals("seg1", a3[1]);
+        assertEquals("g", a3[2]);
+        assertEquals("g", a3[3]);
+        assertEquals("seg1", a3[4]);
+        assertEquals("g", a3[5]);
+        assertEquals(java.time.LocalDate.class, a3[6].getClass());
     }
 
 }
