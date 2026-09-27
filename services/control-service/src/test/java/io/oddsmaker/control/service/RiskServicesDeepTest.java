@@ -935,4 +935,29 @@ class RiskServicesDeepTest {
         assertEquals("g", a[4]);
     }
 
+    // ===== 分支对侧补充（BRANCH 收口）=====
+
+    @Test
+    @DisplayName("风控指标：segmentId 非空引用但空白 → 视同无分群（片段空、参数不尾插、响应无 segmentId 键）")
+    void riskMetricsBlankSegmentIdTreatedAsAbsent() {
+        lenient().when(client.isAvailable()).thenReturn(true);
+        lenient().when(client.query(anyString(), any(Object[].class))).thenReturn(List.of());
+
+        Map<String, Object> trend = riskMetricsService.trend("g", "prod", 24, "   ");
+        assertEquals(true, trend.get("available"));
+        assertFalse(trend.containsKey("segmentId"));
+
+        // segmentFilter 返回空片段：SQL 不含 subject_id 成员子查询
+        ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Object[]> sqlArgs = ArgumentCaptor.forClass(Object[].class);
+        verify(client).query(sql.capture(), (Object[]) sqlArgs.capture());
+        assertFalse(sql.getValue().contains("subject_id"));
+        // args 不尾插 (segmentId, gameId)：参数仍为 (gameId, env, since) 三元
+        assertEquals(3, sqlArgs.getValue().length);
+        assertEquals("g", sqlArgs.getValue()[0]);
+        assertEquals("prod", sqlArgs.getValue()[1]);
+        assertTrue(sqlArgs.getValue()[2] instanceof Timestamp);
+    }
+
 }
