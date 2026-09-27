@@ -29,9 +29,12 @@ import java.util.TreeMap;
  * {@link KafkaSource} 位点簿记缺陷（本轮无数据的分区曾在 cursor 丢条目）。
  * SASL/SCRAM 鉴权与多地址 bootstrap 见 KafkaSourceSaslBrokerE2ETest /
  * KafkaSourceMultiBrokerE2ETest；TLS(SSL) 单向证书链（自签 CA + truststore 注入，
- * 含不可信信任链的可见失败）已覆盖在 KafkaSourceSslBrokerE2ETest；mTLS 客户端证书
- * （{@link SslSettings} keystore 三键）配置面已具备，真实 broker mTLS 回路 E2E 未覆盖。
- * 未覆盖：mTLS 真实回路、长稳与性能压测。
+ * 含不可信信任链的可见失败）与 mTLS 双向认证（{@link SslSettings} keystore 三键：正臂 =
+ * 建 topic/生产/消费全程走 require client auth 的 listener + 跨轮位点续传，负臂 = 不出示
+ * 客户端证书时 broker 在 TLS1.3 握手末段之后以 {@code bad_certificate} alert 拒绝，客户端见
+ * {@code SslAuthenticationException("Failed to process post-handshake messages")}）
+ * 均实测于 KafkaSourceSslBrokerE2ETest（2026-09-27，listener 29097/29098/29099）。
+ * 未覆盖：长稳与性能压测。
  *
  * <p>位点不向 broker 提交（enable.auto.commit=false 且无 commit 调用）——
  * checkpoint.json 是唯一位点事实源，重启后 assign+seek 精确恢复。

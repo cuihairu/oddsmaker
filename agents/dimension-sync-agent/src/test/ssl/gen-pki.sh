@@ -14,9 +14,12 @@
 #   client-truststore.jks         客户端信任库（CA，JKS = kafka-clients 默认 type）
 #   client-truststore.p12         客户端信任库（CA，PKCS12，走显式 type 键）
 #   client-truststore-wrong.p12   客户端信任库（rogue CA，PKCS12，负向臂）
+#   client.crt / client.key       mTLS 客户端证书与私钥（EKU=clientAuth，同 CA 签发）
+#   client-keystore.p12           客户端证书库（叶证书 + CA + 私钥，mTLS 出证用）
+#   secrets/broker-truststore.p12 broker 侧信任库（CA，用于校验客户端证书）
 #
 # 密码（与测试代码默认值一致，改这里也要改测试的 System property 默认值）：
-#   BROKER_PASS=broker-secret  TRUST_PASS=trust-secret
+#   BROKER_PASS=broker-secret  TRUST_PASS=trust-secret  CLIENT_PASS=client-secret
 #
 # 用法：
 #   ./gen-pki.sh
@@ -26,6 +29,7 @@ set -euo pipefail
 OUT_DIR="${OUT_DIR:-/tmp/oddsmaker-kafka-ssl-e2e}"
 BROKER_PASS="${BROKER_PASS:-broker-secret}"
 TRUST_PASS="${TRUST_PASS:-trust-secret}"
+CLIENT_PASS="${CLIENT_PASS:-client-secret}"
 DAYS="${DAYS:-30}"
 
 rm -rf "$OUT_DIR"
@@ -66,6 +70,33 @@ keytool -J-Djava.security.egd=file:/dev/urandom -importcert -noprompt -alias rog
   -keystore client-truststore-wrong.p12 -storetype PKCS12 -storepass "$TRUST_PASS" >/dev/null
 keytool -J-Djava.security.egd=file:/dev/urandom -importcert -noprompt -alias oddsmaker-e2e-ca -file ca.crt \
   -keystore client-truststore.jks -storetype JKS -storepass "$TRUST_PASS" >/dev/null
+# broker 侧信任库（mTLS listener 校验客户端证书用）——同样 keytool 生成，理由同上
+keytool -J-Djava.security.egd=file:/dev/urandom -importcert -noprompt -alias ca -file ca.crt \
+  -keystore secrets/broker-truststore.p12 -storetype PKCS12 -storepass "$TRUST_PASS" >/dev/null
+
+# ── mTLS 客户端证书：EKU=clientAuth（TLS 侧要求；broker 只验链+用途，不验主机名）──
+openssl req -new -newkey rsa:2048 -nodes -keyout client.key -out client.csr \
+  -subj "/CN=oddsmaker-kafka-e2e-client" \
+  -addext "extendedKeyUsage=critical,clientAuth" \
+  -addext "basicConstraints=critical,CA:FALSE" 2>/dev/null
+openssl x509 -req -in client.csr -CA ca.crt -CAkey ca.key -CAcreateserial -days "$DAYS" \
+  -copy_extensions copyall -out client.crt 2>/dev/null
+# 证书库：叶证书 + 私钥 + CA（-export 带私钥，不受上面 -nokeys 的 0 条目坑影响；
+# PKCS12 是单一口令语义——库口令即私钥口令，与 SslSettings「私钥口令复用库口令」一致）
+openssl pkcs12 -export -inkey client.key -in client.crt -certfile ca.crt -name client \
+  -out client-keystore-openssl.p12 -passout "pass:$CLIENT_PASS" 2>/dev/null
+# keytool 转一道，规范成 JDK 原生读法（失败则退回 openssl 产物，由下面的自检兜底判定）
+keytool -J-Djava.security.egd=file:/dev/urandom -importkeystore -noprompt \
+  -srckeystore client-keystore-openssl.p12 -srcstoretype PKCS12 -srcstorepass "$CLIENT_PASS" \
+  -destkeystore client-keystore.p12 -deststoretype PKCS12 -deststorepass "$CLIENT_PASS" >/dev/null 2>&1 \
+  || cp client-keystore-openssl.p12 client-keystore.p12
+# 自检：JDK 视角必须真读到 1 个 PrivateKeyEntry（读出 0 条目 = 前面那个坑复发）
+KS_ENTRIES=$(keytool -list -keystore client-keystore.p12 -storepass "$CLIENT_PASS" 2>/dev/null \
+  | grep -c 'PrivateKeyEntry' || true)
+[ "${KS_ENTRIES:-0}" -ge 1 ] || { echo "FAIL: client-keystore.p12 无 PrivateKeyEntry（JDK 读到 $KS_ENTRIES 条）"; exit 1; }
+BT_ENTRIES=$(keytool -list -keystore secrets/broker-truststore.p12 -storepass "$TRUST_PASS" 2>/dev/null \
+  | grep -c 'trustedCertEntry' || true)
+[ "${BT_ENTRIES:-0}" -ge 1 ] || { echo "FAIL: broker-truststore.p12 无 trustedCertEntry（$BT_ENTRIES 条）"; exit 1; }
 
 # ── SASL_SSL listener 用的 broker 侧 JAAS（客户端凭证由测试代码注入，
 #    broker 只需要一个 KafkaServer 条目供 SCRAM 内部使用）──
@@ -80,3 +111,5 @@ EOF
 echo "PKI 已生成于 $OUT_DIR"
 openssl verify -CAfile ca.crt broker.crt
 openssl x509 -in broker.crt -noout -subject -ext subjectAltName
+openssl verify -CAfile ca.crt client.crt
+openssl x509 -in client.crt -noout -subject -ext extendedKeyUsage
