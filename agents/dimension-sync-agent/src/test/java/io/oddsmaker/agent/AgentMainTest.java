@@ -11,6 +11,7 @@ import org.junit.jupiter.api.io.TempDir;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -21,13 +22,20 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Agent 单轮循环：推送成功才前进断点；每轮心跳上报；失败路径 errorCount++/水位不前进。
  * Gateway/Control 用内嵌 HttpServer 走真实 HTTP（沿用仓库 RuleFetcherTest 的 idiom）。
+ * 另覆盖 {@link AgentMain#sourceOf} 的五类 source 装配分支与两类失败细节
+ * （异常无 message、checkpoint 落盘自身失败）。
+ *
+ * <p>{@code AgentMain.main()} 不在本类范围：它 {@code cfg.validate()} 后进入 {@code run()}
+ * 无限循环并注册 shutdown hook，无法在单测内确定性地启停（进程级行为留给 installDist 手工验收）。
  */
 class AgentMainTest {
 
@@ -41,10 +49,11 @@ class AgentMainTest {
     @TempDir
     Path dir;
 
-    /** 可编排的假源：依次返回排好的 PollResult。 */
+    /** 可编排的假源：依次返回排好的 PollResult，或按 failure 抛错（走 cycle 的异常分支）。 */
     static final class FakeSource implements DimensionSource {
         final Deque<DimensionSource.PollResult> results = new ArrayDeque<>();
         final List<Checkpoint> polledWith = new ArrayList<>();
+        RuntimeException failure;
 
         @Override
         public String name() {
@@ -59,6 +68,9 @@ class AgentMainTest {
         @Override
         public PollResult poll(Checkpoint current) {
             polledWith.add(current.copy());
+            if (failure != null) {
+                throw failure;
+            }
             return results.isEmpty() ? PollResult.of(List.of(), current.copy()) : results.removeFirst();
         }
     }
@@ -205,5 +217,104 @@ class AgentMainTest {
         long start = System.currentTimeMillis();
         agent.run();
         assertTrue(System.currentTimeMillis() - start < 5000);
+    }
+
+    @Test
+    @DisplayName("sourceOf：csv / excel / mysql / postgres 分支按配置装配对应的源（构造不触网、不读文件）")
+    void sourceOfBuildsConfiguredSourceTypes() {
+        AgentConfig csv = cfg();
+        csv.sourceType = "csv";
+        csv.csvDir = dir.toString();
+        DimensionSource csvSource = AgentMain.sourceOf(csv);
+        assertEquals("csv", csvSource.type());
+        assertEquals("csv:" + dir, csvSource.name());
+
+        AgentConfig excel = cfg();
+        excel.sourceType = "excel";
+        excel.excelDir = dir.toString();
+        DimensionSource excelSource = AgentMain.sourceOf(excel);
+        assertEquals("excel", excelSource.type());
+        assertEquals("excel:" + dir, excelSource.name());
+
+        for (String jdbcType : List.of("mysql", "postgres")) {
+            AgentConfig jdbc = cfg();
+            jdbc.sourceType = jdbcType;
+            jdbc.jdbcUrl = "jdbc:h2:mem:dims";
+            DimensionSource source = AgentMain.sourceOf(jdbc);
+            assertTrue(source instanceof JdbcSource, jdbcType + " → " + source.getClass());
+            assertEquals(jdbcType + ":jdbc:h2:mem:dims", source.name());
+        }
+    }
+
+    @Test
+    @DisplayName("sourceOf：kafka 分支装配真实 KafkaConsumerAdapter（含 SslSettings 六键），构造后可关闭")
+    void sourceOfKafkaBranchWiresConsumerAdapter() throws Exception {
+        AgentConfig kafka = cfg();
+        kafka.sourceType = "kafka";
+        kafka.kafkaBootstrap = "127.0.0.1:9999";   // 无人监听的端口：只构造 consumer，不 assign/poll
+        kafka.kafkaTopic = "dims";
+        kafka.kafkaGroupId = "g";
+        DimensionSource source = AgentMain.sourceOf(kafka);
+        assertEquals("kafka", source.type());
+        assertEquals("kafka:127.0.0.1:9999/dims", source.name());
+
+        java.lang.reflect.Field portField = KafkaSource.class.getDeclaredField("port");
+        portField.setAccessible(true);
+        Object port = portField.get(source);
+        assertTrue(port instanceof KafkaConsumerAdapter, "实际端口实现: " + port.getClass());
+        ((AutoCloseable) port).close();            // 释放 consumer 线程与 MBean
+    }
+
+    @Test
+    @DisplayName("sourceOf：未知 source.type 直接抛错（不静默返回空源）")
+    void sourceOfUnknownTypeFailsLoud() {
+        AgentConfig bogus = cfg();
+        bogus.sourceType = "parquet";
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> AgentMain.sourceOf(bogus));
+        assertTrue(ex.getMessage().contains("parquet"), ex.getMessage());
+    }
+
+    @Test
+    @DisplayName("失败路径：异常 message 为 null 时 lastError 取 toString（不留 null、不 NPE）")
+    void failureWithoutMessageRecordsToString() throws Exception {
+        AgentConfig cfg = cfg();
+        FakeSource source = new FakeSource();
+        source.failure = new IllegalStateException();   // getMessage() == null
+        AgentMain agent = new AgentMain(cfg, source, new GatewaySink(cfg),
+                new StatusReporter(cfg), new CheckpointStore(Path.of(cfg.checkpointPath)));
+
+        agent.cycle();
+
+        Checkpoint cp = agent.checkpoint();
+        assertEquals(1, cp.errorCount);
+        assertEquals("java.lang.IllegalStateException", cp.lastError);
+        Checkpoint persisted = new CheckpointStore(Path.of(cfg.checkpointPath)).load();
+        assertEquals("java.lang.IllegalStateException", persisted.lastError);
+        assertEquals(1, statusBodies.size());          // 失败轮的心照报
+    }
+
+    @Test
+    @DisplayName("失败路径叠加 checkpoint 落盘失败：异常不外逃，计数在内存生效且心跳继续")
+    void checkpointSaveFailureStillCountsAndReports() throws Exception {
+        AgentConfig cfg = cfg();
+        // 把 checkpoint 的父目录做成普通文件 → save 必抛 IOException（FileAlreadyExistsException）
+        Path blocker = dir.resolve("not-a-dir");
+        Files.writeString(blocker, "x");
+        cfg.checkpointPath = blocker.resolve("checkpoint.json").toString();
+        FakeSource source = new FakeSource();
+        source.failure = new IllegalStateException("boom");
+        AgentMain agent = new AgentMain(cfg, source, new GatewaySink(cfg),
+                new StatusReporter(cfg), new CheckpointStore(Path.of(cfg.checkpointPath)));
+
+        agent.cycle();   // 不抛
+
+        assertEquals(1, agent.checkpoint().errorCount);
+        assertEquals("boom", agent.checkpoint().lastError);
+        assertEquals(1, statusBodies.size());
+        assertFalse(Files.exists(blocker.resolve("checkpoint.json")));
+        // 第二轮继续计数（落盘失败不影响循环存活）
+        agent.cycle();
+        assertEquals(2, agent.checkpoint().errorCount);
     }
 }

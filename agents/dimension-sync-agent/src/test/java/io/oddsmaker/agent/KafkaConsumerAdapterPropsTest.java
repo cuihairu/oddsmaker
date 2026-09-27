@@ -144,6 +144,24 @@ class KafkaConsumerAdapterPropsTest {
     }
 
     @Test
+    @DisplayName("keystore password null：库口令与私钥口令都归一为空串，type 空白不注入")
+    void nullKeystorePasswordNormalizedToEmpty() {
+        Map<String, Object> props = new HashMap<>();
+        KafkaConsumerAdapter.applySecurityProps(props, "SSL", null, null, null,
+                new KafkaConsumerAdapter.SslSettings(null, null, null, "/ks/client.jks", null, null));
+        assertEquals("", props.get(SslConfigs.SSL_KEYSTORE_PASSWORD_CONFIG));
+        assertEquals("", props.get(SslConfigs.SSL_KEY_PASSWORD_CONFIG));
+        // type 缺省不写：交回 kafka-clients 自身默认（JKS），与 truststore 同一口径
+        assertFalse(props.containsKey(SslConfigs.SSL_KEYSTORE_TYPE_CONFIG));
+
+        Map<String, Object> blankType = new HashMap<>();
+        KafkaConsumerAdapter.applySecurityProps(blankType, "SSL", null, null, null,
+                new KafkaConsumerAdapter.SslSettings(null, null, null, "/ks/c.jks", "p", "  "));
+        assertFalse(blankType.containsKey(SslConfigs.SSL_KEYSTORE_TYPE_CONFIG));
+        assertEquals("p", blankType.get(SslConfigs.SSL_KEY_PASSWORD_CONFIG));
+    }
+
+    @Test
     @DisplayName("mTLS 完整组合：truststore + keystore 同时注入（验链 + 出证）")
     void mtlsInjectsTruststoreAndKeystore() {
         Map<String, Object> props = new HashMap<>();
