@@ -70,6 +70,8 @@
 
 - [x] 测试覆盖率收口（control-service 分支覆盖专项，覆盖率缺口巡检第四刀）：control-service 分支 **98.81% → 99.50%**（未覆盖 82 → 34/总 6864），业务源码零改动（新增 `BranchTopUpCTest` 32 用例，全 mock/内存库/@TempDir 离线可跑）。五目标类：`DashboardService` **80.4% → 100%**、`SegmentService` **86.5% → 100%**、`InspectorProxyService` **84.6% → 100%**、`MlArtifactRegistry` **90.4% → 100%**、`EventsExportService` **89.6% → 97.9%**（唯一残臂 L111 `rows > MAX_ROWS` 需单分区 500 万行 JSONL+gzip 落盘，离线单测 GB 级磁盘/分钟级时长不可承受，按既定做法测试类 javadoc 记账）。关键发现：既有定义校验用例中 `event_name`/`within_days` 等 snake_case 键会被 Jackson `FAIL_ON_UNKNOWN_PROPERTIES` 在 JSON 解析期拒绝，实际从未抵达目标校验臂（断言只查 BusinessException 类型故一直绿）——补测一律 camelCase 直击目标分支；`compile()` 两处 `IllegalStateException("unreachable")` 兜底经包私有方法直调（直接构造未知 kind/op 对象绕过前置校验）合法覆盖，非凑数。剩余 34 miss 分布于非本轮范围的其余 14 类（PredictionMetricsService 7、DimensionSyncStatusService 4、Risk/Crash/Retention/MlRetrainScheduler 各 3 等），无真 bug 暴露
 
+- [x] 测试覆盖率收口（PredictionMetricsService 分支清零，覆盖率缺口巡检第五刀·首类）：`PredictionMetricsService` 分支 **95.3% → 100%**（7 miss：refreshPropensity 入口查询环境三元 isBlank 侧与 avgScore 空集侧、refreshPltv 产物乘数 null/≤0 两回落臂、d7 查询空白环境侧、resolveModel 系数长度不匹配与 intercept 缺失两回落臂——均为既有用例未触达的对侧输入，非防御性不可达），control-service 模块分支 **99.50% → 99.61%**（27/6864）。业务源码零改动，`PredictionMetricsServiceTest` 既有「分支对侧补充」段内追加 5 用例（空白环境 + 空特征集、空白环境模型路径 pLTV、乘数缺失/非正双回落、系数长度不匹配、intercept 缺失），全 mock 离线可跑
+
 ## P7 竞品差距收敛（依据 `docs/competitive-analysis.md`，2026-09 竞品调研）
 
 - [x] P7-1 实时事件检视器（Live Inspector / Debug View）：Gateway 内存环形缓冲记录每条事件结局（accepted/rejected/sampled_out/duplicate + 拒绝原因与 schema 明细）+ `/v1/inspector/recent` 检视 API（API Key 作用域过滤）+ Control 代理端点 + 控制台 Live Inspector 页（轮询刷新）

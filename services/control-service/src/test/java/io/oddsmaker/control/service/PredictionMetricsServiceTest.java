@@ -462,4 +462,78 @@ class PredictionMetricsServiceTest {
         assertEquals("heuristic", resp.get("path"));
         assertEquals(0, resp.get("scored"));
     }
+
+    @Test
+    @DisplayName("付费倾向空白环境 + 空结果：入口查询三元 isBlank 侧 + avgScore 空集侧")
+    void propensityBlankEnvAndEmptyRows() {
+        when(client.isAvailable()).thenReturn(true);
+        when(client.query(contains("v_user_features_30d"), any(Object[].class))).thenReturn(List.of());
+
+        Map<String, Object> resp = service.refreshPropensity("g", " ");
+
+        assertEquals(0, resp.get("scored"));
+        assertEquals(0.0, resp.get("avgScore"));
+    }
+
+    @Test
+    @DisplayName("pLTV 空白环境（模型路径）：d7 查询三元 isBlank 侧 + 环境归一化空串落库")
+    void pltvBlankEnvHitsD7Query() {
+        when(client.isAvailable()).thenReturn(true);
+        when(registry.resolveActive("g", "pltv")).thenReturn(Optional.of(artifact("pltv", null, null, null, 3.2)));
+        when(client.query(contains("today() - 7"), any(Object[].class)))
+            .thenReturn(List.of(Map.of("user_id", "u1", "d7_revenue", 100.0)));
+
+        Map<String, Object> resp = service.refreshPltv("g", "  ");
+
+        assertEquals("model", resp.get("path"));
+        assertEquals(1, resp.get("scored"));
+        assertEquals(3.2, resp.get("multiplier"));
+        ArgumentCaptor<Object[]> args = ArgumentCaptor.forClass(Object[].class);
+        verify(client).update(contains("INSERT INTO predictions"), args.capture());
+        assertEquals("", args.getValue()[1]);
+    }
+
+    @Test
+    @DisplayName("pLTV 产物乘数缺失 / 非正 → 回落启发式，无成熟 cohort 诚实降级不写回")
+    void pltvArtifactMultiplierNullOrNonPositiveFallsBack() {
+        when(client.isAvailable()).thenReturn(true);
+        when(client.query(contains("v_ltv_by_cohort_day"), any(Object[].class))).thenReturn(List.of());
+        when(client.query(contains("v_user_first_seen"), any(Object[].class))).thenReturn(List.of());
+
+        when(registry.resolveActive("g", "pltv")).thenReturn(Optional.of(artifact("pltv", null, null, null, null)));
+        Map<String, Object> nullMult = service.refreshPltv("g", null);
+        assertEquals("heuristic", nullMult.get("path"));
+        assertNotNull(nullMult.get("reason"));
+
+        when(registry.resolveActive("g", "pltv")).thenReturn(Optional.of(artifact("pltv", null, null, null, 0.0)));
+        Map<String, Object> zeroMult = service.refreshPltv("g", null);
+        assertEquals("heuristic", zeroMult.get("path"));
+        assertNotNull(zeroMult.get("reason"));
+
+        verify(client, never()).update(contains("INSERT INTO predictions"), any(Object[].class));
+    }
+
+    @Test
+    @DisplayName("产物系数长度与特征名长度不一致 → 回落启发式（resolveModel 长度臂）")
+    void churnArtifactCoefLengthMismatchFallsBack() {
+        when(client.isAvailable()).thenReturn(true);
+        when(registry.resolveActive("g", "churn")).thenReturn(Optional.of(artifact("churn",
+                CHURN_FEATURES_JSON, "[1.0,1.0,1.0]", 0.0, null)));
+        when(client.query(contains("v_user_features_30d"), any(Object[].class))).thenReturn(List.of());
+
+        Map<String, Object> resp = service.refreshChurn("g", "prod");
+        assertEquals("heuristic", resp.get("path"));
+    }
+
+    @Test
+    @DisplayName("产物 intercept 缺失 → 回落启发式（resolveModel intercept 臂）")
+    void churnArtifactNullInterceptFallsBack() {
+        when(client.isAvailable()).thenReturn(true);
+        when(registry.resolveActive("g", "churn")).thenReturn(Optional.of(artifact("churn",
+                CHURN_FEATURES_JSON, "[0.8,-0.3,-0.002,-0.01]", null, null)));
+        when(client.query(contains("v_user_features_30d"), any(Object[].class))).thenReturn(List.of());
+
+        Map<String, Object> resp = service.refreshChurn("g", "prod");
+        assertEquals("heuristic", resp.get("path"));
+    }
 }
