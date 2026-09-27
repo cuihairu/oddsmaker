@@ -11,6 +11,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -115,5 +116,67 @@ class KafkaConsumerAdapterPropsTest {
         KafkaConsumerAdapter.applySecurityProps(props, "SSL", null, null, null,
                 "/ts/trust.jks", null, "JKS");
         assertEquals("", props.get(SslConfigs.SSL_TRUSTSTORE_PASSWORD_CONFIG));
+    }
+
+    @Test
+    @DisplayName("mTLS keystore：注入 location/password/type + key.password 复用库口令；空 path 不注入")
+    void keystoreInjectsForMtls() {
+        Map<String, Object> props = new HashMap<>();
+        KafkaConsumerAdapter.applySecurityProps(props, "SSL", null, null, null,
+                new KafkaConsumerAdapter.SslSettings(null, null, null,
+                        "/ks/client.p12", "ks-pass", "PKCS12"));
+        assertEquals("/ks/client.p12", props.get(SslConfigs.SSL_KEYSTORE_LOCATION_CONFIG));
+        assertEquals("ks-pass", props.get(SslConfigs.SSL_KEYSTORE_PASSWORD_CONFIG));
+        // kafka-clients 的私钥口令独立成键：配置面复用库口令（PKCS12 单一口令语义）
+        assertEquals("ks-pass", props.get(SslConfigs.SSL_KEY_PASSWORD_CONFIG));
+        assertEquals("PKCS12", props.get(SslConfigs.SSL_KEYSTORE_TYPE_CONFIG));
+        assertFalse(props.containsKey(SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG));
+
+        // 空/空白 keystore path：不注入任何 keystore props（单向 TLS 场景）
+        Map<String, Object> bare = new HashMap<>();
+        KafkaConsumerAdapter.applySecurityProps(bare, "SSL", null, null, null,
+                new KafkaConsumerAdapter.SslSettings("/ts/t.p12", "ts", "PKCS12", null, null, null));
+        assertFalse(bare.containsKey(SslConfigs.SSL_KEYSTORE_LOCATION_CONFIG));
+        Map<String, Object> blank = new HashMap<>();
+        KafkaConsumerAdapter.applySecurityProps(blank, "SSL", null, null, null,
+                new KafkaConsumerAdapter.SslSettings(null, null, null, "  ", "", null));
+        assertFalse(blank.containsKey(SslConfigs.SSL_KEYSTORE_LOCATION_CONFIG));
+    }
+
+    @Test
+    @DisplayName("mTLS 完整组合：truststore + keystore 同时注入（验链 + 出证）")
+    void mtlsInjectsTruststoreAndKeystore() {
+        Map<String, Object> props = new HashMap<>();
+        KafkaConsumerAdapter.applySecurityProps(props, "SSL", null, null, null,
+                new KafkaConsumerAdapter.SslSettings("/ts/trust.p12", "ts-pass", "PKCS12",
+                        "/ks/client.p12", "ks-pass", "PKCS12"));
+        assertEquals("/ts/trust.p12", props.get(SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG));
+        assertEquals("/ks/client.p12", props.get(SslConfigs.SSL_KEYSTORE_LOCATION_CONFIG));
+    }
+
+    @Test
+    @DisplayName("SASL_SSL + keystore：证书链、客户端证书与 SCRAM JAAS 三方叠加")
+    void saslSslInjectsKeystoreAndJaas() {
+        Map<String, Object> props = new HashMap<>();
+        KafkaConsumerAdapter.applySecurityProps(props, "SASL_SSL", "SCRAM-SHA-256",
+                "dim_ro", "secret",
+                new KafkaConsumerAdapter.SslSettings("/ts/trust.p12", "ts-pass", "PKCS12",
+                        "/ks/client.p12", "ks-pass", "PKCS12"));
+        assertEquals("SASL_SSL", props.get(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG));
+        assertEquals("/ts/trust.p12", props.get(SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG));
+        assertEquals("/ks/client.p12", props.get(SslConfigs.SSL_KEYSTORE_LOCATION_CONFIG));
+        assertEquals("SCRAM-SHA-256", props.get(SaslConfigs.SASL_MECHANISM));
+        assertTrue(String.valueOf(props.get(SaslConfigs.SASL_JAAS_CONFIG))
+                .contains("username=\"dim_ro\""));
+    }
+
+    @Test
+    @DisplayName("truststoreOnly 便捷构造 = keystore 三字段全 null（10 参构造行为不变的根保证）")
+    void truststoreOnlyLeavesKeystoreNull() {
+        var ssl = KafkaConsumerAdapter.SslSettings.truststoreOnly("/ts/t.p12", "p", "PKCS12");
+        assertEquals("/ts/t.p12", ssl.truststorePath());
+        assertNull(ssl.keystorePath());
+        assertNull(ssl.keystorePassword());
+        assertNull(ssl.keystoreType());
     }
 }

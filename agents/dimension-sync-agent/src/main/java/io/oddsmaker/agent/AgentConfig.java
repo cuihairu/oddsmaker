@@ -55,6 +55,13 @@ public final class AgentConfig {
     public String kafkaSslTruststorePassword = "";
     /** 信任库类型：JKS / PKCS12（缺省 JKS，与 kafka-clients 默认一致） */
     public String kafkaSslTruststoreType = "JKS";
+    // mTLS（broker 要求客户端证书，ssl.client.auth=required）时的客户端证书库——
+    // 普通 SSL/SASL_SSL 单向认证可不配；私钥口令复用 keystore 口令（PKCS12 单一口令语义，
+    // JKS 库密/钥密分设场景不在本配置面内）
+    public String kafkaSslKeystorePath;
+    public String kafkaSslKeystorePassword = "";
+    /** 证书库类型：JKS / PKCS12（缺省 JKS，与 kafka-clients 默认一致） */
+    public String kafkaSslKeystoreType = "JKS";
     // 同步状态上报（Control /api/dimensions/sync-status；url 空则跳过）
     public String statusUrl;
     public String statusToken;
@@ -108,6 +115,9 @@ public final class AgentConfig {
         c.kafkaSslTruststorePath = trim(p.getProperty("source.kafka.ssl-truststore-path"));
         c.kafkaSslTruststorePassword = p.getProperty("source.kafka.ssl-truststore-password", "");
         c.kafkaSslTruststoreType = orDefault(p.getProperty("source.kafka.ssl-truststore-type"), "JKS");
+        c.kafkaSslKeystorePath = trim(p.getProperty("source.kafka.ssl-keystore-path"));
+        c.kafkaSslKeystorePassword = p.getProperty("source.kafka.ssl-keystore-password", "");
+        c.kafkaSslKeystoreType = orDefault(p.getProperty("source.kafka.ssl-keystore-type"), "JKS");
         c.statusUrl = trim(p.getProperty("status.url"));
         c.statusToken = trim(p.getProperty("status.token"));
         c.sourceKey = trim(p.getProperty("status.source-key"));
@@ -158,7 +168,8 @@ public final class AgentConfig {
     }
 
     /** kafka 鉴权 fail-fast：协议白名单 + SASL_* 必须带齐机制与凭证（PLAIN 明文机制不支持）+
-     * 证书模式信任库类型白名单 + 明文协议下配置 truststore 视为配置漂移直接拒绝。 */
+     * 证书材料（truststore 验服务端 / keystore 出示客户端证书，mTLS 场景）类型白名单，
+     * 明文协议下配置任何证书材料视为配置漂移直接拒绝。 */
     private void validateKafkaSecurity() {
         switch (kafkaSecurityProtocol) {
             case "PLAINTEXT", "SSL" -> { /* 无账号凭证 */ }
@@ -175,16 +186,27 @@ public final class AgentConfig {
             default -> throw new IllegalArgumentException("source.kafka.security-protocol 仅支持 "
                     + "PLAINTEXT/SSL/SASL_PLAINTEXT/SASL_SSL，当前: " + kafkaSecurityProtocol);
         }
-        if (kafkaSslTruststorePath != null && !kafkaSslTruststorePath.isBlank()) {
-            if ("PLAINTEXT".equals(kafkaSecurityProtocol) || "SASL_PLAINTEXT".equals(kafkaSecurityProtocol)) {
-                throw new IllegalArgumentException("source.kafka.ssl-truststore-path 仅在 "
-                        + "SSL/SASL_SSL 证书协议下生效，当前协议: " + kafkaSecurityProtocol
-                        + "（明文协议配置信任库属配置漂移，请检查 security-protocol 是否写错）");
-            }
-            if (!"JKS".equals(kafkaSslTruststoreType) && !"PKCS12".equals(kafkaSslTruststoreType)) {
-                throw new IllegalArgumentException("source.kafka.ssl-truststore-type 仅支持 "
-                        + "JKS/PKCS12，当前: " + kafkaSslTruststoreType);
-            }
+        requireCertMaterial("source.kafka.ssl-truststore-path", kafkaSslTruststorePath,
+                "source.kafka.ssl-truststore-type", kafkaSslTruststoreType, "信任库");
+        requireCertMaterial("source.kafka.ssl-keystore-path", kafkaSslKeystorePath,
+                "source.kafka.ssl-keystore-type", kafkaSslKeystoreType, "证书库");
+    }
+
+    /** 证书材料通用校验（truststore / keystore 同规则）：配了 path 才校验——
+     *  明文协议下配置 = 配置漂移 fail-fast；type 白名单 JKS/PKCS12。 */
+    private void requireCertMaterial(String pathKey, String path,
+                                     String typeKey, String type, String cnName) {
+        if (path == null || path.isBlank()) {
+            return;
+        }
+        if ("PLAINTEXT".equals(kafkaSecurityProtocol) || "SASL_PLAINTEXT".equals(kafkaSecurityProtocol)) {
+            throw new IllegalArgumentException(pathKey + " 仅在 "
+                    + "SSL/SASL_SSL 证书协议下生效，当前协议: " + kafkaSecurityProtocol
+                    + "（明文协议配置" + cnName + "属配置漂移，请检查 security-protocol 是否写错）");
+        }
+        if (!"JKS".equals(type) && !"PKCS12".equals(type)) {
+            throw new IllegalArgumentException(typeKey + " 仅支持 "
+                    + "JKS/PKCS12，当前: " + type);
         }
     }
 

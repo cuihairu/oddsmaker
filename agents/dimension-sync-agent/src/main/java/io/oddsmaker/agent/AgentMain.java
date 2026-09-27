@@ -56,8 +56,11 @@ public final class AgentMain {
                     cfg.kafkaBootstrap, cfg.kafkaGroupId, cfg.kafkaTopic,
                     cfg.kafkaSecurityProtocol, cfg.kafkaSaslMechanism,
                     cfg.kafkaUsername, cfg.kafkaPassword,
-                    cfg.kafkaSslTruststorePath, cfg.kafkaSslTruststorePassword,
-                    cfg.kafkaSslTruststoreType));
+                    new KafkaConsumerAdapter.SslSettings(
+                            cfg.kafkaSslTruststorePath, cfg.kafkaSslTruststorePassword,
+                            cfg.kafkaSslTruststoreType,
+                            cfg.kafkaSslKeystorePath, cfg.kafkaSslKeystorePassword,
+                            cfg.kafkaSslKeystoreType)));
             default -> throw new IllegalArgumentException("未知 source.type: " + cfg.sourceType);
         };
     }

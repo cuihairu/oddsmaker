@@ -89,12 +89,18 @@ class AgentConfigTest {
                 "source.kafka.security-protocol=SSL",
                 "source.kafka.ssl-truststore-path=/ts/client.p12",
                 "source.kafka.ssl-truststore-password=ts-pass",
-                "source.kafka.ssl-truststore-type=PKCS12");
+                "source.kafka.ssl-truststore-type=PKCS12",
+                "source.kafka.ssl-keystore-path=/ks/client.p12",
+                "source.kafka.ssl-keystore-password=ks-pass",
+                "source.kafka.ssl-keystore-type=PKCS12");
         AgentConfig tc = AgentConfig.load(new String[]{"--config=" + tls});
         assertEquals("SSL", tc.kafkaSecurityProtocol);
         assertEquals("/ts/client.p12", tc.kafkaSslTruststorePath);
         assertEquals("ts-pass", tc.kafkaSslTruststorePassword);
         assertEquals("PKCS12", tc.kafkaSslTruststoreType);
+        assertEquals("/ks/client.p12", tc.kafkaSslKeystorePath);
+        assertEquals("ks-pass", tc.kafkaSslKeystorePassword);
+        assertEquals("PKCS12", tc.kafkaSslKeystoreType);
         // 未配置鉴权时缺省明文
         Path plain = write(
                 "gateway.endpoint=http://gw:8080",
@@ -107,10 +113,13 @@ class AgentConfigTest {
         AgentConfig pc = AgentConfig.load(new String[]{"--config=" + plain});
         assertEquals("PLAINTEXT", pc.kafkaSecurityProtocol);
         assertNull(pc.kafkaSaslMechanism);
-        // 未配置时：无信任库（走 JVM 默认）、空密码、类型缺省 JKS（与 kafka-clients 一致）
+        // 未配置时：无信任库/证书库（走 JVM 默认）、空密码、类型缺省 JKS（与 kafka-clients 一致）
         assertNull(pc.kafkaSslTruststorePath);
         assertEquals("", pc.kafkaSslTruststorePassword);
         assertEquals("JKS", pc.kafkaSslTruststoreType);
+        assertNull(pc.kafkaSslKeystorePath);
+        assertEquals("", pc.kafkaSslKeystorePassword);
+        assertEquals("JKS", pc.kafkaSslKeystoreType);
     }
 
     @Test
@@ -324,6 +333,36 @@ class AgentConfigTest {
         badType.kafkaSslTruststoreType = "PEM";
         assertTrue(assertThrows(IllegalArgumentException.class, badType::validate)
                 .getMessage().contains("ssl-truststore-type"));
+
+        // ── mTLS 证书库（keystore，broker ssl.client.auth=required 时出证）──
+        // SSL + truststore + keystore 齐备通过（完整 mTLS 配置面）
+        AgentConfig sslKs = copy(sslTs);
+        sslKs.kafkaSslKeystorePath = "/ks/client.p12";
+        sslKs.kafkaSslKeystorePassword = "ks-pass";
+        sslKs.kafkaSslKeystoreType = "PKCS12";
+        sslKs.validate();
+
+        // SASL_SSL + keystore 同样通过（证书链 + 客户端证书 + 账号凭证三方叠加）
+        AgentConfig saslSslKs = copy(saslSslTs);
+        saslSslKs.kafkaSslKeystorePath = "/ks/client.jks";
+        saslSslKs.validate();
+
+        // 明文协议下配置 keystore = 配置漂移，fail-fast（消息带 path 键名与证书库中文名）
+        AgentConfig plaintextKs = copy(base);
+        plaintextKs.kafkaSslKeystorePath = "/ks/client.p12";
+        assertTrue(assertThrows(IllegalArgumentException.class, plaintextKs::validate)
+                .getMessage().contains("ssl-keystore-path"));
+        AgentConfig saslPlaintextKs = copy(fullSasl);
+        saslPlaintextKs.kafkaSecurityProtocol = "SASL_PLAINTEXT";
+        saslPlaintextKs.kafkaSslKeystorePath = "/ks/client.p12";
+        assertTrue(assertThrows(IllegalArgumentException.class, saslPlaintextKs::validate)
+                .getMessage().contains("证书库"));
+
+        // 证书库类型白名单（与信任库同规则）
+        AgentConfig badKsType = copy(sslKs);
+        badKsType.kafkaSslKeystoreType = "PEM";
+        assertTrue(assertThrows(IllegalArgumentException.class, badKsType::validate)
+                .getMessage().contains("ssl-keystore-type"));
     }
 
     private AgentConfig fullJdbc() {
@@ -377,6 +416,9 @@ class AgentConfigTest {
         c.kafkaSslTruststorePath = src.kafkaSslTruststorePath;
         c.kafkaSslTruststorePassword = src.kafkaSslTruststorePassword;
         c.kafkaSslTruststoreType = src.kafkaSslTruststoreType;
+        c.kafkaSslKeystorePath = src.kafkaSslKeystorePath;
+        c.kafkaSslKeystorePassword = src.kafkaSslKeystorePassword;
+        c.kafkaSslKeystoreType = src.kafkaSslKeystoreType;
         return c;
     }
 }

@@ -180,6 +180,11 @@ source.jdbc.cursor-column=updated_at
 # source.kafka.ssl-truststore-path=/etc/oddsmaker/kafka-client.truststore.p12
 # source.kafka.ssl-truststore-password=***
 # source.kafka.ssl-truststore-type=PKCS12
+# mTLS（broker ssl.client.auth=required）另配客户端证书库三键，单向 TLS 不配即可；
+# 私钥口令复用证书库口令（PKCS12 单一口令语义），校验口径同信任库
+# source.kafka.ssl-keystore-path=/etc/oddsmaker/kafka-client.keystore.p12
+# source.kafka.ssl-keystore-password=***
+# source.kafka.ssl-keystore-type=PKCS12
 
 # Agent 行为
 agent.batch-size=500
