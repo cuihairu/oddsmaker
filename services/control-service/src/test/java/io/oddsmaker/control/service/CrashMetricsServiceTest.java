@@ -13,6 +13,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.contains;
@@ -176,6 +177,31 @@ class CrashMetricsServiceTest {
         assertEquals("g", ra[5]);
         assertEquals("seg1", ra[8]);
         assertEquals("g", ra[9]);
+    }
+
+    // ===== 分支对侧补充（BRANCH 收口）=====
+
+    @Test
+    @DisplayName("分群过滤：segmentId 非空引用但空白 → 视同无分群（片段空、参数不尾插、响应无 segmentId 键）")
+    void blankSegmentIdTreatedAsAbsent() {
+        when(client.isAvailable()).thenReturn(true);
+        when(client.query(anyString(), any(Object[].class))).thenReturn(List.of());
+
+        Map<String, Object> trend = service.trend("g", "prod", 14, "   ");
+        assertEquals(true, trend.get("available"));
+        assertFalse(trend.containsKey("segmentId"));
+
+        // segmentFilter 返回空片段：SQL 不含 subject_id 成员子查询
+        org.mockito.ArgumentCaptor<String> sql = org.mockito.ArgumentCaptor.forClass(String.class);
+        @SuppressWarnings("unchecked")
+        org.mockito.ArgumentCaptor<Object[]> sqlArgs = org.mockito.ArgumentCaptor.forClass(Object[].class);
+        verify(client).query(sql.capture(), (Object[]) sqlArgs.capture());
+        assertFalse(sql.getValue().contains("subject_id"));
+        // addSegmentArgs 不尾插 (segmentId, gameId)：参数仍为 (gameId, env, since) 三元
+        assertEquals(3, sqlArgs.getValue().length);
+        assertEquals("g", sqlArgs.getValue()[0]);
+        assertEquals("prod", sqlArgs.getValue()[1]);
+        assertTrue(sqlArgs.getValue()[2] instanceof java.time.LocalDate);
     }
 
 }
