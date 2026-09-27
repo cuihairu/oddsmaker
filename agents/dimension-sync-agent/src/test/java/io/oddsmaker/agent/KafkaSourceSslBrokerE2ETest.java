@@ -35,10 +35,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * kafka source TLS(SSL) 证书链真实 broker 端到端。
- * 环境：apache/kafka:3.7.0 单节点 KRaft，自签 CA（CN=oddsmaker-kafka-e2e-ca）签发
- * broker 证书（SAN=DNS:localhost,IP:127.0.0.1——kafka-clients 默认开启主机名校验，
- * 证书必须覆盖 advertised 主机名）。两个证书 listener：SSL（宿主 29107，单向证书链）+
- * SASL_SSL（宿主 29108，SCRAM-SHA-256 用户 dim-e2e）。
+ * 环境：apache/kafka:3.7.0 单节点 KRaft，自签 CA 签发 broker 证书（SAN=DNS:localhost,
+ * IP:127.0.0.1——kafka-clients 默认 endpoint identification=https 主机名校验，证书必须
+ * 覆盖 advertised 主机名）。两个证书 listener：SSL（宿主 29097，单向证书链）+
+ * SASL_SSL（宿主 29098，SCRAM-SHA-256 用户 dim-e2e）。
  * <b>SSL broker 或 truststore 文件不可达时整类 SKIP，不误报绿。</b>
  *
  * <p>核对点：①SSL 连通 + 消费回路 + 断点续传位点正确（checkpoint 自管位点跨轮推进）；
@@ -47,54 +47,30 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * building failed），非静默降级；③SASL_SSL 与既有 SASL_PLAINTEXT 用例的差异仅在
  * 协议层叠加证书链（SCRAM 断言不重复造轮子，只验证组合可达 + 回路）。
  *
- * <p>环境编排（一次性，测试资源不含任何私钥材料）：
+ * <p>环境编排见 {@code src/test/ssl/}（生成配方 + docker 编排，私钥只落 OUT_DIR 不进仓库）：
  * <pre>
- * # 1) 证书（目录任选，默认 build/e2e-tls-7c4x/（模块 build/ 下，gitignore 覆盖，可经 truststore sysprop 覆盖））
- * openssl req -new -x509 -keyout ca.key -out ca.crt -days 30 -subj "/CN=oddsmaker-kafka-e2e-ca" -passout pass:ca-secret
- * openssl genrsa -out broker.key 2048
- * openssl req -new -key broker.key -out broker.csr -subj "/CN=localhost"
- * printf "subjectAltName=DNS:localhost,IP:127.0.0.1\nbasicConstraints=CA:FALSE\n" > san.ext
- * openssl x509 -req -in broker.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out broker.crt -days 30 -extfile san.ext -passin pass:ca-secret
- * openssl pkcs12 -export -in broker.crt -inkey broker.key -certfile ca.crt -name broker -out broker.p12 -passout pass:broker-secret
- * keytool -importcert -file ca.crt -alias ca -keystore client.p12 -storetype PKCS12 -storepass client-secret -noprompt
- * mkdir -p secrets &amp;&amp; cp broker.p12 client.p12 secrets/ \
- *   &amp;&amp; printf broker-secret &gt; secrets/key_creds &amp;&amp; printf broker-secret &gt; secrets/keystore_creds
- * # jaas.conf 放 KafkaServer ScramLoginModule 占位（inter-broker 走 PLAINTEXT，不实际参与）
- *
- * # 2) broker（listener 名必须叫 SSL / SASL_SSL：镜像 configure 脚本按字面量 "SSL://" 匹配 advertised 才注入 keystore）
- * docker run -d --name oddsmaker-kafka-ssl-e2e --add-host kafka:127.0.0.1 -p 29107:29107 -p 29108:29108 \
- *   -v &lt;证书目录&gt;/secrets:/etc/kafka/secrets \
- *   -e KAFKA_NODE_ID=1 -e KAFKA_PROCESS_ROLES=broker,controller \
- *   -e KAFKA_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093,SSL://:29107,SASL_SSL://:29108 \
- *   -e KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092,SSL://localhost:29107,SASL_SSL://localhost:29108 \
- *   -e KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER -e KAFKA_CONTROLLER_QUORUM_VOTERS=1@kafka:9093 \
- *   -e KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,SSL:SSL,SASL_SSL:SASL_SSL \
- *   -e KAFKA_INTER_BROKER_LISTENER_NAME=PLAINTEXT \
- *   -e KAFKA_SSL_KEYSTORE_FILENAME=broker.p12 -e KAFKA_SSL_KEY_CREDENTIALS=key_creds \
- *   -e KAFKA_SSL_KEYSTORE_CREDENTIALS=keystore_creds \
- *   -e KAFKA_OPTS=-Djava.security.auth.login.config=/etc/kafka/secrets/jaas.conf \
- *   -e KAFKA_SASL_ENABLED_MECHANISMS=SCRAM-SHA-256 \
- *   -e KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1 -e KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR=1 \
- *   -e KAFKA_TRANSACTION_STATE_LOG_MIN_ISR=1 -e KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS=0 \
- *   apache/kafka:3.7.0
- * # 3) SASL_SSL 臂的 SCRAM 用户（走容器内 PLAINTEXT）
- * docker exec oddsmaker-kafka-ssl-e2e /opt/kafka/bin/kafka-configs.sh --bootstrap-server kafka:9092 \
- *   --alter --add-config 'SCRAM-SHA-256=[password=dim-e2e-secret]' --entity-type users --entity-name dim-e2e
+ * bash src/test/ssl/gen-pki.sh      # PKI → /tmp/oddsmaker-kafka-ssl-e2e（CA/broker SAN 证书/
+ *                                   #   secrets/broker.p12/客户端 truststore，30 天有效）
+ * bash src/test/ssl/run-broker.sh   # 起 oddsmaker-kafka-ssl-e2e（29097/29098）+ 建 SCRAM 用户
+ *                                   #   + openssl s_client 握手自检（Verify return code: 0）
  * </pre>
+ * 下述默认值与脚本产出一致；端口/路径/密码不同时经 System property 覆盖
+ * （oddsmaker.kafka.e2e.ssl.bootstrap / saslssl.bootstrap / ssl.truststore /
+ * ssl.truststore.password）。用完清理：{@code docker rm -f oddsmaker-kafka-ssl-e2e}。
  */
 class KafkaSourceSslBrokerE2ETest {
 
     private static final String BOOTSTRAP =
-            System.getProperty("oddsmaker.kafka.e2e.ssl.bootstrap", "localhost:29107");
+            System.getProperty("oddsmaker.kafka.e2e.ssl.bootstrap", "localhost:29097");
     private static final String SASL_BOOTSTRAP =
-            System.getProperty("oddsmaker.kafka.e2e.saslssl.bootstrap", "localhost:29108");
+            System.getProperty("oddsmaker.kafka.e2e.saslssl.bootstrap", "localhost:29098");
     private static final String USER = System.getProperty("oddsmaker.kafka.e2e.saslssl.user", "dim-e2e");
     private static final String PASSWORD = "dim-e2e-secret";
-    /** 客户端信任库（PKCS12，仅含自签 CA 公钥）——与 broker keystore 同目录生成，测试不落仓库 */
+    /** 客户端信任库（PKCS12，仅含自签 CA 公钥）——gen-pki.sh 产出，与 broker keystore 同目录不落仓库 */
     private static final String TRUSTSTORE = System.getProperty("oddsmaker.kafka.e2e.ssl.truststore",
-            "build/e2e-tls-7c4x/client.p12");
+            "/tmp/oddsmaker-kafka-ssl-e2e/client-truststore.p12");
     private static final String TRUSTSTORE_PASSWORD = System.getProperty(
-            "oddsmaker.kafka.e2e.ssl.truststore.password", "client-secret");
+            "oddsmaker.kafka.e2e.ssl.truststore.password", "trust-secret");
 
     private static final List<String> topics = new ArrayList<>();
 

@@ -55,12 +55,16 @@ openssl x509 -req -in broker.csr -CA ca.crt -CAkey ca.key -CAcreateserial -days 
 openssl pkcs12 -export -inkey broker.key -in broker.crt -certfile ca.crt -name broker \
   -out secrets/broker.p12 -passout "pass:$BROKER_PASS"
 
-# ── 客户端信任库：PKCS12 走 openssl（快），JKS 走 keytool -importcert（只导入不开密钥）──
-openssl pkcs12 -export -nokeys -in ca.crt -out client-truststore.p12 \
-  -name oddsmaker-e2e-ca -passout "pass:$TRUST_PASS" 2>/dev/null
-openssl pkcs12 -export -nokeys -in rogue-ca.crt -out client-truststore-wrong.p12 \
-  -name oddsmaker-e2e-rogue-ca -passout "pass:$TRUST_PASS" 2>/dev/null
-keytool -importcert -noprompt -alias oddsmaker-e2e-ca -file ca.crt \
+# ── 客户端信任库：一律 keytool -importcert 生成（只导入公钥证书，无私钥）。
+#    实测坑：openssl 3.5 `pkcs12 -export -nokeys` 的纯证书 PKCS12，JDK KeyStore
+#    加载成功但读出 0 条目（kafka-clients 信任锚为空，握手全挂且报错形态千奇百怪，
+#    从 listNodes 超时到 TLS CertificateVerify 失败都见得到）；带私钥的 broker
+#    keystore 不受影响。keytool 写出的才是 JDK 保证可读的规范格式 ──
+keytool -J-Djava.security.egd=file:/dev/urandom -importcert -noprompt -alias ca -file ca.crt \
+  -keystore client-truststore.p12 -storetype PKCS12 -storepass "$TRUST_PASS" >/dev/null
+keytool -J-Djava.security.egd=file:/dev/urandom -importcert -noprompt -alias rogue-ca -file rogue-ca.crt \
+  -keystore client-truststore-wrong.p12 -storetype PKCS12 -storepass "$TRUST_PASS" >/dev/null
+keytool -J-Djava.security.egd=file:/dev/urandom -importcert -noprompt -alias oddsmaker-e2e-ca -file ca.crt \
   -keystore client-truststore.jks -storetype JKS -storepass "$TRUST_PASS" >/dev/null
 
 # ── SASL_SSL listener 用的 broker 侧 JAAS（客户端凭证由测试代码注入，

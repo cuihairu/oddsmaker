@@ -175,6 +175,11 @@ source.jdbc.cursor-column=updated_at
 # source.kafka.sasl-mechanism=SCRAM-SHA-256
 # source.kafka.username=oddsmaker_ro
 # source.kafka.password=***
+# TLS 证书模式（security-protocol=SSL / SASL_SSL）：自签或私有 CA 需配客户端信任库；
+# 不配走 JVM 默认信任库（公有 CA）。明文协议下配置信任库启动即拒（配置漂移防护）
+# source.kafka.ssl-truststore-path=/etc/oddsmaker/kafka-client.truststore.p12
+# source.kafka.ssl-truststore-password=***
+# source.kafka.ssl-truststore-type=PKCS12
 
 # Agent 行为
 agent.batch-size=500
