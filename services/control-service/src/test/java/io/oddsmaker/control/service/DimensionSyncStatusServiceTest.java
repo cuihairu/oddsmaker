@@ -253,4 +253,37 @@ class DimensionSyncStatusServiceTest {
         assertEquals(10L, DimensionSyncStatusService.secondsSince(
                 LocalDateTime.now().minusSeconds(10), LocalDateTime.now()));
     }
+
+    // ===== 分支对侧补充（BRANCH 收口）=====
+
+    @Test
+    @DisplayName("upsert：必填校验对侧臂——gameId 空白串、environment null、sourceKey 空白串")
+    void upsertRequiredFieldCounterArms() {
+        DimensionSyncStatusService.StatusUpsert blankGame = upsert();
+        blankGame.gameId = " ";
+        assertThrows(IllegalArgumentException.class, () -> service.upsert(blankGame));
+
+        DimensionSyncStatusService.StatusUpsert nullEnv = upsert();
+        nullEnv.environment = null;
+        assertThrows(IllegalArgumentException.class, () -> service.upsert(nullEnv));
+
+        DimensionSyncStatusService.StatusUpsert blankKey = upsert();
+        blankKey.sourceKey = " ";
+        assertThrows(IllegalArgumentException.class, () -> service.upsert(blankKey));
+    }
+
+    @Test
+    @DisplayName("upsert：sourceType 非空引用但空白 → 忽略合并，保留既有值")
+    void upsertBlankSourceTypeKeepsExisting() {
+        when(gameRepo.findById("g1")).thenReturn(Optional.of(game()));
+        when(statusRepo.findByGameIdAndEnvironmentAndSourceKey("g1", "prod", "agent-mysql-main"))
+                .thenReturn(Optional.of(existing()));
+        when(statusRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        DimensionSyncStatusService.StatusUpsert req = upsert();
+        req.sourceType = "   ";
+
+        DimensionSyncStatusEntity saved = service.upsert(req);
+        assertEquals("mysql", saved.sourceType);
+    }
 }
