@@ -18,6 +18,7 @@ Thumbs.db
 node_modules/
 sdks/web/dist/
 web/dist/
+web/coverage/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
