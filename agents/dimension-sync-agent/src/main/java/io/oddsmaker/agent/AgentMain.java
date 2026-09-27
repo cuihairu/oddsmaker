@@ -55,7 +55,9 @@ public final class AgentMain {
             case "kafka" -> new KafkaSource(cfg, new KafkaConsumerAdapter(
                     cfg.kafkaBootstrap, cfg.kafkaGroupId, cfg.kafkaTopic,
                     cfg.kafkaSecurityProtocol, cfg.kafkaSaslMechanism,
-                    cfg.kafkaUsername, cfg.kafkaPassword));
+                    cfg.kafkaUsername, cfg.kafkaPassword,
+                    cfg.kafkaSslTruststorePath, cfg.kafkaSslTruststorePassword,
+                    cfg.kafkaSslTruststoreType));
             default -> throw new IllegalArgumentException("未知 source.type: " + cfg.sourceType);
         };
     }

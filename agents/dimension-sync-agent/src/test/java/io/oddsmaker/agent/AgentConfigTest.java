@@ -76,6 +76,25 @@ class AgentConfigTest {
         assertEquals("SCRAM-SHA-256", kc.kafkaSaslMechanism);
         assertEquals("dim_ro", kc.kafkaUsername);
         assertEquals("secret", kc.kafkaPassword);
+
+        // SSL 信任库键映射与缺省值（自签/私有 CA 场景）
+        Path tls = write(
+                "gateway.endpoint=http://gw:8080",
+                "gateway.api-key=k1",
+                "game.id=g1",
+                "game.environment=prod",
+                "source.type=kafka",
+                "source.kafka.bootstrap-servers=b:9092",
+                "source.kafka.topic=dims",
+                "source.kafka.security-protocol=SSL",
+                "source.kafka.ssl-truststore-path=/ts/client.p12",
+                "source.kafka.ssl-truststore-password=ts-pass",
+                "source.kafka.ssl-truststore-type=PKCS12");
+        AgentConfig tc = AgentConfig.load(new String[]{"--config=" + tls});
+        assertEquals("SSL", tc.kafkaSecurityProtocol);
+        assertEquals("/ts/client.p12", tc.kafkaSslTruststorePath);
+        assertEquals("ts-pass", tc.kafkaSslTruststorePassword);
+        assertEquals("PKCS12", tc.kafkaSslTruststoreType);
         // 未配置鉴权时缺省明文
         Path plain = write(
                 "gateway.endpoint=http://gw:8080",
@@ -88,6 +107,10 @@ class AgentConfigTest {
         AgentConfig pc = AgentConfig.load(new String[]{"--config=" + plain});
         assertEquals("PLAINTEXT", pc.kafkaSecurityProtocol);
         assertNull(pc.kafkaSaslMechanism);
+        // 未配置时：无信任库（走 JVM 默认）、空密码、类型缺省 JKS（与 kafka-clients 一致）
+        assertNull(pc.kafkaSslTruststorePath);
+        assertEquals("", pc.kafkaSslTruststorePassword);
+        assertEquals("JKS", pc.kafkaSslTruststoreType);
     }
 
     @Test
@@ -269,6 +292,38 @@ class AgentConfigTest {
         AgentConfig ssl = copy(base);
         ssl.kafkaSecurityProtocol = "SSL";
         ssl.validate();
+
+        // ── SSL 信任库（证书模式）──
+        // SSL + truststore 三键齐备通过
+        AgentConfig sslTs = copy(ssl);
+        sslTs.kafkaSslTruststorePath = "/ts/client.p12";
+        sslTs.kafkaSslTruststorePassword = "ts-pass";
+        sslTs.kafkaSslTruststoreType = "PKCS12";
+        sslTs.validate();
+
+        // SASL_SSL + truststore 同样通过（证书链 + 账号凭证叠加）
+        AgentConfig saslSslTs = copy(fullSasl);
+        saslSslTs.kafkaSslTruststorePath = "/ts/client.p12";
+        saslSslTs.kafkaSslTruststoreType = "JKS";
+        saslSslTs.validate();
+
+        // 明文协议下配置 truststore = 配置漂移，fail-fast
+        AgentConfig plaintextTs = copy(base);
+        plaintextTs.kafkaSecurityProtocol = "PLAINTEXT";
+        plaintextTs.kafkaSslTruststorePath = "/ts/client.p12";
+        assertTrue(assertThrows(IllegalArgumentException.class, plaintextTs::validate)
+                .getMessage().contains("ssl-truststore-path"));
+        AgentConfig saslPlaintextTs = copy(fullSasl);
+        saslPlaintextTs.kafkaSecurityProtocol = "SASL_PLAINTEXT";
+        saslPlaintextTs.kafkaSslTruststorePath = "/ts/client.p12";
+        assertTrue(assertThrows(IllegalArgumentException.class, saslPlaintextTs::validate)
+                .getMessage().contains("配置漂移"));
+
+        // 信任库类型白名单（JKS/PKCS12）
+        AgentConfig badType = copy(sslTs);
+        badType.kafkaSslTruststoreType = "PEM";
+        assertTrue(assertThrows(IllegalArgumentException.class, badType::validate)
+                .getMessage().contains("ssl-truststore-type"));
     }
 
     private AgentConfig fullJdbc() {
@@ -319,6 +374,9 @@ class AgentConfigTest {
         c.kafkaSaslMechanism = src.kafkaSaslMechanism;
         c.kafkaUsername = src.kafkaUsername;
         c.kafkaPassword = src.kafkaPassword;
+        c.kafkaSslTruststorePath = src.kafkaSslTruststorePath;
+        c.kafkaSslTruststorePassword = src.kafkaSslTruststorePassword;
+        c.kafkaSslTruststoreType = src.kafkaSslTruststoreType;
         return c;
     }
 }

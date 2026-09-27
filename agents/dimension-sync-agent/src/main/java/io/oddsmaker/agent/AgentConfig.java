@@ -49,6 +49,12 @@ public final class AgentConfig {
     public String kafkaSaslMechanism;
     public String kafkaUsername;
     public String kafkaPassword;
+    // SSL 证书模式（SSL / SASL_SSL 协议）的客户端信任库——自签或私有 CA 场景必填，
+    // 缺省时走 JVM 默认 truststore（cacerts）；path 配了 password 可空（允许空密码信任库）
+    public String kafkaSslTruststorePath;
+    public String kafkaSslTruststorePassword = "";
+    /** 信任库类型：JKS / PKCS12（缺省 JKS，与 kafka-clients 默认一致） */
+    public String kafkaSslTruststoreType = "JKS";
     // 同步状态上报（Control /api/dimensions/sync-status；url 空则跳过）
     public String statusUrl;
     public String statusToken;
@@ -99,6 +105,9 @@ public final class AgentConfig {
         c.kafkaSaslMechanism = trim(p.getProperty("source.kafka.sasl-mechanism"));
         c.kafkaUsername = trim(p.getProperty("source.kafka.username"));
         c.kafkaPassword = p.getProperty("source.kafka.password", "");
+        c.kafkaSslTruststorePath = trim(p.getProperty("source.kafka.ssl-truststore-path"));
+        c.kafkaSslTruststorePassword = p.getProperty("source.kafka.ssl-truststore-password", "");
+        c.kafkaSslTruststoreType = orDefault(p.getProperty("source.kafka.ssl-truststore-type"), "JKS");
         c.statusUrl = trim(p.getProperty("status.url"));
         c.statusToken = trim(p.getProperty("status.token"));
         c.sourceKey = trim(p.getProperty("status.source-key"));
@@ -148,7 +157,8 @@ public final class AgentConfig {
         return "mysql".equals(sourceType) || "postgres".equals(sourceType);
     }
 
-    /** kafka 鉴权 fail-fast：协议白名单 + SASL_* 必须带齐机制与凭证（PLAIN 明文机制不支持）。 */
+    /** kafka 鉴权 fail-fast：协议白名单 + SASL_* 必须带齐机制与凭证（PLAIN 明文机制不支持）+
+     * 证书模式信任库类型白名单 + 明文协议下配置 truststore 视为配置漂移直接拒绝。 */
     private void validateKafkaSecurity() {
         switch (kafkaSecurityProtocol) {
             case "PLAINTEXT", "SSL" -> { /* 无账号凭证 */ }
@@ -164,6 +174,17 @@ public final class AgentConfig {
             }
             default -> throw new IllegalArgumentException("source.kafka.security-protocol 仅支持 "
                     + "PLAINTEXT/SSL/SASL_PLAINTEXT/SASL_SSL，当前: " + kafkaSecurityProtocol);
+        }
+        if (kafkaSslTruststorePath != null && !kafkaSslTruststorePath.isBlank()) {
+            if ("PLAINTEXT".equals(kafkaSecurityProtocol) || "SASL_PLAINTEXT".equals(kafkaSecurityProtocol)) {
+                throw new IllegalArgumentException("source.kafka.ssl-truststore-path 仅在 "
+                        + "SSL/SASL_SSL 证书协议下生效，当前协议: " + kafkaSecurityProtocol
+                        + "（明文协议配置信任库属配置漂移，请检查 security-protocol 是否写错）");
+            }
+            if (!"JKS".equals(kafkaSslTruststoreType) && !"PKCS12".equals(kafkaSslTruststoreType)) {
+                throw new IllegalArgumentException("source.kafka.ssl-truststore-type 仅支持 "
+                        + "JKS/PKCS12，当前: " + kafkaSslTruststoreType);
+            }
         }
     }
 
