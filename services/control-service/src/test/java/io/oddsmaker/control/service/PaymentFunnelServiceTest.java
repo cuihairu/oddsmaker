@@ -142,4 +142,39 @@ class PaymentFunnelServiceTest {
         assertEquals("g", ra[4]);
     }
 
+    // ===== 分支对侧补充（BRANCH 收口）=====
+
+    @Test
+    @DisplayName("分群过滤：segmentId 非空引用但空白 → 视同无分群（不注入子查询、参数不尾插、响应无 segmentId 键）")
+    void blankSegmentIdTreatedAsAbsent() {
+        when(client.isAvailable()).thenReturn(true);
+        when(client.query(anyString(), any(Object[].class))).thenReturn(List.of());
+
+        Map<String, Object> resp = service.funnel("g", "prod", 90, "   ");
+
+        assertEquals(true, resp.get("available"));
+        assertFalse(resp.containsKey("segmentId"));
+
+        // 空白串侧：hasSegment=false → 漏斗与留存 SQL 均不注入 segment_members 子查询
+        verify(client, never()).query(contains("segment_members"), any(Object[].class));
+        // 漏斗参数：(g, prod, g, prod, since) 五元——无 (segmentId, gameId) 尾插
+        org.mockito.ArgumentCaptor<Object[]> funnelArgs = org.mockito.ArgumentCaptor.forClass(Object[].class);
+        verify(client).query(contains("pay_events"), (Object[]) funnelArgs.capture());
+        Object[] fa = funnelArgs.getValue();
+        assertEquals(5, fa.length);
+        assertEquals("g", fa[0]);
+        assertEquals("prod", fa[1]);
+        assertEquals("g", fa[2]);
+        assertEquals("prod", fa[3]);
+        assertEquals(java.time.LocalDate.class, fa[4].getClass());
+        // 留存参数：(g, prod, since) 三元
+        org.mockito.ArgumentCaptor<Object[]> retainedArgs = org.mockito.ArgumentCaptor.forClass(Object[].class);
+        verify(client).query(contains("dateDiff"), (Object[]) retainedArgs.capture());
+        Object[] ra = retainedArgs.getValue();
+        assertEquals(3, ra.length);
+        assertEquals("g", ra[0]);
+        assertEquals("prod", ra[1]);
+        assertEquals(java.time.LocalDate.class, ra[2].getClass());
+    }
+
 }
