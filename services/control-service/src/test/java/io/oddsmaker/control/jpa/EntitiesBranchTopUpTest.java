@@ -993,5 +993,17 @@ class EntitiesBranchTopUpTest {
         dPreset.id = "preset";
         dPreset.ensureId();
         assertEquals("preset", dPreset.id);   // 已有 id 不覆盖（false 侧）
+
+        // 逐实体对侧补齐：Segment 已有 id 不覆盖（b-F 侧）、Dashboard 空串生成（b-T 侧）
+        SegmentEntity sPreset = new SegmentEntity();
+        sPreset.id = "preset";
+        sPreset.ensureId();
+        assertEquals("preset", sPreset.id);   // 已有 id 不覆盖
+
+        DashboardEntity dBlank = new DashboardEntity();
+        dBlank.id = "";
+        dBlank.ensureId();
+        assertNotNull(dBlank.id);
+        assertEquals(32, dBlank.id.length()); // 空串侧同样生成
     }
 }

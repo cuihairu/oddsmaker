@@ -85,12 +85,13 @@ class RiskRuleServiceTest {
     }
 
     @Test
-    @DisplayName("create：PATTERN 非法序列——缺失/单步/越界 9 步/空名/超长名/坏 JSON/非数组 均拒绝")
+    @DisplayName("create：PATTERN 非法序列——缺失/空白串/单步/越界 9 步/空名/超长名/坏 JSON/非数组 均拒绝")
     void createRejectsInvalidPatternSequences() {
         when(gameRepo.findById("g1")).thenReturn(Optional.of(game()));
 
         List<String> bad = List.of(
                 "null",                                                   // 无条件
+                "   ",                                                    // 空白串（isBlank 侧）
                 "{\"no_seq\":1}",                                         // 缺 sequence
                 "{\"sequence\":[]}",                                      // 空
                 "{\"sequence\":[\"login\"]}",                             // 单步

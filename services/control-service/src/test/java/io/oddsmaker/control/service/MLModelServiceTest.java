@@ -13,6 +13,7 @@ import java.time.LocalDateTime;
 import java.util.*;
 
 import static org.assertj.core.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
@@ -606,5 +607,15 @@ class MLModelServiceTest {
     void scheduledMlRetrainDelegates() {
         mlModelService.scheduledMlRetrain();
         verify(mlRetrainScheduler).retrainAll();
+    }
+
+    // ===== 分支对侧补充（BRANCH 收口）=====
+
+    @Test
+    @DisplayName("调度入口：装配缺失（mlRetrainScheduler=null，如单元测试裸实例）诚实跳过不抛异常")
+    void scheduledMlRetrainSkipsWhenSchedulerMissing() {
+        MLModelService bare = new MLModelService();
+        assertDoesNotThrow(bare::scheduledMlRetrain);
+        verify(mlRetrainScheduler, never()).retrainAll();
     }
 }
