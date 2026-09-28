@@ -133,4 +133,28 @@ class OnlineMetricsServiceTest {
                 contains("segment_members"), any(Object[].class));
     }
 
+    // ===== 分支对侧补充（BRANCH 收口）=====
+
+    @Test
+    @DisplayName("分群过滤：空白 segmentId 视同无分群（L58/L95 isBlank 对侧）")
+    void blankSegmentIdTreatedAsAbsent() {
+        when(client.isAvailable()).thenReturn(true);
+        org.mockito.ArgumentCaptor<Object[]> args =
+                org.mockito.ArgumentCaptor.forClass(Object[].class);
+        when(client.query(anyString(), any(Object[].class))).thenReturn(List.of());
+
+        service.overview("g", "prod", 5, "   ");
+
+        // L58：空白串走 "" 分支，不注入成员子查询
+        verify(client, org.mockito.Mockito.never()).query(
+                contains("segment_members"), any(Object[].class));
+        // L95：空白串不尾插 (segmentId, gameId)，参数仍为 (gameId, environment, since) 三元
+        verify(client, org.mockito.Mockito.times(5)).query(anyString(), args.capture());
+        Object[] last = args.getValue();
+        assertEquals(3, last.length);
+        assertEquals("g", last[0]);
+        assertEquals("prod", last[1]);
+        assertTrue(last[2] instanceof Timestamp);
+    }
+
 }
