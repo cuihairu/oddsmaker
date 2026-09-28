@@ -34,6 +34,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -417,5 +418,90 @@ class MlRetrainSchedulerTest {
 
         when(clickHouseClient.isAvailable()).thenReturn(false);
         assertTrue(scheduler(true, true).resolveSource().equals("synthetic"));
+    }
+
+    // ===== 分支对侧补充（BRANCH 收口）=====
+
+    @Test
+    @DisplayName("分支对侧：clickhouseUrl=null 走 JDBC 推导、safeScore resp=null 记跳过不进 errors")
+    void branchCounterArms() throws Exception {
+        // 重置 metrics mock 避免前序测试 stub 污染（LENIENT 模式下 stub 累积）
+        reset(metrics);
+        reset(runner);
+
+        // 1) clickhouseUrl 为 null（而非 blank）→ 走 JDBC 推导分支
+        when(repo.findDistinctGameIds()).thenReturn(List.of("g"));
+        trainWritesArtifacts();
+        when(metrics.refreshChurn(anyString(), any())).thenReturn(Map.of("available", true));
+        when(metrics.refreshRiskScore(anyString(), any())).thenReturn(Map.of("available", true));
+        when(metrics.refreshPltv(anyString(), any())).thenReturn(Map.of("available", true));
+        when(metrics.refreshPropensity(anyString(), any())).thenReturn(Map.of("available", true));
+
+        // 显式传 null（区别于 blank 串），jdbcUrl 为合法 clickhouse URL
+        Map<String, Object> summary = scheduler(true, true, "prod", null,
+                "jdbc:clickhouse://ch:8123/oddsmaker").retrainForGame("g");
+
+        assertEquals("clickhouse", summary.get("source"));
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<String>> cmd =
+                (ArgumentCaptor<List<String>>) (ArgumentCaptor<?>) ArgumentCaptor.forClass(List.class);
+        verify(runner).run(cmd.capture(), any(Path.class), anyLong());
+        assertEquals("http://ch:8123/?database=oddsmaker",
+                cmd.getValue().get(cmd.getValue().indexOf("--clickhouse-url") + 1));
+
+        // 2) safeScore：scoring 返回 null → 记入跳过、不计入 scored、不抛异常
+        //    写全 4 个产物文件避免「产物缺失」污染 errors，专注覆盖 safeScore 分支
+        when(runner.run(anyList(), any(Path.class), anyLong())).thenAnswer(inv -> {
+            List<String> c = inv.getArgument(0);
+            Path out = Path.of(c.get(c.indexOf("--out") + 1));
+            writeArtifacts(out, "churn", "pltv", "risk", "propensity");
+            return new MlTrainingRunner.Result(0, "");
+        });
+        when(metrics.refreshChurn(anyString(), any())).thenReturn(null);  // resp == null 侧
+        when(metrics.refreshRiskScore(anyString(), any())).thenReturn(Map.of("available", true));
+        when(metrics.refreshPltv(anyString(), any())).thenReturn(Map.of("available", true));
+        when(metrics.refreshPropensity(anyString(), any())).thenReturn(Map.of("available", true));
+
+        Map<String, Object> s2 = scheduler(true, true).retrainForGame("g2");
+        assertTrue(((List<?>) s2.get("scored")).contains("risk_model"));
+        assertFalse(((List<?>) s2.get("scored")).contains("churn"));
+        assertEquals(0, ((List<?>) s2.get("errors")).size());  // resp=null 走 else 分支记跳过日志，不进 errors
+
+        // 3) 空白环境（非 null）走公共路径 → envOrNull 归一 null 透传给打分
+        reset(metrics);
+        when(runner.run(anyList(), any(Path.class), anyLong())).thenAnswer(inv -> {
+            List<String> c = inv.getArgument(0);
+            Path out = Path.of(c.get(c.indexOf("--out") + 1));
+            writeArtifacts(out, "churn", "pltv", "risk", "propensity");
+            return new MlTrainingRunner.Result(0, "");
+        });
+        when(metrics.refreshChurn(anyString(), any())).thenReturn(Map.of("available", true));
+        when(metrics.refreshRiskScore(anyString(), any())).thenReturn(Map.of("available", true));
+        when(metrics.refreshPltv(anyString(), any())).thenReturn(Map.of("available", true));
+        when(metrics.refreshPropensity(anyString(), any())).thenReturn(Map.of("available", true));
+
+        scheduler(true, true, "", "", "jdbc:clickhouse://ch:8123/oddsmaker").retrainForGame("g3");
+        verify(metrics).refreshRiskScore(eq("g3"), isNull());
+    }
+
+    /**
+     * envOrNull 的 environment==null 臂（本类最后 1 处分支 miss）：公共路径不可达——
+     * environment=null 时 buildCommand 的 {@code List.of(..., "--environment", environment, ...)}
+     * 会先抛 NPE（实测栈：ImmutableCollections.listFromArray → buildCommand → retrainForGame，
+     * 先于打分执行），且 Spring @Value 默认 "prod" 不会注入 null。按仓内既有惯例
+     * （SecurityComponentsTest / ExperimentMetricsAggregatorTest 反射直调私有 helper）覆盖，
+     * 并并列断言另两臂钉住三态契约（非空白透传 / 空白归一 null，两臂已由公共路径覆盖）。
+     */
+    @Test
+    @DisplayName("分支对侧：envOrNull environment==null 臂——公共路径 buildCommand 先 NPE，反射直调覆盖")
+    void envOrNullNullArmViaReflection() throws Exception {
+        java.lang.reflect.Method envOrNull = MlRetrainScheduler.class.getDeclaredMethod("envOrNull");
+        envOrNull.setAccessible(true);
+
+        MlRetrainScheduler nullEnv = scheduler(true, true, null, "",
+                "jdbc:clickhouse://ch:8123/oddsmaker");
+        assertNull(envOrNull.invoke(nullEnv));                              // ==null 臂（本次目标 miss）
+        assertEquals("prod", envOrNull.invoke(scheduler(true, true)));      // 非空白 → 原样透传
+        assertNull(envOrNull.invoke(scheduler(true, true, " ", "", null)));  // 空白 → 归一 null
     }
 }
