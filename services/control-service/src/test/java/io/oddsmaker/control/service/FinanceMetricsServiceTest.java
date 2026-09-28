@@ -136,4 +136,36 @@ class FinanceMetricsServiceTest {
         assertEquals("seg1", na[3]);
     }
 
+    // ===== 分支对侧补充（BRANCH 收口）=====
+
+    @Test
+    @DisplayName("分群过滤：segmentId 非空引用但空白 → 视同无分群（不注入子查询、参数不尾插、响应无 segmentId 键）")
+    void blankSegmentIdTreatedAsAbsent() {
+        when(client.isAvailable()).thenReturn(true);
+        when(client.query(anyString(), any(Object[].class))).thenReturn(List.of());
+
+        Map<String, Object> resp = service.report("g", "prod", "day", 30, "   ");
+
+        assertEquals(true, resp.get("available"));
+        assertFalse(resp.containsKey("segmentId"));
+
+        // 空白串侧：hasSegment=false → activity/new_users SQL 均不注入 segment_members 子查询
+        verify(client, never()).query(contains("segment_members"), any(Object[].class));
+        // 两查询参数均为 (g, prod, since) 三元——无 (segmentId, gameId) 尾插
+        org.mockito.ArgumentCaptor<Object[]> activityArgs = org.mockito.ArgumentCaptor.forClass(Object[].class);
+        verify(client).query(contains("uniqExact"), (Object[]) activityArgs.capture());
+        Object[] aa = activityArgs.getValue();
+        assertEquals(3, aa.length);
+        assertEquals("g", aa[0]);
+        assertEquals("prod", aa[1]);
+        assertEquals(java.time.LocalDate.class, aa[2].getClass());
+        org.mockito.ArgumentCaptor<Object[]> newArgs = org.mockito.ArgumentCaptor.forClass(Object[].class);
+        verify(client).query(contains("v_user_first_seen"), (Object[]) newArgs.capture());
+        Object[] na = newArgs.getValue();
+        assertEquals(3, na.length);
+        assertEquals("g", na[0]);
+        assertEquals("prod", na[1]);
+        assertEquals(java.time.LocalDate.class, na[2].getClass());
+    }
+
 }
