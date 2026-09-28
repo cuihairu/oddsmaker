@@ -17,6 +17,15 @@ import {
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
+/** 轮询等待条件成立（gzip 流水线/事件循环时序波动的稳健等待，1ms 步进，超时抛错）。 */
+async function waitUntil(cond: () => boolean, timeoutMs = 2000) {
+  const t0 = Date.now();
+  while (!cond()) {
+    if (Date.now() - t0 > timeoutMs) throw new Error('waitUntil timeout');
+    await sleep(1);
+  }
+}
+
 // ---------- 测试环境:window / fetch / CompressionStream / document 可编程替身 ----------
 
 type FetchStep = { status?: number; headers?: Record<string, string>; body?: string; throw?: Error };
@@ -379,7 +388,7 @@ test('自动 flush:size 达 maxBatch', async t => {
   sdk.track('a');
   assert.equal(env.fetchCalls.length, 0);
   sdk.track('b');
-  await sleep(20);
+  await waitUntil(() => env.fetchCalls.length >= 1);
   assert.equal(env.fetchCalls.length, 1);
 });
 
@@ -387,7 +396,7 @@ test('自动 flush:字节超 maxQueueBytes(overLimit)', async t => {
   const env = setup(t, [{ status: 200 }]);
   const sdk = makeSdk(t, env, { maxQueueBytes: 10 });
   sdk.track('big');   // 单条 JSON 远超 10 字节
-  await sleep(20);
+  await waitUntil(() => env.fetchCalls.length >= 1);
   assert.equal(env.fetchCalls.length, 1);
 });
 
@@ -402,7 +411,7 @@ test('send 成功:真 gzip(body 1f 8b)+ 头 + URL(尾斜杠剥离)+ debug 日志
   const env = setup(t, [{ status: 200 }]);
   const sdk = makeSdk(t, env, { maxBatch: 1, debug: true });
   sdk.track('boot');
-  await sleep(30);
+  await waitUntil(() => env.fetchCalls.length >= 1);
   assert.equal(env.fetchCalls.length, 1);
   const c = env.fetchCalls[0];
   assert.equal(c.url, 'https://ing.example/v1/batch');   // 构造器剥掉尾斜杠
@@ -483,7 +492,7 @@ test('send 成功:无 CompressionStream → 明文 ndjson', async t => {
   const env = setup(t, [{ status: 200 }], { compression: false });
   const sdk = makeSdk(t, env, { maxBatch: 1 });
   sdk.track('plain');
-  await sleep(20);
+  await waitUntil(() => env.fetchCalls.length >= 1);
   const c = env.fetchCalls[0];
   assert.equal(c.init.headers['content-encoding'], undefined);
   assert.equal(typeof c.init.body, 'string');
@@ -494,7 +503,7 @@ test('send:CompressionStream 构造抛错 → 降级明文', async t => {
   const env = setup(t, [{ status: 200 }], { compression: 'throw' });
   const sdk = makeSdk(t, env, { maxBatch: 1 });
   sdk.track('fallback');
-  await sleep(20);
+  await waitUntil(() => env.fetchCalls.length >= 1);
   const c = env.fetchCalls[0];
   assert.equal(c.init.headers['content-encoding'], undefined);
   assert.equal(JSON.parse(c.init.body).event_name, 'fallback');
@@ -507,7 +516,7 @@ test('send:429 按 retry-after=0 立即重试后成功', async t => {
   ]);
   const sdk = makeSdk(t, env, { maxBatch: 1 });
   sdk.track('retry');
-  await sleep(30);
+  await waitUntil(() => env.fetchCalls.length >= 2);
   assert.equal(env.fetchCalls.length, 2);   // 两次尝试都发出
 });
 
@@ -550,7 +559,7 @@ test('window 事件:online → flush;visibilitychange hidden → flush;visible �
 
   (globalThis as any).document = { visibilityState: 'hidden' };
   env.emit('visibilitychange');
-  await sleep(20);
+  await waitUntil(() => env.fetchCalls.length >= 1);
   assert.equal(env.fetchCalls.length, 1);   // hidden → flush
 
   env.emit('online');   // 队列已空 → flush 早退
@@ -708,7 +717,7 @@ test('fetchExperimentsCached:TTL 内命中返回缓存,后台刷新成功更新�
   env.store.set(key, JSON.stringify({ ts: Date.now(), exps: [{ id: 'cached' }] }));
   const r = await fetchExperimentsCached('https://c', 'g3', 'e3');
   assert.deepEqual(r, [{ id: 'cached' }]);   // 命中缓存立即返回
-  await sleep(30);   // 等后台刷新 promise 落盘
+  await waitUntil(() => { try { return JSON.parse(env.store.get(key)!).exps[0]?.id === 'bg'; } catch { return false; } });   // 等后台刷新 promise 落盘
   assert.deepEqual(JSON.parse(env.store.get(key)!).exps, [{ id: 'bg' }]);
 });
 
