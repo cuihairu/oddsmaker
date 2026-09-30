@@ -15,6 +15,9 @@ dependencies {
   runtimeOnly("com.mysql:mysql-connector-j:8.4.0")
   runtimeOnly("org.postgresql:postgresql:42.7.4")
   testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
+  // 适配器 assign/poll 离线单测需 mock kafka-clients KafkaConsumer；
+  // 版本与 control-service 解析结果对齐（spring-boot BOM 管理的 5.11.0）
+  testImplementation("org.mockito:mockito-core:5.11.0")
 }
 
 application {
