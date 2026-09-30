@@ -12,7 +12,12 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** CSV 源：文件序扫描、文件粒度断点（处理过的不重读）、缺 resource_id 行跳过。 */
+/**
+ * CSV 源：文件序扫描、文件粒度断点（处理过的不重读）、缺 resource_id 行跳过。
+ *
+ * <p>一条臂刻意不强求覆盖：空白 resource_id 行跳过（{@link JdbcSource#mapRow} 的
+ * firstNonNull 保证 resourceId 非空或 null，isBlank 侧不可达）。
+ */
 class CsvSourceTest {
 
     @TempDir
@@ -124,5 +129,48 @@ class CsvSourceTest {
         assertEquals(1, changes.size());
         assertEquals("铁剑, 长", changes.get(0).attributes.get("name"));
         assertEquals("第一行\n第二行", changes.get(0).attributes.get("description"));
+    }
+
+    // === 分支对侧补充（BRANCH 收口）===
+
+    @Test
+    @DisplayName("空 csv 文件（零字节）：照常记断点 0，不产生变更")
+    void emptyCsvFileRecordsZeroAndContinues() throws Exception {
+        Files.writeString(dir.resolve("empty.csv"), "");
+        DimensionSource.PollResult r = new CsvSource(cfg()).poll(new Checkpoint());
+        assertTrue(r.changes().isEmpty());
+        assertEquals(0L, r.next().files.get("empty.csv"));
+    }
+
+    @Test
+    @DisplayName("数据行单元格少于表头列数：只映射存在的列，多余表头列跳过")
+    void rowWithFewerCellsThanHeaderMapsOnlyPresentColumns() throws Exception {
+        Files.writeString(dir.resolve("short.csv"), """
+                dim_type,item_code,name,rarity,version_ts
+                item,sword_01,铁剑
+                """);
+        DimensionSource.PollResult r = new CsvSource(cfg()).poll(new Checkpoint());
+        assertEquals(1, r.changes().size());
+        DimensionChange c = r.changes().get(0);
+        assertEquals("sword_01", c.resourceId);
+        // rarity / version_ts 两列在数据行缺失 → 不进 attributes
+        assertEquals(1, c.attributes.size());
+        assertEquals("铁剑", c.attributes.get("name"));
+    }
+
+    @Test
+    @DisplayName("数据行单元格多于表头列数：超出表头的列被忽略（c < header.length 假分支）")
+    void rowWithMoreCellsThanHeaderIgnoresExtraCells() throws Exception {
+        Files.writeString(dir.resolve("wide.csv"), """
+                item_code,name
+                sword_01,铁剑,extra1,extra2
+                """);
+        DimensionSource.PollResult r = new CsvSource(cfg()).poll(new Checkpoint());
+        assertEquals(1, r.changes().size());
+        DimensionChange c = r.changes().get(0);
+        assertEquals("sword_01", c.resourceId);
+        assertEquals("铁剑", c.attributes.get("name"));
+        // 额外列 extra1, extra2 不进 attributes
+        assertEquals(1, c.attributes.size());
     }
 }

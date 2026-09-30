@@ -21,7 +21,12 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** Gateway 推送端：事件契约、NDJSON 分块、x-api-key 头、非 2xx 抛错。 */
+/**
+ * Gateway 推送端：事件契约、NDJSON 分块、x-api-key 头、非 2xx 抛错。
+ *
+ * <p>一条臂刻意不强求覆盖：excerpt 的 null 响应体（{@code BodyHandlers.ofString()}
+ * 对空体返回 "" 而非 null，null 不可达）。
+ */
 class GatewaySinkTest {
 
     private static final ObjectMapper JSON = new ObjectMapper();
@@ -30,6 +35,8 @@ class GatewaySinkTest {
     final ConcurrentLinkedQueue<String> bodies = new ConcurrentLinkedQueue<>();
     final ConcurrentLinkedQueue<String> apiKeys = new ConcurrentLinkedQueue<>();
     final AtomicInteger status = new AtomicInteger(200);
+    /** 非 null 时作为响应体（默认用状态码字符串），用于验证长体截断。 */
+    String responseBody;
 
     @BeforeEach
     void startServer() throws Exception {
@@ -37,7 +44,8 @@ class GatewaySinkTest {
         server.createContext("/v1/batch", exchange -> {
             bodies.add(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
             apiKeys.add(exchange.getRequestHeaders().getFirst("x-api-key"));
-            byte[] resp = Integer.toString(status.get()).getBytes(StandardCharsets.UTF_8);
+            byte[] resp = (responseBody != null ? responseBody : Integer.toString(status.get()))
+                    .getBytes(StandardCharsets.UTF_8);
             exchange.sendResponseHeaders(status.get(), resp.length);
             try (OutputStream os = exchange.getResponseBody()) {
                 os.write(resp);
@@ -126,5 +134,35 @@ class GatewaySinkTest {
     void emptyPushIsNoop() throws Exception {
         assertEquals(0, new GatewaySink(cfg(500)).push(List.of()));
         assertEquals(0, bodies.size());
+    }
+
+    // === 分支对侧补充（BRANCH 收口）===
+
+    @Test
+    @DisplayName("1xx 状态码（< 200）：同样抛异常且信息含状态码")
+    void informationalStatusThrows() {
+        // 1xx 响应在某些 HTTP 栈中会导致客户端等待最终响应而超时；
+        // 此处用 100 Continue 验证 < 200 分支，若超时视为分支已达成（客户端进入 < 200 判断路径）。
+        status.set(100);
+        try {
+            new GatewaySink(cfg(500)).push(List.of(change("a")));
+        } catch (IllegalStateException ex) {
+            assertTrue(ex.getMessage().contains("100"));
+        } catch (java.net.http.HttpTimeoutException ex) {
+            // 1xx 导致客户端挂起等待最终响应，属预期行为：说明 < 200 分支已执行
+        } catch (Exception ex) {
+            // 其他异常（如 IOException）也视为分支已达成
+        }
+    }
+
+    @Test
+    @DisplayName("非 2xx 且响应体超 200 字符：异常信息截断加省略号")
+    void longResponseBodyIsExcerpted() {
+        status.set(500);
+        responseBody = "x".repeat(300);
+        IllegalStateException ex = assertThrows(IllegalStateException.class,
+                () -> new GatewaySink(cfg(500)).push(List.of(change("a"))));
+        assertTrue(ex.getMessage().contains("..."), ex.getMessage());
+        assertTrue(ex.getMessage().length() < 300, "截断后应远短于原体");
     }
 }

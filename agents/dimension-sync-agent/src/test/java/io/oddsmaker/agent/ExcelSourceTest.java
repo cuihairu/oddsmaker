@@ -14,7 +14,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** Excel 源：与 CsvSource 同语义——文件序、文件粒度断点、缺 resource_id 行跳过。 */
+/**
+ * Excel 源：与 CsvSource 同语义——文件序、文件粒度断点、缺 resource_id 行跳过。
+ *
+ * <p>两条臂刻意不强求覆盖（构造不出来也不该改产品代码去凑）：
+ * 表头 null 单元格（{@link XlsxParser} 产出的 cells 恒为非 null 字符串，空洞补 ""）
+ * 与空白 resource_id 行跳过（{@link JdbcSource#mapRow} 的 firstNonNull 保证
+ * resourceId 非空或 null，isBlank 侧不可达）。
+ */
 class ExcelSourceTest {
 
     @TempDir
@@ -140,5 +147,84 @@ class ExcelSourceTest {
         assertEquals(0L, r.next().files.get("b.xlsx"));
         assertEquals(0L, r.next().files.get("c.xlsx"));
         assertEquals(2L, r.next().files.get("a.xlsx"));
+    }
+
+    // === 分支对侧补充（BRANCH 收口）===
+
+    @Test
+    @DisplayName("空工作表（零行）：文件照常记断点 0，不产生变更")
+    void emptySheetRecordsZeroAndContinues() throws Exception {
+        writeSheet(dir.resolve("empty.xlsx"), """
+                <?xml version="1.0"?>
+                <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+                  <sheetData></sheetData>
+                </worksheet>
+                """);
+        DimensionSource.PollResult r = new ExcelSource(cfg()).poll(new Checkpoint());
+        assertTrue(r.changes().isEmpty());
+        assertEquals(0L, r.next().files.get("empty.xlsx"));
+    }
+
+    @Test
+    @DisplayName("数据行单元格少于表头列数：只映射存在的列，多余表头列跳过")
+    void rowWithFewerCellsThanHeaderMapsOnlyPresentColumns() throws Exception {
+        writeSheet(dir.resolve("short.xlsx"), """
+                <?xml version="1.0"?>
+                <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+                  <sheetData>
+                    <row r="1"><c r="A1" t="inlineStr"><is><t>dim_type</t></is></c><c r="B1" t="inlineStr"><is><t>item_code</t></is></c><c r="C1" t="inlineStr"><is><t>name</t></is></c><c r="D1" t="inlineStr"><is><t>rarity</t></is></c><c r="E1" t="inlineStr"><is><t>version_ts</t></is></c></row>
+                    <row r="2"><c r="A2" t="inlineStr"><is><t>item</t></is></c><c r="B2" t="inlineStr"><is><t>sword_01</t></is></c><c r="C2" t="inlineStr"><is><t>铁剑</t></is></c></row>
+                  </sheetData>
+                </worksheet>
+                """);
+        DimensionSource.PollResult r = new ExcelSource(cfg()).poll(new Checkpoint());
+        assertEquals(1, r.changes().size());
+        DimensionChange c = r.changes().get(0);
+        assertEquals("sword_01", c.resourceId);
+        // rarity / version_ts 两列在数据行缺失 → 不进 attributes
+        assertEquals(1, c.attributes.size());
+        assertEquals("铁剑", c.attributes.get("name"));
+    }
+
+    @Test
+    @DisplayName("表头空白单元格：该列跳过，不串位、不污染 attributes")
+    void blankHeaderCellSkipsColumn() throws Exception {
+        writeSheet(dir.resolve("blankhdr.xlsx"), """
+                <?xml version="1.0"?>
+                <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+                  <sheetData>
+                    <row r="1"><c r="A1" t="inlineStr"><is><t>item_code</t></is></c><c r="B1" t="inlineStr"/><c r="C1" t="inlineStr"><is><t>name</t></is></c></row>
+                    <row r="2"><c r="A2" t="inlineStr"><is><t>sword_01</t></is></c><c r="B2" t="inlineStr"><is><t>ignored</t></is></c><c r="C2" t="inlineStr"><is><t>铁剑</t></is></c></row>
+                  </sheetData>
+                </worksheet>
+                """);
+        DimensionSource.PollResult r = new ExcelSource(cfg()).poll(new Checkpoint());
+        assertEquals(1, r.changes().size());
+        DimensionChange c = r.changes().get(0);
+        assertEquals("sword_01", c.resourceId);
+        // B 列表头空白 → 该列（ignored）被跳过
+        assertEquals(1, c.attributes.size());
+        assertEquals("铁剑", c.attributes.get("name"));
+    }
+
+    @Test
+    @DisplayName("数据行单元格多于表头列数：超出表头的列被忽略（c < header.length 假分支）")
+    void rowWithMoreCellsThanHeaderIgnoresExtraCells() throws Exception {
+        writeSheet(dir.resolve("wide.xlsx"), """
+                <?xml version="1.0"?>
+                <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+                  <sheetData>
+                    <row r="1"><c r="A1" t="inlineStr"><is><t>item_code</t></is></c><c r="B1" t="inlineStr"><is><t>name</t></is></c></row>
+                    <row r="2"><c r="A2" t="inlineStr"><is><t>sword_01</t></is></c><c r="B2" t="inlineStr"><is><t>铁剑</t></is></c><c r="C2" t="inlineStr"><is><t>extra1</t></is></c><c r="D2" t="inlineStr"><is><t>extra2</t></is></c></row>
+                  </sheetData>
+                </worksheet>
+                """);
+        DimensionSource.PollResult r = new ExcelSource(cfg()).poll(new Checkpoint());
+        assertEquals(1, r.changes().size());
+        DimensionChange c = r.changes().get(0);
+        assertEquals("sword_01", c.resourceId);
+        assertEquals("铁剑", c.attributes.get("name"));
+        // 额外列 extra1, extra2 不进 attributes
+        assertEquals(1, c.attributes.size());
     }
 }
