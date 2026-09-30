@@ -8,11 +8,27 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.io.OutputStream;
+import java.net.Authenticator;
+import java.net.CookieHandler;
 import java.net.InetSocketAddress;
+import java.net.ProxySelector;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpHeaders;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicInteger;
+
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLParameters;
+import javax.net.ssl.SSLSession;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -157,5 +173,58 @@ class StatusReporterTest {
     void redirectionStatusIsFailure() {
         status.set(302);
         assertFalse(new StatusReporter(cfg()).report(checkpoint()));
+    }
+
+    @Test
+    @DisplayName("statusCode < 200 假分支：经注入缝投喂 199 合成响应 → 判失败返回 false")
+    @SuppressWarnings("unchecked")
+    void sub200FinalResponseIsFailure() {
+        // java.net.http 把 1xx 当信息性响应继续等最终响应，真实回路给不出 <200 的最终
+        // statusCode（真服务端 199 用例走的是异常 catch 路径）——该防御臂经包内注入缝
+        // 直击：合成 199 响应 → report 判失败返回 false，不抛。
+        HttpClient synthetic199 = new HttpClient() {
+            @Override
+            public <T> HttpResponse<T> send(HttpRequest request, HttpResponse.BodyHandler<T> handler) {
+                return (HttpResponse<T>) syntheticResponse(199);
+            }
+
+            @Override
+            public <T> CompletableFuture<HttpResponse<T>> sendAsync(HttpRequest request,
+                    HttpResponse.BodyHandler<T> handler) {
+                throw new UnsupportedOperationException("本用例只走同步 send");
+            }
+
+            @Override
+            public <T> CompletableFuture<HttpResponse<T>> sendAsync(HttpRequest request,
+                    HttpResponse.BodyHandler<T> handler, HttpResponse.PushPromiseHandler<T> pushPromiseHandler) {
+                throw new UnsupportedOperationException("本用例只走同步 send");
+            }
+
+            @Override public Optional<CookieHandler> cookieHandler() { return Optional.empty(); }
+            @Override public Optional<Duration> connectTimeout() { return Optional.empty(); }
+            @Override public HttpClient.Redirect followRedirects() { return null; }
+            @Override public Optional<ProxySelector> proxy() { return Optional.empty(); }
+            @Override public SSLContext sslContext() { return null; }
+            @Override public SSLParameters sslParameters() { return null; }
+            @Override public Optional<Authenticator> authenticator() { return Optional.empty(); }
+            @Override public HttpClient.Version version() { return HttpClient.Version.HTTP_1_1; }
+            @Override public Optional<Executor> executor() { return Optional.empty(); }
+        };
+        assertFalse(new StatusReporter(cfg(), synthetic199).report(checkpoint()));
+    }
+
+    private static HttpResponse<String> syntheticResponse(int statusCode) {
+        return new HttpResponse<>() {
+            @Override public int statusCode() { return statusCode; }
+            @Override public HttpRequest request() { return null; }
+            @Override public Optional<HttpResponse<String>> previousResponse() { return Optional.empty(); }
+            @Override public HttpHeaders headers() {
+                return HttpHeaders.of(Map.of(), (k, v) -> true);
+            }
+            @Override public String body() { return "{}"; }
+            @Override public Optional<SSLSession> sslSession() { return Optional.empty(); }
+            @Override public URI uri() { return URI.create("http://127.0.0.1/"); }
+            @Override public HttpClient.Version version() { return HttpClient.Version.HTTP_1_1; }
+        };
     }
 }
