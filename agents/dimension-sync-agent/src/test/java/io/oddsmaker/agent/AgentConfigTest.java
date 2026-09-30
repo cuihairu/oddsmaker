@@ -421,4 +421,208 @@ class AgentConfigTest {
         c.kafkaSslKeystoreType = src.kafkaSslKeystoreType;
         return c;
     }
+
+    // === 分支对侧补充：覆盖 load/orDefault/intOf/longOf/require/requireCertMaterial 的未达臂 ===
+
+    @Test
+    @DisplayName("load：忽略不以 --config= 开头的参数（分支对侧）")
+    void loadIgnoresNonConfigArgs() throws Exception {
+        Path p = write(
+                "gateway.endpoint=http://gw:8080",
+                "gateway.api-key=k1",
+                "game.id=g1",
+                "game.environment=prod",
+                "source.type=csv",
+                "source.csv.dir=/tmp");
+        // 传入不以 --config= 开头的参数，应被忽略，仍加载默认路径 ./agent.properties（不存在会抛 IOException）
+        // 这里改用存在的文件路径，验证参数被忽略不影响加载
+        AgentConfig c = AgentConfig.load(new String[]{"--config=" + p, "--unknown=foo", "bare-arg"});
+        assertEquals("http://gw:8080", c.gatewayEndpoint);
+    }
+
+    @Test
+    @DisplayName("orDefault：显式非空非空白值返回自身 trimmed（分支对侧：v != null && !v.isBlank()）")
+    void orDefaultReturnsTrimmedWhenPresent() throws Exception {
+        // 通过 load 间接验证：配置文件里显式写 checkpoint-path，应被读取并 trimmed
+        Path p = write(
+                "gateway.endpoint=http://gw:8080",
+                "gateway.api-key=k1",
+                "game.id=g1",
+                "game.environment=prod",
+                "source.type=csv",
+                "source.csv.dir=/tmp",
+                "agent.checkpoint-path=  /custom/path  ");
+        AgentConfig c = AgentConfig.load(new String[]{"--config=" + p});
+        assertEquals("/custom/path", c.checkpointPath);
+    }
+
+    @Test
+    @DisplayName("orDefault：空白串视为缺失回退默认值（分支对侧：v.isBlank() 为 true）")
+    void orDefaultFallsBackToDefaultWhenBlank() throws Exception {
+        Path p = write(
+                "gateway.endpoint=http://gw:8080",
+                "gateway.api-key=k1",
+                "game.id=g1",
+                "game.environment=prod",
+                "source.type=csv",
+                "source.csv.dir=/tmp",
+                "agent.checkpoint-path=   ");
+        AgentConfig c = AgentConfig.load(new String[]{"--config=" + p});
+        assertEquals("./checkpoint.json", c.checkpointPath);
+    }
+
+    @Test
+    @DisplayName("intOf：通过 load 设置 batch-size/poll-seconds 覆盖解析分支（v != null && !v.isBlank() + 解析）")
+    void loadParsesIntOfBranches() throws Exception {
+        Path p = write(
+                "gateway.endpoint=http://gw:8080",
+                "gateway.api-key=k1",
+                "game.id=g1",
+                "game.environment=prod",
+                "source.type=csv",
+                "source.csv.dir=/tmp",
+                "agent.batch-size=123",
+                "agent.poll-seconds=456");
+        AgentConfig c = AgentConfig.load(new String[]{"--config=" + p});
+        assertEquals(123, c.batchSize);
+        assertEquals(456, c.pollSeconds);
+    }
+
+    @Test
+    @DisplayName("longOf：通过 load 设置 kafka.poll-timeout-ms 覆盖解析分支")
+    void loadParsesLongOfBranches() throws Exception {
+        Path p = write(
+                "gateway.endpoint=http://gw:8080",
+                "gateway.api-key=k1",
+                "game.id=g1",
+                "game.environment=prod",
+                "source.type=kafka",
+                "source.kafka.bootstrap-servers=b:9092",
+                "source.kafka.topic=dims",
+                "source.kafka.poll-timeout-ms=7777");
+        AgentConfig c = AgentConfig.load(new String[]{"--config=" + p});
+        assertEquals(7777L, c.kafkaPollTimeoutMs);
+    }
+
+    @Test
+    @DisplayName("require：空白串也视为缺失并抛出（分支对侧：v.isBlank() 为 true）")
+    void requireRejectsBlankString() {
+        AgentConfig c = new AgentConfig();
+        c.gatewayEndpoint = "http://gw";
+        c.gatewayApiKey = "k";
+        c.gameId = "g";
+        c.environment = "prod";
+        c.sourceType = "csv";
+        c.csvDir = "  ";   // 空白串
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, c::validate);
+        assertTrue(ex.getMessage().contains("source.csv.dir"), ex.getMessage());
+    }
+
+    @Test
+    @DisplayName("requireCertMaterial：keystore path 非空且 protocol 为 SASL_SSL、type 合法时通过")
+    void requireCertMaterialAllowsKeystoreUnderSaslSsl() {
+        AgentConfig c = new AgentConfig();
+        c.gatewayEndpoint = "http://gw";
+        c.gatewayApiKey = "k";
+        c.gameId = "g";
+        c.environment = "prod";
+        c.sourceType = "kafka";
+        c.kafkaBootstrap = "b:9092";
+        c.kafkaTopic = "dims";
+        c.kafkaSecurityProtocol = "SASL_SSL";
+        c.kafkaSaslMechanism = "SCRAM-SHA-256";
+        c.kafkaUsername = "u";
+        c.kafkaPassword = "p";
+        c.kafkaSslKeystorePath = "/ks/client.p12";
+        c.kafkaSslKeystoreType = "PKCS12";
+        c.validate();
+    }
+
+    @Test
+    @DisplayName("requireCertMaterial：keystore type 非法（非 JKS/PKCS12）在 SASL_SSL 下被拒绝")
+    void requireCertMaterialRejectsBadKeystoreTypeUnderSaslSsl() {
+        AgentConfig c = new AgentConfig();
+        c.gatewayEndpoint = "http://gw";
+        c.gatewayApiKey = "k";
+        c.gameId = "g";
+        c.environment = "prod";
+        c.sourceType = "kafka";
+        c.kafkaBootstrap = "b:9092";
+        c.kafkaTopic = "dims";
+        c.kafkaSecurityProtocol = "SASL_SSL";
+        c.kafkaSaslMechanism = "SCRAM-SHA-256";
+        c.kafkaUsername = "u";
+        c.kafkaPassword = "p";
+        c.kafkaSslKeystorePath = "/ks/client.p12";
+        c.kafkaSslKeystoreType = "PEM";
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, c::validate);
+        assertTrue(ex.getMessage().contains("ssl-keystore-type"), ex.getMessage());
+    }
+
+    @Test
+    @DisplayName("intOf：空白串回退默认值（覆盖 v != null && v.isBlank() 分支）")
+    void loadParsesIntOfBlankFallsBackToDefault() throws Exception {
+        Path p = write(
+                "gateway.endpoint=http://gw:8080",
+                "gateway.api-key=k1",
+                "game.id=g1",
+                "game.environment=prod",
+                "source.type=csv",
+                "source.csv.dir=/tmp",
+                "agent.batch-size=   ",
+                "agent.poll-seconds=   ");
+        AgentConfig c = AgentConfig.load(new String[]{"--config=" + p});
+        assertEquals(500, c.batchSize);
+        assertEquals(300, c.pollSeconds);
+    }
+
+    @Test
+    @DisplayName("longOf：空白串回退默认值（覆盖 v != null && v.isBlank() 分支）")
+    void loadParsesLongOfBlankFallsBackToDefault() throws Exception {
+        Path p = write(
+                "gateway.endpoint=http://gw:8080",
+                "gateway.api-key=k1",
+                "game.id=g1",
+                "game.environment=prod",
+                "source.type=kafka",
+                "source.kafka.bootstrap-servers=b:9092",
+                "source.kafka.topic=dims",
+                "source.kafka.poll-timeout-ms=   ");
+        AgentConfig c = AgentConfig.load(new String[]{"--config=" + p});
+        assertEquals(3000L, c.kafkaPollTimeoutMs);
+    }
+
+    @Test
+    @DisplayName("requireCertMaterial：truststore path 空白串视为未配置（早期返回分支）")
+    void requireCertMaterialTreatsBlankTruststoreAsAbsent() {
+        AgentConfig c = new AgentConfig();
+        c.gatewayEndpoint = "http://gw";
+        c.gatewayApiKey = "k";
+        c.gameId = "g";
+        c.environment = "prod";
+        c.sourceType = "kafka";
+        c.kafkaBootstrap = "b:9092";
+        c.kafkaTopic = "dims";
+        c.kafkaSecurityProtocol = "SSL";
+        c.kafkaSslTruststorePath = "  ";
+        c.kafkaSslTruststoreType = "JKS";
+        c.validate();
+    }
+
+    @Test
+    @DisplayName("requireCertMaterial：keystore path 空白串视为未配置（早期返回分支）")
+    void requireCertMaterialTreatsBlankKeystoreAsAbsent() {
+        AgentConfig c = new AgentConfig();
+        c.gatewayEndpoint = "http://gw";
+        c.gatewayApiKey = "k";
+        c.gameId = "g";
+        c.environment = "prod";
+        c.sourceType = "kafka";
+        c.kafkaBootstrap = "b:9092";
+        c.kafkaTopic = "dims";
+        c.kafkaSecurityProtocol = "SSL";
+        c.kafkaSslKeystorePath = "  ";
+        c.kafkaSslKeystoreType = "JKS";
+        c.validate();
+    }
 }
