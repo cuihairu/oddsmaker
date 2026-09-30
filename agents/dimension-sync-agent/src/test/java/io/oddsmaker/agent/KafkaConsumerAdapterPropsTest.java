@@ -197,4 +197,52 @@ class KafkaConsumerAdapterPropsTest {
         assertNull(ssl.keystorePassword());
         assertNull(ssl.keystoreType());
     }
+
+    // === 分支对侧补充：SslSettings 版 applySecurityProps 的 truststoreType/keystoreType null/blank 分支 ===
+
+    @Test
+    @DisplayName("SslSettings：truststore path 非空但 type 为 null，不注入 type 配置")
+    void sslSettingsTruststoreTypeNullDoesNotInjectTypeConfig() {
+        Map<String, Object> props = new HashMap<>();
+        KafkaConsumerAdapter.applySecurityProps(props, "SSL", null, null, null,
+                new KafkaConsumerAdapter.SslSettings("/ts/trust.jks", "pass", null, null, null, null));
+        assertEquals("/ts/trust.jks", props.get(SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG));
+        assertEquals("pass", props.get(SslConfigs.SSL_TRUSTSTORE_PASSWORD_CONFIG));
+        assertFalse(props.containsKey(SslConfigs.SSL_TRUSTSTORE_TYPE_CONFIG),
+                "type 为 null 时不应注入 SSL_TRUSTSTORE_TYPE_CONFIG");
+    }
+
+    @Test
+    @DisplayName("SslSettings：truststore path 非空但 type 为空白，不注入 type 配置")
+    void sslSettingsTruststoreTypeBlankDoesNotInjectTypeConfig() {
+        Map<String, Object> props = new HashMap<>();
+        KafkaConsumerAdapter.applySecurityProps(props, "SSL", null, null, null,
+                new KafkaConsumerAdapter.SslSettings("/ts/trust.jks", "pass", "  ", null, null, null));
+        assertEquals("/ts/trust.jks", props.get(SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG));
+        assertFalse(props.containsKey(SslConfigs.SSL_TRUSTSTORE_TYPE_CONFIG),
+                "type 为空白时不应注入 SSL_TRUSTSTORE_TYPE_CONFIG");
+    }
+
+    @Test
+    @DisplayName("SslSettings：keystore path 非空但 type 为 null，不注入 type 配置")
+    void sslSettingsKeystoreTypeNullDoesNotInjectTypeConfig() {
+        Map<String, Object> props = new HashMap<>();
+        KafkaConsumerAdapter.applySecurityProps(props, "SSL", null, null, null,
+                new KafkaConsumerAdapter.SslSettings(null, null, null, "/ks/client.jks", "pass", null));
+        assertEquals("/ks/client.jks", props.get(SslConfigs.SSL_KEYSTORE_LOCATION_CONFIG));
+        assertEquals("pass", props.get(SslConfigs.SSL_KEYSTORE_PASSWORD_CONFIG));
+        assertFalse(props.containsKey(SslConfigs.SSL_KEYSTORE_TYPE_CONFIG),
+                "type 为 null 时不应注入 SSL_KEYSTORE_TYPE_CONFIG");
+    }
+
+    @Test
+    @DisplayName("SslSettings：keystore path 非空但 type 为空白，不注入 type 配置")
+    void sslSettingsKeystoreTypeBlankDoesNotInjectTypeConfig() {
+        Map<String, Object> props = new HashMap<>();
+        KafkaConsumerAdapter.applySecurityProps(props, "SSL", null, null, null,
+                new KafkaConsumerAdapter.SslSettings(null, null, null, "/ks/client.jks", "pass", "  "));
+        assertEquals("/ks/client.jks", props.get(SslConfigs.SSL_KEYSTORE_LOCATION_CONFIG));
+        assertFalse(props.containsKey(SslConfigs.SSL_KEYSTORE_TYPE_CONFIG),
+                "type 为空白时不应注入 SSL_KEYSTORE_TYPE_CONFIG");
+    }
 }

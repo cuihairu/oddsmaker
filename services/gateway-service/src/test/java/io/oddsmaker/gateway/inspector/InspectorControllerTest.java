@@ -172,4 +172,40 @@ class InspectorControllerTest {
                 .exchange()
                 .expectStatus().isUnauthorized();
     }
+
+    @Test
+    @DisplayName("鉴权：x-api-key 空白串（非 null）同样 401")
+    void blankApiKeyRejected() {
+        client.get().uri(b -> b.path("/v1/inspector/recent")
+                        .queryParam("game_id", "game_a")
+                        .queryParam("environment", "prod").build())
+                .header("x-api-key", "  ")
+                .exchange()
+                .expectStatus().isUnauthorized();
+    }
+
+    @Test
+    @DisplayName("非 scoped key：environment 空白串（非 null）→ 400 missing_scope")
+    void blankEnvironmentParamRejected() {
+        client.get().uri(b -> b.path("/v1/inspector/recent")
+                        .queryParam("game_id", "game_a")
+                        .queryParam("environment", "  ").build())
+                .header("x-api-key", "pk_unscoped")
+                .exchange()
+                .expectStatus().isBadRequest();
+    }
+
+    @Test
+    @DisplayName("outcome 空白串（非 null）视为不过滤，返回作用域全部记录")
+    void blankOutcomeParamIgnored() {
+        client.get().uri(b -> b.path("/v1/inspector/recent")
+                        .queryParam("game_id", "game_a")
+                        .queryParam("environment", "prod")
+                        .queryParam("outcome", "  ").build())
+                .header("x-api-key", "pk_unscoped")
+                .exchange()
+                .expectStatus().is2xxSuccessful()
+                .expectBody()
+                .jsonPath("$.count").isEqualTo(3);
+    }
 }

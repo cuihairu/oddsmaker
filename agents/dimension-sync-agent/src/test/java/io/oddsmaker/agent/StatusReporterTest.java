@@ -114,4 +114,48 @@ class StatusReporterTest {
         assertFalse(new StatusReporter(unreachable).report(checkpoint()));
         assertEquals(1, bodies.size());
     }
+
+    // === 分支对侧补充（BRANCH 收口）===
+
+    @Test
+    @DisplayName("statusUrl 为 null（非空白串）：enabled/report 均静默跳过")
+    void nullStatusUrlDisables() {
+        AgentConfig cfg = cfg();
+        cfg.statusUrl = null;
+        assertFalse(new StatusReporter(cfg).enabled());
+        assertFalse(new StatusReporter(cfg).report(checkpoint()));
+        assertEquals(0, bodies.size());
+    }
+
+    @Test
+    @DisplayName("sourceKey 已配置：载荷用配置值（不走 agent-<sourceType> 缺省）")
+    void configuredSourceKeyIsUsed() throws Exception {
+        AgentConfig cfg = cfg();
+        cfg.sourceKey = "dim-sync-01";
+        new StatusReporter(cfg).report(new Checkpoint());
+        assertEquals("dim-sync-01", JSON.readValue(bodies.poll(), Map.class).get("sourceKey"));
+    }
+
+    @Test
+    @DisplayName("statusToken 为 null：x-admin-token 头为空串（不 NPE、不省略头）")
+    void nullStatusTokenSendsEmptyHeader() throws Exception {
+        AgentConfig cfg = cfg();
+        cfg.statusToken = null;
+        new StatusReporter(cfg).report(new Checkpoint());
+        assertEquals("", tokens.poll());
+    }
+
+    @Test
+    @DisplayName("1xx 状态码（< 200）：同样判失败返回 false")
+    void informationalStatusIsFailure() {
+        status.set(199);
+        assertFalse(new StatusReporter(cfg()).report(checkpoint()));
+    }
+
+    @Test
+    @DisplayName("3xx 状态码（>= 300）：重定向也判失败返回 false（覆盖 resp.statusCode() >= 300 分支）")
+    void redirectionStatusIsFailure() {
+        status.set(302);
+        assertFalse(new StatusReporter(cfg()).report(checkpoint()));
+    }
 }

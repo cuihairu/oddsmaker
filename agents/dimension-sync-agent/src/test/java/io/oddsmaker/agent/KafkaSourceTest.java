@@ -16,7 +16,12 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** Kafka 源（假端口离线测试）：位点推进、drain、坏消息跳过、断点续传；k: 位点编解码。 */
+/**
+ * Kafka 源（假端口离线测试）：位点推进、drain、坏消息跳过、断点续传；k: 位点编解码。
+ *
+ * <p>一条臂刻意不强求覆盖：空白 resource_id 消息跳过（{@link JdbcSource#mapRow} 的
+ * firstNonNull 保证 resourceId 非空或 null，isBlank 侧不可达）。
+ */
 class KafkaSourceTest {
 
     /** 内存假端口：按轮返回预置批次，记录 assign 收到的起点。 */
@@ -192,5 +197,43 @@ class KafkaSourceTest {
                 () -> new KafkaSource(cfg(), failing).poll(current));
         assertEquals("broker 不可达", e.getMessage());
         assertEquals("k:0=1", current.cursor);   // poll 不落盘，current 未被改动
+    }
+
+    // === 分支对侧补充（BRANCH 收口）===
+
+    @Test
+    @DisplayName("cursor-initial 空白串：回落空起点（不注入空白位点）")
+    void blankCursorInitialFallsBackToEmpty() throws Exception {
+        FakePort port = new FakePort();
+        AgentConfig c = cfg();
+        c.kafkaCursorInitial = "   ";
+        new KafkaSource(c, port).poll(new Checkpoint());
+        assertTrue(port.assigned.isEmpty());
+    }
+
+    @Test
+    @DisplayName("drain 上限 100 轮：第 100 轮后停止（即使还有数据），剩余下轮续传")
+    void drainStopsAtHundredRounds() throws Exception {
+        FakePort port = new FakePort();
+        for (int i = 0; i < 105; i++) {
+            port.batches.add(List.of(rec(0, i, "{\"resource_id\":\"id_" + i + "\"}")));
+        }
+        DimensionSource.PollResult r = new KafkaSource(cfg(), port).poll(new Checkpoint());
+        assertEquals(100, r.changes().size());       // 只消费前 100 轮
+        assertEquals(100, port.round);               // 第 101 轮未拉取（for 条件假退出）
+        assertEquals("k:0=100", r.next().cursor);   // offset 0..99 → next 100
+    }
+
+    @Test
+    @DisplayName("纯坏消息轮：位点前进但无变更，lastEventTs 不更新")
+    void pureBadRoundAdvancesCursorWithoutChanges() throws Exception {
+        FakePort port = new FakePort();
+        port.batches.add(List.of(rec(0, 5, "not-json{")));
+        Checkpoint current = new Checkpoint();
+        current.lastEventTs = 111L;
+        DimensionSource.PollResult r = new KafkaSource(cfg(), port).poll(current);
+        assertTrue(r.changes().isEmpty());
+        assertEquals("k:0=6", r.next().cursor);     // 位点前进
+        assertEquals(111L, r.next().lastEventTs);   // 无变更 → lastEventTs 不更新
     }
 }

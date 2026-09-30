@@ -317,4 +317,33 @@ class AgentMainTest {
         agent.cycle();
         assertEquals(2, agent.checkpoint().errorCount);
     }
+
+    // === 分支对侧补充（BRANCH 收口）===
+
+    @Test
+    @DisplayName("run：pollSeconds 等待窗自然走完后进入下一轮（for 条件假臂），shutdown 置停后退出")
+    void runExitsWaitLoopViaConditionThenStops() throws Exception {
+        FakeSource source = new FakeSource();
+        AgentConfig cfg = cfg();
+        cfg.pollSeconds = 1;   // 1000ms 等待窗
+        AgentMain agent = new AgentMain(cfg, source, new GatewaySink(cfg),
+                new StatusReporter(cfg), new CheckpointStore(Path.of(cfg.checkpointPath)));
+        Thread t = new Thread(() -> {
+            try {
+                agent.run();
+            } catch (Exception ignored) {
+            }
+        });
+        t.start();
+        // 等首轮 cycle 完成（心跳已报，进入 for 等待窗）
+        long deadline = System.currentTimeMillis() + 5000;
+        while (statusBodies.isEmpty() && System.currentTimeMillis() < deadline) {
+            Thread.sleep(10);
+        }
+        // 让 for 窗自然走完（1000ms → waited=1000 条件假退出），再置停
+        Thread.sleep(1200);
+        agent.running.set(false);
+        t.join(5000);
+        assertFalse(t.isAlive());
+    }
 }

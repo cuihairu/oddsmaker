@@ -20,10 +20,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * xlsx 最小解析器：测试用 ZipOutputStream 手工产出 xlsx 结构（zip+xml），零三方依赖。
  *
- * <p>两条臂刻意不强求覆盖（源码内均为兜底，构造不出来也不该改产品代码去凑）：
- * {@code firstSheetPath} 的 {@code getAttributeNS} 回退（parseXml 未开 namespace-aware，
- * {@code getAttribute("r:id")} 总能取到字面属性）与 {@code parseXml} 中
- * {@code setFeature(disallow-doctype-decl)} 抛错的 catch（JDK 内置解析器恒支持该特性）。
+ * <p>一条臂刻意不强求覆盖（源码内为兜底，构造不出来也不该改产品代码去凑）：
+ * {@code parseXml} 中 {@code setFeature(disallow-doctype-decl)} 抛错的 catch
+ * （JDK 内置解析器恒支持该特性）。
  */
 class XlsxParserTest {
 
@@ -341,5 +340,65 @@ class XlsxParserTest {
         assertEquals("42", XlsxParser.normalizeNumber(" 4.2E1 "));
         assertEquals("1.5", XlsxParser.normalizeNumber("1.5"));
         assertEquals("abc", XlsxParser.normalizeNumber("abc"));
+    }
+
+    // === 分支对侧补充（BRANCH 收口）===
+
+    @Test
+    @DisplayName("共享字符串索引负数（-1）：越界 IOException 带索引值上下文")
+    void negativeSharedStringIndexFailsLoudly() throws Exception {
+        Path neg = dir.resolve("idx-neg.xlsx");
+        writeXlsx(neg, """
+                <?xml version="1.0"?>
+                <sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><si><t>x</t></si></sst>
+                """, """
+                <?xml version="1.0"?>
+                <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+                  <sheetData><row><c r="A1" t="s"><v>-1</v></c></row></sheetData>
+                </worksheet>
+                """, WORKBOOK_XML, RELS_XML, "xl/worksheets/sheet1.xml");
+        IOException e = assertThrows(IOException.class, () -> XlsxParser.parse(neg));
+        assertTrue(e.getMessage().contains("越界"), e.getMessage());
+        assertTrue(e.getMessage().contains("-1"), e.getMessage());
+    }
+
+    @Test
+    @DisplayName("colOf：小写字母后遇 > 'z' 的非字母字符 → break（不串位）")
+    void colOfLowercaseThenNonLetterBreaks() {
+        assertEquals(0, XlsxParser.colOf("a{"));
+        assertEquals(0, XlsxParser.colOf("a~"));
+    }
+
+    @Test
+    @DisplayName("workbook 无 sheet 元素 / sheet 无 r:id：rid 空 → 兜底约定路径解析成功")
+    void missingSheetOrRidFallsBackToConventionPath() throws Exception {
+        String sheet = """
+                <?xml version="1.0"?>
+                <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+                  <sheetData><row><c r="A1" t="inlineStr"><is><t>item_code</t></is></c></row></sheetData>
+                </worksheet>
+                """;
+
+        // 无 <sheet> 元素 → rid 保持空串 → 兜底
+        Path noSheets = dir.resolve("no-sheets.xlsx");
+        writeXlsx(noSheets, null, sheet, """
+                <?xml version="1.0"?>
+                <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+                          xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+                  <sheets></sheets>
+                </workbook>
+                """, RELS_XML, "xl/worksheets/sheet1.xml");
+        assertEquals("item_code", XlsxParser.parse(noSheets).get(0)[0]);
+
+        // <sheet> 无 r:id → getAttributeNS 回退取空 → 同样兜底
+        Path noRid = dir.resolve("no-rid.xlsx");
+        writeXlsx(noRid, null, sheet, """
+                <?xml version="1.0"?>
+                <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+                          xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+                  <sheets><sheet name="dims" sheetId="1"/></sheets>
+                </workbook>
+                """, RELS_XML, "xl/worksheets/sheet1.xml");
+        assertEquals("item_code", XlsxParser.parse(noRid).get(0)[0]);
     }
 }

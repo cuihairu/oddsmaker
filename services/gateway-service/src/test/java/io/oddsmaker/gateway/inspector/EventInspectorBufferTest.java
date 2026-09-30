@@ -16,6 +16,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * EventInspectorBuffer（Live Inspector 检视缓冲）单元测试：
  * 有界环形、新→旧读取、outcome 过滤、作用域隔离与 LRU 淘汰、TTL 过期、并发安全。
+ *
+ * 记账（不可达分支）：
+ * - recent() L144 `rec.tsServer < cutoff` 的 break 侧——L138 的 while 已把过期前缀
+ *   全部清理（deque 按 addLast 插入序、tsServer 单调不减），迭代器只见未过期记录，
+ *   break 为防御性兜底，公开路径不可达；
+ * - evictStaleScopes() L178 `scopes.remove(key) != null` 的假侧——scopes 与 lastTouch
+ *   在 record/evict/clear 中恒同步增删，lastTouch 不会出现 scopes 缺失的键，
+ *   假侧仅理论竞态可致，公开路径不可达。
  */
 @DisplayName("实时事件检视缓冲")
 class EventInspectorBufferTest {
@@ -133,5 +141,37 @@ class EventInspectorBufferTest {
         pool.shutdownNow();
         // 全部 256 条写入，容量 64 → 恰好保留最新 64 条
         assertEquals(64, buf.recent("g", "prod", null, 300).size());
+    }
+
+    @Test
+    @DisplayName("路由字段空白串/null 对侧：gameId 空白与 environment 缺失同样静默跳过")
+    void blankRoutingFieldsSkipped() {
+        EventInspectorBuffer buf = new EventInspectorBuffer(10, 8, 600_000L);
+        buf.record("game_a", "prod", EventInspectorBuffer.OUTCOME_ACCEPTED, null, null, event("a1"));
+        // gameId 空白串（非 null）与 environment null 都是「无法归属作用域」的对侧臂
+        buf.record("  ", "prod", EventInspectorBuffer.OUTCOME_REJECTED, "invalid_schema", null, event("x1"));
+        buf.record("game_a", null, EventInspectorBuffer.OUTCOME_REJECTED, "invalid_schema", null, event("x2"));
+        assertEquals(1, buf.scopeCount());
+        assertEquals(1, buf.recent("game_a", "prod", null, 10).size());
+    }
+
+    @Test
+    @DisplayName("outcome 空白串（非 null）视为不过滤，与 null 同语义")
+    void blankOutcomeMeansNoFilter() {
+        EventInspectorBuffer buf = new EventInspectorBuffer(10, 8, 600_000L);
+        buf.record("g", "prod", EventInspectorBuffer.OUTCOME_ACCEPTED, null, null, event("ok1"));
+        buf.record("g", "prod", EventInspectorBuffer.OUTCOME_REJECTED, "invalid_schema", null, event("bad1"));
+        List<EventInspectorBuffer.InspectorRecord> all = buf.recent("g", "prod", "  ", 10);
+        assertEquals(2, all.size());
+    }
+
+    @Test
+    @DisplayName("maxScopes=0 边界：写入即淘汰（淘汰循环耗尽退出，非 break 路径）")
+    void zeroMaxScopesEvictsImmediately() {
+        EventInspectorBuffer buf = new EventInspectorBuffer(10, 0, 600_000L);
+        buf.record("g", "prod", EventInspectorBuffer.OUTCOME_ACCEPTED, null, null, event("e1"));
+        // toEvict=1 与 byAge 条目数相等：唯一条目移除后循环耗尽退出（hasNext 假侧）
+        assertEquals(0, buf.scopeCount());
+        assertTrue(buf.recent("g", "prod", null, 10).isEmpty());
     }
 }

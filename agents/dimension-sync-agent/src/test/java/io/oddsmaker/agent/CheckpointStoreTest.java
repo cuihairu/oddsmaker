@@ -12,7 +12,12 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** 断点存取：JSON 往返、缺失文件返回空断点、原子落盘无 .tmp 残留。 */
+/**
+ * 断点存取：JSON 往返、缺失文件返回空断点、原子落盘无 .tmp 残留。
+ *
+ * <p>一条臂刻意不强求覆盖：{@code save} 中 {@code AtomicMoveNotSupportedException}
+ * 的 catch（常规文件系统均支持 ATOMIC_MOVE，无法在单测环境构造不支持原子移动的文件系统）。
+ */
 class CheckpointStoreTest {
 
     @TempDir
@@ -79,5 +84,29 @@ class CheckpointStoreTest {
         Checkpoint copy = cp.copy();
         copy.files.put("b.csv", 2L);
         assertFalse(cp.files.containsKey("b.csv"));
+    }
+
+    @Test
+    @DisplayName("save：父目录不存在时自动创建（Files.createDirectories 分支）")
+    void saveCreatesParentDirectories() throws Exception {
+        Path deepPath = dir.resolve("a").resolve("b").resolve("c").resolve("checkpoint.json");
+        CheckpointStore store = new CheckpointStore(deepPath);
+        Checkpoint cp = new Checkpoint();
+        cp.cursor = "n:999";
+        store.save(cp);
+        assertEquals("n:999", store.load().cursor);
+    }
+
+    @Test
+    @DisplayName("save→load：errorCount 与 lastError 字段往返")
+    void saveLoadErrorFields() throws Exception {
+        CheckpointStore store = new CheckpointStore(dir.resolve("cp.json"));
+        Checkpoint cp = new Checkpoint();
+        cp.errorCount = 5;
+        cp.lastError = "connection timeout";
+        store.save(cp);
+        Checkpoint loaded = store.load();
+        assertEquals(5, loaded.errorCount);
+        assertEquals("connection timeout", loaded.lastError);
     }
 }

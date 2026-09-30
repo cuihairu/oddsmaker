@@ -70,4 +70,30 @@ class CsvParserTest {
         assertArrayEquals(new String[]{"a", "", "c"}, rows.get(0));
         assertArrayEquals(new String[]{"", "d", ""}, rows.get(1));
     }
+
+    // === 分支对侧补充 ===
+
+    @Test
+    @DisplayName("空字符串输入返回空列表（text.isEmpty() 为 true 分支）")
+    void emptyStringReturnsEmptyList() {
+        List<String[]> rows = CsvParser.parse("");
+        assertEquals(0, rows.size());
+    }
+
+    @Test
+    @DisplayName("仅 CR 换行（旧 Mac 格式）也能正确切行（\\r 非 \\r\\n 分支）")
+    void crOnlyLineEnding() {
+        List<String[]> rows = CsvParser.parse("a,b\rc,d");
+        assertEquals(2, rows.size());
+        assertArrayEquals(new String[]{"a", "b"}, rows.get(0));
+        assertArrayEquals(new String[]{"c", "d"}, rows.get(1));
+    }
+
+    @Test
+    @DisplayName("引号字段以引号开启，非引号字符累积（inQuotes=false -> '\"' 分支）")
+    void quoteOpensQuotedField() {
+        List<String[]> rows = CsvParser.parse("\"hello\",world");
+        assertEquals(1, rows.size());
+        assertArrayEquals(new String[]{"hello", "world"}, rows.get(0));
+    }
 }

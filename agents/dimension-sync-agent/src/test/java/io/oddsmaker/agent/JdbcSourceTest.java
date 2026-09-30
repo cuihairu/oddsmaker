@@ -98,4 +98,33 @@ class JdbcSourceTest {
         assertEquals("mysql", s.type());
         assertTrue(s.name().contains("jdbc:mysql://localhost:3306/game"));
     }
+
+    // === 分支对侧补充（BRANCH 收口）===
+
+    @Test
+    @DisplayName("mapRow：null 键条目跳过（不 NPE、不污染 attributes）")
+    void nullKeyEntryIsSkipped() {
+        Map<String, String> row = new LinkedHashMap<>();
+        row.put("resource_id", "r1");
+        row.put(null, "boom");
+        row.put("name", "n");
+        DimensionChange c = JdbcSource.mapRow(row, "item", 999L);
+        assertEquals("r1", c.resourceId);
+        assertEquals(1, c.attributes.size());
+        assertEquals("n", c.attributes.get("name"));
+    }
+
+    @Test
+    @DisplayName("parseVersionTs：空白串取 now（与 null 同语义）")
+    void blankVersionTsFallsBackToNow() {
+        assertEquals(42L, JdbcSource.parseVersionTs("  ", 42L));
+        assertEquals(42L, JdbcSource.parseVersionTs("", 42L));
+    }
+
+    @Test
+    @DisplayName("mapRow：op 空白串回落 upsert（与 null 同语义）")
+    void blankOpFallsBackToUpsert() {
+        DimensionChange c = JdbcSource.mapRow(rowOf("resource_id", "r1", "op", "  "), "item", 1L);
+        assertEquals("upsert", c.op);
+    }
 }
