@@ -96,4 +96,12 @@ class CsvParserTest {
         assertEquals(1, rows.size());
         assertArrayEquals(new String[]{"hello", "world"}, rows.get(0));
     }
+
+    @Test
+    @DisplayName("\\r 在文本末尾：无后视字符（i+1 越界）按单字符换行收尾，不成悬挂行")
+    void crAtEndOfText() {
+        List<String[]> rows = CsvParser.parse("a,b\r");
+        assertEquals(1, rows.size());
+        assertArrayEquals(new String[]{"a", "b"}, rows.get(0));
+    }
 }

@@ -8,13 +8,29 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.io.OutputStream;
+import java.net.Authenticator;
+import java.net.CookieHandler;
 import java.net.InetSocketAddress;
+import java.net.ProxySelector;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpHeaders;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicInteger;
+
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLParameters;
+import javax.net.ssl.SSLSession;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -24,8 +40,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Gateway 推送端：事件契约、NDJSON 分块、x-api-key 头、非 2xx 抛错。
  *
- * <p>一条臂刻意不强求覆盖：excerpt 的 null 响应体（{@code BodyHandlers.ofString()}
- * 对空体返回 "" 而非 null，null 不可达）。
+ * <p>{@code statusCode < 200} 与 {@code excerpt(null)} 两条臂真实回路构造不出来
+ * （java.net.http 把 1xx 当信息性响应继续等最终响应、{@code ofString()} 空体返回 ""
+ * 而非 null），经包内注入缝 {@code GatewaySink(cfg, HttpClient)} 投喂合成响应直击，
+ * 见 {@code sub200WithNullBodyViaInjectedClient}。
  */
 class GatewaySinkTest {
 
@@ -164,5 +182,62 @@ class GatewaySinkTest {
                 () -> new GatewaySink(cfg(500)).push(List.of(change("a"))));
         assertTrue(ex.getMessage().contains("..."), ex.getMessage());
         assertTrue(ex.getMessage().length() < 300, "截断后应远短于原体");
+    }
+
+    @Test
+    @DisplayName("注入缝合成 199 + null 体：< 200 判失败抛异常，excerpt(null) 返回空串")
+    @SuppressWarnings("unchecked")
+    void sub200WithNullBodyViaInjectedClient() {
+        // java.net.http 把 1xx 当信息性响应继续等最终响应，ofString() 空体返回 ""——
+        // statusCode<200 与 excerpt 的 body==null 两臂真实回路构造不出来（真实服务端
+        // 100 用例走的是异常路径），经包内注入缝投喂合成响应直击。
+        HttpClient synthetic199 = new HttpClient() {
+            @Override
+            public <T> HttpResponse<T> send(HttpRequest request, HttpResponse.BodyHandler<T> handler) {
+                return (HttpResponse<T>) syntheticResponse(199, null);
+            }
+
+            @Override
+            public <T> CompletableFuture<HttpResponse<T>> sendAsync(HttpRequest request,
+                    HttpResponse.BodyHandler<T> handler) {
+                throw new UnsupportedOperationException("本用例只走同步 send");
+            }
+
+            @Override
+            public <T> CompletableFuture<HttpResponse<T>> sendAsync(HttpRequest request,
+                    HttpResponse.BodyHandler<T> handler, HttpResponse.PushPromiseHandler<T> pushPromiseHandler) {
+                throw new UnsupportedOperationException("本用例只走同步 send");
+            }
+
+            @Override public Optional<CookieHandler> cookieHandler() { return Optional.empty(); }
+            @Override public Optional<Duration> connectTimeout() { return Optional.empty(); }
+            @Override public HttpClient.Redirect followRedirects() { return null; }
+            @Override public Optional<ProxySelector> proxy() { return Optional.empty(); }
+            @Override public SSLContext sslContext() { return null; }
+            @Override public SSLParameters sslParameters() { return null; }
+            @Override public Optional<Authenticator> authenticator() { return Optional.empty(); }
+            @Override public HttpClient.Version version() { return HttpClient.Version.HTTP_1_1; }
+            @Override public Optional<Executor> executor() { return Optional.empty(); }
+        };
+
+        IllegalStateException ex = assertThrows(IllegalStateException.class,
+                () -> new GatewaySink(cfg(500), synthetic199).push(List.of(change("a"))));
+        // null 体经 excerpt 返回空串——若走 String.valueOf 则消息会带 "null"
+        assertEquals("Gateway 推送失败 HTTP 199: ", ex.getMessage());
+    }
+
+    private static HttpResponse<String> syntheticResponse(int statusCode, String body) {
+        return new HttpResponse<>() {
+            @Override public int statusCode() { return statusCode; }
+            @Override public HttpRequest request() { return null; }
+            @Override public Optional<HttpResponse<String>> previousResponse() { return Optional.empty(); }
+            @Override public HttpHeaders headers() {
+                return HttpHeaders.of(Map.of(), (k, v) -> true);
+            }
+            @Override public String body() { return body; }
+            @Override public Optional<SSLSession> sslSession() { return Optional.empty(); }
+            @Override public URI uri() { return URI.create("http://127.0.0.1/"); }
+            @Override public HttpClient.Version version() { return HttpClient.Version.HTTP_1_1; }
+        };
     }
 }
