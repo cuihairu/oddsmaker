@@ -772,6 +772,7 @@ describe('DashboardsView', () => {
     const w = await mountView(DashboardsView)
 
     await findBtn(w, '+ Widget').trigger('click')
+    await settle()
     // 弹层数据源下拉只有白名单 4 项，includes false 臂经 raw ref 注入缝直击
     w.vm.$.devtoolsRawSetupState.addForm.value.source = 'weird-source'
     await findBtn(w, '添加').trigger('click')
