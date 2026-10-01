@@ -218,7 +218,7 @@ describe('WebhooksView', () => {
     const r2 = rowFor(w, 'audit-sink')
     expect(r2.text()).not.toContain('null')
     expect(r2.find('p').exists()).toBe(false) // description null → 无说明段
-    expect(r2.findAll('span').find((s) => s.text() === 'INACTIVE').classes().join(' ')).toContain('bg-gray-100')
+    expect(badge(w, 'INACTIVE').classes().join(' ')).toContain('bg-gray-100')
     expect(r2.text()).toContain('全部事件')
     expect(r2.text()).toContain('全部')
     expect(r2.text()).toContain('0')
@@ -228,7 +228,7 @@ describe('WebhooksView', () => {
 
     // 行3：PAUSED 着色 + displayName 回落
     const r3 = rowFor(w, '稀疏配置')
-    expect(r3.findAll('span').find((s) => s.text() === 'PAUSED').classes().join(' ')).toContain('bg-yellow-100')
+    expect(badge(w, 'PAUSED').classes().join(' ')).toContain('bg-yellow-100')
     expect(r3.text()).toContain('7')
     expect(r3.text()).toContain('1')
   })
@@ -315,22 +315,19 @@ describe('WebhooksView', () => {
     await w.find('input[placeholder="https://..."]').setValue('https://h')
     await w.find('.fixed select').setValue('basic')
     expect(w.find('textarea.font-mono').attributes('placeholder')).toContain('如 {') // create 模式占位臂
-    expect(w.text()).toContain('*') // 新建时 authConfig 必填星标（!editing 臂）
+    const authLabel0 = w.findAll('label').find((l) => l.text().includes('鉴权配置'))
+    expect(authLabel0.text()).toContain('*') // 新建时 authConfig 必填星标（!editing 臂）
 
     await findBtn(w, '保存').trigger('click') // authConfig 空 + 新建 → else-if 双真
     expect(w.text()).toContain('所选鉴权类型需要填写 authConfig（JSON）')
 
     const cfg = w.find('textarea.font-mono')
-    for (const [badJson, hint] of [
-      ['not-json', '非 JSON'],
-      ['null', '!parsed'],
-      ['[]', '数组'],
-      ['{}', '空对象'],
-      ['"str"', '非对象']
-    ]) {
+    // 五个失败子臂：非 JSON（SyntaxError 走 catch）、null（!parsed）、[]（isArray）、
+    // {}（keys 空）、"str"（typeof 非对象）——均 throw 进同一 catch
+    for (const badJson of ['not-json', 'null', '[]', '{}', '"str"']) {
       await cfg.setValue(badJson)
       await findBtn(w, '保存').trigger('click')
-      expect(w.text()).toContain('authConfig 必须是非空 JSON 对象') // hint: hint
+      expect(w.text()).toContain('authConfig 必须是非空 JSON 对象')
       expect(w.text()).toContain('新建 Webhook 配置') // 弹层保持
     }
     expect(api.post).not.toHaveBeenCalled()
@@ -517,11 +514,11 @@ describe('WebhooksView', () => {
     await settle()
     await waitFor(() => {
       expect(w.text()).toContain('测试「Slack 告警」')
-      expect(w.text()).toContain('成功')
+      expect(badge(w, '成功')).toBeDefined() // 徽标精确匹配（统计卡「累计成功」不计入）
       expect(w.text()).toContain('HTTP 200，耗时 120ms')
       expect(w.text()).toContain('（日志 77）')
     })
-    expect(rowFor(w, 'Slack 告警', '') && w.find('.card.text-sm').exists()).toBe(true)
+    expect(w.find('.card.mb-8').exists()).toBe(true) // testResult 卡（v-if 臂）
 
     await findBtn(w, '刷新').trigger('click') // load() 清 testResult
     await settle()
@@ -541,7 +538,7 @@ describe('WebhooksView', () => {
 
     await waitFor(() => {
       expect(w.text()).toContain('测试「audit-sink」') // displayName null → name
-      expect(w.text()).toContain('失败')
+      expect(badge(w, '失败')).toBeDefined() // 徽标精确匹配（统计卡「累计失败」不计入）
       expect(w.text()).toContain('TimeoutError: connect timeout')
       expect(w.text()).not.toContain('（日志') // logId 缺省臂
     })
@@ -632,20 +629,20 @@ describe('WebhooksView', () => {
     expect(r1).toContain('95ms')
     expect(r1).toContain('×0')
     expect(r1).not.toContain('connection') // errorMessage '' → '-'
-    expect(rows[0].findAll('span').find((s) => s.text() === 'SUCCESS').classes().join(' ')).toContain('bg-green-100')
+    expect(rows[0].findAll('span').find((s) => s.text().trim() === 'SUCCESS').classes().join(' ')).toContain('bg-green-100')
 
     const r2 = rows[1].text()
     expect(r2).toContain('-') // sentAt null
     expect(r2).toContain('block')
     expect(r2).toContain('connection refused')
     expect(r2).toContain('×2')
-    expect(rows[1].findAll('span').find((s) => s.text() === 'FAILED').classes().join(' ')).toContain('bg-red-100')
+    expect(rows[1].findAll('span').find((s) => s.text().trim() === 'FAILED').classes().join(' ')).toContain('bg-red-100')
 
     const r3 = rows[2].text()
     expect(r3).toContain('503')
     expect(r3).toContain('×0') // retryCount undefined → ?? 0
     expect(r3).toContain('-') // responseTimeMs null / errorMessage null
-    expect(rows[2].findAll('span').find((s) => s.text() === 'RETRYING').classes().join(' ')).toContain('bg-yellow-100')
+    expect(rows[2].findAll('span').find((s) => s.text().trim() === 'RETRYING').classes().join(' ')).toContain('bg-yellow-100')
 
     await findBtn(w, '关闭').trigger('click')
     expect(w.text()).not.toContain('发送日志：')
