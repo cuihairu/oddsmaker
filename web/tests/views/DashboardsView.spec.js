@@ -19,6 +19,13 @@ const TrendChartStub = defineComponent({
  *   （后端 message / 兜底文案 / 未知数据源 / available:false）
  * - 仪表盘 CRUD：新建（prompt 取消/成功/失败）、删除（confirm 取消/成功/失败）、
  *   保存（dirty 门控/成功/失败）、widget 增删、坏 layout JSON、切换仪表盘
+ * - 展示模型矩阵：line/bar/table × 4 源全组合（空 payload 的 || 兜底、nullish 值
+ *   ?? 0 兜底）、rateOf 三步转化率、弹层全字段 v-model 联动、widgetTitle 源名回落
+ * - 不可达臂（记账不硬凑，5 行 + 6 臂）：kpiValue switch default（未知源数据永不
+ *   入缓存，模板错误分支先短路）；line/bar/table 各自链尾回落与 payment/crash 尾
+ *   if 的 false 臂（已知源均在更早分支 return，未知源先行抛错）；rateOf 的
+ *   return null 与 retained30-if false 臂（调用点只喂 firstPay/secondPay/retained30）；
+ *   barMax 的 model||[] 空臂（唯一调用点有类型真值守卫）
  *
  * 组件依赖 useGameList 模块单例——每用例 resetModules + 先设 localStorage 再动态
  * import 视图，保证单例从干净状态起步；GameSelector/TrendChart 打桩隔离。
@@ -132,6 +139,7 @@ async function mountDash(ctx, target) {
 }
 
 const findBtn = (w, label) => w.findAll('button').find((b) => b.text() === label)
+const cardFor = (w, title) => w.findAll('.card').find((c) => c.text().includes(title))
 const callsOf = (api, frag) => api.get.mock.calls.filter((c) => c[0].includes(frag))
 
 const W_ONLINE_KPI = { id: 'w1', type: 'kpi', source: 'online-overview', title: '当前在线', span: 3, params: { environment: 'prod', minutes: 10 } }
@@ -266,6 +274,8 @@ describe('DashboardsView', () => {
     })
     const w = await mountView(DashboardsView)
     expect(w.text()).toContain('无权限')
+    await w.find('.text-red-500').trigger('click') // 错误横幅可关闭
+    expect(w.text()).not.toContain('无权限')
 
     const { DashboardsView: V2 } = await fresh({ dashboardError: new Error('x') })
     const w2 = await mountView(V2)
@@ -511,6 +521,266 @@ describe('DashboardsView', () => {
       '/api/retention-metrics/g1/trend', { params: { environment: 'prod', days: 30, granularity: 'day' } }
     ])
     expect(w.text()).toContain('留存趋势')
+  })
+
+  it('line 矩阵：4 源折线模型经 stub 透传；空 payload 走 || [] 兜底', async () => {
+    const W = (id, source, params, title) => ({ id, type: 'line', source, title, span: 6, params })
+    const DASH = { id: 'd1', name: '折线墙', layout: JSON.stringify({ widgets: [
+      W('l1', 'online-overview', { environment: 'prod', minutes: 10 }, 'L-在线'),
+      W('l2', 'retention-trend', { environment: 'prod', days: 30, granularity: 'day' }, 'L-留存'),
+      W('l3', 'payment-funnel', { days: 90 }, 'L-付费'),
+      W('l4', 'crash-trend', { environment: 'prod', days: 14 }, 'L-Crash'),
+      W('l5', 'retention-trend', { environment: 'prod', days: 7, granularity: 'day' }, 'L-留存空'),
+      W('l6', 'crash-trend', { environment: 'prod', days: 21 }, 'L-Crash空'),
+      W('l7', 'payment-funnel', { days: 60 }, 'L-付费空'),
+      W('l8', 'online-overview', { environment: 'prod', minutes: 5 }, 'L-在线空')
+    ] }) }
+    const ctx = await fresh({
+      dashboards: [BOOT, DASH],
+      online: (cfg) => (cfg?.params?.minutes === 10 ? ONLINE : {}),
+      retention: (cfg) => (cfg?.params?.days === 30 ? RETENTION : {}),
+      crash: (cfg) => (cfg?.params?.days === 14 ? CRASH : {}),
+      payment: (cfg) => (cfg?.params?.days === 90 ? PAYMENT : {})
+    })
+    const w = await mountDash(ctx, DASH)
+
+    const charts = w.findAllComponents(TrendChartStub)
+    expect(charts).toHaveLength(8)
+    expect(charts[0].props('labels')).toEqual(['10:01'])
+    expect(charts[0].props('series')).toEqual([{ name: '在线', color: '#3b82f6', values: [5] }])
+    expect(charts[0].props('percent')).toBe(false)
+    expect(charts[1].props('labels')).toEqual(['09-01'])
+    expect(charts[1].props('series')).toEqual([{ name: 'D1 留存', color: '#10b981', values: [0.4] }])
+    expect(charts[1].props('percent')).toBe(true)
+    expect(charts[2].props('labels')).toEqual(['注册', '首付', '二付'])
+    expect(charts[2].props('series')).toEqual([{ name: '人数', color: '#8b5cf6', values: [1000, 100, 30] }])
+    expect(charts[3].props('labels')).toEqual(['09-29'])
+    expect(charts[3].props('series')).toEqual([{ name: 'Crash 次数', color: '#ef4444', values: [7] }])
+    // 空 payload：pts 兜底 []，模型仍成立（labels/values 空）
+    for (const i of [4, 5]) {
+      expect(charts[i].props('labels')).toEqual([])
+      expect(charts[i].props('series')[0].values).toEqual([])
+    }
+    // 空 payment：funnel || {} 仍有 3 个标签，值 nullish（undefined）
+    expect(charts[6].props('labels')).toEqual(['注册', '首付', '二付'])
+    expect(charts[6].props('series')[0].values).toHaveLength(3)
+    for (const v of charts[6].props('series')[0].values) expect(v).toBeUndefined()
+    // 空 online：trend || [] 兜底
+    expect(charts[7].props('labels')).toEqual([])
+    expect(charts[7].props('series')).toEqual([{ name: '在线', color: '#3b82f6', values: [] }])
+  })
+
+  it('bar 矩阵：4 源柱状模型；空 payload 与 nullish 值按 0 兜底', async () => {
+    const W = (id, source, params, title) => ({ id, type: 'bar', source, title, span: 6, params })
+    const DASH = { id: 'd1', name: '柱状墙', layout: JSON.stringify({ widgets: [
+      W('b1', 'online-overview', { environment: 'prod', minutes: 10 }, 'B-在线'),
+      W('b2', 'retention-trend', { environment: 'prod', days: 30, granularity: 'day' }, 'B-留存'),
+      W('b3', 'crash-trend', { environment: 'prod', days: 14 }, 'B-Crash'),
+      W('b4', 'payment-funnel', { days: 60 }, 'B-付费空'),
+      W('b5', 'online-overview', { environment: 'prod', minutes: 5 }, 'B-在线空'),
+      W('b6', 'retention-trend', { environment: 'prod', days: 7, granularity: 'day' }, 'B-留存空'),
+      W('b7', 'crash-trend', { environment: 'prod', days: 21 }, 'B-Crash空')
+    ] }) }
+    const ctx = await fresh({
+      dashboards: [BOOT, DASH],
+      online: (cfg) => (cfg?.params?.minutes === 10 ? ONLINE : {}),
+      retention: (cfg) => (cfg?.params?.days === 30 ? RETENTION : {}),
+      crash: (cfg) => (cfg?.params?.days === 14 ? CRASH : {}),
+      payment: {}
+    })
+    const w = await mountDash(ctx, DASH)
+
+    // 正常模型：柱数、标签、数值（barMax 归一）
+    const b1 = cardFor(w, 'B-在线')
+    expect(b1.findAll('.bg-primary-500')).toHaveLength(2)
+    expect(b1.text()).toContain('iOS')
+    expect(b1.findAll('span.font-mono').map((s) => s.text())).toEqual(['30', '12'])
+    expect(cardFor(w, 'B-留存').findAll('.bg-primary-500')).toHaveLength(1)
+    expect(cardFor(w, 'B-留存').text()).toContain('100')
+    expect(cardFor(w, 'B-Crash').findAll('.bg-primary-500')).toHaveLength(1)
+    expect(cardFor(w, 'B-Crash').text()).toContain('3')
+    // 付费空 funnel：4 行值全 nullish → 数值 '0'、宽度 0%（|| 0 与 ?? 0 双兜底臂）
+    const b4 = cardFor(w, 'B-付费空')
+    expect(b4.findAll('.bg-primary-500')).toHaveLength(4)
+    expect(b4.findAll('span.font-mono').map((s) => s.text())).toEqual(['0', '0', '0', '0'])
+    expect(b4.findAll('.bg-primary-500')[0].attributes('style')).toContain('width: 0%')
+    // 空 payload：模型空数组，零柱
+    for (const t of ['B-在线空', 'B-留存空', 'B-Crash空']) {
+      expect(cardFor(w, t).findAll('.bg-primary-500')).toHaveLength(0)
+    }
+  })
+
+  it('table 矩阵：4 源表格模型、rateOf 转化率与 ?? 0 兜底', async () => {
+    const W = (id, source, params, title) => ({ id, type: 'table', source, title, span: 6, params })
+    const RETENTION_PARTIAL = {
+      summary: { avgD1Rate: 0.33, cohorts: 2 },
+      points: [
+        { cohort: '2026-09-01', newUsers: 100, d1Rate: 0.4 },
+        { cohort: '2026-09-02', d1Rate: 0.25 } // 缺 newUsers → '0 新增'
+      ]
+    }
+    const PAYMENT_PARTIAL = { funnel: { registered: 1000, firstPay: 100, firstPayRate: 0.1 } } // 缺二付/留存30
+    const DASH = { id: 'd1', name: '表格墙', layout: JSON.stringify({ widgets: [
+      W('t1', 'online-overview', { environment: 'prod', minutes: 10 }, 'T-在线'),
+      W('t2', 'retention-trend', { environment: 'prod', days: 30, granularity: 'day' }, 'T-留存'),
+      W('t3', 'payment-funnel', { days: 90 }, 'T-付费'),
+      W('t4', 'payment-funnel', { days: 120 }, 'T-付费残缺'),
+      W('t5', 'online-overview', { environment: 'prod', minutes: 5 }, 'T-在线空'),
+      W('t6', 'retention-trend', { environment: 'prod', days: 7, granularity: 'day' }, 'T-留存空'),
+      W('t7', 'payment-funnel', { days: 60 }, 'T-付费空'),
+      W('t8', 'crash-trend', { environment: 'prod', days: 14 }, 'T-Crash残缺'),
+      W('t9', 'crash-trend', { environment: 'prod', days: 21 }, 'T-Crash空')
+    ] }) }
+    const ctx = await fresh({
+      dashboards: [BOOT, DASH],
+      online: (cfg) => (cfg?.params?.minutes === 10 ? ONLINE : {}),
+      retention: (cfg) => (cfg?.params?.days === 30 ? RETENTION_PARTIAL : {}),
+      payment: (cfg) => (cfg?.params?.days === 90 ? PAYMENT : cfg?.params?.days === 120 ? PAYMENT_PARTIAL : {}),
+      crash: (cfg) => (cfg?.params?.days === 14 ? { points: [{ date: '2026-09-29' }] } : {})
+    })
+    const w = await mountDash(ctx, DASH)
+
+    const rowsOf = (title) => cardFor(w, title).findAll('tbody tr').map((r) => r.text())
+    expect(rowsOf('T-在线')).toEqual(['平台iOS30', '平台Android12', '版本1.2.020'])
+    expect(rowsOf('T-留存')).toEqual(['2026-09-01100 新增40.0%', '2026-09-020 新增25.0%'])
+    expect(rowsOf('T-付费')).toEqual(['注册1,000—', '首付10010.0%', '二付3030.0%', '留存305050.0%'])
+    expect(rowsOf('T-付费残缺')).toEqual(['注册1,000—', '首付10010.0%', '二付0—', '留存300—'])
+    // 空 payload：online/retention 走 || [] 零行；payment 走 funnel || {} 仍有 4 行全兜底值
+    expect(cardFor(w, 'T-在线空').findAll('tbody tr')).toHaveLength(0)
+    expect(cardFor(w, 'T-留存空').findAll('tbody tr')).toHaveLength(0)
+    expect(rowsOf('T-付费空')).toEqual(['注册0—', '首付0—', '二付0—', '留存300—'])
+    // crash 残缺点位：crashes/affectedDevices 缺失均按 0 兜底；空 points 零行
+    expect(rowsOf('T-Crash残缺')).toEqual(['2026-09-290 次0 设备'])
+    expect(cardFor(w, 'T-Crash空').findAll('tbody tr')).toHaveLength(0)
+  })
+
+  it('未知源：标题回落源名（widgetTitle 第三臂）、fetchSource 先抛不发请求', async () => {
+    const { api, DashboardsView } = await fresh({
+      dashboards: [{ id: 'd1', name: '主面板', layout: JSON.stringify({ widgets: [
+        { id: 'x1', type: 'kpi', source: 'weird-source', title: '', span: 6 }
+      ] }) }]
+    })
+    const w = await mountView(DashboardsView)
+
+    expect(w.text()).toContain('weird-source') // 空 title → SOURCE_LABELS 未命中 → 源名兜底
+    expect(w.text()).toContain('数据加载失败')
+    for (const frag of ['/online-metrics', '/retention-metrics', '/payment-metrics', '/crash-metrics']) {
+      expect(callsOf(api, frag)).toHaveLength(0) // fetchSource default 先抛，不发请求
+    }
+  })
+
+  it('弹层全字段：遮罩点击关闭、type/title/span/env/days/minutes v-model 联动', async () => {
+    const { api, DashboardsView } = await fresh({
+      dashboards: [{ id: 'd1', name: '主面板', layout: JSON.stringify({ widgets: [] }) }]
+    })
+    const w = await mountView(DashboardsView)
+
+    await findBtn(w, '+ Widget').trigger('click')
+    await w.find('.fixed .absolute').trigger('click') // 遮罩关闭
+    expect(w.text()).not.toContain('添加 Widget')
+
+    await findBtn(w, '+ Widget').trigger('click')
+    const [srcSel, typeSel, spanSel, envSel] = w.findAll('.fixed select')
+    await srcSel.setValue('retention-trend')
+    await typeSel.setValue('table')
+    await w.find('.fixed input').setValue('留存表') // 标题（可选）
+    await spanSel.setValue('12')
+    await envSel.setValue('staging')
+    await w.find('.fixed input[type="number"]').setValue('45') // 近 N 天
+    await findBtn(w, '添加').trigger('click')
+    await settle()
+
+    expect(w.text()).not.toContain('添加 Widget')
+    expect(callsOf(api, '/retention-metrics')[0]).toEqual([
+      '/api/retention-metrics/g1/trend', { params: { environment: 'staging', days: 45, granularity: 'day' } }
+    ])
+    const added = cardFor(w, '留存表')
+    expect(added).toBeTruthy()
+    expect(added.classes()).toContain('md:col-span-12')
+    expect(findBtn(w, '保存布局')).toBeTruthy() // dirty
+
+    // 再加一个 online：minutes 字段分支 + 数字转换
+    await findBtn(w, '+ Widget').trigger('click')
+    await w.findAll('.fixed select')[0].setValue('online-overview')
+    await w.find('.fixed input[type="number"]').setValue('5') // 近 N 分钟
+    await findBtn(w, '添加').trigger('click')
+    await settle()
+    expect(callsOf(api, '/online-metrics')[0]).toEqual([
+      '/api/online-metrics/g1', { params: { environment: 'staging', minutes: 5 } }
+    ])
+  })
+
+  it('CRUD 兜底：后端 message 缺失回落默认文案；删空后 save 无面板早退', async () => {
+    vi.stubGlobal('prompt', vi.fn(() => '新面板'))
+    vi.stubGlobal('confirm', vi.fn(() => true))
+    const { api, DashboardsView } = await fresh({
+      dashboards: [{ id: 'd1', name: '主面板', layout: JSON.stringify({ widgets: [
+        { id: 'w1', type: 'kpi', source: 'online-overview', title: '在线', span: 3, params: { minutes: 10 } }
+      ] }) }]
+    })
+    api.post.mockRejectedValue(new Error('network'))
+    api.delete.mockRejectedValue(new Error('network'))
+    api.put.mockRejectedValue(new Error('network'))
+    const w = await mountView(DashboardsView)
+
+    await findBtn(w, '新建').trigger('click')
+    await settle()
+    expect(w.text()).toContain('创建失败')
+    await w.find('.text-red-500').trigger('click') // 错误横幅关闭
+    expect(w.text()).not.toContain('创建失败')
+
+    await findBtn(w, '删除').trigger('click')
+    await settle()
+    expect(w.text()).toContain('删除失败')
+
+    await w.find('button[title="移除"]').trigger('click') // 制造 dirty
+    await findBtn(w, '保存布局').trigger('click')
+    await settle()
+    expect(w.text()).toContain('保存失败')
+
+    api.delete.mockResolvedValue({ data: {} })
+    await findBtn(w, '删除').trigger('click')
+    await settle()
+    expect(w.text()).toContain('还没有自定义仪表盘') // 删空 → activeId null
+
+    w.vm.$.setupState.save() // 无活动仪表盘：早退不发 PUT
+    await settle()
+    expect(api.put).toHaveBeenCalledTimes(1) // 早退未追加调用
+  })
+
+  it('layout null 与缺 widgets 键：parseLayout 兜底；reload 不打断已选中仪表盘', async () => {
+    const DX = { id: 'dx', name: '空布局', layout: null }
+    const ctx = await fresh({
+      dashboards: [{ id: 'd1', name: '主面板', layout: JSON.stringify({ widgets: [] }) }, DX]
+    })
+    const { api, DashboardsView } = ctx
+    const w = await mountDash(ctx, DX)
+
+    expect(w.text()).toContain('空仪表盘') // layout null → '{}' → 缺 widgets 键 → []
+
+    await w.vm.$.setupState.load() // 再次拉取：find 命中 dx，不重置选中
+    await settle()
+    expect(callsOf(api, '/dashboards')).toHaveLength(2)
+    expect(w.find('select').element.value).toBe('dx')
+    expect(w.text()).toContain('空仪表盘')
+  })
+
+  it('addForm 注入缝：非白名单源不拼任何 params（includes false 臂）', async () => {
+    const { api, DashboardsView } = await fresh({
+      dashboards: [{ id: 'd1', name: '主面板', layout: JSON.stringify({ widgets: [] }) }]
+    })
+    const w = await mountView(DashboardsView)
+
+    await findBtn(w, '+ Widget').trigger('click')
+    // 弹层数据源下拉只有白名单 4 项，includes false 臂经 raw ref 注入缝直击
+    w.vm.$.devtoolsRawSetupState.addForm.value.source = 'weird-source'
+    await findBtn(w, '添加').trigger('click')
+    await settle()
+
+    expect(w.text()).toContain('数据加载失败') // fetchSource default 抛错 → 兜底文案
+    for (const frag of ['/online-metrics', '/retention-metrics', '/payment-metrics', '/crash-metrics']) {
+      expect(callsOf(api, frag)).toHaveLength(0)
+    }
   })
 
   it('同 source+params 去重：进行中的请求不重复发（dataLoading 竞态臂）', async () => {
