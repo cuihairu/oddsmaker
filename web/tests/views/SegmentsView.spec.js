@@ -17,8 +17,12 @@ import { mount, flushPromises } from '@vue/test-utils'
  * import 视图；GameSelector 打桩隔离。视图内 await 均为独立语句（无内联
  * `x[k] = await` 赋值），无本环境赋值目标提前捕获问题，常规 mount 即可。
  *
- * 不可达臂（记账不硬凑）：normalizeCondition 的 `c.op || 'gte'` false 侧（op 恒来自
- * 选项，非空字符串）、`Number(c.count) || 1` false 侧（canSubmit 已卡 count > 0）。
+ * 不可达臂：无——normalizeCondition 的 `c.op || 'gte'` / `Number(c.count) || 1` 两条 false 侧
+ * （UI 门控下选不出空值）经 devtoolsRawSetupState 注入缝 + 不 yield 直击 dispatch 覆盖
+ * （见「新建成功」用例，期望值同时钉住注入生效）。
+ *
+ * 时序说明（与 WebhooksView.spec.js 同口径）：宏任务链尾部的横幅/重载断言经条件轮询
+ * waitFor（命中即返），同步路径保持直接断言。
  */
 vi.mock('@/services/api', () => ({ default: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() } }))
 
@@ -81,11 +85,29 @@ const settle = async () => {
   await flushPromises()
   await flushPromises()
   await flushPromises()
+  await flushPromises()
+  await flushPromises()
+}
+
+// 条件等待（与 WebhooksView.spec.js 同口径）：盒子高负载时固定轮数 settle 边际不足，
+// 宏任务链尾部的横幅/重载断言按条件轮询，命中即返（绿路径不加耗时）。
+async function waitFor(assertFn, tries = 30) {
+  let last
+  for (let i = 0; i < tries; i++) {
+    try {
+      assertFn()
+      return
+    } catch (e) { last = e }
+    await settle()
+  }
+  throw last
 }
 
 async function mountView(SegmentsView) {
   const w = mount(SegmentsView, { global: { stubs: { GameSelector: true } } })
   await settle()
+  // 初载完成才返回（同 WebhooksView.spec.js 口径）：loading 复位在 finally 之后
+  await waitFor(() => expect(findBtn(w, '刷新').attributes('disabled')).toBeUndefined())
   return w
 }
 
@@ -106,8 +128,10 @@ describe('SegmentsView', () => {
     const { api, SegmentsView } = await fresh({ selectedGame: null })
     const w = await mountView(SegmentsView)
 
-    expect(callsOf(api, '/segments')).toHaveLength(1) // 早退那轮不发，自动选中后 watch 触发
-    expect(w.text()).toContain('鲸鱼用户')
+    await waitFor(() => {
+      expect(callsOf(api, '/segments')).toHaveLength(1) // 早退那轮不发，自动选中后 watch 触发
+      expect(w.text()).toContain('鲸鱼用户')
+    })
   })
 
   it('列表渲染：名称回落、口径中文/未知回落、条件摘要、成员数与时间兜底、状态徽标', async () => {
@@ -173,13 +197,15 @@ describe('SegmentsView', () => {
     expect(w.text()).toContain('加载中')
     pending.segments.resolve()
     await settle()
-    expect(w.text()).toContain('还没有分群')
-    expect(w.text()).toContain('创建一个分群')
-    expect(callsOf(api, '/segments')).toHaveLength(1)
+    await waitFor(() => {
+      expect(w.text()).toContain('还没有分群')
+      expect(w.text()).toContain('创建一个分群')
+      expect(callsOf(api, '/segments')).toHaveLength(1)
+    })
 
     await findBtn(w, '刷新').trigger('click')
     await settle()
-    expect(callsOf(api, '/segments')).toHaveLength(2)
+    await waitFor(() => expect(callsOf(api, '/segments')).toHaveLength(2))
   })
 
   it('计算成功：busy 中态、member_count 就地更新、成功文案含千分位', async () => {
@@ -195,16 +221,18 @@ describe('SegmentsView', () => {
 
     pend.resolve()
     await settle()
-    expect(rowFor(w, 'whales').text()).toContain('1,234')
-    expect(w.text()).toContain('「鲸鱼用户」计算完成：1,234 名成员')
-    expect(rowFor(w, 'whales').text()).not.toContain('未计算') // last_computed_at 已刷新
+    await waitFor(() => {
+      expect(rowFor(w, 'whales').text()).toContain('1,234')
+      expect(w.text()).toContain('「鲸鱼用户」计算完成：1,234 名成员')
+      expect(rowFor(w, 'whales').text()).not.toContain('未计算') // last_computed_at 已刷新
+    })
 
     // memberCount 0 → '0 名成员' 兜底
     api.post.mockImplementation((url) =>
       url.includes('/compute') ? ok({ memberCount: 0 }) : ok({}))
     await findBtn(w, '计算').trigger('click')
     await settle()
-    expect(w.text()).toContain('计算完成：0 名成员')
+    await waitFor(() => expect(w.text()).toContain('计算完成：0 名成员'))
   })
 
   it('计算失败臂：后端 message 与无 response 兜底', async () => {
@@ -302,9 +330,11 @@ describe('SegmentsView', () => {
     expect(w.text()).toContain('加载中') // 预览 loading 中态
     await settle()
     expect(api.get).toHaveBeenCalledWith('/api/segments/s1/members', { params: { limit: 100 } })
-    expect(w.text()).toContain('成员预览')
-    expect(w.text()).toContain('玩家 ID') // subjectLabels 命中
-    expect(w.findAll('.fixed li').map((li) => li.text())).toEqual(['p1', 'p2', 'p3'])
+    await waitFor(() => {
+      expect(w.text()).toContain('成员预览')
+      expect(w.text()).toContain('玩家 ID') // subjectLabels 命中
+      expect(w.findAll('.fixed li').map((li) => li.text())).toEqual(['p1', 'p2', 'p3'])
+    })
 
     // 关闭按钮
     await findBtn(w, '关闭').trigger('click')
@@ -315,16 +345,18 @@ describe('SegmentsView', () => {
       url.includes('/members') ? ok({}) : url === '/api/games' ? ok({ content: [{ id: 'g1' }] }) : ok([]))
     await rowFor(w, 'whales').findAll('button').find((b) => b.text() === '成员').trigger('click')
     await settle()
-    expect(w.text()).toContain('暂无成员')
+    await waitFor(() => expect(w.text()).toContain('暂无成员'))
 
     // 失败臂 + subject 缺失 → '主体'（用无 subject 的 naked 行开预览）
     api.get.mockImplementation((url) =>
       url.includes('/members') ? bad(new Error('x')) : url === '/api/games' ? ok({ content: [{ id: 'g1' }] }) : ok([]))
     await rowFor(w, 'naked').findAll('button').find((b) => b.text() === '成员').trigger('click')
     await settle()
-    expect(w.text()).toContain('加载成员失败')
-    expect(w.text()).toContain('主体 ID')
-    expect(w.text()).toContain('「naked」') // 预览头 display_name 缺省回落 name
+    await waitFor(() => {
+      expect(w.text()).toContain('加载成员失败')
+      expect(w.text()).toContain('主体 ID')
+      expect(w.text()).toContain('「naked」') // 预览头 display_name 缺省回落 name
+    })
 
     // 遮罩关闭
     await w.find('.fixed .absolute').trigger('click')
@@ -417,7 +449,7 @@ describe('SegmentsView', () => {
     const blocks = () => w.findAll('.fixed .rounded-md.border')
     await blocks()[1].find('select').setValue('event') // 块2 kind
     await blocks()[1].find('input[placeholder="事件名，如 purchase"]').setValue('purchase')
-    await blocks()[1].findAll('select')[1].setValue('gte') // event 块无 field select → [kind, op]
+    await blocks()[1].findAll('select')[1].setValue('lte') // event 分支 op 变更处理器（模板 356 行）
     await blocks()[1].findAll('input[type="number"]')[0].setValue('2') // count
     await blocks()[1].findAll('input[type="number"]')[1].setValue('14') // 窗口
 
@@ -425,7 +457,14 @@ describe('SegmentsView', () => {
     await blocks()[2].find('select').setValue('event') // 块3 kind：不设窗口 → within_days 缺省臂
     await blocks()[2].find('input[placeholder="事件名，如 purchase"]').setValue('login')
 
-    await findBtn(w, '创建').trigger('click')
+    // 注入缝：块2 op 置空 → `c.op || 'gte'` false 侧；块3 count 置空 → `Number(c.count) || 1`
+    // false 侧（validCondition 不校验 op；canSubmit 此时会禁用按钮且 jsdom 对 disabled 不派发
+    // click——注入与 dispatch 之间不 yield，DOM 尚未重渲染，click 正常触发；create 自身不复检
+    // canSubmit）。期望 op 'gte' / count 1 同时钉住注入确实生效
+    w.vm.$.devtoolsRawSetupState.form.value.conditions[1].op = ''
+    w.vm.$.devtoolsRawSetupState.form.value.conditions[2].count = ''
+    const btn = w.findAll('button').find((b) => b.text() === '创建')
+    await btn.trigger('click')
     await settle()
 
     expect(api.post).toHaveBeenCalledTimes(1)
@@ -440,13 +479,15 @@ describe('SegmentsView', () => {
     expect(def.within_days).toBe(90) // Number(0) || 90
     expect(def.conditions).toEqual([
       { kind: 'attribute', field: 'platform', op: 'in', value: ['ios', 'android', '平板'] },
-      { kind: 'event', event_name: 'purchase', op: 'gte', count: 2, within_days: 14 },
-      { kind: 'event', event_name: 'login', op: 'eq', count: 1 } // op 默认 eq 原样透出、within_days 缺省不携带
+      { kind: 'event', event_name: 'purchase', op: 'gte', count: 2, within_days: 14 }, // op 空 → 'gte' 回落（false 侧）
+      { kind: 'event', event_name: 'login', op: 'eq', count: 1 } // count '' → 1 回落（false 侧）、op 'eq' 原样、无窗口
     ])
 
     expect(w.text()).toContain('分群「new_seg」已创建')
-    expect(w.text()).not.toContain('标识名') // 弹层关闭（页头按钮同名残留，改用弹层内 label）
-    expect(callsOf(api, '/segments')).toHaveLength(2) // 成功后 load() 重载
+    await waitFor(() => {
+      expect(w.text()).not.toContain('标识名') // 弹层关闭（页头按钮同名残留，改用弹层内 label）
+      expect(callsOf(api, '/segments')).toHaveLength(2) // 成功后 load() 重载
+    })
 
     // 表单重置：重开弹层 name 为空、条件回到 1 个默认项
     await findBtn(w, '新建分群').trigger('click')
@@ -483,7 +524,7 @@ describe('SegmentsView', () => {
 
     await findBtn(w, '计算').trigger('click')
     await settle()
-    expect(w.text()).toContain('「churn_risk」计算完成：5 名成员')
+    await waitFor(() => expect(w.text()).toContain('「churn_risk」计算完成：5 名成员'))
     await w.find('.text-green-500').trigger('click')
     expect(w.text()).not.toContain('计算完成')
   })
