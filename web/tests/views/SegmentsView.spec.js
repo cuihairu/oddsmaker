@@ -271,6 +271,24 @@ describe('SegmentsView', () => {
     await rowFor(w, 'churn_risk').findAll('button').find((b) => b.text() === '删除').trigger('click')
     await settle()
     expect(w.text()).toContain('无权限删除') // 后端 message 优先臂
+
+    api.delete.mockRejectedValueOnce({ response: {} }) // 半残 response：?.data 短路 → 兜底臂
+    await rowFor(w, 'churn_risk').findAll('button').find((b) => b.text() === '删除').trigger('click')
+    await settle()
+    expect(w.text()).toContain('删除失败')
+
+    api.delete.mockRejectedValueOnce({ response: { data: {} } }) // data 存在但 message 缺失 → ?.message 短路臂
+    await rowFor(w, 'churn_risk').findAll('button').find((b) => b.text() === '删除').trigger('click')
+    await settle()
+    expect(w.text()).toContain('删除失败')
+
+    // 无 display_name 的分群删除成功 → 文案回落 name（右臂）
+    api.delete.mockResolvedValueOnce({ data: {} })
+    await rowFor(w, 'churn_risk').findAll('button').find((b) => b.text() === '删除').trigger('click')
+    await settle()
+    expect(api.delete).toHaveBeenCalledWith('/api/segments/s2')
+    expect(rowFor(w, 'churn_risk')).toBeUndefined()
+    expect(w.text()).toContain('分群「churn_risk」已删除')
   })
 
   it('成员预览：列表渲染、缺键空态、失败兜底、subject 主体回落、关闭按钮与遮罩', async () => {
@@ -334,8 +352,9 @@ describe('SegmentsView', () => {
     // 切 event：eventName/count 字段门控（弹层 select 序 env0/subject1/match2/块内 kind3/field4/op5）
     const sels = () => w.findAll('.fixed select')
     await sels()[3].setValue('event')
-    // 注入缝：eventName 为 undefined → `?? ''` 右侧臂
-    w.vm.$.devtoolsRawSetupState.form.value.conditions[0].eventName = undefined
+    // 注入缝：eventName 为 nullish → `?? ''` 右侧臂（null/undefined 均非空串字面量路径）
+    w.vm.$.devtoolsRawSetupState.form.value.conditions[0].eventName = null
+    await flushPromises()
     expect(createBtn().attributes('disabled')).toBeDefined()
     await w.find('input[placeholder="事件名，如 purchase"]').setValue('purchase')
     expect(createBtn().attributes('disabled')).toBeUndefined() // count 默认 1
@@ -366,9 +385,12 @@ describe('SegmentsView', () => {
 
     // 注入缝：attribute 值为数组时 Array.isArray 臂放行（[] 使 String() 为空，走 Array.isArray 右臂）
     w.vm.$.devtoolsRawSetupState.form.value.conditions[0].value = []
+    await flushPromises()
     expect(createBtn().attributes('disabled')).toBeUndefined()
-    w.vm.$.devtoolsRawSetupState.form.value.conditions[0].value = ['ios']
-    expect(createBtn().attributes('disabled')).toBeUndefined()
+    // 注入缝：value nullish → `?? ''` 右臂（null 两侧皆空 → 门控回到禁用，结果可区分）
+    w.vm.$.devtoolsRawSetupState.form.value.conditions[0].value = null
+    await flushPromises()
+    expect(createBtn().attributes('disabled')).toBeDefined()
 
     // 遮罩关闭
     await w.find('.fixed .absolute').trigger('click')
