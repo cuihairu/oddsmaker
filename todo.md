@@ -130,6 +130,6 @@
 
 ## 暂停项
 
-- [ ] 不继续实现 Organization/Tenant 相关新功能
-- [ ] 不继续做租户套餐、租户升级、跨公司 Row Policy
-- [ ] P8 MMP 归因接入（有条件立项，2026-09-26 核对）：前置条件为拿到任一 MMP 的原始数据导出权限（Data Locker / CSV uploads 任一），当前未达成——仅保留调研文档 `docs/mmp-attribution-evaluation.md`，达成前不启动
+- [x] 不继续实现 Organization/Tenant 相关新功能（2026-10-02 收尾核验：功能面零残留——schema/services 主干/前端 grep 无 organization/tenant 命中，P0 起全链路已无租户字段，维持不跟进）
+- [x] 不继续做租户套餐、租户升级、跨公司 Row Policy（2026-10-02 收尾核验：全仓无套餐/租户升级/行级策略任何实现痕迹，与竞品分析 §4「不跟进多租户 SaaS 化」一致，维持不做）
+- [x] P8 MMP 归因接入（有条件立项，2026-09-26 核对 → 2026-10-02 收尾核验）：前置条件为拿到任一 MMP 的原始数据导出权限（Data Locker / CSV uploads 任一），仓库侧复核仍无任何 MMP 数据接入痕迹（无凭据/配置/接收端点/建表，`ad_network` 等四列为游戏服自报回退维度与 MMP 归因无关），前置未达成——仅保留调研文档 `docs/mmp-attribution-evaluation.md`，达成前不启动
