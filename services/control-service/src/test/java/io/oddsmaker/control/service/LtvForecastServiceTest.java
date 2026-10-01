@@ -8,6 +8,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.sql.Date;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 
@@ -65,12 +67,15 @@ class LtvForecastServiceTest {
     @DisplayName("pltv：cohort 规模与 LTV 曲线查询合并输出乘数")
     void pltvQueriesAndForecasts() {
         when(client.isAvailable()).thenReturn(true);
+        // cohort 取「今天 − 10 天」：相对成熟窗口（today−30）恒未成熟，断言不随日期翻转
+        // （硬编码 2026-09-01 在 2026-10-01 起成熟，乘数 0.0→1.0 是时界炸弹）
+        Date cohort = Date.valueOf(LocalDate.now(ZoneOffset.UTC).minusDays(10));
         when(client.query(contains("v_user_first_seen"), any(Object[].class)))
-            .thenReturn(List.of(Map.of("cohort", Date.valueOf("2026-09-01"), "cohort_size", 40L)));
+            .thenReturn(List.of(Map.of("cohort", cohort, "cohort_size", 40L)));
         when(client.query(contains("v_ltv_by_cohort_day"), any(Object[].class)))
             .thenReturn(List.of(
-                Map.of("cohort", Date.valueOf("2026-09-01"), "age_day", 0, "revenue", 30.0),
-                Map.of("cohort", Date.valueOf("2026-09-01"), "age_day", 5, "revenue", 20.0)));
+                Map.of("cohort", cohort, "age_day", 0, "revenue", 30.0),
+                Map.of("cohort", cohort, "age_day", 5, "revenue", 20.0)));
 
         Map<String, Object> resp = service.pltv("g", null, 90);
 
