@@ -1,29 +1,29 @@
-/* oddsmaker palette — 数据分析盘面 — 青绿
- *   #0d9488  brand（链接、按钮、feature 图标）
- *   #0f766e  hover
- *   #115e59  active / 标题强调
- *   #5eead4  暗色模式提亮
+/* oddsmaker palette — 盘面酒红（对齐 logo #8c104d）
+ *   #b01a5e  brand（链接、按钮、feature 图标）
+ *   #8c104d  logo 主色 / hover
+ *   #6e0c3b  active / 标题强调
+ *   #e8699c  暗色模式提亮
  * 其余沿用 VitePress 默认中性色，避免整站被染色。
  */
 :root {
-  --vp-c-brand-1: #0d9488;
-  --vp-c-brand-2: #0f766e;
-  --vp-c-brand-3: #115e59;
-  --vp-c-brand-soft: rgba(13,148,136, 0.13);
+  --vp-c-brand-1: #b01a5e;
+  --vp-c-brand-2: #8c104d;
+  --vp-c-brand-3: #6e0c3b;
+  --vp-c-brand-soft: rgba(140,16,77, 0.13);
 
-  --vp-button-brand-bg: #0d9488;
-  --vp-button-brand-hover-bg: #0f766e;
-  --vp-button-brand-active-bg: #115e59;
+  --vp-button-brand-bg: #8c104d;
+  --vp-button-brand-hover-bg: #6e0c3b;
+  --vp-button-brand-active-bg: #5c0a31;
 
   --vp-home-hero-name-color: transparent;
   --vp-home-hero-name-background: linear-gradient(
     115deg,
-    #115e59 8%,
-    #0d9488 52%,
-    #5eead4 96%
+    #6e0c3b 8%,
+    #8c104d 52%,
+    #e8699c 96%
   );
 
-  --vp-custom-outline: #0d9488;
+  --vp-custom-outline: #8c104d;
 
   .VPFeature .icon {
     border-radius: 10px;
@@ -32,25 +32,25 @@
   }
 }
 
-/* 暗色：亮色系主色压暗会发闷，整体提一档 */
+/* 暗色：深酒红在暗底发闷，整体提亮一档 */
 .dark {
-  --vp-c-brand-1: #5eead4;
-  --vp-c-brand-2: #0d9488;
-  --vp-c-brand-3: #5eead4;
-  --vp-c-brand-soft: rgba(94,234,212, 0.16);
+  --vp-c-brand-1: #e8699c;
+  --vp-c-brand-2: #d14d80;
+  --vp-c-brand-3: #e8699c;
+  --vp-c-brand-soft: rgba(232,105,156, 0.16);
 
-  --vp-button-brand-bg: #0d9488;
-  --vp-button-brand-hover-bg: #5eead4;
-  --vp-button-brand-active-bg: #0f766e;
+  --vp-button-brand-bg: #8c104d;
+  --vp-button-brand-hover-bg: #e8699c;
+  --vp-button-brand-active-bg: #d14d80;
 
   --vp-home-hero-name-background: linear-gradient(
     115deg,
-    #5eead4 8%,
-    #0d9488 52%,
-    #115e59 96%
+    #e8699c 8%,
+    #d14d80 52%,
+    #8c104d 96%
   );
 
-  --vp-custom-outline: #5eead4;
+  --vp-custom-outline: #e8699c;
 }
 
 /* 行内代码沿用品牌色，替掉默认蓝 */
