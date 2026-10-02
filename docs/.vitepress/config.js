@@ -104,6 +104,7 @@ export default withMermaid(defineConfig({
   description: 'Gaming Analytics Platform Documentation',
 
   themeConfig: {
+    logo: '/logo.svg',
     socialLinks: [
       { icon: 'github', link: 'https://github.com/cuihairu/oddsmaker' }
     ],

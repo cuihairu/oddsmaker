@@ -1,4 +1,10 @@
+<div align="center">
+
+<img src="docs/public/logo.svg" width="64" alt="Oddsmaker logo" />
+
 # Oddsmaker
+
+</div>
 
 Oddsmaker 是一套面向单个游戏公司的实时分析与风控平台。
 
