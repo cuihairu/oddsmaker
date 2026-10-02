@@ -4,6 +4,10 @@
 
 # Oddsmaker
 
+[![CI](https://github.com/cuihairu/oddsmaker/actions/workflows/ci.yaml/badge.svg)](https://github.com/cuihairu/oddsmaker/actions/workflows/ci.yaml)
+[![Docs](https://github.com/cuihairu/oddsmaker/actions/workflows/docs.yaml/badge.svg)](https://cuihairu.github.io/oddsmaker/)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 </div>
 
 Oddsmaker 是一套面向单个游戏公司的实时分析与风控平台。
