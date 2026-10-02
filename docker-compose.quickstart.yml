@@ -1,0 +1,268 @@
+# =============================================================================
+# Oddsmaker QuickStart Docker Compose
+# 快速本地部署编排 - 使用非占用端口 + 中文注释
+# =============================================================================
+
+# 端口说明：为避免与宿主机占用冲突，本编排使用 3xxxx 端口组
+# 宿主占用避免参考：22 53 2222 3000 3100 3306 3389 4000 4173 4822 5037 5173 5554 5555 5584 5585 5900 6379 6402 8080 8081 8082 8443 8554 8888 8899 9000 9090 9527 9614 12222 13306 14822 15432 16379 18000 18780 18999 19091 19990 34015 34467 35645 37541 39665 41020 41021 41359 42101 42102 42200 42400 43085 43947 49374 51337 61209
+# 可用段：5432、9092、8123、25xxx、28xxx、3xxxx
+# 端口/密码/Token 均可用 .env 覆盖：cp .env.example .env（中文注释见该文件）
+
+networks:
+  oddsmaker-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  clickhouse_data:
+    driver: local
+  apicurio_data:
+    driver: local
+  superset_data:
+    driver: local
+  control_logs:
+    driver: local
+  control_data:
+    driver: local
+
+services:
+
+  # PostgreSQL（control 的唯一 schema 真源是 Flyway 迁移）
+  postgres:
+    image: postgres:16-alpine
+    container_name: oddsmaker-postgres
+    environment:
+      TZ: UTC
+      POSTGRES_DB: oddsmaker
+      POSTGRES_USER: oddsmaker
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-oddsmaker}
+    ports:
+      - "${POSTGRES_PORT:-35432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U oddsmaker"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks:
+      - oddsmaker-network
+
+  # Redis（实时计数 / 风控短窗状态 / 会话缓存）
+  redis:
+    image: redis:7-alpine
+    container_name: oddsmaker-redis
+    ports:
+      - "${REDIS_PORT:-36379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks:
+      - oddsmaker-network
+
+  # Kafka（KRaft 单节点）
+  kafka:
+    image: apache/kafka:3.7.0
+    container_name: oddsmaker-kafka
+    ports:
+      - "${KAFKA_PORT:-39092}:29092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093,PLAINTEXT_HOST://:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_MESSAGE_MAX_BYTES: 10485760
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 20
+    networks:
+      - oddsmaker-network
+
+  # 一次性建齐全部 topic（Flink source 启动即查 topic，缺则退）
+  topic-init:
+    image: apache/kafka:3.7.0
+    container_name: oddsmaker-topic-init
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        for t in oddsmaker.events_raw oddsmaker.risk_events oddsmaker.identity_events oddsmaker.deadletter; do
+          /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic "$$t" --partitions 1 --replication-factor 1
+        done
+        echo "topics ready"
+    networks:
+      - oddsmaker-network
+
+  # ClickHouse 24.8（事件存储与聚合分析；initdb 自动建 schema）
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8
+    container_name: oddsmaker-clickhouse
+    environment:
+      TZ: UTC
+      CLICKHOUSE_USER: oddsmaker
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-oddsmaker}
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+    ports:
+      - "${CLICKHOUSE_HTTP_PORT:-38123}:8123"
+      - "${CLICKHOUSE_NATIVE_PORT:-39000}:9000"
+    volumes:
+      - ./schema/sql/clickhouse/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./schema/sql/clickhouse/analytics.sql:/docker-entrypoint-initdb.d/02-analytics.sql:ro
+      - ./schema/sql/clickhouse/configurable-funnels-schema.sql:/docker-entrypoint-initdb.d/03-configurable-funnels.sql:ro
+      - ./schema/sql/clickhouse/ltv.sql:/docker-entrypoint-initdb.d/04-ltv.sql:ro
+      - ./schema/sql/clickhouse/ml.sql:/docker-entrypoint-initdb.d/05-ml.sql:ro
+      - ./schema/sql/clickhouse/crash.sql:/docker-entrypoint-initdb.d/06-crash.sql:ro
+      - clickhouse_data:/var/lib/clickhouse
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8123/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    networks:
+      - oddsmaker-network
+
+  # Avro Schema Registry（gateway Avro 序列化依赖）
+  apicurio:
+    image: quay.io/apicurio/apicurio-registry-mem:2.6.5.Final
+    container_name: oddsmaker-apicurio
+    ports:
+      - "${APICURIO_PORT:-38081}:8080"
+    environment:
+      - QUARKUS_HTTP_PORT=8080
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/health || wget -qO- http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    networks:
+      - oddsmaker-network
+
+  # Control Service（管理面 API / 实验 / 风控规则 / Flyway 迁移）
+  # 单镜像双服务（根 Dockerfile：多阶段构建、非 root），SERVICE 环境变量选 control
+  control-service:
+    image: ghcr.io/cuihairu/oddsmaker:nightly
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: oddsmaker-control-service
+    ports:
+      - "${CONTROL_PORT:-38085}:8085"
+    environment:
+      TZ: UTC
+      SERVICE: control
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/oddsmaker
+      SPRING_DATASOURCE_USERNAME: oddsmaker
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-oddsmaker}
+      SPRING_JPA_HIBERNATE_DDL_AUTO: validate
+      SPRING_FLYWAY_ENABLED: "true"
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      CLICKHOUSE_URL: jdbc:clickhouse://clickhouse:8123/default
+      CLICKHOUSE_USER: oddsmaker
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-oddsmaker}
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_REDIS_HOST: redis
+      ODDSMAKER_ADMIN_TOKEN: ${ODDSMAKER_ADMIN_TOKEN:-dev-admin-token}
+      ODDSMAKER_INTERNAL_TOKEN: ${ODDSMAKER_INTERNAL_TOKEN:-dev-internal-token}
+      ODDSMAKER_PLAYER_EXPORT_DIR: /app/data/player-exports
+      LOGGING_LEVEL_IO_ODDSMAKER: INFO
+      LOGGING_LEVEL_ORG_HIBERNATE_SQL: WARN
+    volumes:
+      - control_logs:/app/logs
+      - control_data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      topic-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8085/actuator/health | grep -q '\"status\":\"UP\"' || curl -fsS http://localhost:8085/actuator/health | grep -q '\"status\":\"UP\"'"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 90s
+    networks:
+      - oddsmaker-network
+
+  # Gateway Service（采集入口：API Key / HMAC / Schema 校验 / 限流 / 前置风控）
+  # 同一镜像，SERVICE=gateway
+  gateway-service:
+    image: ghcr.io/cuihairu/oddsmaker:nightly
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: oddsmaker-gateway-service
+    ports:
+      - "${GATEWAY_PORT:-38080}:8080"
+    environment:
+      TZ: UTC
+      SERVICE: gateway
+      ODDSMAKER_KAFKA_BOOTSTRAP: kafka:9092
+      ODDSMAKER_KAFKA_REGISTRY_URL: http://apicurio:8080/apis/registry/v2
+      ODDSMAKER_CONTROL_URL: http://control-service:8085
+      ODDSMAKER_CONTROL_INTERNAL_TOKEN: ${ODDSMAKER_INTERNAL_TOKEN:-dev-internal-token}
+      ODDSMAKER_KAFKA_TOPIC_EVENTS: oddsmaker.events_raw
+      ODDSMAKER_KAFKA_TOPIC_RISK: oddsmaker.risk_events
+      ODDSMAKER_AUTH_KEYS_DEVKEY: ${ODDSMAKER_AUTH_KEYS_DEVKEY:-dev-secret}
+    depends_on:
+      control-service:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      apicurio:
+        condition: service_healthy
+      topic-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health | grep -q '\"status\":\"UP\"' || curl -fsS http://localhost:8080/actuator/health | grep -q '\"status\":\"UP\"'"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 60s
+    networks:
+      - oddsmaker-network
+
+  # Superset（可选看板，起后需手工初始化管理员；不需要可注释掉本服务）
+  superset:
+    image: apache/superset:3.1.0
+    container_name: oddsmaker-superset
+    ports:
+      - "${SUPERSET_PORT:-38088}:8088"
+    environment:
+      SUPERSET_SECRET_KEY: "superset-secret-key-change-in-production"
+      ADMIN_USERNAME: admin
+      ADMIN_PASSWORD: admin
+      ADMIN_FIRST_NAME: Admin
+      ADMIN_LAST_NAME: User
+      ADMIN_EMAIL: admin@oddsmaker.local
+    volumes:
+      - superset_data:/app/superset_home
+    networks:
+      - oddsmaker-network
+
+# 说明：Flink 分析作业（富化/会话/留存/漏斗/风控/身份归一）不在 quickstart 默认链路；
+# 需要「事件 → ClickHouse 聚合」全链路时用仓库根 docker-compose.yml（开发编排）
+# 或 nightly Release 分发包（bin/run-job.sh）。

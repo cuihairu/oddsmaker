@@ -46,12 +46,21 @@ features:
 # Clone the repository
 git clone https://github.com/cuihairu/oddsmaker.git
 
-# Start the local infrastructure
+# Enter the project directory
 cd oddsmaker
-docker-compose -f infra/docker-compose.yml up -d
+
+# Optional: adjust ports / passwords / tokens (see .env.example)
+cp .env.example .env
+
+# Start quick local orchestration (recommended, uses non-conflicting ports + Chinese comments)
+docker compose -f docker-compose.quickstart.yml up -d
+
+# Or use Docker single service startup
+# docker pull ghcr.io/cuihairu/oddsmaker:nightly
+# docker run -d --name oddsmaker-control -p 38085:8085 -e SERVICE=control ...
 
 # Access the API
-curl http://localhost:8085/actuator/health
+curl http://localhost:38085/actuator/health
 ```
 
 ## Architecture

@@ -1,0 +1,467 @@
+# Oddsmaker Nightly Build — 滚动 Release
+# 触发：每日 cron + main 推送 + 手动 dispatch
+# 产物：5 平台服务端分发包（Linux x64/arm64、macOS x64/arm64、Windows x64）
+# 交付：仅 GitHub Release 页（tag 固定 nightly、prerelease、资产清旧传新）；
+#       Actions artifacts 只是中转，不算交付面。
+# 门禁：全量 Gradle 测试 + Web 控制台测试/构建 + Web SDK 测试全绿后才构建上传。
+
+name: Nightly Build
+
+on:
+  schedule:
+    - cron: '0 0 * * *'  # 每日 UTC 00:00（北京时间 08:00）
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write
+
+concurrency:
+  group: nightly-build
+  cancel-in-progress: false  # 串行执行，避免两次发布交叠撕坏滚动 Release 资产
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}/oddsmaker
+  JAVA_VERSION: '21'
+
+jobs:
+  # ============================================================
+  # Phase 1: 全量测试（必须全绿才允许构建与上传）
+  # ============================================================
+  test:
+    name: Full Test Suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v5
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Run all Gradle tests
+        uses: gradle/gradle-build-action@v3
+        with:
+          gradle-version: '8.10.1'
+          arguments: |
+            --no-daemon
+            --stacktrace
+            test
+
+      - name: Assert zero test failures (XML 聚合)
+        run: |
+          python3 - <<'PY'
+          import glob, sys
+          import xml.etree.ElementTree as ET
+          failures = errors = 0
+          for p in glob.glob('**/build/test-results/test/*.xml', recursive=True):
+              r = ET.parse(p).getroot()
+              failures += int(r.get('failures', 0) or 0)
+              errors += int(r.get('errors', 0) or 0)
+          print(f'test-results: failures={failures} errors={errors}')
+          sys.exit(1 if (failures or errors) else 0)
+          PY
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: test-results
+          path: '**/build/reports/tests/'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 11
+
+      - name: Web console（web/）tests + build
+        run: |
+          pnpm -C web install --frozen-lockfile
+          pnpm -C web test
+          pnpm -C web build
+
+      - name: Web SDK（sdks/web/）tests + build
+        working-directory: sdks/web
+        run: |
+          npm ci || npm i
+          npm run test
+          npm run build
+
+  # ============================================================
+  # Phase 2: 5 平台并行构建服务端分发包
+  # ============================================================
+  build:
+    name: Build ${{ matrix.os_name }}
+    needs: test
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux x64
+          - os: ubuntu-latest
+            os_name: linux-x64
+            artifact_name: oddsmaker-server-linux-x64-nightly
+            package_ext: tar.gz
+          # Linux arm64
+          - os: ubuntu-24.04-arm
+            os_name: linux-arm64
+            artifact_name: oddsmaker-server-linux-arm64-nightly
+            package_ext: tar.gz
+          # macOS x64（Intel）
+          - os: macos-15-intel
+            os_name: macos-x64
+            artifact_name: oddsmaker-server-macos-x64-nightly
+            package_ext: tar.gz
+          # macOS arm64（Apple Silicon）
+          - os: macos-15
+            os_name: macos-arm64
+            artifact_name: oddsmaker-server-macos-arm64-nightly
+            package_ext: tar.gz
+          # Windows x64
+          - os: windows-latest
+            os_name: windows-x64
+            artifact_name: oddsmaker-server-windows-x64-nightly
+            package_ext: zip
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v5
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 11
+
+      - name: Build server jars（control + gateway + Flink 作业 fatJar + agent）
+        uses: gradle/gradle-build-action@v3
+        with:
+          gradle-version: '8.10.1'
+          arguments: |
+            --no-daemon
+            --stacktrace
+            :services:control-service:bootJar
+            :services:gateway-service:bootJar
+            :jobs:flink:events-enrich-job:fatJar
+            :jobs:flink:sessions-job:fatJar
+            :jobs:flink:retention-job:fatJar
+            :jobs:flink:funnels-job:fatJar
+            :jobs:flink:risk-job:fatJar
+            :jobs:flink:identity-merge-job:fatJar
+            :agents:dimension-sync-agent:installDist
+
+      - name: Build web console
+        run: |
+          pnpm -C web install --frozen-lockfile
+          pnpm -C web build
+
+      - name: Build web SDK
+        working-directory: sdks/web
+        run: |
+          npm ci || npm i
+          npm run build
+
+      - name: Assemble distribution package
+        id: package
+        run: |
+          set -euo pipefail
+          DIST_DIR="${{ matrix.artifact_name }}"
+          SHA_SHORT="${GITHUB_SHA:0:8}"
+          VERSION="nightly-$(date -u +'%Y%m%d')-${SHA_SHORT}"
+          mkdir -p "$DIST_DIR"/{bin,conf,lib,jobs,agent}
+
+          # ——— 服务 jar（bootJar；显式排除 plain jar 防多匹配）———
+          find services/control-service/build/libs -maxdepth 1 -name '*.jar' ! -name '*-plain.jar' \
+            -exec cp {} "$DIST_DIR/lib/control-service.jar" \;
+          find services/gateway-service/build/libs -maxdepth 1 -name '*.jar' ! -name '*-plain.jar' \
+            -exec cp {} "$DIST_DIR/lib/gateway-service.jar" \;
+
+          # ——— Flink 作业 fatJar（6 个带 fatJar 任务的作业；dimension-sync-job 无 fatJar）———
+          for j in events-enrich-job sessions-job retention-job funnels-job risk-job identity-merge-job; do
+            cp jobs/flink/$j/build/libs/*-all.jar "$DIST_DIR/jobs/$j-all.jar"
+          done
+          test "$(find "$DIST_DIR/jobs" -maxdepth 1 -name '*-all.jar' | wc -l)" -eq 6
+
+          # ——— 维度同步 agent（application 插件 installDist：bin + lib 可直接执行）———
+          cp -r agents/dimension-sync-agent/build/install/dimension-sync-agent "$DIST_DIR/agent"
+
+          # ——— 控制台静态资源 + Web SDK dist ———
+          cp -r web/dist "$DIST_DIR/console"
+          cp -r sdks/web/dist "$DIST_DIR/sdk-web"
+
+          # ——— 配置模板（改名避免相互覆盖，供外挂时参考）———
+          cp services/control-service/src/main/resources/application.yaml "$DIST_DIR/conf/control-application.yaml"
+          cp services/gateway-service/src/main/resources/application.yaml "$DIST_DIR/conf/gateway-application.yaml"
+
+          # ——— 启动脚本（unix）———
+          cat > "$DIST_DIR/bin/control.sh" <<'SCRIPT'
+          #!/usr/bin/env bash
+          # Oddsmaker Control Service 启动脚本（环境变量优先于 conf/ 模板）
+          set -euo pipefail
+          DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+          exec java ${JAVA_OPTS:--Xms512m -Xmx1024m -XX:+UseG1GC} \
+            -jar "$DIR/lib/control-service.jar" \
+            --spring.config.additional-location=optional:file:"$DIR/conf/control-application.yaml"
+          SCRIPT
+          cat > "$DIST_DIR/bin/gateway.sh" <<'SCRIPT'
+          #!/usr/bin/env bash
+          # Oddsmaker Gateway Service 启动脚本
+          set -euo pipefail
+          DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+          exec java ${JAVA_OPTS:--Xms512m -Xmx1024m -XX:+UseG1GC} \
+            -jar "$DIR/lib/gateway-service.jar" \
+            --spring.config.additional-location=optional:file:"$DIR/conf/gateway-application.yaml"
+          SCRIPT
+          cat > "$DIST_DIR/bin/run-job.sh" <<'SCRIPT'
+          #!/usr/bin/env bash
+          # Oddsmaker Flink 作业 local executor 启动脚本：./run-job.sh <job 名> [参数...]
+          # JVM 参数与仓库 docker-compose.yml 同款（Flink 1.19 + JDK 21 所需 add-opens）
+          set -euo pipefail
+          DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+          JOB="${1:?用法: run-job.sh <events-enrich-job|sessions-job|retention-job|funnels-job|risk-job|identity-merge-job> [args...]}"
+          shift || true
+          exec java \
+            --add-opens java.base/java.lang=ALL-UNNAMED \
+            --add-opens java.base/java.lang.invoke=ALL-UNNAMED \
+            --add-opens java.base/java.lang.reflect=ALL-UNNAMED \
+            --add-opens java.base/java.io=ALL-UNNAMED \
+            --add-opens java.base/java.net=ALL-UNNAMED \
+            --add-opens java.base/java.nio=ALL-UNNAMED \
+            --add-opens java.base/java.util=ALL-UNNAMED \
+            --add-opens java.base/java.util.concurrent=ALL-UNNAMED \
+            --add-opens java.base/sun.nio.ch=ALL-UNNAMED \
+            -jar "$DIR/jobs/$JOB-all.jar" "$@"
+          SCRIPT
+          chmod +x "$DIST_DIR"/bin/*.sh
+
+          # ——— 启动脚本（windows）———
+          cat > "$DIST_DIR/bin/control.bat" <<'SCRIPT'
+          @echo off
+          rem Oddsmaker Control Service 启动脚本（Windows）
+          set "DIR=%~dp0.."
+          java %JAVA_OPTS% -jar "%DIR%\lib\control-service.jar" --spring.config.additional-location=optional:file:"%DIR%\conf\control-application.yaml"
+          SCRIPT
+          cat > "$DIST_DIR/bin/gateway.bat" <<'SCRIPT'
+          @echo off
+          rem Oddsmaker Gateway Service 启动脚本（Windows）
+          set "DIR=%~dp0.."
+          java %JAVA_OPTS% -jar "%DIR%\lib\gateway-service.jar" --spring.config.additional-location=optional:file:"%DIR%\conf\gateway-application.yaml"
+          SCRIPT
+
+          # ——— 构建信息 ———
+          cat > "$DIST_DIR/BUILD_INFO" <<EOF
+          ODDSMAKER_NIGHTLY_BUILD=1
+          VERSION=$VERSION
+          BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+          BUILD_COMMIT=${{ github.sha }}
+          BUILD_REF=${{ github.ref_name }}
+          BUILD_RUN_ID=${{ github.run_id }}
+          BUILD_RUN_NUMBER=${{ github.run_number }}
+          BUILD_PLATFORM=${{ matrix.os_name }}
+          BUILD_RUNNER=${{ matrix.os }}
+          BUILD_JAVA_VERSION=${{ env.JAVA_VERSION }}
+          BUILD_GRADLE_VERSION=8.10.1
+          COMPONENTS=control-service,gateway-service,flink-jobs(6),dimension-sync-agent,web-console,sdks-web
+          CLI_SEPARATE=none（本仓库暂无独立 CLI 模块）
+          EOF
+
+          # ——— 打包 ———
+          if [[ "${{ matrix.package_ext }}" == "tar.gz" ]]; then
+            ARTIFACT_FILE="$DIST_DIR.tar.gz"
+            tar -czf "$ARTIFACT_FILE" "$DIST_DIR"
+          else
+            # Windows runner 用 PowerShell Compress-Archive（Git Bash 无 zip 命令）
+            ARTIFACT_FILE="$DIST_DIR.zip"
+            powershell -NoProfile -Command "Compress-Archive -Path '$DIST_DIR' -DestinationPath '$ARTIFACT_FILE' -Force"
+          fi
+          ls -lh "$ARTIFACT_FILE"
+          echo "ARTIFACT_PATH=$ARTIFACT_FILE" >> "$GITHUB_OUTPUT"
+
+      - name: Upload distribution artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: ${{ steps.package.outputs.ARTIFACT_PATH }}
+          retention-days: 1
+          if-no-files-found: error
+
+  # ============================================================
+  # Phase 3: 创建/更新 nightly Release（清旧资产 → 上传新资产 + VERIFY.md）
+  # ============================================================
+  nightly-release:
+    name: Roll Nightly Release
+    needs: [test, build]
+    if: github.event_name == 'schedule' || github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Compute version info
+        id: meta
+        run: |
+          SHA_SHORT="${GITHUB_SHA:0:8}"
+          echo "version=nightly-$(date -u +'%Y%m%d')-${SHA_SHORT}" >> "$GITHUB_OUTPUT"
+          echo "built_at=$(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> "$GITHUB_OUTPUT"
+
+      - name: Download all platform artifacts
+        uses: actions/download-artifact@v5
+        with:
+          pattern: oddsmaker-server-*-nightly
+          path: release-assets
+          merge-multiple: true
+
+      - name: Verify artifacts complete（5 平台）
+        run: |
+          ls -lh release-assets/
+          COUNT=$(find release-assets -maxdepth 1 -type f | wc -l)
+          echo "Artifacts count: $COUNT"
+          test "$COUNT" -eq 5
+
+      - name: Generate VERIFY.md（SHA256）
+        run: |
+          cd release-assets
+          {
+            echo "# Oddsmaker Nightly Build — SHA256 Checksums"
+            echo
+            echo "- Version: ${{ steps.meta.outputs.version }}"
+            echo "- Commit: ${{ github.sha }}"
+            echo "- Built at: ${{ steps.meta.outputs.built_at }}"
+            echo "- Tag: nightly（滚动 prerelease，资产每日清旧传新）"
+            echo
+            echo "| File | Size | SHA256 |"
+            echo "|------|------|--------|"
+            for f in oddsmaker-server-*-nightly.tar.gz oddsmaker-server-*-nightly.zip; do
+              [[ -f "$f" ]] || continue
+              sha=$(sha256sum "$f" | cut -d' ' -f1)
+              size=$(stat -c%s "$f")
+              echo "| \`$f\` | $size | \`$sha\` |"
+            done
+          } > VERIFY.md
+          cat VERIFY.md
+
+      - name: Generate release body
+        run: |
+          cat > release-assets/BODY.md <<EOF
+          # Oddsmaker Nightly Build
+
+          - **版本**：\`${{ steps.meta.outputs.version }}\`
+          - **提交**：\`${{ github.sha }}\`
+          - **构建时间（UTC）**：${{ steps.meta.outputs.built_at }}
+          - **门禁**：全量 Gradle 测试 + Web 控制台测试/构建 + Web SDK 测试全绿后才上传
+
+          这是滚动 nightly Release：tag 固定为 \`nightly\`，每次构建清空旧资产后上传新资产；
+          Actions artifacts 不作为交付，请只从本 Release 页下载。
+
+          ## 产物矩阵
+
+          | 平台 | 资产 |
+          |------|------|
+          | Linux x64 | \`oddsmaker-server-linux-x64-nightly.tar.gz\` |
+          | Linux arm64 | \`oddsmaker-server-linux-arm64-nightly.tar.gz\` |
+          | macOS x64 | \`oddsmaker-server-macos-x64-nightly.tar.gz\` |
+          | macOS arm64 | \`oddsmaker-server-macos-arm64-nightly.tar.gz\` |
+          | Windows x64 | \`oddsmaker-server-windows-x64-nightly.zip\` |
+
+          ## 包内容
+
+          control-service / gateway-service（bootJar）、6 个 Flink 作业 fatJar、
+          dimension-sync-agent（installDist 可执行目录）、Web 控制台静态资源（console/）、
+          Web SDK dist（sdk-web/）、启动脚本（bin/）与配置模板（conf/）、构建信息（BUILD_INFO）。
+          本仓库暂无独立 CLI 模块（BUILD_INFO 内已注明）。
+
+          运行要求：JDK 21。SHA256 校验见 [VERIFY.md](VERIFY.md)。
+          EOF
+
+      - name: Clear old nightly release assets
+        run: |
+          # 删除旧 nightly Release 的全部资产（保留 tag 与 Release 本体，随后软更新）
+          gh release view nightly --json assets --jq '.assets[].name' \
+            | xargs -r -I {} gh release delete-asset nightly {} --yes || true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish nightly release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: nightly
+          name: Nightly Build #${{ github.run_number }} (${{ steps.meta.outputs.version }})
+          prerelease: true
+          body_path: release-assets/BODY.md
+          files: |
+            release-assets/oddsmaker-server-*-nightly.tar.gz
+            release-assets/oddsmaker-server-*-nightly.zip
+            release-assets/VERIFY.md
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ============================================================
+  # Phase 4: 推送 Docker 镜像 :nightly（同一镜像含 control+gateway，SERVICE 分发）
+  # ============================================================
+  docker-nightly:
+    name: Push Docker :nightly
+    needs: [test, build]
+    if: github.event_name == 'schedule' || github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata for nightly
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=nightly
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

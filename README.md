@@ -144,29 +144,77 @@ event_id     = 单事件唯一 ID
 
 ## Quick Start
 
-本地基础设施：
+### Docker Compose 快速搭建（推荐）
+
+一条命令拉起服务端（control + gateway 单镜像）与全部依赖（PostgreSQL / Redis / Kafka / Apicurio / ClickHouse），端口、卷、健康检查齐全：
 
 ```bash
-docker-compose -f infra/docker-compose.yml up -d
+# 可选：复制环境配置并按需修改端口 / 密码 / Token（全部有中文注释）
+cp .env.example .env
+
+docker compose -f docker-compose.quickstart.yml up -d
+
+# 查看健康状态（全部 healthy 即就绪）
+docker compose -f docker-compose.quickstart.yml ps
+
+# 验证 API
+curl http://localhost:38085/actuator/health   # control（管理面）
+curl http://localhost:38080/actuator/health   # gateway（采集入口）
 ```
 
-体验脚本：
+### 单容器运行（Docker 镜像）
+
+镜像为单镜像双服务：`ghcr.io/cuihairu/oddsmaker`，运行时用 `SERVICE` 环境变量选择 `control`（8085）或 `gateway`（8080）：
+
+```bash
+docker pull ghcr.io/cuihairu/oddsmaker:nightly
+
+# 控制服务（SERVICE=control）
+docker run -d --name oddsmaker-control \
+  -p 38085:8085 \
+  -e SERVICE=control \
+  -e SPRING_DATASOURCE_URL=jdbc:postgresql://<pg>:5432/oddsmaker \
+  -e ODDSMAKER_ADMIN_TOKEN=dev-admin-token \
+  ghcr.io/cuihairu/oddsmaker:nightly
+
+# 网关服务（SERVICE=gateway）
+docker run -d --name oddsmaker-gateway \
+  -p 38080:8080 \
+  -e SERVICE=gateway \
+  -e ODDSMAKER_KAFKA_BOOTSTRAP=<kafka>:9092 \
+  -e ODDSMAKER_CONTROL_URL=http://<control>:8085 \
+  -e ODDSMAKER_CONTROL_INTERNAL_TOKEN=dev-internal-token \
+  ghcr.io/cuihairu/oddsmaker:nightly
+```
+
+### 本地构建镜像（Dockerfile）
+
+根目录 `Dockerfile` 为多阶段构建（Gradle 编译 → `eclipse-temurin:21-jre-alpine` 运行），以非 root 用户运行，内置 healthcheck；构建上下文必须是仓库根：
+
+```bash
+docker build -t ghcr.io/cuihairu/oddsmaker:local .
+```
+
+镜像 tag 口径：CI 每日/每次 main 推送推 `:nightly`（nightly-build.yml），发版时推 `:<version>` 与 `:latest`（release.yaml）。
+
+### Nightly 构建产物
+
+每日 UTC 00:00（及每次 main 推送）CI 全量测试通过后，在 [Releases](https://github.com/cuihairu/oddsmaker/releases) 页发布滚动 nightly 构建（tag 固定 `nightly`）：Linux x64/arm64、macOS x64/arm64、Windows x64 五平台服务端分发包（control + gateway + 6 个 Flink 作业 fatJar + 维度同步 agent + Web 控制台/SDK 静态资源 + 启动脚本），包内含 `BUILD_INFO`，Release 附 `VERIFY.md`（全资产 SHA256）。
+
+### 源码开发
+
+体验脚本与流式任务：
 
 ```bash
 bash scripts/e2e.sh
 bash scripts/superset-import.sh
-```
-
-流式任务：
-
-```bash
 bash scripts/run_flink.sh
 ```
 
 说明：
 
-- 当前仓库没有根目录 Gradle Wrapper，不能直接假设 `./gradlew` 可用。
-- 如果要跑 Java 服务，需要你本地已有 Gradle 或补充 wrapper。
+- 全量测试：`./gradlew test --continue`（Gradle Wrapper 8.10.1，JDK 21）。
+- Web 控制台：`pnpm -C web test && pnpm -C web build`（开发态 `pnpm -C web dev`，代理到 control 8085）。
 
 ## Current Direction
 

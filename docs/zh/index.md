@@ -46,12 +46,21 @@ features:
 # 克隆仓库
 git clone https://github.com/cuihairu/oddsmaker.git
 
-# 启动本地基础设施
+# 进入项目目录
 cd oddsmaker
-docker-compose -f infra/docker-compose.yml up -d
+
+# 可选：按需改端口 / 密码 / Token（中文注释见 .env.example）
+cp .env.example .env
+
+# 启动快速本地编排（推荐，使用非占用端口 + 中文注释）
+docker compose -f docker-compose.quickstart.yml up -d
+
+# 或者使用 Docker 单服务启动
+# docker pull ghcr.io/cuihairu/oddsmaker:nightly
+# docker run -d --name oddsmaker-control -p 38085:8085 -e SERVICE=control ...
 
 # 访问 API
-curl http://localhost:8085/actuator/health
+curl http://localhost:38085/actuator/health
 ```
 
 ## 核心功能
