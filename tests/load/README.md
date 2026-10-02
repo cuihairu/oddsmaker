@@ -277,4 +277,4 @@ jmap -histo <pid> | head -20
 
 - [Gatling Documentation](https://gatling.io/docs/)
 - [Performance Testing Best Practices](https://gatling.io/docs/gatling/tutorials/advanced/)
-- [Oddsmaker Architecture](../../docs/reference/architecture.md)
+- [Oddsmaker Architecture](../../docs/zh/reference/architecture.md)

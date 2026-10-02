@@ -138,14 +138,16 @@ Critical alerts include:
 
 ## Security Checklist
 
-- [ ] Enable HTTPS
-- [ ] Configure CORS
-- [ ] Set up firewall rules
-- [ ] Enable audit logging
-- [ ] Configure rate limiting
-- [ ] Set up MFA for admin users
-- [ ] Rotate secrets regularly
-- [ ] Monitor security events
+> 2026-10 收尾核验：`[x]` = 仓库已交付且运行时/配置面可证；`[ ]` 附仓库现状证据如实保留（环境执行项与未交付项不假勾）。
+
+- [ ] Enable HTTPS — 部分：k8s control ingress 已配 TLS + ssl-redirect（`deploy/k8s/control-service.yaml`，证书 secret 由运维注入）；网关侧无 ingress 清单、本机 compose 为 HTTP——平台级 HTTPS 待部署环境生效
+- [x] Configure CORS — 已交付：Spring Security `SecurityConfig#corsConfigurationSource`（白名单源/方法/请求头/凭证，注册 `/api/**`）
+- [ ] Set up firewall rules — 部署环境执行项（仓库无对应配置面，如实保留）
+- [x] Enable audit logging — 已交付：`audit_log` 落库 + `GET /api/audit-logs` 查询（策略/密钥/权限/风控动作全记录）
+- [ ] Configure rate limiting — 部分：control ingress `rate-limit 100/min` 注解已随仓；网关（公网事件入口）侧未覆盖——待部署环境生效
+- [ ] Set up MFA for admin users — 未交付：`MFAConfigEntity` / `SecurityPolicyEntity.mfaRequired` 字段已建，登录链路未接入校验
+- [ ] Rotate secrets regularly — 部分：API Key 创建/轮换/禁用已支持；周期轮换节奏属运维执行动作
+- [x] Monitor security events — 已交付：风控大屏 `/api/risk-metrics`（风险趋势/命中/处置状态）+ 审计日志查询；告警规则接入属监控栈（见 Monitoring Stack）
 
 ## On-Call Handbook
 

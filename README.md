@@ -176,13 +176,13 @@ bash scripts/run_flink.sh
 ## Documentation
 
 - [总体文档入口](docs/README.md)
-- [系统架构](docs/reference/architecture.zh.md)
-- [环境与存储路由设计](docs/reference/environment-and-storage.zh.md)
-- [重设计方案](docs/redesign/README.zh.md)
-- [采集 API](docs/reference/api.zh.md)
-- [控制面](docs/reference/control.zh.md)
-- [路线图](docs/roadmap.zh.md)
-- [运维文档](docs/operations/README.md)
+- [系统架构](docs/zh/reference/architecture.md)
+- [环境与存储路由设计](docs/zh/reference/environment-and-storage.md)
+- [重设计方案](docs/zh/redesign/index.md)
+- [采集 API](docs/zh/reference/api.md)
+- [控制面](docs/zh/reference/control.md)
+- [路线图](docs/zh/analysis/roadmap.md)
+- [运维文档](docs/operations/index.md)
 
 ## Tech Stack
 

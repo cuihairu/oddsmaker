@@ -1,6 +1,6 @@
 # TODO（短期执行）
 
-面向新架构的短期落地事项。参考：`docs/redesign/05-roadmap.zh.md`。
+面向新架构的短期落地事项。参考：`docs/zh/redesign/05-roadmap.md`。
 
 ## P0 模型统一与安全修复
 

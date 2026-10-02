@@ -239,6 +239,9 @@ velero restore create --from-backup oddsmaker-daily-backup-20240101020000
 - Annually: Full DR drill
 
 ### Test Checklist
+
+> 2026-10 收尾核验：演练为环境执行项——本机栈未起、WAL 归档 / clickhouse-backup / 对象存储备份链路未部署（仓库侧交付物 = 本策略文档 + `postgres-backup.sh`），6 项需在具备完整备份链路的环境按上方演练计划执行后据实勾选，如实保留未勾。
+
 - [ ] Backup restoration successful
 - [ ] Data integrity verified
 - [ ] Application functionality verified

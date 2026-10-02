@@ -20,9 +20,9 @@ bash scripts/superset-import.sh
 
 ## 文档
 
-- 架构：`docs/architecture.zh.md`
-- 重设计：`docs/redesign/README.zh.md`
-- 采集 API：`docs/api.zh.md`
-- 控制面：`docs/control.zh.md`
-- 路线图：`docs/roadmap.zh.md`
-- 运维：`docs/ops.zh.md`
+- 架构：`docs/zh/reference/architecture.md`
+- 重设计：`docs/zh/redesign/index.md`
+- 采集 API：`docs/zh/reference/api.md`
+- 控制面：`docs/zh/reference/control.md`
+- 路线图：`docs/zh/analysis/roadmap.md`
+- 运维：`docs/zh/operations/ops.md`

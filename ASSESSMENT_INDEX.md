@@ -1,5 +1,7 @@
 # Oddsmaker 项目功能完成度评估报告
 
+> **状态（2026-10 收尾归档）**：本文为新架构重构前的历史评估快照（见 `docs/zh/redesign/index.md`「历史材料」——保留为历史评估，不代表新的目标架构），清单勾选状态保留评估时点原貌、不再作为跟踪表；所列缺陷与完成条件的当前状态以仓库根 `todo.md`（80/80 全闭环）为准。
+
 ## 文件导航
 
 ### 1. [oddsmaker_completion_assessment.md](oddsmaker_completion_assessment.md) - 详细技术评估
