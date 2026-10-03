@@ -270,12 +270,14 @@ class SecurityComponentsTest {
     @DisplayName("AccessGuard：requirePermission 全局级与 ROLE_INTERNAL 直通")
     void accessGuardEnvironmentScope() {
         var permissionService2 = mock(PermissionService.class);
-        AccessGuard guard = new AccessGuard(permissionService2);
+        var userService2 = mock(io.oddsmaker.control.service.UserService.class);
+        AccessGuard guard = new AccessGuard(permissionService2, userService2);
         SecurityContextHolder.getContext().setAuthentication(
             new UsernamePasswordAuthenticationToken("tester", "pw", java.util.List.of()));
+        stubUser(userService2, "tester", "user-tester-0001");
 
-        // requirePermission 全局级
-        when(permissionService2.hasPermission("tester", "user:update")).thenReturn(true);
+        // requirePermission 全局级（门卫传的是解析出的 id，不是登录名）
+        when(permissionService2.hasPermission("user-tester-0001", "user:update")).thenReturn(true);
         guard.requirePermission("user:update");
 
         // ROLE_INTERNAL 直通
@@ -289,17 +291,29 @@ class SecurityComponentsTest {
     @DisplayName("AccessGuard：普通用户权限遍历完 authorities 后走 hasGamePermission 链路")
     void accessGuardPlainUserIteration() {
         var permissionService2 = mock(PermissionService.class);
-        AccessGuard guard = new AccessGuard(permissionService2);
-        // 普通用户（非 ROLE_ADMIN/ROLE_INTERNAL）：两个 for 循环均遍历至自然结束
+        var userService2 = mock(io.oddsmaker.control.service.UserService.class);
+        AccessGuard guard = new AccessGuard(permissionService2, userService2);
+        // 普通用户（非 ROLE_ADMIN/ROLE_INTERNAL）：authorities 遍历至自然结束后按用户 id 判权
         SecurityContextHolder.getContext().setAuthentication(
             new UsernamePasswordAuthenticationToken("u", "pw",
                 List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_VIEWER"))));
+        stubUser(userService2, "u", "user-u-0001");
 
-        when(permissionService2.hasGamePermission("u", "g1", "game:read")).thenReturn(true);
+        when(permissionService2.hasGamePermission("user-u-0001", "g1", "game:read")).thenReturn(true);
         org.junit.jupiter.api.Assertions.assertTrue(guard.canAccessGame("g1", "game:read"));
 
-        when(permissionService2.hasGamePermission("u", "g2", "game:read")).thenReturn(false);
+        when(permissionService2.hasGamePermission("user-u-0001", "g2", "game:read")).thenReturn(false);
         assertThrows(SecurityException.class, () -> guard.requireGamePermission("g2", "game:read"));
+    }
+
+    /** 登录名可解析到用户（门卫按 id 判权的前置） */
+    private static void stubUser(io.oddsmaker.control.service.UserService userService,
+                                 String username, String userId) {
+        var user = new io.oddsmaker.control.jpa.UserEntity();
+        user.id = userId;
+        user.username = username;
+        org.mockito.Mockito.when(userService.findByUsername(username))
+            .thenReturn(java.util.Optional.of(user));
     }
 
     @Test

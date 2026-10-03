@@ -1,6 +1,8 @@
 package io.oddsmaker.control.security;
 
+import io.oddsmaker.control.jpa.UserEntity;
 import io.oddsmaker.control.service.PermissionService;
+import io.oddsmaker.control.service.UserService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -14,6 +16,7 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.util.Arrays;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -34,6 +37,9 @@ class SecuritySweep2Test {
 
     @Mock
     private PermissionService permissionService;
+
+    @Mock
+    private UserService userService;
 
     @InjectMocks
     private AccessGuard accessGuard;
@@ -76,10 +82,24 @@ class SecuritySweep2Test {
     @DisplayName("canAccessGame：普通用户委托 permissionService，结果透传")
     void canAccessGameDelegatesToPermissionService() {
         login("alice");
-        lenient().when(permissionService.hasGamePermission("alice", "g1", "game:read")).thenReturn(true);
-        lenient().when(permissionService.hasGamePermission("alice", "g2", "game:read")).thenReturn(false);
+        // 门卫先按登录名解析出用户 id，再以 id 委托判权（登录名 ≠ users.id 是常态）
+        UserEntity user = new UserEntity();
+        user.id = "user-alice-0001";
+        user.username = "alice";
+        lenient().when(userService.findByUsername("alice")).thenReturn(Optional.of(user));
+        lenient().when(permissionService.hasGamePermission("user-alice-0001", "g1", "game:read")).thenReturn(true);
+        lenient().when(permissionService.hasGamePermission("user-alice-0001", "g2", "game:read")).thenReturn(false);
         assertTrue(accessGuard.canAccessGame("g1", "game:read"));
         assertFalse(accessGuard.canAccessGame("g2", "game:read"));
+    }
+
+    @Test
+    @DisplayName("canAccessGame：登录名解析不到用户时按无权限（fail closed，不落到判权）")
+    void canAccessGameUnknownLoginFailsClosed() {
+        login("ghost");
+        lenient().when(userService.findByUsername("ghost")).thenReturn(Optional.empty());
+        assertFalse(accessGuard.canAccessGame("g1", "game:read"));
+        verifyNoInteractions(permissionService);
     }
 
     // ===== jpa 嵌套枚举 <clinit> =====
