@@ -61,10 +61,12 @@ jobs:
           path: '**/build/reports/tests/'
 
       # pnpm 必须先于 setup-node 安装：cache: 'pnpm' 会执行 pnpm store path，pnpm 不在 PATH 时 setup-node 直接失败
+      # 不要再叠 npm install -g pnpm：action-setup 的安装目录已在 PATH 最前，npm 全局那份是死代码
       - name: Set up pnpm
         uses: pnpm/action-setup@v5
         with:
           version: 12
+          run_install: false
 
       - name: Set up Node ${{ env.NODE_VERSION }}
         uses: actions/setup-node@v5
@@ -72,9 +74,6 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'pnpm'
           cache-dependency-path: 'web/pnpm-lock.yaml'
-
-      - name: Install pnpm
-        run: npm install -g pnpm
 
       - name: Install Web SDK dependencies
         run: pnpm -C web install --frozen-lockfile
@@ -333,6 +332,18 @@ jobs:
           ls -la dist/
           echo "Artifacts downloaded successfully"
 
+      # build 阶段算出的版本串在矩阵每个 runner 上独立求得（跨时区/跨 runner 可能差一天），
+      # Release 的标题/正文统一以本 step 的输出口径为准，避免 VERIFY.md 与 Release 名不一致
+      - name: Resolve release metadata
+        id: meta
+        run: |
+          {
+            echo "date=$(date -u +%Y-%m-%d)"
+            echo "stamp=$(date -u +%Y%m%d)"
+            echo "commit=$(git rev-parse --short HEAD)"
+            echo "full_commit=$(git rev-parse HEAD)"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Generate VERIFY.md (SHA256 checksums)
         run: |
           cd dist
@@ -340,9 +351,9 @@ jobs:
           {
             echo "# Oddsmaker Nightly Build - SHA256 Checksums"
             echo ""
-            echo "Build: nightly-$(date +%Y%m%d)-$(git rev-parse --short HEAD)"
+            echo "Build: nightly-${{ steps.meta.outputs.stamp }}-${{ steps.meta.outputs.commit }}"
             echo "Date: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-            echo "Commit: $(git rev-parse HEAD)"
+            echo "Commit: ${{ steps.meta.outputs.full_commit }}"
             echo ""
             echo "| File | SHA256 |"
             echo "|------|--------|"
@@ -351,6 +362,11 @@ jobs:
                 echo "| $f | $(sha256sum "$f" | awk '{print $1}') |"
               fi
             done
+            echo ""
+            echo '```text'
+            # 附一份 sha256sum -c 兼容格式，校验不必手抄哈希
+            sha256sum oddsmaker-server-*
+            echo '```'
           } > VERIFY.md
           cat VERIFY.md
 
@@ -360,12 +376,70 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # gh CLI 只认 GH_TOKEN/GITHUB_TOKEN 环境变量，不加则清旧静默失效
 
+      # Release 页是唯一交付面：正文要自带「下载哪个 / 怎么校验 / 怎么起」三件事，
+      # 用户不该为了读说明再翻仓库文档
+      - name: Generate RELEASE_NOTES.md
+        run: |
+          cd dist
+          {
+            echo "## Oddsmaker Nightly ${{ steps.meta.outputs.date }} · \`${{ steps.meta.outputs.commit }}\`"
+            echo ""
+            echo "每日滚动构建（UTC 00:00 + 每次 main 推送）。tag 固定 \`nightly\`，每次运行"
+            echo "清空旧资产后重新上传，**只以下方资产为准**（Actions artifacts 不作为交付物）。"
+            echo ""
+            echo "### 下载"
+            echo ""
+            echo "| 平台 | 资产 |"
+            echo "|------|------|"
+            echo "| Linux x64 | \`oddsmaker-server-linux-x64.tar.gz\` |"
+            echo "| Linux arm64 | \`oddsmaker-server-linux-arm64.tar.gz\` |"
+            echo "| macOS x64 (Intel) | \`oddsmaker-server-macos-x64.tar.gz\` |"
+            echo "| macOS arm64 (Apple Silicon) | \`oddsmaker-server-macos-arm64.tar.gz\` |"
+            echo "| Windows x64 | \`oddsmaker-server-windows-x64.zip\` |"
+            echo ""
+            echo "校验和见 [VERIFY.md](VERIFY.md)（SHA256）。"
+            echo ""
+            echo '```bash'
+            echo "# Linux：grep 出 64 位哈希行后交给 sha256sum -c"
+            echo "grep -E '^[0-9a-f]{64}  ' VERIFY.md | sha256sum -c -"
+            echo ""
+            echo "# macOS 同理，换 shasum"
+            echo "grep -E '^[0-9a-f]{64}  ' VERIFY.md | shasum -a 256 -c -"
+            echo ""
+            echo "# Windows PowerShell：逐个文件比对"
+            echo "Get-FileHash -Algorithm SHA256 .\\oddsmaker-server-windows-x64.zip"
+            echo '```'
+            echo ""
+            echo "### 包内容"
+            echo ""
+            echo "| 路径 | 说明 |"
+            echo "|------|------|"
+            echo "| \`bin/control.sh\` · \`bin/gateway.sh\` | 服务端启动脚本（JVM 参数用 \`JAVA_OPTS\` 覆盖） |"
+            echo "| \`bin/run-job.sh <作业名>\` | 6 个 Flink 作业 local executor 启动脚本 |"
+            echo "| \`bin/entrypoint.bat\` | Windows 启动脚本（\`set SERVICE=control\\|gateway\`） |"
+            echo "| \`bin/dimension-sync-agent[.bat]\` | 维度同步 Agent（游戏方内网部署） |"
+            echo "| \`lib/control-service.jar\` · \`lib/gateway-service.jar\` | 两个服务端 bootJar |"
+            echo "| \`jars/*-job.jar\` | 6 个 Flink 作业 fatJar |"
+            echo "| \`web/\` | Web 控制台静态资源 |"
+            echo "| \`conf/\` | 配置模板（挂载覆盖用） |"
+            echo "| \`BUILD_INFO\` | 版本 / 构建时间 / commit / 平台 |"
+            echo ""
+            echo "### 不想下 700MB？用容器"
+            echo ""
+            echo "镜像 \`ghcr.io/cuihairu/oddsmaker\` 与本构建同步推送（\`nightly\` tag，版本 tag 由 v* 发布推）。"
+            echo ""
+            echo '```bash'
+            echo "cp .env.example .env"
+            echo "docker compose -f docker-compose.quickstart.yml up -d"
+            echo '```'
+          } > RELEASE_NOTES.md
+
       - name: Create/Update Nightly Release
         uses: softprops/action-gh-release@v3
         with:
           tag_name: nightly
-          name: "Nightly Build $(date +%Y-%m-%d)"
-          body_path: dist/VERIFY.md
+          name: Nightly ${{ steps.meta.outputs.date }} (${{ steps.meta.outputs.commit }})
+          body_path: dist/RELEASE_NOTES.md
           prerelease: true
           draft: false
           make_latest: false

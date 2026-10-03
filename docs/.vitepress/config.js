@@ -15,7 +15,7 @@ export default withMermaid(defineConfig({
         nav: [
           { text: 'Home', link: '/' },
           { text: 'API Reference', link: '/reference/' },
-          { text: '中文', link: '/zh/' },
+          // 语言切换只用 VitePress 原生 locale 切换器（locales 自动渲染），不在此手写第二套
         ],
         sidebar: {
           '/reference/': [
@@ -55,7 +55,7 @@ export default withMermaid(defineConfig({
         nav: [
           { text: '首页', link: '/zh/' },
           { text: 'API 文档', link: '/zh/reference/' },
-          { text: 'English', link: '/' },
+          // 语言切换只用 VitePress 原生 locale 切换器（locales 自动渲染），不在此手写第二套
         ],
         sidebar: {
           '/zh/reference/': [
