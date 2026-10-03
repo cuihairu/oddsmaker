@@ -24,6 +24,8 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -232,5 +234,26 @@ class SecurityFilterChainTest {
         // 4) 全空 → 空实现(decode 返回 null,仅 Admin Token 认证可用)
         ReflectionTestUtils.setField(config, "jwtSecret", "");
         assertNull(config.jwtDecoder().decode("any-token"));
+    }
+
+    @Test
+    @DisplayName("CORS 源配置化：默认表回落 + ODDSMAKER_WEB_CORS_ALLOWED_ORIGINS 覆盖（对外域名部署入口）")
+    void corsAllowedOriginsConfigurable() {
+        SecurityConfig config = new SecurityConfig();
+
+        // 未配置（字段 null）→ 历史默认表
+        assertEquals(SecurityConfig.DEFAULT_CORS_ALLOWED_ORIGINS, config.corsAllowedOrigins());
+        CorsConfiguration cfg = ((UrlBasedCorsConfigurationSource) config.corsConfigurationSource())
+                .getCorsConfigurations().get("/api/**");
+        assertEquals(SecurityConfig.DEFAULT_CORS_ALLOWED_ORIGINS, cfg.getAllowedOrigins());
+
+        // 配置串：trim + 去空项；只挂在 /api/**
+        ReflectionTestUtils.setField(config, "corsAllowedOrigins",
+                " https://oddsmaker.cuihairu.site ,, http://localhost:3000 ");
+        List<String> expected = List.of("https://oddsmaker.cuihairu.site", "http://localhost:3000");
+        assertEquals(expected, config.corsAllowedOrigins());
+        CorsConfiguration cfg2 = ((UrlBasedCorsConfigurationSource) config.corsConfigurationSource())
+                .getCorsConfigurations().get("/api/**");
+        assertEquals(expected, cfg2.getAllowedOrigins());
     }
 }

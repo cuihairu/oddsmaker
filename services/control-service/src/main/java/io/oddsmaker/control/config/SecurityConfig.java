@@ -23,6 +23,7 @@ import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import java.util.Arrays;
+import java.util.List;
 
 /**
  * 安全配置
@@ -41,6 +42,21 @@ public class SecurityConfig {
 
     @Value("${oddsmaker.auth.jwt-secret:}")
     private String jwtSecret;
+
+    /**
+     * CORS 允许源（逗号分隔）：对外域名部署时经 ODDSMAKER_WEB_CORS_ALLOWED_ORIGINS 覆盖。
+     * 同源 SPA 的写请求也会带 Origin 头过 CORS 校验，默认表不含站点域名时浏览器登录直接 403。
+     */
+    @Value("${oddsmaker.web.cors.allowed-origins:}")
+    private String corsAllowedOrigins;
+
+    /** 默认允许源（未配置时与历史行为一致） */
+    static final List<String> DEFAULT_CORS_ALLOWED_ORIGINS = List.of(
+            "http://localhost:3000",
+            "http://localhost:8080",
+            "http://localhost:8085",
+            "https://*.oddsmaker.local"
+    );
 
     /**
      * 公开端点列表（不需要认证）
@@ -202,6 +218,17 @@ public class SecurityConfig {
         return token -> null;
     }
 
+    /** 配置串解析：空白回落默认表；逗号分隔 + trim + 去空项 */
+    List<String> corsAllowedOrigins() {
+        if (corsAllowedOrigins == null || corsAllowedOrigins.isBlank()) {
+            return DEFAULT_CORS_ALLOWED_ORIGINS;
+        }
+        return Arrays.stream(corsAllowedOrigins.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .toList();
+    }
+
     /**
      * CORS配置
      */
@@ -209,13 +236,8 @@ public class SecurityConfig {
     CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
 
-        // 允许的源（生产环境应限制为具体域名）
-        configuration.setAllowedOrigins(Arrays.asList(
-            "http://localhost:3000",
-            "http://localhost:8080",
-            "http://localhost:8085",
-            "https://*.oddsmaker.local"
-        ));
+        // 允许的源：默认本地开发表，对外域名经 oddsmaker.web.cors.allowed-origins 配置
+        configuration.setAllowedOrigins(corsAllowedOrigins());
 
         // 允许的HTTP方法
         configuration.setAllowedMethods(Arrays.asList(
