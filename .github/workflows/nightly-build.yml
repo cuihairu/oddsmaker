@@ -211,10 +211,66 @@ jobs:
           cp -r web/dist/* "$DIST_DIR/web/" 2>/dev/null || true
 
           # Startup scripts
-          cp docker/entrypoint.sh "$DIST_DIR/bin/entrypoint.sh"
-          chmod +x "$DIST_DIR/bin/entrypoint.sh"
-          # Windows batch wrapper (use printf to avoid YAML parsing issues with @)
-          printf '@echo off\r\nset SERVICE=%%SERVICE%%\r\nif "%%SERVICE%%"=="" set SERVICE=control\r\nset JAR_FILE=\r\nif "%%SERVICE%%"=="control" set JAR_FILE=..\lib\control-service.jar\r\nif "%%SERVICE%%"=="gateway" set JAR_FILE=..\lib\gateway-service.jar\r\nif "%%JAR_FILE%%"=="" (\r\n  echo ERROR: Unknown SERVICE=%%SERVICE%%. Valid values: control, gateway\r\n  exit /b 1\r\n)\r\njava %%JAVA_OPTS%% -jar "%%JAR_FILE%%" --spring.config.additional-location=optional:file:..\conf\,optional:file:..\conf\\r\n' > "$DIST_DIR/bin/entrypoint.bat"
+          # unix：包内相对路径启动脚本（docker/entrypoint.sh 是容器内入口、写死 /app 路径，不随包发布）
+          # heredoc 与 run 块同缩进：YAML 剥块缩进后终结符必须顶格，否则 heredoc 不终止
+          cat > "$DIST_DIR/bin/control.sh" <<'SCRIPT'
+          #!/usr/bin/env bash
+          # Oddsmaker Control Service 启动脚本（JVM 参数可用环境变量 JAVA_OPTS 覆盖）
+          set -euo pipefail
+          DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+          exec java ${JAVA_OPTS:--Xms512m -Xmx1024m -XX:+UseG1GC} \
+            -jar "$DIR/lib/control-service.jar" \
+            --spring.config.additional-location=optional:file:"$DIR/conf/control-application.yaml"
+          SCRIPT
+          cat > "$DIST_DIR/bin/gateway.sh" <<'SCRIPT'
+          #!/usr/bin/env bash
+          # Oddsmaker Gateway Service 启动脚本（JVM 参数可用环境变量 JAVA_OPTS 覆盖）
+          set -euo pipefail
+          DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+          exec java ${JAVA_OPTS:--Xms512m -Xmx1024m -XX:+UseG1GC} \
+            -jar "$DIR/lib/gateway-service.jar" \
+            --spring.config.additional-location=optional:file:"$DIR/conf/gateway-application.yaml"
+          SCRIPT
+          cat > "$DIST_DIR/bin/run-job.sh" <<'SCRIPT'
+          #!/usr/bin/env bash
+          # Oddsmaker Flink 作业 local executor：./run-job.sh <作业名> [参数...]
+          # JVM 参数与仓库 docker-compose.yml 同款（Flink 1.19 + JDK 21 所需 add-opens）
+          set -euo pipefail
+          DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+          JOB="${1:?用法: run-job.sh <events-enrich-job|sessions-job|retention-job|funnels-job|risk-job|identity-merge-job> [args...]}"
+          shift || true
+          exec java \
+            --add-opens java.base/java.lang=ALL-UNNAMED \
+            --add-opens java.base/java.lang.invoke=ALL-UNNAMED \
+            --add-opens java.base/java.lang.reflect=ALL-UNNAMED \
+            --add-opens java.base/java.io=ALL-UNNAMED \
+            --add-opens java.base/java.net=ALL-UNNAMED \
+            --add-opens java.base/java.nio=ALL-UNNAMED \
+            --add-opens java.base/java.util=ALL-UNNAMED \
+            --add-opens java.base/java.util.concurrent=ALL-UNNAMED \
+            --add-opens java.base/sun.nio.ch=ALL-UNNAMED \
+            -jar "$DIR/jars/$JOB.jar" "$@"
+          SCRIPT
+          chmod +x "$DIST_DIR"/bin/*.sh
+
+          # Windows：heredoc 逐字面生成（printf 格式串里反斜杠转义有丢 \ 风险），再统一转 CRLF
+          cat > "$DIST_DIR/bin/entrypoint.bat" <<'SCRIPT'
+          @echo off
+          rem Oddsmaker 启动脚本（Windows）：set SERVICE=control|gateway 后运行（默认 control）
+          set "DIR=%~dp0.."
+          if "%SERVICE%"=="" set SERVICE=control
+          if "%SERVICE%"=="control" set "JAR_FILE=%DIR%\lib\control-service.jar"
+          if "%SERVICE%"=="control" set "CONF_FILE=%DIR%\conf\control-application.yaml"
+          if "%SERVICE%"=="gateway" set "JAR_FILE=%DIR%\lib\gateway-service.jar"
+          if "%SERVICE%"=="gateway" set "CONF_FILE=%DIR%\conf\gateway-application.yaml"
+          if not defined JAR_FILE (
+            echo ERROR: Unknown SERVICE=%SERVICE%. Valid values: control, gateway
+            exit /b 1
+          )
+          java %JAVA_OPTS% -jar "%JAR_FILE%" --spring.config.additional-location=optional:file:"%CONF_FILE%"
+          SCRIPT
+          awk '{ printf "%s\r\n", $0 }' "$DIST_DIR/bin/entrypoint.bat" > "$DIST_DIR/bin/entrypoint.bat.tmp" \
+            && mv "$DIST_DIR/bin/entrypoint.bat.tmp" "$DIST_DIR/bin/entrypoint.bat"
 
           # Config templates
           cp services/control-service/src/main/resources/application.yaml "$DIST_DIR/conf/control-application.yaml"
@@ -280,20 +336,22 @@ jobs:
       - name: Generate VERIFY.md (SHA256 checksums)
         run: |
           cd dist
-          echo "# Oddsmaker Nightly Build - SHA256 Checksums" > VERIFY.md
-          echo "" >> VERIFY.md
-          echo "Build: nightly-$(date +%Y%m%d)-$(git rev-parse --short HEAD)" >> VERIFY.md
-          echo "Date: $(date -u +%Y-%m-%dT%H:%M:%SZ)" >> VERIFY.md
-          echo "Commit: $(git rev-parse HEAD)" >> VERIFY.md
-          echo "" >> VERIFY.md
-          echo "| File | SHA256 |" >> VERIFY.md
-          echo "|------|--------|" >> VERIFY.md
-          for f in oddsmaker-server-*; do
-            if [ -f "$f" ]; then
-              sha=$(sha256sum "$f" | awk '{print $1}')
-              echo "| $f | $sha |" >> VERIFY.md
-            fi
-          done
+          # 分组重定向一次写出（逐行 >> 会触发 shellcheck SC2129）
+          {
+            echo "# Oddsmaker Nightly Build - SHA256 Checksums"
+            echo ""
+            echo "Build: nightly-$(date +%Y%m%d)-$(git rev-parse --short HEAD)"
+            echo "Date: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "Commit: $(git rev-parse HEAD)"
+            echo ""
+            echo "| File | SHA256 |"
+            echo "|------|--------|"
+            for f in oddsmaker-server-*; do
+              if [ -f "$f" ]; then
+                echo "| $f | $(sha256sum "$f" | awk '{print $1}') |"
+              fi
+            done
+          } > VERIFY.md
           cat VERIFY.md
 
       - name: Clean up old release assets (keep only current)
