@@ -98,16 +98,17 @@ jobs:
           docker compose -f "$DEMO_HOME/docker-compose.yml" --env-file "$DEMO_HOME/.env" config -q
 
       - name: Pull nightly image
-        run: docker pull "$IMAGE"
+        run: |
+          # PREV_DIGEST 必须在 pull 前捕获：pull 会把 :nightly 移到新镜像，之后再
+          # inspect 拿到的是新 digest，回滚腿会拉回同一个坏镜像空转（等于没回滚）。
+          # 记的就是「当前在跑的上一版」；首次部署无本地镜像则留空，回滚步自动跳过。
+          echo "PREV_DIGEST=$(docker inspect --format '{{index .RepoDigests 0}}' "$IMAGE" 2>/dev/null || true)" >> "$GITHUB_ENV"
+          docker pull "$IMAGE"
 
       - name: Deploy stack and verify health
         run: |
           set -euo pipefail
           cd "$DEMO_HOME"
-
-          # 记录当前在跑的 digest：新镜像不健康时回滚到它
-          PREV_DIGEST="$(docker inspect --format '{{index .RepoDigests 0}}' "$IMAGE" 2>/dev/null || true)"
-          echo "PREV_DIGEST=$PREV_DIGEST" >> "$GITHUB_ENV"
 
           docker compose up -d
 
