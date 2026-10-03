@@ -42,6 +42,9 @@ class GlobalExceptionHandlerTest {
     void authExceptions() {
         assertEquals(401, handler.handleAuthenticationException(new BadCredentialsException("x")).getStatusCode().value());
         assertEquals(403, handler.handleAccessDeniedException(new AccessDeniedException("x")).getStatusCode().value());
+        // AccessGuard 的拒绝走 SecurityException，同样 403 而非兜底 500
+        assertEquals(403, handler.handleSecurityException(
+            new SecurityException("Access denied: missing permission user:read")).getStatusCode().value());
     }
 
     @Test

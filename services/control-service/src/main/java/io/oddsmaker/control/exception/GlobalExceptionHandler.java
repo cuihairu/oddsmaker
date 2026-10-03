@@ -131,6 +131,21 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * 处理权限门拒绝（AccessGuard 抛 java.lang.SecurityException）
+     *
+     * 不单独映射会落到兜底 Exception 分支变 500：只读角色访问无权端点是
+     * 正常拒绝语义（403），前端把它当服务故障会整屏降级。
+     */
+    @ExceptionHandler(SecurityException.class)
+    public ResponseEntity<ApiResponse<String>> handleSecurityException(SecurityException ex) {
+
+        logger.warn("Access denied: {}", ex.getMessage());
+
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+            .body(ApiResponse.forbidden("Access denied"));
+    }
+
+    /**
      * 处理缺少请求参数异常
      */
     @ExceptionHandler(MissingServletRequestParameterException.class)

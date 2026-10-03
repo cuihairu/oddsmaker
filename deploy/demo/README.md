@@ -102,3 +102,19 @@ curl -sS -X POST http://127.0.0.1:38085/api/users -H "Authorization: Bearer $TOK
 
 > `POST /api/users` 收的是已 bcrypt 的 `passwordHash`（`UserService.createUser` 不做哈希），
 > 角色留空时服务默认给 `VIEWER`。
+
+- 角色分配（**必做**）：权限门读 `user_role_assignments`，`POST /api/users` 只写
+  `users.roles` 不落该表——不补这行，账号登录后所有受权限门端点全量拒绝：
+
+```bash
+docker exec -i oddsmaker-demo-postgres psql -U oddsmaker -d oddsmaker <<'SQL'
+INSERT INTO user_role_assignments (user_id, role_id, enabled, assigned_by, assigned_at)
+SELECT u.id, 'role_viewer', TRUE, 'demo-seed', now()
+FROM users u
+WHERE u.username = 'demo'
+  AND NOT EXISTS (
+    SELECT 1 FROM user_role_assignments a
+    WHERE a.user_id = u.id AND a.role_id = 'role_viewer' AND a.enabled
+  );
+SQL
+```

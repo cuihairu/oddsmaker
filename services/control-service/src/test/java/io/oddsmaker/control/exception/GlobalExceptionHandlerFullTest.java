@@ -74,6 +74,8 @@ class GlobalExceptionHandlerFullTest {
         assertEquals(409, handler.handleIllegalStateException(new IllegalStateException("x")).getStatusCode().value());
         assertEquals(401, handler.handleAuthenticationException(new BadCredentialsException("x")).getStatusCode().value());
         assertEquals(403, handler.handleAccessDeniedException(new AccessDeniedException("x")).getStatusCode().value());
+        assertEquals(403, handler.handleSecurityException(
+            new SecurityException("Access denied: missing permission audit:read")).getStatusCode().value());
         assertEquals(405, handler.handleHttpRequestMethodNotSupportedException(
             new HttpRequestMethodNotSupportedException("PUT")).getStatusCode().value());
         assertEquals(415, handler.handleHttpMediaTypeNotSupportedException(

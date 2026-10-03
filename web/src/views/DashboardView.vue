@@ -13,28 +13,34 @@ const recentActivities = ref([])
 const loading = ref(true)
 
 onMounted(async () => {
-  try {
-    // 获取统计数据
-    const [gamesRes, usersRes] = await Promise.all([
-      api.get('/api/games/statistics'),
-      api.get('/api/users/statistics')
-    ])
-    
-    stats.value = {
-      totalGames: gamesRes.data.totalGames || 0,
-      activeGames: gamesRes.data.liveGames || 0,
-      totalEvents: 0,
-      totalUsers: usersRes.data.totalUsers || 0
-    }
-    
-    // 获取最近活动
-    const auditRes = await api.get('/api/audit-logs?size=10')
-    recentActivities.value = auditRes.data.content || []
-  } catch (error) {
-    console.error('Failed to load dashboard data:', error)
-  } finally {
-    loading.value = false
+  // 各请求独立落定：只读账号（演示 VIEWER 无 user:read）单个接口被拒时，
+  // 其余卡片与最近活动仍要加载——原 Promise.all 一挂全挂，整屏停在全零空态。
+  const [games, users, audit] = await Promise.allSettled([
+    api.get('/api/games/statistics'),
+    api.get('/api/users/statistics'),
+    api.get('/api/audit-logs?size=10')
+  ])
+
+  if (games.status === 'fulfilled') {
+    stats.value.totalGames = games.value.data.totalGames || 0
+    stats.value.activeGames = games.value.data.liveGames || 0
+  } else {
+    console.error('Failed to load game statistics:', games.reason)
   }
+
+  if (users.status === 'fulfilled') {
+    stats.value.totalUsers = users.value.data.totalUsers || 0
+  } else {
+    console.error('Failed to load user statistics:', users.reason)
+  }
+
+  if (audit.status === 'fulfilled') {
+    recentActivities.value = audit.value.data.content || []
+  } else {
+    console.error('Failed to load recent activities:', audit.reason)
+  }
+
+  loading.value = false
 })
 
 function formatDate(dateStr) {
