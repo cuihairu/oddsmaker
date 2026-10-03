@@ -10,6 +10,7 @@ import org.mockito.ArgumentMatchers;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.math.BigDecimal;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -71,7 +72,8 @@ class MlArtifactRegistryTest {
         assertEquals("synthetic", saved.source);
         assertEquals("[\"days_inactive_30d\",\"session_count_30d\"]", saved.featureNames);
         assertEquals("[0.8,-0.3]", saved.coefficients);
-        assertEquals(-1.5, saved.intercept);
+        // 实体字段已 BigDecimal 化（precision/scale 落库），断言须同类型比较
+        assertEquals(BigDecimal.valueOf(-1.5), saved.intercept);
         assertNull(saved.multiplier);
         assertEquals("ACTIVE", saved.status);
         assertTrue(saved.id.startsWith("mla_"));
@@ -99,7 +101,7 @@ class MlArtifactRegistryTest {
 
         assertNull(saved.featureNames);
         assertNull(saved.intercept);
-        assertEquals(3.2, saved.multiplier);
+        assertEquals(BigDecimal.valueOf(3.2), saved.multiplier);
     }
 
     @Test
@@ -121,7 +123,7 @@ class MlArtifactRegistryTest {
 
         assertEquals("propensity", saved.modelType);
         assertEquals("[\"days_inactive_30d\",\"session_count_30d\"]", saved.featureNames);
-        assertEquals(0.5, saved.intercept);
+        assertEquals(BigDecimal.valueOf(0.5), saved.intercept);
     }
 
     @Test

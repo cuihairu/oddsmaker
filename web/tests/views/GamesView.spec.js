@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { mount, flushPromises } from '@vue/test-utils'
+import { mount } from '@vue/test-utils'
+import { settle } from '../helpers/settle.js'
 
 /**
  * views/GamesView.vue：加载渲染、空态、卡片点击跳转、创建表单的成功/失败流。
@@ -27,7 +28,7 @@ const GAME = {
 
 async function mountView() {
   const w = mount(GamesView)
-  await flushPromises()
+  await settle()
   return w
 }
 
@@ -106,7 +107,7 @@ describe('GamesView', () => {
     await pcBox.setValue(true)
 
     await w.find('form').trigger('submit')
-    await flushPromises()
+    await settle()
 
     expect(api.post).toHaveBeenCalledWith('/api/games', {
       name: 'new_game',
@@ -130,7 +131,7 @@ describe('GamesView', () => {
     await w.findAll('button').find((b) => b.text() === '创建游戏').trigger('click')
     await w.find('input[placeholder="例如: game_demo"]').setValue('dup')
     await w.find('form').trigger('submit')
-    await flushPromises()
+    await settle()
 
     expect(alertMock).toHaveBeenCalledWith('创建游戏失败: 名称已存在')
     expect(w.text()).toContain('创建新游戏')
@@ -146,7 +147,7 @@ describe('GamesView', () => {
 
     await w.findAll('button').find((b) => b.text() === '创建游戏').trigger('click')
     await w.find('form').trigger('submit')
-    await flushPromises()
+    await settle()
 
     expect(alertMock).toHaveBeenCalledWith('创建游戏失败: 网络中断')
     vi.unstubAllGlobals()

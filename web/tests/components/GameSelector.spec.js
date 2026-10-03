@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { mount, flushPromises } from '@vue/test-utils'
+import { mount } from '@vue/test-utils'
+import { settle } from '../helpers/settle.js'
 
 /**
  * components/GameSelector.vue：游戏切换器（报表页共用）。
@@ -27,7 +28,7 @@ describe('GameSelector', () => {
   it('无游戏：下拉禁用并显示占位项', async () => {
     const { GameSelector } = await fresh({ games: [] })
     const w = mount(GameSelector)
-    await flushPromises()
+    await settle()
     const select = w.find('select')
     expect(select.attributes('disabled')).toBeDefined()
     expect(w.text()).toContain('暂无可用游戏')
@@ -36,7 +37,7 @@ describe('GameSelector', () => {
   it('有游戏：选项渲染 displayName 回退 name 并附 id，选中值与 currentGameId 同步', async () => {
     const { GameSelector, useGameList } = await fresh()
     const w = mount(GameSelector)
-    await flushPromises()
+    await settle()
 
     const options = w.findAll('option')
     expect(options).toHaveLength(2)
@@ -46,7 +47,7 @@ describe('GameSelector', () => {
 
     // 加载后自动选中第一个游戏（useGameList 契约），select 跟随
     expect(useGameList().currentGameId.value).toBe('g1')
-    await flushPromises()
+    await settle()
     expect(w.find('select').element.value).toBe('g1')
     expect(w.find('select').attributes('disabled')).toBeUndefined()
   })
@@ -54,7 +55,7 @@ describe('GameSelector', () => {
   it('change：selectGame 持久化并 emit 给父组件', async () => {
     const { GameSelector, useGameList } = await fresh()
     const w = mount(GameSelector)
-    await flushPromises()
+    await settle()
 
     await w.find('select').setValue('g2')
     expect(w.emitted('change')).toEqual([['g2']])

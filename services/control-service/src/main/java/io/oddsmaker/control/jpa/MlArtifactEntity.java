@@ -6,6 +6,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
@@ -51,12 +52,12 @@ public class MlArtifactEntity {
     public String coefficients;
 
     /** churn/risk 线性模型截距 */
-    @Column(columnDefinition = "DECIMAL(12,8)")
-    public Double intercept;
+    @Column(precision = 12, scale = 8)
+    public BigDecimal intercept;
 
     /** pltv 的 D7→D30 乘数（必须为正） */
-    @Column(columnDefinition = "DECIMAL(12,6)")
-    public Double multiplier;
+    @Column(precision = 12, scale = 6)
+    public BigDecimal multiplier;
 
     /** 产物训练指标（JSON：auc/log_loss/brier/pr_auc 或 holdout MAPE） */
     @Column(columnDefinition = "TEXT")

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { mount, flushPromises } from '@vue/test-utils'
+import { mount } from '@vue/test-utils'
 import { defineComponent, h } from 'vue'
+import { settle, waitFor } from '../helpers/settle.js'
 
 /** TrendChart 打桩：具名 + 同 props，findComponent 按定义精确匹配并透传断言 props */
 const TrendChartStub = defineComponent({
@@ -117,16 +118,14 @@ async function fresh({
   return { api, DashboardsView, pending }
 }
 
-const settle = async () => {
-  await flushPromises()
-  await flushPromises()
-  await flushPromises()
-}
-
 function mountView(DashboardsView) {
   const w = mount(DashboardsView, { global: { stubs: { GameSelector: true, TrendChart: TrendChartStub } } })
   return settle().then(() => w)
 }
+
+/** 仪表盘 CRUD/弹层用例的交互前置：按条件等数据面就绪，不靠固定轮数赌时序 */
+const waitReady = (w) =>
+  waitFor(() => expect(w.find('select').exists()).toBe(true))
 
 /** 启动位空仪表盘：数据着陆类用例先落它，绕开首轮 activeId 切换的双 applyActive 竞态 */
 const BOOT = { id: 'boot', name: '启动位', layout: JSON.stringify({ widgets: [] }) }
@@ -471,6 +470,7 @@ describe('DashboardsView', () => {
     api.put.mockRejectedValue({ response: { data: { message: '版本冲突' } } })
     const w = await mountView(DashboardsView)
 
+    await waitReady(w)
     await w.find('button[title="移除"]').trigger('click') // 先制造 dirty
     await findBtn(w, '保存布局').trigger('click')
     await settle()
@@ -513,6 +513,7 @@ describe('DashboardsView', () => {
     const w = await mountView(DashboardsView)
 
     await findBtn(w, '+ Widget').trigger('click')
+    await waitFor(() => expect(w.find('.fixed select').exists()).toBe(true)) // 弹层渲染后再取控件
     await w.find('.fixed select').setValue('retention-trend') // 弹层内数据源下拉
     await findBtn(w, '添加').trigger('click')
     await settle()
@@ -676,6 +677,7 @@ describe('DashboardsView', () => {
     const w = await mountView(DashboardsView)
 
     await findBtn(w, '+ Widget').trigger('click')
+    await waitFor(() => expect(w.find('.fixed .absolute').exists()).toBe(true)) // 遮罩渲染后再点
     await w.find('.fixed .absolute').trigger('click') // 遮罩关闭
     expect(w.text()).not.toContain('添加 Widget')
 
@@ -772,7 +774,7 @@ describe('DashboardsView', () => {
     const w = await mountView(DashboardsView)
 
     await findBtn(w, '+ Widget').trigger('click')
-    await settle()
+    await waitFor(() => expect(findBtn(w, '添加')).toBeTruthy()) // 弹层渲染后再注入
     // 弹层数据源下拉只有白名单 4 项，includes false 臂经 raw ref 注入缝直击
     w.vm.$.devtoolsRawSetupState.addForm.value.source = 'weird-source'
     await findBtn(w, '添加').trigger('click')

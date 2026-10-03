@@ -24,7 +24,9 @@ concurrency:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}/oddsmaker
+  # 用 repository_owner 而非 repository：github.repository 已是 cuihairu/oddsmaker，
+  # 再拼 /oddsmaker 会变成 ghcr.io/cuihairu/oddsmaker/oddsmaker（多一层路径，非交付口径）
+  IMAGE_NAME: ${{ github.repository_owner }}/oddsmaker
   JAVA_VERSION: '21'
 
 jobs:
@@ -46,10 +48,9 @@ jobs:
           distribution: 'temurin'
           cache: gradle
 
-      - name: Run all Gradle tests
+      - name: Run all Gradle tests（走仓库 wrapper，唯一 Gradle 版本真源）
         uses: gradle/gradle-build-action@v3
         with:
-          gradle-version: '8.10.1'
           arguments: |
             --no-daemon
             --stacktrace
@@ -84,7 +85,7 @@ jobs:
       - name: Set up pnpm
         uses: pnpm/action-setup@v5
         with:
-          version: 11
+          version: 12   # 与本机验证版本一致（web/ 为独立 pnpm 工程，自带 pnpm-lock.yaml）
 
       - name: Web console（web/）tests + build
         run: |
@@ -159,12 +160,11 @@ jobs:
       - name: Set up pnpm
         uses: pnpm/action-setup@v5
         with:
-          version: 11
+          version: 12   # 与本机验证版本一致
 
       - name: Build server jars（control + gateway + Flink 作业 fatJar + agent）
         uses: gradle/gradle-build-action@v3
         with:
-          gradle-version: '8.10.1'
           arguments: |
             --no-daemon
             --stacktrace

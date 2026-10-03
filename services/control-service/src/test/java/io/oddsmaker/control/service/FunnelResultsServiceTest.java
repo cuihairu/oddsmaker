@@ -9,6 +9,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 
@@ -154,7 +155,9 @@ class FunnelResultsServiceTest {
 
         service.results("f1", "g", null, 30);
 
-        LocalDate expectedSince = LocalDate.now().minusDays(30);
+        // 服务端按 UTC 取窗口起点（与 ClickHouse event_date 口径一致），期望值须同口径，
+        // 否则在 UTC 日期与本地日期不一致的时段（如 UTC+8 的 00:00–08:00）必挂
+        LocalDate expectedSince = LocalDate.now(ZoneOffset.UTC).minusDays(30);
         verify(client).query(anyString(), eq("f1"), eq("g"), eq(expectedSince));
     }
 

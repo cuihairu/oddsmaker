@@ -9,6 +9,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -117,10 +118,10 @@ public class MlArtifactRegistry {
 
         List<String> featureNames = null;
         double[] coefficients = null;
-        Double intercept = null;
-        Double multiplier = null;
+        BigDecimal intercept = null;
+        BigDecimal multiplier = null;
         if ("pltv".equals(type)) {
-            multiplier = readPositiveDouble(artifact.get("multiplier"), "multiplier");
+            multiplier = readPositiveBigDecimal(artifact.get("multiplier"), "multiplier");
         } else {
             featureNames = readStringArray(artifact.get("feature_names"));
             coefficients = readDoubleArray(artifact.get("coefficients"));
@@ -131,7 +132,7 @@ public class MlArtifactRegistry {
                 throw new IllegalArgumentException("产物校验失败: coefficients 与 feature_names 长度不一致 ("
                         + coefficients.length + " vs " + featureNames.size() + ")");
             }
-            intercept = readPositiveOrAnyDouble(artifact.get("intercept"), "intercept");
+            intercept = readBigDecimal(artifact.get("intercept"), "intercept");
         }
         return new Parsed(type, version, featureNames, coefficients, intercept, multiplier);
     }
@@ -141,7 +142,7 @@ public class MlArtifactRegistry {
      * 或 pltv 的 multiplier。
      */
     record Parsed(String type, String version, List<String> featureNames,
-                  double[] coefficients, Double intercept, Double multiplier) {}
+                  double[] coefficients, BigDecimal intercept, BigDecimal multiplier) {}
 
     // ===== 解析辅助（非法输入一律 IllegalArgumentException，字段名指位） =====
 
@@ -188,16 +189,22 @@ public class MlArtifactRegistry {
         }
     }
 
-    private static Double readPositiveOrAnyDouble(Object value, String field) {
+    private static BigDecimal readBigDecimal(Object value, String field) {
         if (!(value instanceof Number n)) {
             throw new IllegalArgumentException("产物校验失败: " + field + " 缺失或非数值");
         }
-        return n.doubleValue();
+        double d = n.doubleValue();
+        // NaN/无穷守卫：BigDecimal.valueOf 对二者抛 NumberFormatException，
+        // 统一收敛为带字段名的 IllegalArgumentException（与产物校验错误口径一致）
+        if (Double.isNaN(d) || Double.isInfinite(d)) {
+            throw new IllegalArgumentException("产物校验失败: " + field + " 为 NaN 或无穷");
+        }
+        return BigDecimal.valueOf(d);
     }
 
-    private static Double readPositiveDouble(Object value, String field) {
-        Double v = readPositiveOrAnyDouble(value, field);
-        if (v <= 0 || v.isNaN() || v.isInfinite()) {
+    private static BigDecimal readPositiveBigDecimal(Object value, String field) {
+        BigDecimal v = readBigDecimal(value, field);
+        if (v.compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalArgumentException("产物校验失败: " + field + " 必须为正数");
         }
         return v;

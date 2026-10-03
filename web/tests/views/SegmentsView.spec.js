@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
+import { settle, waitFor } from '../helpers/settle.js'
 
 /**
  * views/SegmentsView.vue：分群列表 + 新建弹层（条件编译校验）+ 计算/启停/删除 + 成员预览。
@@ -81,27 +82,8 @@ async function fresh({
   return { api, SegmentsView, pending }
 }
 
-const settle = async () => {
-  await flushPromises()
-  await flushPromises()
-  await flushPromises()
-  await flushPromises()
-  await flushPromises()
-}
-
-// 条件等待（与 WebhooksView.spec.js 同口径）：盒子高负载时固定轮数 settle 边际不足，
-// 宏任务链尾部的横幅/重载断言按条件轮询，命中即返（绿路径不加耗时）。
-async function waitFor(assertFn, tries = 30) {
-  let last
-  for (let i = 0; i < tries; i++) {
-    try {
-      assertFn()
-      return
-    } catch (e) { last = e }
-    await settle()
-  }
-  throw last
-}
+// settle / waitFor 统一走共享 helper（同时排空微任务 + setTimeout 宏任务队列）；
+// 口径与实现见 tests/helpers/settle.js。
 
 async function mountView(SegmentsView) {
   const w = mount(SegmentsView, { global: { stubs: { GameSelector: true } } })

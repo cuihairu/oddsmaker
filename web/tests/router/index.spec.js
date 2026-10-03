@@ -70,7 +70,10 @@ describe('beforeEach 路由守卫', () => {
     expect(router.currentRoute.value.name).toBe('login')
   })
 
-  it('路由表完整性：每条记录的懒加载 chunk 都可解析（遍历全部 route arrow 与视图模块顶层）', async () => {
+  // 30s：一次性 await 28 个视图模块的懒加载 chunk（vite 转换 + 解析）。本机 0.4s，
+  // 但受限 CPU（CI runner / taskset 2 核实测 5s 默认超时必挂）下转换耗时成倍放大；
+  // 这是环境预算而非被测逻辑变慢，故显式放宽而非拆用例掩盖。
+  it('路由表完整性：每条记录的懒加载 chunk 都可解析（遍历全部 route arrow 与视图模块顶层）', { timeout: 30000 }, async () => {
     const records = router.getRoutes()
     // 路由表契约：当前 27 个具名路由 + 1 个 not-found catch-all；增删路由须同步此数
     expect(records.length).toBe(28)

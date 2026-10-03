@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { mount, flushPromises } from '@vue/test-utils'
+import { mount } from '@vue/test-utils'
+import { settle } from '../helpers/settle.js'
 
 /**
  * views/RetentionView.vue：留存报表的数据流与渲染分支。
@@ -65,7 +66,7 @@ describe('RetentionView', () => {
   it('无可用游戏：不发趋势请求，页面只有头部', async () => {
     const { api, RetentionView } = await fresh({ games: [] })
     const w = mountView(RetentionView)
-    await flushPromises()
+    await settle()
     expect(api.get).toHaveBeenCalledWith('/api/games')
     expect(trendCalls(api)).toHaveLength(0)
     expect(w.text()).toContain('留存趋势报表')
@@ -78,7 +79,7 @@ describe('RetentionView', () => {
       retention: { points: [POINT], summary: SUMMARY }
     })
     const w = mountView(RetentionView)
-    await flushPromises()
+    await settle()
 
     expect(trendCalls(api)).toHaveLength(1)
     expect(trendCalls(api)[0][0]).toBe('/api/retention-metrics/g1/trend')
@@ -101,7 +102,7 @@ describe('RetentionView', () => {
   it('空数据兜底：summary 缺省 ?? 0、points 空 → 「窗口期内无留存数据」', async () => {
     const { api, RetentionView } = await fresh({ selectedGame: 'g1', retention: {} })
     const w = mountView(RetentionView)
-    await flushPromises()
+    await settle()
     expect(trendCalls(api)).toHaveLength(1)
     const text = w.text()
     expect(text).toContain('窗口期内无留存数据')
@@ -112,10 +113,10 @@ describe('RetentionView', () => {
   it('切换粒度 granularity → watch 重拉，参数带 week', async () => {
     const { api, RetentionView } = await fresh({ selectedGame: 'g1', retention: {} })
     const w = mountView(RetentionView)
-    await flushPromises()
+    await settle()
 
     await w.findAll('select')[0].setValue('week')
-    await flushPromises()
+    await settle()
     expect(trendCalls(api)).toHaveLength(2)
     expect(trendCalls(api)[1][1].params.granularity).toBe('week')
   })
@@ -123,10 +124,10 @@ describe('RetentionView', () => {
   it('切换时间窗 days → watch 重拉，参数带 180（option 绑定数字）', async () => {
     const { api, RetentionView } = await fresh({ selectedGame: 'g1', retention: {} })
     const w = mountView(RetentionView)
-    await flushPromises()
+    await settle()
 
     await w.findAll('select')[1].setValue('180')
-    await flushPromises()
+    await settle()
     expect(trendCalls(api)[1][1].params.days).toBe(180)
   })
 
@@ -139,7 +140,7 @@ describe('RetentionView', () => {
       ]
     })
     const w = mountView(RetentionView)
-    await flushPromises()
+    await settle()
 
     const text = w.text()
     expect(text).toContain('高价值')
@@ -147,7 +148,7 @@ describe('RetentionView', () => {
     expect(trendCalls(api)[0][1].params.segment_id).toBeUndefined()
 
     await w.findAll('select')[2].setValue('seg-1')
-    await flushPromises()
+    await settle()
     expect(trendCalls(api)[1][1].params.segment_id).toBe('seg-1')
   })
 
@@ -157,21 +158,21 @@ describe('RetentionView', () => {
       retentionError: { response: { data: { message: '后端炸了' } } }
     })
     const w = mountView(RetentionView)
-    await flushPromises()
+    await settle()
     expect(w.text()).toContain('后端炸了')
   })
 
   it('失败臂（无 response）：兜底文案「加载留存趋势失败」', async () => {
     const { RetentionView } = await fresh({ selectedGame: 'g1', retentionError: new Error('x') })
     const w = mountView(RetentionView)
-    await flushPromises()
+    await settle()
     expect(w.text()).toContain('加载留存趋势失败')
   })
 
   it('available:false：ClickHouse 未配置提示', async () => {
     const { RetentionView } = await fresh({ selectedGame: 'g1', retention: { available: false } })
     const w = mountView(RetentionView)
-    await flushPromises()
+    await settle()
     expect(w.text()).toContain('ClickHouse 未配置')
     expect(w.text()).toContain('CLICKHOUSE_URL')
   })
@@ -179,9 +180,9 @@ describe('RetentionView', () => {
   it('刷新按钮：手动再拉一次', async () => {
     const { api, RetentionView } = await fresh({ selectedGame: 'g1', retention: {} })
     const w = mountView(RetentionView)
-    await flushPromises()
+    await settle()
     await w.findAll('button').find((b) => b.text() === '刷新').trigger('click')
-    await flushPromises()
+    await settle()
     expect(trendCalls(api)).toHaveLength(2)
   })
 })

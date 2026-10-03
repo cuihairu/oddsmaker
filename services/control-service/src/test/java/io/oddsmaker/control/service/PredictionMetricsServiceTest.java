@@ -9,6 +9,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.math.BigDecimal;
 import java.sql.Timestamp;
 import java.util.List;
 import java.util.Map;
@@ -57,7 +58,7 @@ class PredictionMetricsServiceTest {
             "[\"critical_30d\",\"high_30d\",\"medium_30d\",\"low_30d\",\"distinct_rules_30d\"]";
 
     private static MlArtifactEntity artifact(String type, String featureNamesJson,
-                                             String coefficientsJson, Double intercept, Double multiplier) {
+                                             String coefficientsJson, BigDecimal intercept, BigDecimal multiplier) {
         MlArtifactEntity a = new MlArtifactEntity();
         a.id = "mla_" + type + "_test";
         a.gameId = "g";
@@ -112,7 +113,7 @@ class PredictionMetricsServiceTest {
     void churnUsesModelWhenArtifactMatches() {
         when(client.isAvailable()).thenReturn(true);
         when(registry.resolveActive("g", "churn")).thenReturn(Optional.of(artifact("churn",
-                CHURN_FEATURES_JSON, "[0.8,-0.3,-0.002,-0.01]", -1.5, null)));
+                CHURN_FEATURES_JSON, "[0.8,-0.3,-0.002,-0.01]", BigDecimal.valueOf(-1.5), null)));
         // golden case 与 Python 侧同输入：z = -1.89 → sigmoid = 0.131244469439
         when(client.query(contains("v_user_features_30d"), any(Object[].class)))
             .thenReturn(List.of(Map.of("user_id", "u1", "days_inactive", 2L,
@@ -138,7 +139,7 @@ class PredictionMetricsServiceTest {
     void churnFallsBackWhenFeatureMismatch() {
         when(client.isAvailable()).thenReturn(true);
         when(registry.resolveActive("g", "churn")).thenReturn(Optional.of(artifact("churn",
-                "[\"a\",\"b\",\"c\",\"d\"]", "[1.0,1.0,1.0,1.0]", 0.0, null)));
+                "[\"a\",\"b\",\"c\",\"d\"]", "[1.0,1.0,1.0,1.0]", BigDecimal.ZERO, null)));
         when(client.query(contains("v_user_features_30d"), any(Object[].class)))
             .thenReturn(List.of(Map.of("user_id", "u1", "days_inactive", 20L,
                 "session_count", 1L, "event_count", 10L, "revenue_total", 0.0)));
@@ -173,7 +174,7 @@ class PredictionMetricsServiceTest {
     void riskUsesModelWhenArtifactMatches() {
         when(client.isAvailable()).thenReturn(true);
         when(registry.resolveActive("g", "risk")).thenReturn(Optional.of(artifact("risk",
-                RISK_FEATURES_JSON, "[0.5,0.4,0.3,0.2,0.1]", -2.0, null)));
+                RISK_FEATURES_JSON, "[0.5,0.4,0.3,0.2,0.1]", BigDecimal.valueOf(-2.0), null)));
         // golden case：z = 0.2 → sigmoid = 0.549833997312
         when(client.query(contains("risk_events"), any(Object[].class)))
             .thenReturn(List.of(Map.of("subject_id", "s1", "c_critical", 2L, "c_high", 1L,
@@ -195,7 +196,7 @@ class PredictionMetricsServiceTest {
     void pltvUsesModelMultiplier() {
         when(client.isAvailable()).thenReturn(true);
         when(registry.resolveActive("g", "pltv")).thenReturn(Optional.of(artifact("pltv",
-                null, null, null, 3.2)));
+                null, null, null, BigDecimal.valueOf(3.2))));
         // 空用户行被跳过，仅 u1 写入
         when(client.query(contains("today() - 7"), any(Object[].class)))
             .thenReturn(List.of(Map.of("user_id", "u1", "d7_revenue", 100.0),
@@ -261,7 +262,7 @@ class PredictionMetricsServiceTest {
     void propensityUsesModelWhenArtifactMatches() {
         when(client.isAvailable()).thenReturn(true);
         when(registry.resolveActive("g", "propensity")).thenReturn(Optional.of(artifact("propensity",
-                CHURN_FEATURES_JSON, "[0.5,-0.2,0.001,0.01]", -1.0, null)));
+                CHURN_FEATURES_JSON, "[0.5,-0.2,0.001,0.01]", BigDecimal.valueOf(-1.0), null)));
         // golden case 与 Python 侧同输入：z = -0.63 → sigmoid = 0.34751053780725555
         when(client.query(contains("v_user_features_30d"), any(Object[].class)))
             .thenReturn(List.of(Map.of("user_id", "u1", "days_inactive", 2L,
@@ -453,7 +454,7 @@ class PredictionMetricsServiceTest {
     void corruptArtifactFallsBack() {
         when(client.isAvailable()).thenReturn(true);
         MlArtifactEntity broken = artifact("churn", CHURN_FEATURES_JSON,
-                "[1.0,1.0,1.0,1.0]", 0.0, null);
+                "[1.0,1.0,1.0,1.0]", BigDecimal.ZERO, null);
         broken.featureNames = "not-json";
         when(registry.resolveActive("g", "churn")).thenReturn(Optional.of(broken));
         when(client.query(contains("v_user_features_30d"), any(Object[].class))).thenReturn(List.of());
@@ -479,7 +480,7 @@ class PredictionMetricsServiceTest {
     @DisplayName("pLTV 空白环境（模型路径）：d7 查询三元 isBlank 侧 + 环境归一化空串落库")
     void pltvBlankEnvHitsD7Query() {
         when(client.isAvailable()).thenReturn(true);
-        when(registry.resolveActive("g", "pltv")).thenReturn(Optional.of(artifact("pltv", null, null, null, 3.2)));
+        when(registry.resolveActive("g", "pltv")).thenReturn(Optional.of(artifact("pltv", null, null, null, BigDecimal.valueOf(3.2))));
         when(client.query(contains("today() - 7"), any(Object[].class)))
             .thenReturn(List.of(Map.of("user_id", "u1", "d7_revenue", 100.0)));
 
@@ -505,7 +506,7 @@ class PredictionMetricsServiceTest {
         assertEquals("heuristic", nullMult.get("path"));
         assertNotNull(nullMult.get("reason"));
 
-        when(registry.resolveActive("g", "pltv")).thenReturn(Optional.of(artifact("pltv", null, null, null, 0.0)));
+        when(registry.resolveActive("g", "pltv")).thenReturn(Optional.of(artifact("pltv", null, null, null, BigDecimal.ZERO)));
         Map<String, Object> zeroMult = service.refreshPltv("g", null);
         assertEquals("heuristic", zeroMult.get("path"));
         assertNotNull(zeroMult.get("reason"));
@@ -518,7 +519,7 @@ class PredictionMetricsServiceTest {
     void churnArtifactCoefLengthMismatchFallsBack() {
         when(client.isAvailable()).thenReturn(true);
         when(registry.resolveActive("g", "churn")).thenReturn(Optional.of(artifact("churn",
-                CHURN_FEATURES_JSON, "[1.0,1.0,1.0]", 0.0, null)));
+                CHURN_FEATURES_JSON, "[1.0,1.0,1.0]", BigDecimal.ZERO, null)));
         when(client.query(contains("v_user_features_30d"), any(Object[].class))).thenReturn(List.of());
 
         Map<String, Object> resp = service.refreshChurn("g", "prod");

@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
+import { settle, waitFor } from '../helpers/settle.js'
 
 /**
  * views/WebhooksView.vue：Webhook 配置列表 + 统计卡 + 新建/编辑弹层（必填与 authConfig
@@ -124,28 +125,9 @@ async function fresh({
   return { api, WebhooksView, pending, route }
 }
 
-const settle = async () => {
-  await flushPromises()
-  await flushPromises()
-  await flushPromises()
-  await flushPromises()
-  await flushPromises()
-}
-
-// 条件等待：load 链（PUT/POST/DELETE → await load() → 双 setTimeout 宏任务 → 渲染）在
-// 高负载下固定轮数 settle 可能不够（与 sdks/web flaky 同根因），此处按条件轮询，
-// 命中即返（绿路径不增加耗时），30 轮仍未命中则抛最后一次断言错误（真 bug 照常红）。
-async function waitFor(assertFn, tries = 30) {
-  let last
-  for (let i = 0; i < tries; i++) {
-    try {
-      assertFn()
-      return
-    } catch (e) { last = e }
-    await settle()
-  }
-  throw last
-}
+// settle / waitFor 统一走共享 helper（同时排空微任务 + setTimeout 宏任务队列）；
+// 口径与实现见 tests/helpers/settle.js：固定轮数 flushPromises 在受限 CPU
+// （CI runner / taskset 2 核实测必挂）下排不空 load 链的宏任务尾部。
 
 async function mountView(WebhooksView) {
   const w = mount(WebhooksView, { global: { stubs: { GameSelector: true } } })
@@ -658,7 +640,7 @@ describe('WebhooksView', () => {
 
     await rowBtn(w, 'Slack 告警', '日志').trigger('click')
     await settle()
-    expect(w.text()).toContain('暂无发送记录') // 非 loading 且空 → else 臂
+    await waitFor(() => expect(w.text()).toContain('暂无发送记录')) // 非 loading 且空 → else 臂
 
     for (const [variant, expectMsg] of CHAIN_VARIANTS) {
       const route = (url) => {

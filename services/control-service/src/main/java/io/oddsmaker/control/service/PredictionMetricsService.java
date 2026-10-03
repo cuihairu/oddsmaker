@@ -5,6 +5,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -104,7 +105,7 @@ public class PredictionMetricsService {
                         RiskMetricsAssembler.asDouble(row.get("session_count")),
                         RiskMetricsAssembler.asDouble(row.get("event_count")),
                         RiskMetricsAssembler.asDouble(row.get("revenue_total"))};
-                score = MlArtifactScorer.score(model.coefficients, model.artifact.intercept, features);
+                score = MlArtifactScorer.score(model.coefficients, model.artifact.intercept.doubleValue(), features);
             } else {
                 ChurnScorer.Scored scored = ChurnScorer.score(
                         RiskMetricsAssembler.asLong(row.get("days_inactive")),
@@ -194,7 +195,7 @@ public class PredictionMetricsService {
                         RiskMetricsAssembler.asDouble(row.get("session_count")),
                         RiskMetricsAssembler.asDouble(row.get("event_count")),
                         RiskMetricsAssembler.asDouble(row.get("revenue_total"))};
-                score = MlArtifactScorer.score(model.coefficients, model.artifact.intercept, features);
+                score = MlArtifactScorer.score(model.coefficients, model.artifact.intercept.doubleValue(), features);
             } else {
                 PropensityScorer.Scored scored = PropensityScorer.score(
                         RiskMetricsAssembler.asLong(row.get("days_inactive")),
@@ -270,7 +271,7 @@ public class PredictionMetricsService {
                         RiskMetricsAssembler.asDouble(row.get("c_medium")),
                         RiskMetricsAssembler.asDouble(row.get("c_low")),
                         RiskMetricsAssembler.asDouble(row.get("distinct_rules"))};
-                score = MlArtifactScorer.score(model.coefficients, model.artifact.intercept, features);
+                score = MlArtifactScorer.score(model.coefficients, model.artifact.intercept.doubleValue(), features);
             } else {
                 RiskScorer.Scored scored = RiskScorer.score(
                         RiskMetricsAssembler.asLong(row.get("c_critical")),
@@ -318,8 +319,8 @@ public class PredictionMetricsService {
         String modelId;
         String modelVersion;
         MlArtifactEntity artifact = registry.resolveActive(gameId, "pltv").orElse(null);
-        if (artifact != null && artifact.multiplier != null && artifact.multiplier > 0) {
-            multiplier = artifact.multiplier;
+        if (artifact != null && artifact.multiplier != null && artifact.multiplier.compareTo(BigDecimal.ZERO) > 0) {
+            multiplier = artifact.multiplier.doubleValue();
             modelId = artifact.id;
             modelVersion = artifact.modelVersion;
             resp.put("path", "model");
