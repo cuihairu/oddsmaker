@@ -173,9 +173,9 @@ jobs:
 
           # Control & Gateway bootJars
           cp services/control-service/build/libs/*-all.jar "$DIST_DIR/lib/control-service.jar" 2>/dev/null || \
-          cp services/control-service/build/libs/*.jar "$DIST_DIR/lib/control-service.jar"
+            cp services/control-service/build/libs/*.jar "$DIST_DIR/lib/control-service.jar"
           cp services/gateway-service/build/libs/*-all.jar "$DIST_DIR/lib/gateway-service.jar" 2>/dev/null || \
-          cp services/gateway-service/build/libs/*.jar "$DIST_DIR/lib/gateway-service.jar"
+            cp services/gateway-service/build/libs/*.jar "$DIST_DIR/lib/gateway-service.jar"
 
           # Flink job fatJars (6 jobs)
           cp jobs/flink/events-enrich-job/build/libs/*-all.jar "$DIST_DIR/jars/events-enrich-job.jar"
@@ -194,37 +194,24 @@ jobs:
           # Startup scripts
           cp docker/entrypoint.sh "$DIST_DIR/bin/entrypoint.sh"
           chmod +x "$DIST_DIR/bin/entrypoint.sh"
-          # Windows batch wrapper
-          cat > "$DIST_DIR/bin/entrypoint.bat" <<'EOF'
-@echo off
-set SERVICE=%SERVICE%
-if "%SERVICE%"=="" set SERVICE=control
-set JAR_FILE=
-if "%SERVICE%"=="control" set JAR_FILE=..\lib\control-service.jar
-if "%SERVICE%"=="gateway" set JAR_FILE=..\lib\gateway-service.jar
-if "%JAR_FILE%"=="" (
-  echo ERROR: Unknown SERVICE=%SERVICE%. Valid values: control, gateway
-  exit /b 1
-)
-java %JAVA_OPTS% -jar "%JAR_FILE%" --spring.config.additional-location=optional:file:..\conf\,optional:file:..\conf\
-EOF
+          # Windows batch wrapper (use printf to avoid YAML parsing issues with @)
+          printf '@echo off\r\nset SERVICE=%%SERVICE%%\r\nif "%%SERVICE%%"=="" set SERVICE=control\r\nset JAR_FILE=\r\nif "%%SERVICE%%"=="control" set JAR_FILE=..\lib\control-service.jar\r\nif "%%SERVICE%%"=="gateway" set JAR_FILE=..\lib\gateway-service.jar\r\nif "%%JAR_FILE%%"=="" (\r\n  echo ERROR: Unknown SERVICE=%%SERVICE%%. Valid values: control, gateway\r\n  exit /b 1\r\n)\r\njava %%JAVA_OPTS%% -jar "%%JAR_FILE%%" --spring.config.additional-location=optional:file:..\conf\,optional:file:..\conf\\r\n' > "$DIST_DIR/bin/entrypoint.bat"
 
           # Config templates
           cp services/control-service/src/main/resources/application.yaml "$DIST_DIR/conf/control-application.yaml"
           cp services/gateway-service/src/main/resources/application.yaml "$DIST_DIR/conf/gateway-application.yaml"
 
-          # BUILD_INFO
-          cat > "$DIST_DIR/BUILD_INFO" <<EOF
-version=$VERSION
-build_date=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-git_commit=$(git rev-parse HEAD)
-git_branch=$(git rev-parse --abbrev-ref HEAD)
-java_version=21
-gradle_version=$(./gradlew -q --version | grep ^Gradle | awk '{print $2}')
-os=${{ matrix.os }}
-arch=${{ matrix.arch }}
-image=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:nightly
-EOF
+          # BUILD_INFO (use printf to avoid heredoc issues in YAML)
+          printf 'version=%s\nbuild_date=%s\ngit_commit=%s\ngit_branch=%s\njava_version=21\ngradle_version=%s\nos=%s\narch=%s\nimage=%s\n' \
+            "$VERSION" \
+            "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            "$(git rev-parse HEAD)" \
+            "$(git rev-parse --abbrev-ref HEAD)" \
+            "$(./gradlew -q --version | grep ^Gradle | awk '{print $2}')" \
+            "${{ matrix.os }}" \
+            "${{ matrix.arch }}" \
+            "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:nightly" \
+            > "$DIST_DIR/BUILD_INFO"
 
           # Create archive
           cd dist
