@@ -46,7 +46,11 @@ sudo cp <repo>/deploy/demo/docker-compose.yml .
 sudo cp <repo>/deploy/demo/env.example .env && sudo vi .env     # 全部有中文注释，密码用 openssl rand -hex 24
 
 # Web 控制台静态资源：CI 会自动发布，首次也可手动
-sudo mkdir -p /opt/oddsmaker/web && cp -a <repo>/web/dist/. /opt/oddsmaker/web/
+sudo mkdir -p /opt/oddsmaker/web && sudo cp -a <repo>/web/dist/. /opt/oddsmaker/web/
+
+# 必做：整个目录交给 runner（部署腿以 runner 身份做 web 目录原子换名，含 rm 旧 web.prev；
+# sudo 落地留下的 root 属主目录会让下一次部署卡死在 Publish web console，2026-10-04 实锤）
+sudo chown -R runner:runner /opt/oddsmaker
 
 docker compose up -d
 curl -fsS http://127.0.0.1:38085/actuator/health        # {"status":"UP"}
