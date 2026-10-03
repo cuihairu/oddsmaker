@@ -1,57 +1,39 @@
-# =============================================================================
-# Oddsmaker QuickStart Docker Compose
-# 快速本地部署编排 - 使用非占用端口 + 中文注释
-# =============================================================================
-
-# 端口说明：为避免与宿主机占用冲突，本编排使用 3xxxx 端口组
-# 宿主占用避免参考：22 53 2222 3000 3100 3306 3389 4000 4173 4822 5037 5173 5554 5555 5584 5585 5900 6379 6402 8080 8081 8082 8443 8554 8888 8899 9000 9090 9527 9614 12222 13306 14822 15432 16379 18000 18780 18999 19091 19990 34015 34467 35645 37541 39665 41020 41021 41359 42101 42102 42200 42400 43085 43947 49374 51337 61209
-# 可用段：5432、9092、8123、25xxx、28xxx、3xxxx
-# 端口/密码/Token 均可用 .env 覆盖：cp .env.example .env（中文注释见该文件）
-
-networks:
-  oddsmaker-network:
-    driver: bridge
-
-volumes:
-  postgres_data:
-    driver: local
-  redis_data:
-    driver: local
-  clickhouse_data:
-    driver: local
-  apicurio_data:
-    driver: local
-  superset_data:
-    driver: local
-  control_logs:
-    driver: local
-  control_data:
-    driver: local
+# Oddsmaker 快速启动编排（单镜像双服务 + 全依赖）
+#
+# 用法：
+#   1. cp .env.example .env   # 复制并按需修改（端口/密码/Token 全部有中文注释）
+#   2. docker compose -f docker-compose.quickstart.yml up -d
+#   3. docker compose -f docker-compose.quickstart.yml ps   # 全部 healthy 即就绪
+#
+# 特点：
+#   - 单镜像：ghcr.io/cuihairu/oddsmaker（含 control + gateway，SERVICE 环境变量选择）
+#   - 非 root 运行、内置 healthcheck
+#   - 端口组 3xxxx 避开本机常用端口冲突
+#   - 卷持久化、depends_on 健康编排、中文注释
 
 services:
-
-  # PostgreSQL（control 的唯一 schema 真源是 Flyway 迁移）
+  # PostgreSQL（control 的唯一 schema 真源是 Flyway 迁移，由 control 启动自动执行）
   postgres:
     image: postgres:16-alpine
     container_name: oddsmaker-postgres
     environment:
       TZ: UTC
       POSTGRES_DB: oddsmaker
-      POSTGRES_USER: oddsmaker
+      POSTGRES_USER: ${POSTGRES_USER:-oddsmaker}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-oddsmaker}
     ports:
       - "${POSTGRES_PORT:-35432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U oddsmaker"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-oddsmaker}"]
       interval: 5s
       timeout: 3s
       retries: 20
     networks:
       - oddsmaker-network
 
-  # Redis（实时计数 / 风控短窗状态 / 会话缓存）
+  # Redis（会话/实时计数/风控短窗状态）
   redis:
     image: redis:7-alpine
     container_name: oddsmaker-redis
@@ -67,12 +49,12 @@ services:
     networks:
       - oddsmaker-network
 
-  # Kafka（KRaft 单节点）
+  # Kafka（KRaft 单节点；额外开 PLAINTEXT_HOST 供宿主脚本直连调试）
   kafka:
     image: apache/kafka:3.7.0
     container_name: oddsmaker-kafka
     ports:
-      - "${KAFKA_PORT:-39092}:29092"
+      - "${KAFKA_PORT:-39092}:9092"
     environment:
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
@@ -95,7 +77,7 @@ services:
     networks:
       - oddsmaker-network
 
-  # 一次性建齐全部 topic（Flink source 启动即查 topic，缺则退）
+  # 一次性建齐全部 topic（Flink source 启动即查 topic，不存在会直接退出）
   topic-init:
     image: apache/kafka:3.7.0
     container_name: oddsmaker-topic-init
@@ -112,13 +94,13 @@ services:
     networks:
       - oddsmaker-network
 
-  # ClickHouse 24.8（事件存储与聚合分析；initdb 自动建 schema）
+  # ClickHouse 24.8（表在 default 库；initdb 只在空卷首跑）
   clickhouse:
     image: clickhouse/clickhouse-server:24.8
     container_name: oddsmaker-clickhouse
     environment:
       TZ: UTC
-      CLICKHOUSE_USER: oddsmaker
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-oddsmaker}
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-oddsmaker}
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
     ports:
@@ -140,7 +122,7 @@ services:
     networks:
       - oddsmaker-network
 
-  # Avro Schema Registry（gateway Avro 序列化依赖）
+  # Avro Schema Registry（gateway 产出与 Flink job 消费 events_raw 都依赖）
   apicurio:
     image: quay.io/apicurio/apicurio-registry-mem:2.6.5.Final
     container_name: oddsmaker-apicurio
@@ -156,10 +138,9 @@ services:
     networks:
       - oddsmaker-network
 
-  # Control Service（管理面 API / 实验 / 风控规则 / Flyway 迁移）
-  # 单镜像双服务（根 Dockerfile：多阶段构建、非 root），SERVICE 环境变量选 control
+  # Control Service（单镜像，SERVICE=control；schema 由 Flyway 启动迁移，ddl-auto=validate 校验）
   control-service:
-    image: ghcr.io/cuihairu/oddsmaker:nightly
+    image: ${ODDSMAKER_IMAGE:-ghcr.io/cuihairu/oddsmaker:nightly}
     build:
       context: .
       dockerfile: Dockerfile
@@ -170,25 +151,26 @@ services:
       TZ: UTC
       SERVICE: control
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/oddsmaker
-      SPRING_DATASOURCE_USERNAME: oddsmaker
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-oddsmaker}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-oddsmaker}
       SPRING_JPA_HIBERNATE_DDL_AUTO: validate
       SPRING_FLYWAY_ENABLED: "true"
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       CLICKHOUSE_URL: jdbc:clickhouse://clickhouse:8123/default
-      CLICKHOUSE_USER: oddsmaker
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-oddsmaker}
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-oddsmaker}
       SPRING_DATA_REDIS_HOST: redis
       SPRING_REDIS_HOST: redis
       ODDSMAKER_ADMIN_TOKEN: ${ODDSMAKER_ADMIN_TOKEN:-dev-admin-token}
       ODDSMAKER_INTERNAL_TOKEN: ${ODDSMAKER_INTERNAL_TOKEN:-dev-internal-token}
       ODDSMAKER_PLAYER_EXPORT_DIR: /app/data/player-exports
+      ODDSMAKER_FLINK_JARDIR: /jars
       LOGGING_LEVEL_IO_ODDSMAKER: INFO
       LOGGING_LEVEL_ORG_HIBERNATE_SQL: WARN
     volumes:
-      - control_logs:/app/logs
-      - control_data:/app/data
+      # Flink 作业 jar（本地构建时挂载；pull 镜像模式下可忽略）
+      - ./deploy-rt/jars:/jars:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -199,7 +181,7 @@ services:
       topic-init:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8085/actuator/health | grep -q '\"status\":\"UP\"' || curl -fsS http://localhost:8085/actuator/health | grep -q '\"status\":\"UP\"'"]
+      test: ["CMD-SHELL", "/app/healthcheck.sh"]
       interval: 15s
       timeout: 5s
       retries: 20
@@ -207,10 +189,9 @@ services:
     networks:
       - oddsmaker-network
 
-  # Gateway Service（采集入口：API Key / HMAC / Schema 校验 / 限流 / 前置风控）
-  # 同一镜像，SERVICE=gateway
+  # Gateway Service（单镜像，SERVICE=gateway；采集入口 → Kafka events_raw）
   gateway-service:
-    image: ghcr.io/cuihairu/oddsmaker:nightly
+    image: ${ODDSMAKER_IMAGE:-ghcr.io/cuihairu/oddsmaker:nightly}
     build:
       context: .
       dockerfile: Dockerfile
@@ -224,9 +205,9 @@ services:
       ODDSMAKER_KAFKA_REGISTRY_URL: http://apicurio:8080/apis/registry/v2
       ODDSMAKER_CONTROL_URL: http://control-service:8085
       ODDSMAKER_CONTROL_INTERNAL_TOKEN: ${ODDSMAKER_INTERNAL_TOKEN:-dev-internal-token}
+      ODDSMAKER_AUTH_KEYS_DEVKEY: ${ODDSMAKER_AUTH_KEYS_DEVKEY:-dev-secret}
       ODDSMAKER_KAFKA_TOPIC_EVENTS: oddsmaker.events_raw
       ODDSMAKER_KAFKA_TOPIC_RISK: oddsmaker.risk_events
-      ODDSMAKER_AUTH_KEYS_DEVKEY: ${ODDSMAKER_AUTH_KEYS_DEVKEY:-dev-secret}
     depends_on:
       control-service:
         condition: service_healthy
@@ -237,7 +218,7 @@ services:
       topic-init:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health | grep -q '\"status\":\"UP\"' || curl -fsS http://localhost:8080/actuator/health | grep -q '\"status\":\"UP\"'"]
+      test: ["CMD-SHELL", "/app/healthcheck.sh"]
       interval: 15s
       timeout: 5s
       retries: 20
@@ -245,14 +226,14 @@ services:
     networks:
       - oddsmaker-network
 
-  # Superset（可选看板，起后需手工初始化管理员；不需要可注释掉本服务）
+  # Superset（可选看板，需手动初始化管理员后使用）
   superset:
     image: apache/superset:3.1.0
     container_name: oddsmaker-superset
     ports:
       - "${SUPERSET_PORT:-38088}:8088"
     environment:
-      SUPERSET_SECRET_KEY: "superset-secret-key-change-in-production"
+      SUPERSET_SECRET_KEY: ${SUPERSET_SECRET_KEY:-superset-secret-key-change-in-production}
       ADMIN_USERNAME: admin
       ADMIN_PASSWORD: admin
       ADMIN_FIRST_NAME: Admin
@@ -263,6 +244,16 @@ services:
     networks:
       - oddsmaker-network
 
-# 说明：Flink 分析作业（富化/会话/留存/漏斗/风控/身份归一）不在 quickstart 默认链路；
-# 需要「事件 → ClickHouse 聚合」全链路时用仓库根 docker-compose.yml（开发编排）
-# 或 nightly Release 分发包（bin/run-job.sh）。
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  clickhouse_data:
+    driver: local
+  superset_data:
+    driver: local
+
+networks:
+  oddsmaker-network:
+    driver: bridge
