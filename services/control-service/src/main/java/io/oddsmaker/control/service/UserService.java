@@ -41,13 +41,22 @@ public class UserService {
     public UserEntity createUser(UserEntity user, String operatorId) {
         logger.info("Creating user: {}", user.username);
 
+        // 必填前置校验：迁移真源侧 users.email 是 NOT NULL UNIQUE，username 挂部分唯一索引
+        // 且登录端点只认 username——缺项若放到 flush 才撞约束，对外是 500 而不是 400。
+        if (user.username == null || user.username.isBlank()) {
+            throw new IllegalArgumentException("Username is required");
+        }
+        if (user.email == null || user.email.isBlank()) {
+            throw new IllegalArgumentException("Email is required");
+        }
+
         // 检查用户名是否已存在
         if (userRepo.existsByUsername(user.username)) {
             throw new IllegalArgumentException("Username already exists: " + user.username);
         }
 
         // 检查邮箱是否已存在
-        if (user.email != null && userRepo.existsByEmail(user.email)) {
+        if (userRepo.existsByEmail(user.email)) {
             throw new IllegalArgumentException("Email already exists: " + user.email);
         }
 
@@ -59,6 +68,11 @@ public class UserService {
         // 设置默认状态
         if (user.status == null) {
             user.status = UserEntity.UserStatus.ACTIVE;
+        }
+
+        // 全局角色：迁移列 NOT NULL，请求体显式传 null 也要兜住（字段默认值只管省略情形）
+        if (user.globalRole == null) {
+            user.globalRole = UserEntity.GlobalRole.USER;
         }
 
         // 设置默认角色

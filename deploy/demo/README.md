@@ -97,11 +97,12 @@ TOKEN=$(curl -sS -X POST http://127.0.0.1:38085/api/auth/login \
 HASH=$(python3 -c 'import bcrypt,sys;print(bcrypt.hashpw(sys.argv[1].encode(),bcrypt.gensalt(10,prefix=b"2a")).decode())' "$PW")
 curl -sS -X POST http://127.0.0.1:38085/api/users -H "Authorization: Bearer $TOKEN" \
   -H 'Content-Type: application/json' \
-  -d "{\"username\":\"demo\",\"displayName\":\"演示账号\",\"passwordHash\":\"$HASH\",\"roles\":[\"VIEWER\"],\"status\":\"ACTIVE\"}"
+  -d "{\"username\":\"demo\",\"email\":\"demo@oddsmaker.local\",\"displayName\":\"演示账号\",\"passwordHash\":\"$HASH\",\"roles\":[\"VIEWER\"],\"status\":\"ACTIVE\"}"
 ```
 
 > `POST /api/users` 收的是已 bcrypt 的 `passwordHash`（`UserService.createUser` 不做哈希），
-> 角色留空时服务默认给 `VIEWER`。
+> 角色留空时服务默认给 `VIEWER`。`username` / `email` 必填（`users` 迁移侧
+> `email` 是 `NOT NULL UNIQUE`，缺了是 400 而不是落库报 500）；`globalRole` 缺省 `USER`。
 
 - 角色分配（**必做**）：权限门读 `user_role_assignments`，`POST /api/users` 只写
   `users.roles` 不落该表——不补这行，账号登录后所有受权限门端点全量拒绝：

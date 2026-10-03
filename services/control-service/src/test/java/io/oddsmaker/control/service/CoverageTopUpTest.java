@@ -95,7 +95,9 @@ class CoverageTopUpTest {
 
         UserEntity user = new UserEntity();
         user.username = "u1";
+        user.email = "u1@example.com";  // users.email NOT NULL（迁移真源），必填
         user.status = null;  // 字段初始化器默认 ACTIVE，必须显式置 null 才能走到兜底分支
+        when(userRepo.existsByEmail("u1@example.com")).thenReturn(false);
         UserEntity saved = service.createUser(user, "ops");
 
         assertEquals(UserEntity.UserStatus.ACTIVE, saved.status);

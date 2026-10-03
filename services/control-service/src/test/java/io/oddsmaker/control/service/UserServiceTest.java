@@ -201,6 +201,7 @@ class UserServiceTest {
         UserEntity fresh = new UserEntity();  // id/status/roles 全空 → 走默认填充
         fresh.username = "newuser";
         fresh.email = "new@example.com";
+        fresh.globalRole = null;  // 请求体显式传 null 也要兜底（字段初始化器只管省略情形）
         when(userRepo.existsByUsername("newuser")).thenReturn(false);
         when(userRepo.existsByEmail("new@example.com")).thenReturn(false);
         when(userRepo.save(any(UserEntity.class))).thenAnswer(inv -> inv.getArgument(0));
@@ -209,6 +210,29 @@ class UserServiceTest {
         assertNotNull(saved.id);
         assertEquals(UserEntity.UserStatus.ACTIVE, saved.status);
         assertFalse(saved.roles.isEmpty());
+        // global_role 迁移列 NOT NULL DEFAULT 'USER'：Hibernate 显式绑 NULL 撞约束，服务层必须兜底
+        assertEquals(UserEntity.GlobalRole.USER, saved.globalRole);
+    }
+
+    // ===== 建号必填校验（users.email NOT NULL UNIQUE / username 部分唯一索引）=====
+    // 缺项放到 flush 才撞约束的话对外是 500（§5 建号 500 的实锤路径），必须提前 400。
+
+    @Test
+    void createUser_MissingEmail_Throws400MappedException() {
+        testUser.email = null;
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+            () -> userService.createUser(testUser, "operator"));
+        assertTrue(ex.getMessage().contains("Email"));
+        verify(userRepo, never()).save(any());
+    }
+
+    @Test
+    void createUser_BlankUsername_Throws400MappedException() {
+        testUser.username = "   ";
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+            () -> userService.createUser(testUser, "operator"));
+        assertTrue(ex.getMessage().contains("Username"));
+        verify(userRepo, never()).save(any());
     }
 
     @Test

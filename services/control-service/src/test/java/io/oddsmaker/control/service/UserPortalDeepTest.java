@@ -161,13 +161,15 @@ class UserPortalDeepTest {
     // ==================== UserService ====================
 
     @Test
-    @DisplayName("createUser：空ID/空状态/空角色时填充默认值，null邮箱跳过重复检查")
+    @DisplayName("createUser：空ID/空状态/空角色/空全局角色时填充默认值，邮箱重复必查")
     void createUser_AppliesDefaults() {
         UserEntity u = new UserEntity();
         u.username = "deepuser";
+        u.email = "deepuser@example.com";
         u.id = "   ";
 
         lenient().when(userRepo.existsByUsername("deepuser")).thenReturn(false);
+        lenient().when(userRepo.existsByEmail("deepuser@example.com")).thenReturn(false);
         lenient().when(userRepo.save(any(UserEntity.class))).thenAnswer(inv -> inv.getArgument(0));
 
         UserEntity created = userService.createUser(u, "op_1");
@@ -176,7 +178,9 @@ class UserPortalDeepTest {
         assertEquals(21, created.id.length());
         assertEquals(UserEntity.UserStatus.ACTIVE, created.status);
         assertEquals(Set.of(UserEntity.UserRole.VIEWER), created.roles);
-        verify(userRepo, never()).existsByEmail(any());
+        // global_role 迁移列 NOT NULL，服务层兜底 USER
+        assertEquals(UserEntity.GlobalRole.USER, created.globalRole);
+        verify(userRepo).existsByEmail("deepuser@example.com");
         verify(auditLogRepo).save(any(AuditLogEntity.class));
     }
 

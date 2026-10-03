@@ -1,6 +1,7 @@
 package io.oddsmaker.control.jpa;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
@@ -14,20 +15,45 @@ import java.util.Set;
  */
 @Entity
 @Table(name = "users")
-public class UserEntity {
+public class UserEntity implements org.springframework.data.domain.Persistable<String> {
 
     @Id
     @Column(length = 64)
     public String id;
+
+    /**
+     * 手动分配 id 的实体走 SimpleJpaRepository.save 的 merge 分支；merge 携带非空
+     * @ElementCollection（roles）的 detached 实体时，flush 会对新行生成 UPDATE 且
+     * created_at 绑定 null（干净库 POST /api/users 建号 500 的根因，与 GameEntity 同款）。
+     * 实现 Persistable 让新建实体显式走 persist（INSERT），从库加载的实例走 update。
+     * 不进对外 JSON 契约——/api/users 与 /api/auth/login 响应都直接回实体。
+     */
+    @JsonIgnore
+    @Transient
+    public boolean isNew = true;
+
+    @PostLoad
+    @PostPersist
+    void markNotNew() { isNew = false; }
+
+    @Override
+    public String getId() { return id; }
+
+    @Override
+    @JsonIgnore
+    public boolean isNew() { return isNew; }
 
     @Column(nullable = false, unique = true, length = 100)
     public String username;
 
     /**
      * 本地登录口令（bcrypt）。迁移列 V0.2.0 就有，此前实体未映射、登录端点缺失，
-     * 控制面前端 /api/auth/login 一直是死接口。不对外序列化。
+     * 控制面前端 /api/auth/login 一直是死接口。只写不读：建号接口按契约收已 bcrypt 的
+     * 口令（deploy/demo README §5），登录端点 passwordEncoder.matches 依赖它落库。
+     * 原 @JsonIgnore 连反序列化一起禁，POST /api/users 收到的口令被静默丢弃、
+     * 建出来的号登不进——故改成 WRITE_ONLY（回吐侧仍不序列化）。
      */
-    @JsonIgnore
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     @Column(name = "password_hash", length = 255)
     public String passwordHash;
 
@@ -132,11 +158,12 @@ public class UserEntity {
     public String avatarUrl;
 
     /**
-     * 全局角色
+     * 全局角色。迁移列 NOT NULL DEFAULT 'USER'（V0.2.0），DEFAULT 只在省略列时生效，
+     * Hibernate 显式绑 NULL 同样撞约束——与 UserDTO.toEntity 同口径给默认值。
      */
     @Enumerated(EnumType.STRING)
     @Column(name = "global_role")
-    public GlobalRole globalRole;
+    public GlobalRole globalRole = GlobalRole.USER;
 
     @Column(name = "notification_email")
     public Boolean notificationEmail;
