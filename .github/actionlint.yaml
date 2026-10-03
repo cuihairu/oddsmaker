@@ -1,0 +1,4 @@
+# actionlint 配置：仓库自托管 runner 的自定义 label（deploy.yml runs-on 引用）
+self-hosted-runner:
+  labels:
+    - runner-docker

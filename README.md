@@ -144,6 +144,13 @@ event_id     = 单事件唯一 ID
 
 ## Quick Start
 
+### 演示站点
+
+演示站点 https://oddsmaker.cuihairu.site/ ｜ 演示账号 `demo` / `EBluYQvTaeN78p`（体验用，数据定期重置）
+
+> 演示站点仅供体验：数据会被定期重置，勿存放真实业务数据；演示账号为只读 VIEWER 角色。
+> 私有部署请走下方 Docker Compose 路径。
+
 ### Docker Compose 快速搭建（推荐）
 
 一条命令拉起服务端（control + gateway 单镜像）与全部依赖（PostgreSQL / Redis / Kafka / Apicurio / ClickHouse），端口、卷、健康检查齐全：

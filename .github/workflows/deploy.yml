@@ -1,0 +1,154 @@
+# Oddsmaker 演示站点部署腿：GHCR nightly 镜像 → runner-docker 机 compose 拉起 → 健康检查 → 失败回滚
+#
+# 触发：Nightly Build 成功后自动跟进（workflow_run），或手动 workflow_dispatch。
+# 形态（cockpit 同款）：web 构建在 GitHub-hosted runner 完成（vite build 内存峰值
+# 不落在 1.6G 的部署机上），self-hosted runner 只做下载/拉镜像/起栈/探活。
+#
+# 部署机约定（/opt/oddsmaker）：docker-compose.yml + .env 已就位（首次由人工执行，
+# 见 deploy/demo/README 注释），本工作流只滚动镜像与 web 静态资源。
+
+name: Deploy Demo
+
+on:
+  workflow_run:
+    workflows: ["Nightly Build"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read  # 拉本仓 GHCR 镜像
+
+concurrency:
+  group: deploy-demo
+  cancel-in-progress: false  # 部署不并发：滚动镜像 + 回滚依赖串行状态
+
+jobs:
+  # ============================================================
+  # Job 1: 构建 Web 控制台静态资源（GitHub-hosted，产出 artifact）
+  # ============================================================
+  build-web:
+    name: Build Web Console
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      # pnpm 必须先于 setup-node 安装：cache: 'pnpm' 需要 pnpm 在 PATH（同 nightly-build 的坑）
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 12
+          run_install: false
+
+      - name: Set up Node 24
+        uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: 'pnpm'
+          cache-dependency-path: 'web/pnpm-lock.yaml'
+
+      - name: Install dependencies
+        run: pnpm -C web install --frozen-lockfile
+
+      - name: Build web console
+        run: pnpm -C web build
+
+      - name: Upload web dist
+        uses: actions/upload-artifact@v5
+        with:
+          name: web-dist
+          path: web/dist/
+          retention-days: 1
+          if-no-files-found: error
+
+  # ============================================================
+  # Job 2: 部署到 runner-docker（拉镜像 → 起栈 → 探活 → 失败回滚）
+  # ============================================================
+  deploy:
+    name: Deploy to runner-docker
+    needs: build-web
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: [self-hosted, runner-docker]
+    timeout-minutes: 15
+    env:
+      DEMO_HOME: /opt/oddsmaker
+      IMAGE: ghcr.io/cuihairu/oddsmaker:nightly
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Download web dist
+        uses: actions/download-artifact@v5
+        with:
+          name: web-dist
+          path: web-dist
+
+      - name: Log in to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Pull nightly image
+        run: docker pull "$IMAGE"
+
+      - name: Deploy stack and verify health
+        run: |
+          set -euo pipefail
+          cd "$DEMO_HOME"
+
+          # 记录当前在跑的 digest：新镜像不健康时回滚到它
+          PREV_DIGEST="$(docker inspect --format '{{index .RepoDigests 0}}' "$IMAGE" 2>/dev/null || true)"
+          echo "PREV_DIGEST=$PREV_DIGEST" >> "$GITHUB_ENV"
+
+          docker compose up -d
+
+          # 健康门槛：/actuator/health 是 permitAll，最多等 5 分钟（首启含 Flyway 全量迁移）
+          deadline=$((SECONDS + 300))
+          until curl -fsS http://127.0.0.1:"${CONTROL_PORT:-38085}"/actuator/health 2>/dev/null | grep -q '"status":"UP"'; do
+            if [ "$SECONDS" -ge "$deadline" ]; then
+              echo "::error::health check timeout"; docker compose ps; docker compose logs --tail 50 control-service
+              exit 1
+            fi
+            sleep 5
+          done
+          echo "stack healthy"
+
+      - name: Publish web console (atomic swap)
+        run: |
+          set -euo pipefail
+          # 先落新目录再原子换名：nginx 读到的一直是完整的一份
+          rm -rf "$DEMO_HOME/web.next"
+          mkdir -p "$DEMO_HOME/web.next"
+          cp -a web-dist/. "$DEMO_HOME/web.next/"
+          rm -rf "$DEMO_HOME/web.prev"
+          [ -d "$DEMO_HOME/web" ] && mv "$DEMO_HOME/web" "$DEMO_HOME/web.prev"
+          mv "$DEMO_HOME/web.next" "$DEMO_HOME/web"
+          echo "web published"
+
+      - name: Record last-good digest
+        if: success()
+        run: |
+          docker inspect --format '{{index .RepoDigests 0}}' "$IMAGE" > "$DEMO_HOME/.last-good-digest"
+          cat "$DEMO_HOME/.last-good-digest"
+
+      # 回滚：镜像退回上一个 digest 后重启栈；web 静态资源无状态依赖，保留新版即可
+      - name: Rollback on failure
+        if: failure()
+        run: |
+          set -u
+          cd "$DEMO_HOME"
+          if [ -z "${PREV_DIGEST:-}" ]; then
+            echo "no previous digest recorded, skip rollback"
+            exit 0
+          fi
+          echo "rolling back to $PREV_DIGEST"
+          docker pull "$PREV_DIGEST"
+          docker tag "$PREV_DIGEST" "$IMAGE"
+          docker compose up -d
+          deadline=$((SECONDS + 300))
+          until curl -fsS http://127.0.0.1:"${CONTROL_PORT:-38085}"/actuator/health 2>/dev/null | grep -q '"status":"UP"'; do
+            if [ "$SECONDS" -ge "$deadline" ]; then echo "::error::rollback still unhealthy"; exit 1; fi
+            sleep 5
+          done
+          echo "rolled back to last-good digest"
+          exit 1  # 回滚成功也标记部署失败，让本次变更可见

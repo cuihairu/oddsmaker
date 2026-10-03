@@ -1,0 +1,113 @@
+# Oddsmaker 演示站点精简编排（低配单机：postgres + redis + control-service）
+#
+# 为何不是 docker-compose.quickstart.yml 的服务子集：quickstart 的 control-service
+# depends_on kafka(healthy) + topic-init(completed)，即使按服务名挑着 up 也会连带
+# 拉起整套 Kafka/Apicurio，1.6G 内存的演示机跑不动；演示面只需要控制面 REST + 登录。
+# Kafka 缺席时风控/身份消费者持续重试（ERROR 日志已限流），分析类接口按 designed
+# 降级返回 available=false，不影响演示。
+#
+# 用法（演示机 /opt/oddsmaker）：
+#   1. cp env.example .env && 填好密钥（全部有中文注释）
+#   2. docker compose up -d
+#   3. curl -fsS http://127.0.0.1:38085/actuator/health   # {"status":"UP"}
+#
+# 对外暴露仅 nginx 反代的 127.0.0.1:38085；postgres/redis 不映射宿主端口。
+
+name: oddsmaker-demo
+
+services:
+  # PostgreSQL（唯一 schema 真源 = Flyway，control 启动自动迁移 + 种子 admin）
+  postgres:
+    image: postgres:16-alpine
+    container_name: oddsmaker-demo-postgres
+    environment:
+      TZ: UTC
+      POSTGRES_DB: oddsmaker
+      POSTGRES_USER: ${POSTGRES_USER:-oddsmaker}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?请在 .env 设置 POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-oddsmaker}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    logging: &log-opts
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+    mem_limit: 300m
+    restart: unless-stopped
+    networks:
+      - oddsmaker-demo
+
+  # Redis（会话/实时计数；演示栈无 ClickHouse，分析接口走降级路径）
+  redis:
+    image: redis:7-alpine
+    container_name: oddsmaker-demo-redis
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    logging: *log-opts
+    mem_limit: 100m
+    restart: unless-stopped
+    networks:
+      - oddsmaker-demo
+
+  # Control Service（单镜像 SERVICE=control；nginx 只反代它的 /api/**）
+  control-service:
+    image: ${ODDSMAKER_IMAGE:-ghcr.io/cuihairu/oddsmaker:nightly}
+    container_name: oddsmaker-demo-control
+    ports:
+      - "127.0.0.1:${CONTROL_PORT:-38085}:8085"
+    environment:
+      TZ: UTC
+      SERVICE: control
+      # 1.6G 小机：收 JVM 堆，防与 postgres/swap 互踩
+      JAVA_OPTS: ${JAVA_OPTS:--Xms256m -Xmx512m -XX:MaxMetaspaceSize=256m -XX:+UseG1GC}
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/oddsmaker
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-oddsmaker}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?请在 .env 设置 POSTGRES_PASSWORD}
+      SPRING_JPA_HIBERNATE_DDL_AUTO: validate
+      SPRING_FLYWAY_ENABLED: "true"
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_REDIS_HOST: redis
+      # 演示栈无 Kafka：bootstrap 必须用可解析地址——容器名 kafka 在本编排里不存在，
+      # DNS 解析失败会让 spring-kafka 消费者构造直接抛错、应用启动失败；
+      # IP 字面量跳过 DNS 校验，消费者进入常规连接重试（连接失败无害，仅 ERROR 日志）
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: 127.0.0.1:9092
+      KAFKA_BOOTSTRAP_SERVERS: 127.0.0.1:9092
+      LOGGING_LEVEL_ORG_APACHE_KAFKA: ERROR
+      LOGGING_LEVEL_IO_ODDSMAKER: INFO
+      ODDSMAKER_ADMIN_TOKEN: ${ODDSMAKER_ADMIN_TOKEN:?请在 .env 设置 ODDSMAKER_ADMIN_TOKEN}
+      ODDSMAKER_INTERNAL_TOKEN: ${ODDSMAKER_INTERNAL_TOKEN:-}
+      ODDSMAKER_AUTH_JWT_SECRET: ${ODDSMAKER_AUTH_JWT_SECRET:?请在 .env 设置 ODDSMAKER_AUTH_JWT_SECRET（>=32 字节）}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "/app/healthcheck.sh"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 120s
+    logging: *log-opts
+    mem_limit: 900m
+    restart: unless-stopped
+    networks:
+      - oddsmaker-demo
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  oddsmaker-demo:
+    driver: bridge
