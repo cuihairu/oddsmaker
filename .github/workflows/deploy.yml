@@ -88,6 +88,15 @@ jobs:
       - name: Log in to GHCR
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
+      # 编排文件以仓库为准：只改仓库不同步部署机，下一次重建会带着过期环境变量起来
+      # （如新增 ODDSMAKER_WEB_CORS_ALLOWED_ORIGINS 时，浏览器登录 403 却查不到配置来源）。
+      # .env 是机器本地机密（口令/token/JWT 密钥），不同步、也不进仓库。
+      - name: Sync compose file from repo
+        run: |
+          set -euo pipefail
+          install -m 0644 deploy/demo/docker-compose.yml "$DEMO_HOME/docker-compose.yml"
+          docker compose -f "$DEMO_HOME/docker-compose.yml" --env-file "$DEMO_HOME/.env" config -q
+
       - name: Pull nightly image
         run: docker pull "$IMAGE"
 
