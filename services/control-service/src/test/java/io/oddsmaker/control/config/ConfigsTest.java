@@ -2,11 +2,13 @@ package io.oddsmaker.control.config;
 
 import io.oddsmaker.control.security.AdminTokenFilter;
 import io.oddsmaker.control.security.KeycloakJwtAuthenticationConverter;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.env.MockEnvironment;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -22,6 +24,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 @DisplayName("配置类测试")
 class ConfigsTest {
+
+    // AdminTokenFilter 冒烟测试经真实过滤器往 SecurityContextHolder 写入 dev-admin
+    // （ROLE_ADMIN）认证；不清理会泄漏到同 JVM 里随后执行的测试类——其「未认证」
+    // 断言会撞上残留的特权认证而随机失败（顺序依赖，单类跑必绿）。
+    @AfterEach
+    void clearSecurityContext() {
+        SecurityContextHolder.clearContext();
+    }
 
     // ===== SecurityConfig =====
 

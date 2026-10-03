@@ -4,6 +4,7 @@ import io.oddsmaker.control.jpa.UserEntity;
 import io.oddsmaker.control.service.PermissionService;
 import io.oddsmaker.control.service.UserService;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -40,6 +41,9 @@ class AccessGuardTest {
     @InjectMocks
     private AccessGuard accessGuard;
 
+    // Before+After 双清理：既不外泄本类 login() 的认证，也不吃上游测试类漏进来的
+    // 认证（本类首行就断言「未认证」侧，对执行顺序敏感）
+    @BeforeEach
     @AfterEach
     void clearContext() {
         SecurityContextHolder.clearContext();
