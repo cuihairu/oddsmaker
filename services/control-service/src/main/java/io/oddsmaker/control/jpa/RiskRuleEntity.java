@@ -174,7 +174,8 @@ public class RiskRuleEntity {
         VELOCITY,          // 速度规则
         RATIO,             // 比例规则
         ANOMALY,           // 异常检测
-        MACHINE_LEARNING   // 机器学习
+        MACHINE_LEARNING,  // 机器学习
+        FEATURE            // 特征规则（B5）：ruleConditions.features 从 risk_features 取值评估
     }
 
     public enum RiskLevel {

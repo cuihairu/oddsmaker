@@ -88,9 +88,9 @@ public final class RuleConfig {
     public static final class RuleSpec {
         /** 规则 ID（来自 control API） */
         public final String ruleId;
-        /** 规则类型：THRESHOLD / FREQUENCY / VELOCITY / RATIO / DUPLICATE_RECEIPT / AD_REWARD / PATTERN */
+        /** 规则类型：THRESHOLD / FREQUENCY / VELOCITY / RATIO / DUPLICATE_RECEIPT / AD_REWARD / PATTERN / FEATURE */
         public final String ruleType;
-        /** 触发阈值（金额为分/元单位计数值；PATTERN 借用为窗口秒数） */
+        /** 触发阈值（金额为分/元单位计数值；PATTERN 借用为窗口秒数；FEATURE 规则不用） */
         public final int triggerThreshold;
         /** 处置动作：ALERT / BLOCK / REVIEW / THROTTLE / WEBHOOK */
         public final String actionType;
@@ -102,20 +102,35 @@ public final class RuleConfig {
         public final List<String> sequence;
         /** PATTERN 专属：整段序列允许的时间窗（秒，自第一步起算）；其他类型为 0 */
         public final int windowSeconds;
+        /** FEATURE 专属：特征条件（全部 AND 满足才命中，从 risk_features 取值）；其他类型为空列表 */
+        public final List<FeatureCondition> features;
 
         public RuleSpec(String ruleId, String ruleType, int triggerThreshold,
                         String actionType, int riskScore, String riskLevel) {
-            this(ruleId, ruleType, triggerThreshold, actionType, riskScore, riskLevel, List.of(), 0);
+            this(ruleId, ruleType, triggerThreshold, actionType, riskScore, riskLevel, List.of(), 0, List.of());
         }
 
         public RuleSpec(String ruleId, String ruleType, int triggerThreshold,
                         String actionType, int riskScore, String riskLevel, List<String> sequence) {
-            this(ruleId, ruleType, triggerThreshold, actionType, riskScore, riskLevel, sequence, 0);
+            this(ruleId, ruleType, triggerThreshold, actionType, riskScore, riskLevel, sequence, 0, List.of());
         }
 
         public RuleSpec(String ruleId, String ruleType, int triggerThreshold,
                         String actionType, int riskScore, String riskLevel,
                         List<String> sequence, int windowSeconds) {
+            this(ruleId, ruleType, triggerThreshold, actionType, riskScore, riskLevel, sequence, windowSeconds, List.of());
+        }
+
+        /** FEATURE 规则构造入口（List&lt;String&gt; sequence 重载擦除冲突，特征条件走静态工厂） */
+        public static RuleSpec featureSpec(String ruleId, String ruleType,
+                                           String actionType, int riskScore, String riskLevel,
+                                           List<FeatureCondition> features) {
+            return new RuleSpec(ruleId, ruleType, 0, actionType, riskScore, riskLevel, List.of(), 0, features);
+        }
+
+        private RuleSpec(String ruleId, String ruleType, int triggerThreshold,
+                         String actionType, int riskScore, String riskLevel,
+                         List<String> sequence, int windowSeconds, List<FeatureCondition> features) {
             this.ruleId = ruleId;
             this.ruleType = ruleType;
             this.triggerThreshold = triggerThreshold;
@@ -124,6 +139,30 @@ public final class RuleConfig {
             this.riskLevel = riskLevel;
             this.sequence = sequence != null ? List.copyOf(sequence) : List.of();
             this.windowSeconds = windowSeconds;
+            this.features = features != null ? List.copyOf(features) : List.of();
+        }
+    }
+
+    /**
+     * FEATURE 规则的单条特征条件（B5 事件→特征→规则解耦）。
+     * scope：SUBJECT（主体=PLAYER/DEVICE）或 IP（主体当前 IP）；feature 为 risk_features 特征名；
+     * op 取 &gt; / &gt;= / &lt; / &lt;= / ==；全部条件 AND。
+     */
+    public static final class FeatureCondition {
+        /** 条件作用域：SUBJECT / IP */
+        public final String scope;
+        /** 特征名（risk_features.feature_name） */
+        public final String feature;
+        /** 比较算子：> / >= / < / <= / == */
+        public final String op;
+        /** 阈值 */
+        public final double threshold;
+
+        public FeatureCondition(String scope, String feature, String op, double threshold) {
+            this.scope = scope;
+            this.feature = feature;
+            this.op = op;
+            this.threshold = threshold;
         }
     }
 }

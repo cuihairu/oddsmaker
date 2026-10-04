@@ -26,7 +26,8 @@ function getRuleTypeColor(type) {
     THRESHOLD: 'bg-red-100 text-red-800',
     VELOCITY: 'bg-orange-100 text-orange-800',
     BLACKLIST: 'bg-gray-100 text-gray-800',
-    PATTERN: 'bg-purple-100 text-purple-800'
+    PATTERN: 'bg-purple-100 text-purple-800',
+    FEATURE: 'bg-teal-100 text-teal-800'
   }
   return colors[type] || 'bg-gray-100 text-gray-800'
 }
@@ -36,7 +37,8 @@ function getRuleTypeLabel(type) {
     THRESHOLD: '阈值规则',
     VELOCITY: '速度规则',
     BLACKLIST: '黑名单',
-    PATTERN: '模式规则'
+    PATTERN: '模式规则',
+    FEATURE: '特征规则'
   }
   return labels[type] || type
 }

@@ -16,7 +16,7 @@
 PostgreSQL（元数据）
 ├─ games / environments / api_keys
 ├─ users / roles / user_role_assignments
-├─ tracking_plans / risk_rules / block_lists / audit_logs
+├─ tracking_plans / risk_rules / risk_features / block_lists / audit_logs
 └─ storage_profiles ...
 
 ClickHouse（共享表，按 game_id + environment 分区）
@@ -242,6 +242,12 @@ POST /api/risk-rules/{ruleId}/disable
 ```
 
 状态：`DRAFT` / `ACTIVE` / `PAUSED` / `ARCHIVED` / `DEPRECATED`。
+
+`ruleType=FEATURE` 的特征规则（B5）：`ruleConditions` 形状为
+`{"features":[{"scope":"SUBJECT","feature":"gold_gain_1h","op":">","threshold":500000}]}`，
+`scope` 取 `SUBJECT`（玩家/设备主体）或 `IP`，条件间全 AND；特征行未产出按不满足计（无值不判真）。
+特征值来自 risk-job 特征作业按滑动窗口写入的 `risk_features`（首 6 个：gold_gain_1h/24h、device_count、
+account_count_per_ip、win_rate、event_count_10m），risk-job 每 60 秒拉取规则时解析 `features` 数组。
 
 ### User 与 RoleAssignment
 

@@ -58,6 +58,7 @@
 - Oddsmaker 2.0 重构 B2（权限单真源收敛）：回填迁移把用户-角色关系收敛到 `user_role_assignments` 单一真源；`POST /api/users` 与 `PUT /api/users/{userId}/roles` 改写 RBAC 新体系（roles 表 + user_role_assignments），废弃旧 `users.role` 展示字段的写入语义
 - Oddsmaker 2.0 重构 B3（Server SDK 骨架）：新增 `sdks/server` 零仓库内依赖模块（独立 Gradle 模块，可 subtree 拆出）；SERVER key 发放校验——服务端事件强制 SERVER 档 key + HMAC
 - Oddsmaker 2.0 重构 B4（事件契约 v2 增量）：`event_version`/`source`/`trust_level`/`event_origin` 四字段网关权威回填（TrustPolicy：source 按 key 档位推导、trust_level 一律由 source 推导、发送方声明永不采信）；自抬拒绝（CLIENT key 声明 server 档或高于推导档 trust_level → 整事件 `trust_escalation`）；schema/Avro/ClickHouse/events 表列与四端契约同步
+- Oddsmaker 2.0 重构 B5（风控 Feature 层）：新增 `risk_features` 表（V0.9.18，game_id/environment/scope_key/feature_name/window_start/window_end 唯一约束 + upsert）与 `RiskFeatureEntity`/仓库；risk-job 特征作业分支滑动窗口聚合首 6 特征（gold_gain_1h/24h、device_count、account_count_per_ip、win_rate、event_count_10m）真落 PostgreSQL；规则取值三段解耦——`ruleType=FEATURE` 的 `ruleConditions.features`（SUBJECT/IP + feature + op + threshold，全 AND、无值不判真）改从特征快照取值命中（广播状态，IP 条件退化主体最近上报 IP，TTL 1 天兜底），命中进既有 risk_events 双 sink；既有 7 类事件规则原样保留。测试：RiskFeatureTest 16 例 + §5.4 真 PG 端到端（2 条超阈值金币事件 → risk_features 1h 窗口行 → FEATURE 规则命中，`-Drisk.pg.e2e=true` 门禁、CI 无 PG 自跳过）
 
 ## v0.1.0 (initial release)
 - Unified Java stack for ingest + streaming + analytics

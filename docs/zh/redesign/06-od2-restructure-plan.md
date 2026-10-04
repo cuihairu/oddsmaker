@@ -70,7 +70,7 @@
 | 对象 | 标识 | 现状 | 2.0 动作 |
 |---|---|---|---|
 | **Signal** | 流水，非实体 | Gateway 校验后的原始事件即信号（`risk_context` 字段已入事件契约） | 显式定义信号清单（gold_gain/login_ip/device/…），不需要新表 |
-| **Feature**（**新增**） | `(game_id, scope_key, feature_name)` 时间窗值 | **空缺**——风险与分析的公共欠账 | B5：`RiskFeatureEntity` + risk-job Flink 特征作业；ANALYTICS 侧特征共享见 §5.4 |
+| **Feature**（**新增**） | `(game_id, scope_key, feature_name)` 时间窗值 | ✅（B5 落地：`risk_features` 表 + risk-job 特征作业首 6 特征滑动窗口） | ANALYTICS 侧共享 `feature_store` 双写见 §5.3（B10） |
 | **RiskRule** | `rule_id`，`environmentId` 可空（全局规则） | `RiskRuleEntity` 已具（THRESHOLD/SEQUENCE、riskScore、actionType、enableAutoBlock） | 收敛 `ruleConditions` 为结构化 JSON schema（引 EventSchema 字段），保持现状字段名 |
 | **RiskScore** | `(game_id, subject, as_of)` 值对象 | 内嵌于 Rule（每条规则一个 riskScore） | **从 rule 提出**：一次评估产生一个累计分数记录（B6） |
 | **Decision**（**新增**） | 判定 `(case_id → status)` | **空缺**——现有 `RiskCaseEntity`/`ReviewQueueEntity` 是处置落点雏形 | B6：判定状态机 `OPEN → REVIEW/ALERT/MARK → THROTTLE/BLOCK → RESOLVED` |
@@ -170,7 +170,7 @@ Signal → Feature → Rule → Risk Score → Decision → Action
 现状映射（已核）：
 
 - **Signal** ✅：Gateway 校验后事件 + `risk_context`；risk-job `RuleConfig` 按 ruleType 索引、同型多条取最高 riskScore（`jobs/flink/risk-job/.../RuleConfig.java:13`）。
-- **Feature** ❌ 完全空缺：`RuleConfig.sequence` 是静态序列，不是时间窗特征。
+- **Feature** ✅（B5 落地）：risk-job 特征作业首 6 特征滑动窗口 upsert `risk_features`；`FEATURE` 规则 `ruleConditions.features` 从特征快照取值（共享 `feature_store` 双写留 B10，§5.3）。
 - **Rule** ✅：`RiskRuleEntity`（THRESHOLD/SEQUENCE、riskLevel、actionType、enableAutoBlock/blockDuration）。
 - **Risk Score** 🟡：内嵌 rule（每条规则一个静态 riskScore），**不是一次评估的累计分数**。
 - **Decision** ❌ 空缺：`RiskCaseEntity`/`ReviewQueueEntity`/`BlockListEntity` 是处置落点，没有判定状态机。

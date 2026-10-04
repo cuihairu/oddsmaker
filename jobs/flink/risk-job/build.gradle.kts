@@ -15,6 +15,8 @@ dependencies {
   implementation("org.apache.avro:avro:1.11.3")
   implementation("io.apicurio:apicurio-registry-serdes-avro-serde:2.6.5.Final")
   implementation("com.clickhouse:clickhouse-jdbc:0.6.5")
+  // B5 特征分支：risk_features 落 PostgreSQL control 库
+  implementation("org.postgresql:postgresql:42.7.3")
   implementation("com.fasterxml.jackson.core:jackson-databind:2.17.2")
   // local executor 运行日志：依赖树里 slf4j-api 被拉到 2.x（1.7 binding 被静默忽略成 NOP 日志），
   // 必须用 slf4j2 的 provider
@@ -25,7 +27,28 @@ dependencies {
 }
 
 tasks.withType<JavaCompile> { options.release.set(21) }
-tasks.named<Test>("test") { useJUnitPlatform() }
+tasks.named<Test>("test") {
+  useJUnitPlatform()
+  // Kryo（POJO 字段回退序列化）在 JDK21 反射 java.* 内部类需要 open；
+  // 集群模式 flink 启动脚本自带同款 --add-opens，本地 test JVM 需显式补齐（JDK21 + Flink 1.19）
+  jvmArgs(
+    "--add-opens=java.base/java.util=ALL-UNNAMED",
+    "--add-opens=java.base/java.lang=ALL-UNNAMED",
+    "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+    "--add-opens=java.base/java.io=ALL-UNNAMED",
+    "--add-opens=java.base/java.net=ALL-UNNAMED",
+    "--add-opens=java.base/java.nio=ALL-UNNAMED",
+    "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
+    "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
+    "--add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED"
+  )
+  // §5.4 真 PG 端到端（RiskFeaturePgE2eTest，@EnabledIfSystemProperty）：本地门禁 -Drisk.pg.e2e=true
+  // 显式开启；CI 无 PG 自跳过。url/user/pass 仅在显式传入时透传（缺省保留测试内默认值）。
+  for (key in listOf("risk.pg.e2e", "risk.pg.e2e.url", "risk.pg.e2e.user", "risk.pg.e2e.pass")) {
+    val v = System.getProperty(key)
+    if (v != null && v.isNotEmpty()) systemProperty(key, v)
+  }
+}
 
 // 可执行 fatJar：java -jar 跑 local executor，或 flink run 提交 1.19 集群
 val fatJar = tasks.register<Jar>("fatJar") {

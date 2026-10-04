@@ -267,4 +267,4 @@ bash scripts/run_flink.sh
 
 已交付的能力：采集网关（`/v1/batch` + 事件契约 v2）、控制面（游戏/环境/密钥/权限 8 角色/实验/风控规则）、7 个 Flink 作业（enrich/sessions/retention/funnels/risk/dimension/identity-merge）、维度同步 Agent（5 类 source）、5 端 SDK、4 类 ML 模型训练与批量打分、Web 控制台。
 
-2.0 重构进行中（B1–B4 已验收）：事件契约 v2 增量、Server SDK、网关权威回填与自抬拒绝；后续批次（风控 Feature 层等）按 `todo.md` 逐批推进。
+2.0 重构进行中（B1–B5 已验收）：事件契约 v2 增量、Server SDK、网关权威回填与自抬拒绝、风控 Feature 层（`risk_features` + FEATURE 规则取值三段解耦）；后续批次（RiskScore/Decision 状态机等）按 `todo.md` 逐批推进。

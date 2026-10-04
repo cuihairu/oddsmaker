@@ -80,13 +80,25 @@ public class RiskJob {
                 System.getProperty("control.gameId", "default"),
                 System.getProperty("control.token", ""),
                 Long.parseLong(System.getProperty("rule.refresh-ms", "60000")),
+                // B5 特征分支：risk_features 落 PostgreSQL（control 库）
+                System.getProperty("control.db.url", "jdbc:postgresql://localhost:5432/oddsmaker"),
+                System.getProperty("control.db.user", "oddsmaker"),
+                System.getProperty("control.db.pass", "oddsmaker"),
+                // 乱序容忍秒数：e2e 复现时置 0 可让窗口按事件时间即刻闭合
+                Integer.parseInt(System.getProperty("risk.watermark.delay-seconds", "120")),
+                // 特征分支总开关（关掉则既不产出 risk_features 也不评估 FEATURE 规则）
+                Boolean.parseBoolean(System.getProperty("risk.features.enabled", "true")),
                 // PATTERN 窗口不在此处：DEFAULTS/spec.windowSeconds 直接读 risk.pattern.window-minutes
         };
     }
 
-    /** 有界乱序水位线（2 分钟），时间戳取 ts_server → ts_client → now。 */
+    /** 有界乱序水位线（缺省 2 分钟），时间戳取 ts_server → ts_client → now。 */
     static WatermarkStrategy<RawEvent> watermarks() {
-        return WatermarkStrategy.<RawEvent>forBoundedOutOfOrderness(Duration.ofMinutes(2))
+        return watermarks(120);
+    }
+
+    static WatermarkStrategy<RawEvent> watermarks(int delaySeconds) {
+        return WatermarkStrategy.<RawEvent>forBoundedOutOfOrderness(Duration.ofSeconds(delaySeconds))
                 .withTimestampAssigner((SerializableTimestampAssigner<RawEvent>) (r, recordTimestamp) -> {
                     Long s = r.ts_server;
                     Long c = r.ts_client;
@@ -121,6 +133,11 @@ public class RiskJob {
         String chPass = (String) cfg[6];
         int freqWindowMin = (Integer) cfg[7];
         RuleSource rules = new RuleSource((String) cfg[8], (String) cfg[9], (String) cfg[10], (Long) cfg[11]);
+        String pgUrl = (String) cfg[12];
+        String pgUser = (String) cfg[13];
+        String pgPass = (String) cfg[14];
+        int watermarkDelaySeconds = (Integer) cfg[15];
+        boolean featuresEnabled = (Boolean) cfg[16];
 
         // local executor 默认并行度=CPU 核数，而 events_raw 只有 1 个分区：
         // 多余的空 source subtask 会把全局 watermark 卡死，影响窗口类规则。
@@ -135,7 +152,7 @@ public class RiskJob {
                 .setDeserializer(new ApicurioAvroFlinkDeserializer(registry))
                 .build();
 
-        DataStream<RawEvent> raw = env.fromSource(source, watermarks(), "events-raw");
+        DataStream<RawEvent> raw = env.fromSource(source, watermarks(watermarkDelaySeconds), "events-raw");
 
         DataStream<RiskInput> inputs = raw.flatMap(inputMapper()).returns(Types.POJO(RiskInput.class));
 
@@ -171,8 +188,27 @@ public class RiskJob {
                 .process(new PatternFunction(rules))
                 .returns(Types.POJO(RiskHit.class));
 
-        DataStream<RiskHit> allHits = thresholdHits.union(frequencyHits).union(velocityHits).union(ratioHits)
-                .union(duplicateReceiptHits).union(adRewardHits).union(patternHits);
+        DataStream<RiskHit> allHits;
+        if (featuresEnabled) {
+            // B5 特征分支（计划书 §5.1）：事件→特征→规则三段解耦。
+            // 特征行按 6 特征滑动窗口聚合 → upsert PostgreSQL risk_features；
+            // 同一批特征行广播回评估算子，FEATURE 规则按主体最新特征快照命中。
+            DataStream<FeatureRow> featureRows = buildFeatureBranch(inputs);
+
+            featureRows.addSink(featureJdbcSink(pgUrl, pgUser, pgPass)).name("postgres-risk-features");
+
+            DataStream<RiskHit> featureRuleHits = inputs
+                    .keyBy(RiskJob::subjectWindowKey)
+                    .connect(featureRows.broadcast(FeatureRuleFunction.FEATURE_STATE))
+                    .process(new FeatureRuleFunction(rules))
+                    .returns(Types.POJO(RiskHit.class));
+
+            allHits = thresholdHits.union(frequencyHits).union(velocityHits).union(ratioHits)
+                    .union(duplicateReceiptHits).union(adRewardHits).union(patternHits).union(featureRuleHits);
+        } else {
+            allHits = thresholdHits.union(frequencyHits).union(velocityHits).union(ratioHits)
+                    .union(duplicateReceiptHits).union(adRewardHits).union(patternHits);
+        }
 
         KafkaSink<String> kafkaSink = KafkaSink.<String>builder()
                 .setBootstrapServers(bootstrap)
@@ -215,6 +251,104 @@ public class RiskJob {
                 .window(SlidingEventTimeWindows.of(Time.minutes(windowMin), Time.minutes(slideMinutes(windowMin))));
     }
 
+    /**
+     * B5 特征作业分支：首批 6 特征的滑动窗口聚合（清单以计划书 §5.1 为准）。
+     * 窗口步长：1h 特征 5 分钟一算（规则读值新鲜度），24h 半小时，10 分钟特征 1 分钟。
+     * 分口径 keyBy：gold/device/win/event_count 走主体键，account_count_per_ip 走 IP 键。
+     */
+    static DataStream<FeatureRow> buildFeatureBranch(DataStream<RiskInput> inputs) {
+        DataStream<FeatureRow> gold1h = inputs
+                .filter(FeatureCalc::isGoldSource)
+                .keyBy(RiskJob::subjectWindowKey)
+                .window(SlidingEventTimeWindows.of(Time.hours(1), Time.minutes(5)))
+                .process(new FeatureCalc.GoldGainFeature("gold_gain_1h"))
+                .returns(Types.POJO(FeatureRow.class));
+
+        DataStream<FeatureRow> gold24h = inputs
+                .filter(FeatureCalc::isGoldSource)
+                .keyBy(RiskJob::subjectWindowKey)
+                .window(SlidingEventTimeWindows.of(Time.hours(24), Time.minutes(30)))
+                .process(new FeatureCalc.GoldGainFeature("gold_gain_24h"))
+                .returns(Types.POJO(FeatureRow.class));
+
+        DataStream<FeatureRow> deviceCount = inputs
+                .filter(RiskJob::isPlayerSubject)
+                .keyBy(RiskJob::subjectWindowKey)
+                .window(SlidingEventTimeWindows.of(Time.hours(1), Time.minutes(5)))
+                .process(new FeatureCalc.DeviceCountFeature())
+                .returns(Types.POJO(FeatureRow.class));
+
+        DataStream<FeatureRow> accountPerIp = inputs
+                .filter(RiskJob::hasIpAccount)
+                .keyBy(RiskJob::ipWindowKey)
+                .window(SlidingEventTimeWindows.of(Time.hours(1), Time.minutes(5)))
+                .process(new FeatureCalc.AccountPerIpFeature())
+                .returns(Types.POJO(FeatureRow.class));
+
+        DataStream<FeatureRow> winRate = inputs
+                .filter(FeatureCalc::isMatchResult)
+                .keyBy(RiskJob::subjectWindowKey)
+                .window(SlidingEventTimeWindows.of(Time.hours(1), Time.minutes(5)))
+                .process(new FeatureCalc.WinRateFeature())
+                .returns(Types.POJO(FeatureRow.class));
+
+        DataStream<FeatureRow> eventCount = inputs
+                .keyBy(RiskJob::subjectWindowKey)
+                .window(SlidingEventTimeWindows.of(Time.minutes(10), Time.minutes(1)))
+                .process(new FeatureCalc.EventCountFeature())
+                .returns(Types.POJO(FeatureRow.class));
+
+        return gold1h.union(gold24h).union(deviceCount).union(accountPerIp).union(winRate).union(eventCount);
+    }
+
+    /** risk_features upsert：同窗口重算（迟到事件修正）按唯一键覆盖 value/as_of，幂等可重放 */
+    static final String FEATURE_UPSERT_SQL =
+            "INSERT INTO risk_features (game_id, environment, scope_key, feature_name, window_start, window_end, value, as_of) "
+            + "VALUES (?,?,?,?,?,?,?,?) "
+            + "ON CONFLICT (game_id, environment, scope_key, feature_name, window_start, window_end) "
+            + "DO UPDATE SET value = EXCLUDED.value, as_of = EXCLUDED.as_of";
+
+    /** risk_features 写入 sink（PostgreSQL control 库） */
+    static org.apache.flink.streaming.api.functions.sink.SinkFunction<FeatureRow> featureJdbcSink(String pgUrl, String pgUser, String pgPass) {
+        return JdbcSink.sink(
+                FEATURE_UPSERT_SQL,
+                RiskJob::bindFeatureRow,
+                JdbcExecutionOptions.builder().withBatchIntervalMs(500).withBatchSize(500).withMaxRetries(3).build(),
+                new JdbcConnectionOptions.JdbcConnectionOptionsBuilder()
+                        .withUrl(pgUrl)
+                        .withDriverName("org.postgresql.Driver")
+                        .withUsername(pgUser)
+                        .withPassword(pgPass)
+                        .build());
+    }
+
+    /** risk_features 表写入绑定（8 列）。 */
+    static void bindFeatureRow(java.sql.PreparedStatement ps, FeatureRow r) throws java.sql.SQLException {
+        ps.setString(1, r.gameId);
+        ps.setString(2, r.environment);
+        ps.setString(3, r.scopeKey);
+        ps.setString(4, r.featureName);
+        ps.setTimestamp(5, new java.sql.Timestamp(r.windowStartMs));
+        ps.setTimestamp(6, new java.sql.Timestamp(r.windowEndMs));
+        ps.setDouble(7, r.value);
+        ps.setTimestamp(8, new java.sql.Timestamp(r.asOfMs));
+    }
+
+    /** device_count/win_rate/event_count 的主体口径前提：带 user_id 的 PLAYER 主体 */
+    static boolean isPlayerSubject(RiskInput i) {
+        return i.userId != null && !i.userId.isEmpty();
+    }
+
+    /** account_count_per_ip 的入窗口前提：带账号且带 IP */
+    static boolean hasIpAccount(RiskInput i) {
+        return isPlayerSubject(i) && i.clientIp != null && !i.clientIp.isEmpty();
+    }
+
+    /** account_count_per_ip 的分键：game|env|IP:<ip> */
+    static String ipWindowKey(RiskInput i) {
+        return i.gameId + "|" + i.environment + "|" + FeatureCalc.ipScopeKey(i);
+    }
+
     /** RawEvent → RiskInput 的算子封装（null 表示丢弃）。 */
     static FlatMapFunction<RawEvent, RiskInput> inputMapper() {
         return (r, out) -> {
@@ -246,6 +380,8 @@ public class RiskJob {
         if (tsServer != null) in.ts = new Timestamp(tsServer / 1000L);
         in.amount = parseAmount(r.resource_amount);
         in.flowType = nz(r.flow_type);
+        in.resourceId = nz(r.resource_id);
+        in.propsJson = r.props_json;
         in.receiptKey = firstNonBlank(r.receipt_hash, r.order_id);
         in.revenueAmount = parseAmount(r.revenue_amount);
         String adFormat = nz(r.ad_format);
@@ -732,7 +868,8 @@ public class RiskJob {
         return sb.toString();
     }
 
-    public static final class RiskInput {
+    /** 风控输入 POJO；随携带它的函数闭包一起序列化（TimedSource/RuleSource 等），实现 Serializable。 */
+    public static final class RiskInput implements java.io.Serializable {
         public String gameId;
         public String environment;
         public String eventId;
@@ -744,6 +881,10 @@ public class RiskJob {
         public Timestamp ts;
         public BigDecimal amount;
         public String flowType;
+        /** 资源 ID（金币口径判 gold） */
+        public String resourceId;
+        /** props 原文 JSON（win_rate 的 win 标记来源） */
+        public String propsJson;
         /** 收据键：receipt_hash 优先，退化 order_id；null 表示非收据事件 */
         public String receiptKey;
         public BigDecimal revenueAmount;

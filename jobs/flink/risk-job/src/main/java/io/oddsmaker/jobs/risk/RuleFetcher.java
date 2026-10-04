@@ -117,6 +117,17 @@ public class RuleFetcher implements Runnable {
                 continue;
             }
 
+            if ("FEATURE".equals(type)) {
+                // FEATURE（B5）：条件取 ruleConditions.features，从 risk_features 特征取值评估；
+                // 无有效条件（空数组/缺字段）跳过该规则，不设阈值门槛
+                java.util.List<RuleConfig.FeatureCondition> features = parseFeatureConditions(rule.path("ruleConditions"));
+                if (features.isEmpty()) continue;
+                collected.merge(type, RuleConfig.RuleSpec.featureSpec(
+                                ruleId, type, actionType, riskScore, riskLevel, features),
+                        (a, b) -> b.riskScore > a.riskScore ? b : a);
+                continue;
+            }
+
             int threshold = rule.path("triggerThreshold").asInt(0);
             if (threshold <= 0) continue;
 
@@ -149,5 +160,34 @@ public class RuleFetcher implements Runnable {
             seq.add(s);
         }
         return java.util.List.copyOf(seq);
+    }
+
+    /** 合法特征条件算子集（缺失字段/非法算子整条规则作废，避免半残条件上线） */
+    private static final java.util.Set<String> OPS = java.util.Set.of(">", ">=", "<", "<=", "==");
+
+    /**
+     * ruleConditions JSON 节点 → 特征条件列表。
+     * 形态：{"features":[{"scope":"SUBJECT","feature":"gold_gain_1h","op":">","value":100000}]}；
+     * scope 缺省 SUBJECT，非 SUBJECT/IP、feature 空、op 非法、value 非数字均整列表作废。
+     */
+    static java.util.List<RuleConfig.FeatureCondition> parseFeatureConditions(JsonNode ruleConditions) {
+        if (ruleConditions == null || !ruleConditions.isObject()) {
+            return java.util.List.of();
+        }
+        JsonNode arr = ruleConditions.path("features");
+        if (!arr.isArray() || arr.isEmpty()) return java.util.List.of();
+        java.util.List<RuleConfig.FeatureCondition> out = new java.util.ArrayList<>();
+        for (JsonNode n : arr) {
+            String scope = n.path("scope").asText("SUBJECT").trim();
+            if (!"SUBJECT".equals(scope) && !"IP".equals(scope)) return java.util.List.of();
+            String feature = n.path("feature").asText("").trim();
+            if (feature.isEmpty()) return java.util.List.of();
+            String op = n.path("op").asText("").trim();
+            if (!OPS.contains(op)) return java.util.List.of();
+            JsonNode value = n.path("value");
+            if (!value.isNumber()) return java.util.List.of();
+            out.add(new RuleConfig.FeatureCondition(scope, feature, op, value.asDouble()));
+        }
+        return java.util.List.copyOf(out);
     }
 }

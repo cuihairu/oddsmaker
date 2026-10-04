@@ -89,7 +89,7 @@ flowchart LR
 PostgreSQL（元数据）
 ├─ games / environments / api_keys
 ├─ users / roles / user_role_assignments
-├─ tracking_plans / risk_rules / risk_cases / block_lists
+├─ tracking_plans / risk_rules / risk_cases / risk_features / block_lists
 └─ audit_logs / storage_profiles ...
 
 ClickHouse（事件与聚合，共享表）
@@ -140,6 +140,7 @@ ORDER BY (game_id, environment, event_type, event_date, player_id, user_id, devi
 - 客户端安全：客户端只持 public `api_key`；HMAC 只用于 Server SDK。
 - PII 治理：Gateway 执行 deny/mask/coarse，违规事件进入 DLQ。
 - 风控链路：Gateway 硬拦截，Flink 实时检测，ClickHouse 回溯，Webhook 输出处置。
+- 风控特征层：risk-job 特征作业分支按滑动窗口聚合首批 6 特征（gold_gain_1h/24h、device_count、account_count_per_ip、win_rate、event_count_10m），upsert PostgreSQL `risk_features`；`FEATURE` 规则从特征快照取值命中（事件→特征→规则三段解耦）。
 - 数据隔离：共享表按 `(game_id, environment)` 分区 + 查询必带分区条件；物理分库由存储 profile 的 `isolationStrategy` 预留，尚未接线。
 
 ## 风控能力
@@ -153,6 +154,7 @@ ORDER BY (game_id, environment, event_type, event_date, player_id, user_id, devi
 风控输出：
 
 - `risk_events`：每次命中规则的事实表。
+- `risk_features`：窗口特征层（PostgreSQL），`FEATURE` 规则的取值来源。
 - `risk_scores`：账号、设备、玩家、IP 的风险评分。
 - `risk_actions`：block、review、mark、throttle、webhook。
 
