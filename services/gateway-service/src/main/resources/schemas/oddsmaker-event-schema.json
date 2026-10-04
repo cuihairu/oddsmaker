@@ -51,6 +51,10 @@
     "device_fingerprint": {"type": ["string", "null"], "maxLength": 256},
     "client_integrity": {"type": ["string", "null"], "maxLength": 512},
     "experiments": {"type": ["object", "null"], "additionalProperties": {"type": "string"}},
+    "event_version": {"type": "integer", "minimum": 1},
+    "source": {"type": "string", "enum": ["client", "server", "system", "derived"]},
+    "trust_level": {"type": "string", "enum": ["LOW", "HIGH", "COMPUTED"]},
+    "event_origin": {"type": ["string", "null"], "maxLength": 64},
     "props": {"type": ["object","null"], "additionalProperties": true}
   },
   "additionalProperties": true

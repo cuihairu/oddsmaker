@@ -207,6 +207,12 @@ class OddsmakerIntegrationTest {
         assertTrue(first.contains("\"event_name\":\"server.purchase.confirmed\""));
         assertTrue(first.contains("\"game_id\":\"game_demo\""));
         assertTrue(first.contains("\"environment\":\"prod\""));
+        // 契约 v2 声明（06 计划书 §4.2）：SDK 自动补 source/event_version/event_origin；
+        // trust_level 由网关推导，SDK 载荷不携带
+        assertTrue(first.contains("\"event_version\":1"));
+        assertTrue(first.contains("\"source\":\"server\""));
+        assertTrue(first.contains("\"event_origin\":\"server-java/" + Oddsmaker.VERSION + "\""));
+        assertFalse(first.contains("\"trust_level\""));
         assertTrue(first.contains("\"user_id\":\"player-1\""));
         assertTrue(first.contains("\"device_id\":\"player-1\""));  // device_id 兜底为用户
         assertTrue(first.contains("\"ts_client\":"));

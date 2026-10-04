@@ -50,6 +50,10 @@
     {"name": "device_fingerprint", "type": ["null", "string"], "default": null, "doc": "Device fingerprint for risk control"},
     {"name": "client_integrity", "type": ["null", "string"], "default": null, "doc": "Client integrity signal"},
     {"name": "experiments", "type": ["null", {"type": "map", "values": "string"}], "default": null, "doc": "Active experiments and variants"},
+    {"name": "event_version", "type": "int", "default": 1, "doc": "Event contract major version (>=1)"},
+    {"name": "source", "type": ["null", "string"], "default": null, "doc": "Producer source: client, server, system, derived (gateway-authoritative)"},
+    {"name": "trust_level", "type": ["null", "string"], "default": null, "doc": "Trust level derived from source by the gateway: LOW, HIGH, COMPUTED"},
+    {"name": "event_origin", "type": ["null", "string"], "default": null, "doc": "SDK name+version for audit (e.g. server-java/0.1.0); gateway fills default when absent"},
     {"name": "props_json", "type": ["null", "string"], "default": null, "doc": "Additional properties as JSON string"}
   ]
 }

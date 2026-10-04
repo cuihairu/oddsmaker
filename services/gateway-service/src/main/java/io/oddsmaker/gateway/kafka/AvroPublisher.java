@@ -1,6 +1,7 @@
 package io.oddsmaker.gateway.kafka;
 
 import io.oddsmaker.common.model.Event;
+import io.oddsmaker.gateway.config.TrustPolicy;
 import org.apache.avro.Schema;
 import org.apache.avro.generic.GenericData;
 import org.apache.avro.generic.GenericRecord;
@@ -152,6 +153,11 @@ public class AvroPublisher {
         gr.put("client_integrity", e.clientIntegrity);
         // Experiment fields
         gr.put("experiments", e.experiments);
+        // Contract v2 fields（TrustPolicy 已回填权威值；缺省兜底保证 Avro int 非空）
+        gr.put("event_version", e.eventVersion == null ? TrustPolicy.DEFAULT_EVENT_VERSION : e.eventVersion);
+        gr.put("source", e.source);
+        gr.put("trust_level", e.trustLevel);
+        gr.put("event_origin", e.eventOrigin);
         // Additional properties as JSON
         try {
             gr.put("props_json", e.props == null ? "{}" : om.writeValueAsString(e.props));

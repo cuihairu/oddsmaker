@@ -411,6 +411,25 @@
       },
       "description": "Active experiments and variants"
     },
+    "event_version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Event contract major version (>=1; gateway defaults to 1 when absent)"
+    },
+    "source": {
+      "type": "string",
+      "enum": ["client", "server", "system", "derived"],
+      "description": "Producer source. Gateway-authoritative: defaults from API key role; system/derived are platform-reserved"
+    },
+    "trust_level": {
+      "type": "string",
+      "enum": ["LOW", "HIGH", "COMPUTED"],
+      "description": "Derived from source by the gateway (client->LOW, server/system->HIGH, derived->COMPUTED)"
+    },
+    "event_origin": {
+      "type": ["string", "null"],
+      "description": "SDK name+version for audit (e.g. server-java/0.1.0); gateway fills 'gateway' when absent"
+    },
     "props": {
       "type": ["object", "null"],
       "description": "Additional properties"

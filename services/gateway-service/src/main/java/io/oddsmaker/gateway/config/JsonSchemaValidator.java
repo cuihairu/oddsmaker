@@ -64,6 +64,11 @@ public class JsonSchemaValidator {
     }
 
     private String validateField(String key, JsonNode value, JsonNode rule) {
+        // 数值下界（如 event_version ≥1）：仅对数值生效，字符串交由类型检查拒绝
+        if (rule.has("minimum") && value.isNumber()
+                && value.doubleValue() < rule.get("minimum").asDouble()) {
+            return key + "_below_minimum";
+        }
         if (value.isTextual()) {
             int len = value.asText().length();
             if (rule.has("minLength") && len < rule.get("minLength").asInt()) {

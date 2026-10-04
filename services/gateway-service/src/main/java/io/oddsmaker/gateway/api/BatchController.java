@@ -11,6 +11,7 @@ import io.oddsmaker.gateway.config.JsonSchemaValidator;
 import io.oddsmaker.gateway.config.PiiPolicy;
 import io.oddsmaker.gateway.config.PolicyService;
 import io.oddsmaker.gateway.config.PropsPolicy;
+import io.oddsmaker.gateway.config.TrustPolicy;
 import io.oddsmaker.gateway.crash.CrashFingerprinter;
 import io.oddsmaker.gateway.inspector.EventInspectorBuffer;
 import io.oddsmaker.gateway.kafka.AvroPublisher;
@@ -165,6 +166,14 @@ public class BatchController {
                     reject(resp, event, "invalid_schema");
                     // schema 校验明细进检视面（响应体只回笼统 reason，明细是 Debug View 的核心价值）
                     inspect(event, keyContext, EventInspectorBuffer.OUTCOME_REJECTED, "invalid_schema", schemaError);
+                    continue;
+                }
+                // 事件契约 v2：source/trust_level 为网关权威字段——按 key 档位推导回填，
+                // 自抬（CLIENT key 声明 server 档、trust_level 高于推导档）整事件拒绝
+                String trustError = TrustPolicy.apply(event, keyContext.keyRole);
+                if (trustError != null) {
+                    reject(resp, event, "trust_escalation", trustError);
+                    inspect(event, keyContext, EventInspectorBuffer.OUTCOME_REJECTED, "trust_escalation", trustError);
                     continue;
                 }
                 // 风控前置：event_id 幂等吸收——schema 合法后才占用幂等位，

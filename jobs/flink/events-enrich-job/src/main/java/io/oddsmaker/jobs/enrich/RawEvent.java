@@ -56,6 +56,11 @@ public class RawEvent {
     public String risk_context;
     public String device_fingerprint;
     public String client_integrity;
+    // 契约 v2 字段（网关 TrustPolicy 权威回填；旧 schema 记录读取时为 null，透传不裁剪）
+    public Integer event_version;
+    public String source;
+    public String trust_level;
+    public String event_origin;
     public String props_json;
     public java.util.Map<String, String> experiments;
 
@@ -108,6 +113,10 @@ public class RawEvent {
         e.risk_context = str(r, "risk_context");
         e.device_fingerprint = str(r, "device_fingerprint");
         e.client_integrity = str(r, "client_integrity");
+        e.event_version = integer(r, "event_version");
+        e.source = str(r, "source");
+        e.trust_level = str(r, "trust_level");
+        e.event_origin = str(r, "event_origin");
         e.props_json = str(r, "props_json");
         e.experiments = mp(r, "experiments");
         return e;
@@ -151,6 +160,13 @@ public class RawEvent {
         if (v == null) return null;
         if (v instanceof Number n) return n.doubleValue();
         try { return Double.parseDouble(v.toString()); } catch (NumberFormatException ex) { return null; }
+    }
+
+    private static Integer integer(GenericRecord r, String name) {
+        Object v = field(r, name);
+        if (v == null) return null;
+        if (v instanceof Number n) return n.intValue();
+        try { return Integer.parseInt(v.toString()); } catch (NumberFormatException ex) { return null; }
     }
 
     private static Object field(GenericRecord r, String name) {

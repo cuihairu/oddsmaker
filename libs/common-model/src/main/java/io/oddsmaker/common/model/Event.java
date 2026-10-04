@@ -77,6 +77,12 @@ public class Event {
     // Experiment fields
     public Map<String, String> experiments;  // Active experiments and variants
 
+    // Contract v2 fields (gateway-authoritative; see docs/zh/redesign/06 §4.2)
+    public Integer eventVersion;     // Event contract major version (default 1)
+    public String source;            // client | server | system | derived
+    public String trustLevel;        // LOW | HIGH | COMPUTED — derived from source, sender value never trusted
+    public String eventOrigin;       // SDK name+version, e.g. server-java/0.1.0 (audit trail)
+
     // Additional properties
     public Map<String, Object> props;
 }

@@ -122,6 +122,12 @@ CREATE TABLE IF NOT EXISTS game_events
   ad_format LowCardinality(String) DEFAULT '',
   ad_impression_id String DEFAULT '',
 
+  -- 事件契约 v2（06 计划书 §4.2）：网关 TrustPolicy 权威回填；''=契约 v2 前的历史行
+  event_version UInt32 DEFAULT 1,
+  source LowCardinality(String) DEFAULT '',
+  trust_level LowCardinality(String) DEFAULT '',
+  event_origin LowCardinality(String) DEFAULT '',
+
   -- 实验相关字段
   experiments Map(String, String) DEFAULT map(),
   

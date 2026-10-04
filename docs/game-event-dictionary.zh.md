@@ -14,6 +14,21 @@
 - 自定义业务字段放在 `props`
 - 与收入直接相关的事件，优先同时填写顶层 `revenue_amount` 和 `revenue_currency`
 
+## 契约 v2 增量字段（2026-10，B4）
+
+在 v1 包络上只加字段、不改删（06 计划书 §4.2）。四个字段均为**网关权威**：缺省由网关回填，
+发送方声明值不采信、不可自抬。
+
+| 字段 | 类型 | 语义 | 接入方约定 |
+| --- | --- | --- | --- |
+| `event_version` | integer ≥1 | 事件契约主版本 | 缺省 1，SDK 可不传 |
+| `source` | `client`\|`server`\|`system`\|`derived` | 生产来源 | server SDK 必带 `server`；client SDK 可不传（网关按 key 档位回填）；`system`/`derived` 为平台保留档，声明即拒收（`trust_escalation`） |
+| `trust_level` | `LOW`\|`HIGH`\|`COMPUTED` | 由 source 推导（client→LOW；server/system→HIGH；derived→COMPUTED） | **任何接入方不得声明**，声明高于推导档即拒收；风控 BLOCK 级动作只认 `HIGH` |
+| `event_origin` | string ≤64 | SDK 名+版本（如 `server-java/0.1.0`） | 审计回溯用；缺省网关填 `gateway` |
+
+ClickHouse `events` 表对应列：`event_version`（DEFAULT 1）、`source`/`trust_level`/`event_origin`
+（DEFAULT `''`，空串=契约 v2 前历史行；信任判定须精确匹配 `trust_level='HIGH'`）。
+
 ## 1. 身份与会话
 
 | 事件名 | 用途 | 推荐 props |

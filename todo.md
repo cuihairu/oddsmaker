@@ -33,11 +33,11 @@
 
 ## B4 事件契约 v2 增量
 
-- [ ] 事件 schema 加 `event_version`（缺省 1）/ `source`（client|server|system|derived）/ `trust_level`（LOW|HIGH|COMPUTED，由 source 推导不可自抬）/ `event_origin`（SDK 名+版本）
-- [ ] `schema/json` 三枚 schema 文件同步 + Gateway `JsonSchemaValidator`/`PropsPolicy` 增量校验
-- [ ] Flink 各 job 对新增字段透传（不改 key）
+- [x] 事件 schema 加 `event_version`（缺省 1）/ `source`（client|server|system|derived）/ `trust_level`（LOW|HIGH|COMPUTED，由 source 推导不可自抬）/ `event_origin`（SDK 名+版本）
+- [x] `schema/json` 三枚 schema 文件同步 + Gateway `JsonSchemaValidator`/`PropsPolicy` 增量校验
+- [x] Flink 各 job 对新增字段透传（不改 key）
 
-**验收：** 全绿；v1 事件不收 `source` 仍 200（向后兼容）；`source=client` 时 `trust_level` 恒 LOW、自抬重写拒绝。
+**验收：** ✅（见提交号）全量 213 suite / 2456 用例 + web build 双绿；`EventContractV2Test` 钉验收三口径：v1 事件（不收 source）仍 200 且网关回填 client/LOW/event_version=1/event_origin=gateway；自抬拒绝——新增网关策略组件 `TrustPolicy`（config 包）按 key 档位推导：CLIENT key 声明 server 档、任何 key 声明保留档 system/derived、trust_level 高于推导档 → `trust_escalation` 整事件拒绝（不发布、不占幂等位）；source=client 时 trust_level 恒回填 LOW（声明 LOW 放行、声明 HIGH/COMPUTED 拒、server key 声明 LOW 静默纠正为 HIGH）；SERVER key 缺省回填 server/HIGH、保留 SDK 声明的 event_origin。Server SDK 自动声明 event_version=1/source=server/event_origin=server-java/VERSION（trust_level 不声明，由网关推导）。schema 出品同步：oddsmaker-event-schema.json（canonical + gateway classpath 副本）、game-events-schema.json（json+avro+clickhouse DDL 三形态）、schema/avro/oddsmaker-event.avsc（canonical+副本，四字段带 default 保 Avro 新旧读写兼容）——`schema/json` 第三枚 experiment-config.schema.json 无事件信封、归 B8 升级，本批未动；JsonSchemaValidator 增量 `minimum` 规则（event_version ≥1，0 → invalid_schema/below_minimum）+ 新字段 enum/maxLength；PropsPolicy 语义未动（props 白名单/字节上限不涉信任推导，网关增量校验=JsonSchemaValidator 规则 + TrustPolicy）。Flink 透传：RawEvent（七 job 共享 POJO）+4 字段（旧 schema 记录读 null 不抛，RawEventFromEdgeTest 钉），events-enrich-job INSERT 43→47 列落 ClickHouse（events/game_events 表 +4 列：schema.sql + 幂等迁移 `2026-10-event-contract-v2.sql`，`''`=契约 v2 前历史行，信任判定须精确匹配 `trust_level='HIGH'`）；路由键 game_id|environment 与 event_id 幂等键未动。
 
 ## B5 风控 Feature 层
 

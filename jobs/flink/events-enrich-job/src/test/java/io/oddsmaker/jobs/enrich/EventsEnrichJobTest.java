@@ -442,7 +442,7 @@ class EventsEnrichJobTest {
     // ===== JdbcSink binder =====
 
     @Test
-    @DisplayName("bindEvent：43 个参数按序绑定")
+    @DisplayName("bindEvent：47 个参数按序绑定")
     void bindEventSetsAllParameters() throws Exception {
         EventsEnrichJob.EventRow r = new EventsEnrichJob.EventRow();
         r.game_id = "g";
@@ -488,6 +488,10 @@ class EventsEnrichJobTest {
         r.ad_impression_id = "ai";
         r.props_json = "{}";
         r.experiments = "{}";
+        r.event_version = 1;
+        r.source = "server";
+        r.trust_level = "HIGH";
+        r.event_origin = "server-java/0.1.0";
 
         Map<String, Object> calls = new LinkedHashMap<>();
         PreparedStatement ps = (PreparedStatement) Proxy.newProxyInstance(
@@ -510,7 +514,33 @@ class EventsEnrichJobTest {
         assertEquals(new BigDecimal("3.5"), calls.get("setBigDecimal:37"));
         assertEquals("{}", calls.get("setString:42"));
         assertEquals("{}", calls.get("setString:43"));
-        assertEquals(43, calls.size());
+        assertEquals(1, calls.get("setInt:44"));
+        assertEquals("server", calls.get("setString:45"));
+        assertEquals("HIGH", calls.get("setString:46"));
+        assertEquals("server-java/0.1.0", calls.get("setString:47"));
+        assertEquals(47, calls.size());
+    }
+
+    @Test
+    @DisplayName("契约 v2 字段透传：toRow 映射 + event_version 缺省 1")
+    void toRowPassesThroughContractV2Fields() {
+        RawEvent r = validEvent();
+        r.event_version = 3;
+        r.source = "server";
+        r.trust_level = "HIGH";
+        r.event_origin = "server-java/0.1.0";
+        EventsEnrichJob.EventRow row = EventsEnrichJob.toRow(r, EventsEnrichJob.Enrichers.create(""));
+        assertEquals(3, row.event_version);
+        assertEquals("server", row.source);
+        assertEquals("HIGH", row.trust_level);
+        assertEquals("server-java/0.1.0", row.event_origin);
+
+        RawEvent legacy = validEvent();   // 旧 schema 记录：v2 字段缺失
+        EventsEnrichJob.EventRow legacyRow = EventsEnrichJob.toRow(legacy, EventsEnrichJob.Enrichers.create(""));
+        assertEquals(1, legacyRow.event_version);   // 旧记录即 v1 契约
+        assertEquals("", legacyRow.source);
+        assertEquals("", legacyRow.trust_level);
+        assertEquals("", legacyRow.event_origin);
     }
 
     @Test

@@ -40,4 +40,45 @@ class RawEventFromEdgeTest {
         assertNull(e.revenue_amount);
         assertEquals(Double.valueOf(12.5), e.virtual_amount);
     }
+
+    @Test
+    @DisplayName("契约 v2 字段：source/trust_level/event_origin 透传 + event_version 数值解析")
+    void contractV2FieldsPassThrough() {
+        GenericData.Record r = recordWith(
+            new Schema.Field("event_version", Schema.create(Schema.Type.INT)),
+            new Schema.Field("source", Schema.create(Schema.Type.STRING)),
+            new Schema.Field("trust_level", Schema.create(Schema.Type.STRING)),
+            new Schema.Field("event_origin", Schema.create(Schema.Type.STRING)));
+        r.put("event_version", 1);
+        r.put("source", "server");
+        r.put("trust_level", "HIGH");
+        r.put("event_origin", "server-java/0.1.0");
+
+        RawEvent e = RawEvent.from(r);
+        assertEquals(Integer.valueOf(1), e.event_version);
+        assertEquals("server", e.source);
+        assertEquals("HIGH", e.trust_level);
+        assertEquals("server-java/0.1.0", e.event_origin);
+
+        // integer 容错：非数字文本 → null
+        GenericData.Record bad = recordWith(
+            new Schema.Field("event_version", Schema.create(Schema.Type.STRING)));
+        bad.put("event_version", "not-a-number");
+        assertNull(RawEvent.from(bad).event_version);
+    }
+
+    @Test
+    @DisplayName("旧 schema 记录（无 v2 字段列）→ 字段为 null，读取不抛")
+    void legacyRecordWithoutV2FieldsReadsAsNull() {
+        GenericData.Record r = recordWith(
+            new Schema.Field("event_id", Schema.create(Schema.Type.STRING)));
+        r.put("event_id", "e1");
+
+        RawEvent e = RawEvent.from(r);
+        assertEquals("e1", e.event_id);
+        assertNull(e.event_version);
+        assertNull(e.source);
+        assertNull(e.trust_level);
+        assertNull(e.event_origin);
+    }
 }

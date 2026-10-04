@@ -128,8 +128,9 @@ public class EventsEnrichJob {
                         "order_id, product_id, revenue_amount, revenue_currency, receipt_hash, " +
                         "virtual_currency, virtual_amount, flow_type, item_id, operation_id, operation_type, " +
                         "resource_id, resource_amount, " +
-                        "ad_network, ad_placement, ad_format, ad_impression_id, props_json, experiments" +
-                        ") VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                        "ad_network, ad_placement, ad_format, ad_impression_id, props_json, experiments, " +
+                        "event_version, source, trust_level, event_origin" +
+                        ") VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 EventsEnrichJob::bindEvent,
                 JdbcExecutionOptions.builder().withBatchIntervalMs(200).withBatchSize(2000).withMaxRetries(3).build(),
                 new JdbcConnectionOptions.JdbcConnectionOptionsBuilder()
@@ -223,6 +224,11 @@ public class EventsEnrichJob {
         row.ad_placement = nz(record.ad_placement);
         row.ad_format = nz(record.ad_format);
         row.ad_impression_id = nz(record.ad_impression_id);
+        // 契约 v2 字段透传：event_version 缺省 1（旧 schema 记录即 v1 契约）
+        row.event_version = record.event_version == null ? 1 : record.event_version;
+        row.source = nz(record.source);
+        row.trust_level = nz(record.trust_level);
+        row.event_origin = nz(record.event_origin);
         // Enrich country if empty and IP present
         if (currentCountry.isEmpty() && !clientIp.isEmpty()) {
             String c = enrichers.countryByIp(clientIp);
@@ -245,7 +251,7 @@ public class EventsEnrichJob {
         return row;
     }
 
-    /** events 表写入绑定（43 列）。 */
+    /** events 表写入绑定（47 列）。 */
     static void bindEvent(java.sql.PreparedStatement ps, EventRow r) throws java.sql.SQLException {
         ps.setString(1, r.game_id);
         ps.setString(2, r.environment);
@@ -290,6 +296,10 @@ public class EventsEnrichJob {
         ps.setString(41, r.ad_impression_id);
         ps.setString(42, r.props_json);
         ps.setString(43, r.experiments);
+        ps.setInt(44, r.event_version);
+        ps.setString(45, r.source);
+        ps.setString(46, r.trust_level);
+        ps.setString(47, r.event_origin);
     }
 
     static String nz(String s) { return s == null ? "" : s; }
@@ -372,6 +382,10 @@ public class EventsEnrichJob {
         public String ad_placement;
         public String ad_format;
         public String ad_impression_id;
+        public Integer event_version;
+        public String source;
+        public String trust_level;
+        public String event_origin;
         public String props_json;
         public String experiments;
         public BigDecimal revenue_amount;

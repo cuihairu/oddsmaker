@@ -17,7 +17,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * {@link Event} 是所有 source/网关/下游只认的 v1 事件模型（纯字段 POJO，本体零依赖）。
+ * {@link Event} 是所有 source/网关/下游只认的事件模型（纯字段 POJO，本体零依赖；
+ * v1 包络 + 契约 v2 增量字段，06 计划书 §4.2）。
  * 这组测试钉的是它的<b>契约面</b>：
  *
  * <ul>
@@ -64,6 +65,8 @@ class EventTest {
             "riskContext:String", "deviceFingerprint:String", "clientIntegrity:String",
             // Experiments & props
             "experiments:Map", "props:Map",
+            // Contract v2 (gateway-authoritative, 06 计划书 §4.2)
+            "eventVersion:Integer", "source:String", "trustLevel:String", "eventOrigin:String",
     };
 
     @Test
@@ -76,6 +79,7 @@ class EventTest {
             Field f = Event.class.getDeclaredField(name);
             assertEquals(type.equals("Map") ? Map.class : type.equals("long") ? long.class
                             : type.equals("Long") ? Long.class : type.equals("Double") ? Double.class
+                            : type.equals("Integer") ? Integer.class
                             : String.class,
                     f.getType(), "字段类型不符: " + name);
             int mods = f.getModifiers();

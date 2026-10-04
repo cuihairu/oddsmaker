@@ -30,7 +30,8 @@ import java.util.logging.Logger;
  *
  * <p>事件契约（v1）：必填 {@code event_id/event_name/ts_client/game_id/environment/device_id}
  * 由 SDK 自动补齐；事件命名建议 {@code server.<domain>.<action>}。充值/经济类结算只认
- * server 事件（06 计划书 §4.3）。
+ * server 事件（06 计划书 §4.3）。契约 v2 增量字段 {@code event_version/source/event_origin}
+ * 由 SDK 自动声明（source=server；trust_level 由网关按 source 推导，不可自抬）。
  *
  * <p>投递管道：Memory→Disk Queue→Batch→Gzip→HMAC。2xx 丢弃；401/403（凭证/签名无法
  * 自愈）丢弃并告警；429/5xx/网络异常整批重新入队待下次投递。
@@ -39,6 +40,9 @@ public final class Oddsmaker implements AutoCloseable {
 
     private static final Logger LOG = Logger.getLogger(Oddsmaker.class.getName());
     private static final AtomicReference<Oddsmaker> DEFAULT = new AtomicReference<>();
+
+    /** SDK 版本（event_origin 审计字段组成部分）。 */
+    public static final String VERSION = "0.1.0";
 
     private final Config config;
     private final EventQueue queue;
@@ -121,6 +125,11 @@ public final class Oddsmaker implements AutoCloseable {
         event.put("game_id", config.gameId);
         event.put("environment", config.environment);
         event.put("device_id", uid != null && !uid.isBlank() ? uid : config.deviceId);
+        // 事件契约 v2 声明（06 计划书 §4.2）：source 为 SERVER SDK 必填档；
+        // trust_level 由网关按 source 推导，SDK 不声明、声明了也不被采信
+        event.put("event_version", 1);
+        event.put("source", "server");
+        event.put("event_origin", "server-java/" + VERSION);
         if (uid != null && !uid.isBlank()) {
             event.put("user_id", uid);
         }
