@@ -77,48 +77,43 @@ flowchart LR
 ## 核心边界
 
 - 公司：部署级配置，不进入事件分区键。
-- 游戏：核心业务对象，**每个游戏独立数据库**。
-- 环境：`dev`、`staging`、`prod`，**表级别隔离**。
-- 存储路由：**按游戏分库**，数据物理隔离。
-- API Key：绑定 `game_id + environment`，路由到对应数据库。
+- 游戏：核心业务对象。当前实现是共享 ClickHouse 表、按 `(game_id, environment)` 分区；「每个游戏独立数据库」是规划中的隔离形态，由存储 profile 的 `isolationStrategy`（`SHARED` / `PROD_ISOLATED` / `DEDICATED`）表达，物理分库尚未接线。
+- 环境：`dev`、`staging`、`prod`（另有 `TESTING`、`LOADTEST` 两类），表内按 `environment` 分区隔离。
+- API Key：绑定 `game_id + environment`，校验事件的归属一致。
 - 权限：绑定全局、游戏或环境范围。
-- 风控策略：绑定 `game_id + environment`，可灰度发布。
+- 风控策略：绑定 `game_id + environment`。
 
-**数据库架构**：
+**当前数据库布局（已实现）**：
 
 ```
-oddsmaker_meta (元数据库)
-├─ games
-├─ environments  
-├─ api_keys
-├─ users
-└─ audit_logs
+PostgreSQL（元数据）
+├─ games / environments / api_keys
+├─ users / roles / user_role_assignments
+├─ tracking_plans / risk_rules / risk_cases / block_lists
+└─ audit_logs / storage_profiles ...
 
-game_demo_prod (游戏数据库)
-├─ events
-├─ sessions
-├─ retention
-├─ resource_changes
-└─ risk_events
-
-game_demo_staging
-└─ (同样的表结构)
-
-game_rpg_prod
-└─ ...
+ClickHouse（事件与聚合，共享表）
+├─ events / sessions
+├─ retention / funnels / resource_changes
+├─ risk_events / risk_scores / risk_actions
+└─ （全部按 (game_id, environment, 日期) 分区）
+（risk_cases 是 PostgreSQL 表，记录案例与处置状态）
 ```
+
+存储 profile 是游戏与存储之间的唯一桥：`SHARED` 用共享表，`PROD_ISOLATED`/`DEDICATED` 预留给独立库形态。
 
 推荐默认拓扑：
 
-- `dev/staging` 共享非生产 ClickHouse 集群（不同库）
+- `dev/staging` 共享非生产 ClickHouse 集群
 - `prod` 使用生产 ClickHouse 集群
-- 每个游戏独立数据库，完全物理隔离
+- 单游戏故障影响与扩缩容靠分区裁剪与 profile 策略控制
 
 ## 数据模型
 
 事件核心字段：
 
-- 标识：`event_id,event_type,event_name`（game_id 和 environment 在数据库/表层级）
+- 标识：`event_id,event_type,event_name`（`game_id`、`environment` 同时是存储字段和分区键）
+- 契约 v2：`event_version,source,trust_level,event_origin`（网关权威回填，见采集 API 文档）
 - 身份：`device_id,user_id,player_id,character_id,session_id`
 - 时间：`ts_client,ts_server,event_date`
 - 客户端：`platform,app_version,sdk_version,country,user_agent`
@@ -129,25 +124,23 @@ game_rpg_prod
 - 风控：`risk_context,client_integrity,device_fingerprint`
 - 扩展：`props,experiments,attribution`
 
-ClickHouse 分区（每个游戏独立库）：
+ClickHouse 分区（共享表）：
 
 ```sql
--- game_demo_prod.events
-PARTITION BY (toYYYYMM(event_date))
-ORDER BY (event_type, event_date, server_id, player_id, user_id, device_id, ts_server, event_id)
+-- events
+PARTITION BY (game_id, environment, toYYYYMM(event_date))
+ORDER BY (game_id, environment, event_type, event_date, player_id, user_id, device_id, ts_server, event_id)
 ```
-
-注意：`game_id` 和 `environment` 已在数据库/表名称中体现，不需要作为字段存储。
 
 ## 关键设计
 
-- 幂等去重：客户端生成 `event_id`，Flink 按 `server_id + player_id + event_id` 去重。
+- 幂等去重：客户端生成 `event_id`；Gateway 在 schema 校验通过后占用幂等位吸收 SDK 重试（计 `duplicates`）；Flink 按 `event_id` 去重（状态 TTL 7 天，重复进 DLQ）。
 - 乱序处理：Flink 使用事件时间和 watermark，迟到事件进入补偿链路。
 - Schema 治理：Tracking Plan 管事件名、字段字典、枚举、cardinality 上限。
 - 客户端安全：客户端只持 public `api_key`；HMAC 只用于 Server SDK。
 - PII 治理：Gateway 执行 deny/mask/coarse，违规事件进入 DLQ。
 - 风控闭环：Gateway 硬拦截，Flink 实时检测，ClickHouse 回溯，Webhook 输出处置。
-- **数据隔离**：每个游戏独立数据库，物理隔离，互不影响。
+- 数据隔离：共享表按 `(game_id, environment)` 分区 + 查询必带分区条件；物理分库由存储 profile 的 `isolationStrategy` 预留，尚未接线。
 
 ## 风控能力
 
@@ -182,14 +175,14 @@ ORDER BY (event_type, event_date, server_id, player_id, user_id, device_id, ts_s
 - `services/gateway-service/`：采集入口
 - `services/control-service/`：游戏、环境、密钥、策略、风控、权限
 - `jobs/flink/`：富化、会话、留存、漏斗、风控等作业
-- `sdks/`：Web、Android、iOS、Unity
+- `sdks/`：Web、Android、iOS、Unity、Server
 - `bi/`：Superset 资源
 - `infra/`：本地和部署编排
 - `docs/`：架构、API、运维、路线图
 
 ## 演进顺序
 
-1. **按游戏分库架构**：每个游戏独立 ClickHouse 数据库，物理隔离。
+1. 按游戏分库架构（未实现）：当前共享表按 `(game_id, environment)` 分区，独立库形态走存储 profile 的 `isolationStrategy`。
 2. 接通单公司多游戏控制面。
 3. 扩展游戏事件 v1。
 4. 增加风控规则、实时检测和处置闭环。

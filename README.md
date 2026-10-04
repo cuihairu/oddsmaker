@@ -134,10 +134,10 @@ event_id     = 单事件唯一 ID
 - `services/control-service/`：游戏、环境、密钥、策略、实验、风控管理
 - `jobs/flink/`：富化、去重、会话、留存、漏斗、风控、维度同步等流式作业
 - `agents/`：`dimension-sync-agent`——游戏方内网部署的维度同步器（零仓库内依赖）
-- `ml/`：`oddsmaker-ml` 训练管线——churn / pltv / risk 可训练模型（Python，含启发式基线对照）
+- `ml/`：`oddsmaker-ml` 训练管线——churn / pltv / risk / propensity 四类可训练模型（Python，含启发式基线对照）
 - `libs/`：公共模型、鉴权、Kafka、可观测性组件
 - `schema/`：Avro、JSON Schema、ClickHouse DDL、查询脚本
-- `sdks/`：Web、Android、iOS、Unity SDK
+- `sdks/`：Web、Android、iOS、Unity、Server SDK
 - `bi/`：Superset 资源
 - `infra/`：Docker Compose、K8s、Helm、Grafana、Prometheus
 - `docs/`：架构、API、运维、重设计、路线图
@@ -257,16 +257,12 @@ bash scripts/run_flink.sh
 
 ## Status
 
-项目仍处于创建早期，但核心模型已经定下来。
+当前版本 `v0.2.0 (unreleased)`，仓库定位与命名已收敛：
 
-已经明确的方向：
-
-- 品牌名固定为 `Oddsmaker`
-- Git remote 已切到 `git@github.com:cuihairu/oddsmaker.git`
-- 包名已统一到 `io.oddsmaker`
+- 品牌名固定为 `Oddsmaker`，包名统一 `io.oddsmaker`
 - 架构目标固定为“单公司、多游戏、多环境、风控内建”
+- Git remote：`https://github.com/cuihairu/oddsmaker.git`
 
-尚在持续收口的部分：
+已交付的能力：采集网关（`/v1/batch` + 事件契约 v2）、控制面（游戏/环境/密钥/权限 8 角色/实验/风控规则）、7 个 Flink 作业（enrich/sessions/retention/funnels/risk/dimension/identity-merge）、维度同步 Agent（5 类 source）、5 端 SDK、4 类 ML 模型训练与批量打分、Web 控制台。
 
-- SDK 公开 API 统一
-- Flink / SQL / BI / 文档全链路改名
+2.0 重构进行中（B1–B4 已验收）：事件契约 v2 增量、Server SDK、网关权威回填与自抬拒绝；后续批次（风控 Feature 层等）按 `todo.md` 逐批推进。

@@ -25,10 +25,12 @@
 | `CASUAL` | 休闲 |
 | `SIMULATION` | 模拟 |
 | `SPORTS` | 体育 |
+| `RACING` | 竞速 |
 | `SHOOTER` | 射击 |
 | `MMORPG` | 大型多人在线角色扮演 |
 | `MOBA` | 多人在线战斗竞技 |
 | `BATTLE_ROYALE` | 大逃杀 |
+| `OTHER` | 其他 |
 
 ## 游戏状态
 
@@ -37,10 +39,13 @@
 | `DEVELOPMENT` | 开发中 |
 | `TESTING` | 测试中 |
 | `LIVE` | 已上线 |
+| `PUBLISHED` | 已发布（V0.4.1 起种子游戏的默认状态） |
 | `MAINTENANCE` | 维护中 |
 | `DISCONTINUED` | 已停服 |
 
 ## 创建游戏
+
+`platforms` 取值是 `WEB` / `MOBILE` / `PC` / `CONSOLE` / `VR` / `AR`（没有 ANDROID/IOS）。时区字段名是 `defaultTimezone`（IANA 标识）。创建成功后会自动建 `dev` / `staging` / `prod` 三个环境。
 
 ```http
 POST /api/games
@@ -50,8 +55,8 @@ Authorization: Bearer {token}
 {
   "name": "My Game",
   "genre": "RPG",
-  "platforms": ["ANDROID", "IOS"],
-  "timezone": "Asia/Shanghai",
+  "platforms": ["MOBILE", "PC"],
+  "defaultTimezone": "Asia/Shanghai",
   "defaultCurrency": "CNY"
 }
 ```
@@ -63,7 +68,9 @@ Authorization: Bearer {token}
   "name": "My Game",
   "genre": "RPG",
   "status": "DEVELOPMENT",
-  "platforms": ["ANDROID", "IOS"],
+  "platforms": ["MOBILE", "PC"],
+  "defaultTimezone": "Asia/Shanghai",
+  "serverEventsEnabled": false,
   "createdAt": "2024-01-01T00:00:00Z"
 }
 ```

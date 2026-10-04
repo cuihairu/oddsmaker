@@ -37,7 +37,7 @@ sdk.close();   // 最终 flush 并停泵
 | `props` | setUser traits 与 track props 合并（同名键显式 props 优先） |
 
 充值/经济类结算**只认 server 事件**；同一业务事实的客户端与服务器事件不去重，
-消费方按 `source` 区分（v2 契约字段，B4 落地）。SDK 不发送任何 v2 字段。
+消费方按 `source` 区分（v2 契约字段，B4 落地）。SDK 自动声明 v2 字段：`event_version=1`、`source=server`、`event_origin=server-java/{VERSION}`；`trust_level` 不声明，由网关按 source 推导（server→HIGH），声明了也不被采信。
 
 ## 投递管道：Memory → Disk Queue → Batch → Gzip → HMAC
 

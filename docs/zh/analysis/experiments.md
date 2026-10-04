@@ -26,7 +26,9 @@ SDK 分流与曝光（伪代码，TypeScript）
 function assign(exp: {id:string,salt:string,variants:{name:string,weight:number}[]}, key: string): string {
   // key: userId or deviceId; use stable hashing
   const sum = exp.variants.reduce((a,v)=>a+v.weight,0);
-  const h = murmur3(exp.id + ':' + (exp.salt||'') + ':' + key) % sum;
+  // hash32 = FNV-1a 32 位变体，与服务端 ExperimentSplitter 同款；
+  // 锚点：hash32("a")=0xe40c292c、hash32("foobar")=0xbf9cf968
+  const h = hash32(exp.id + ':' + (exp.salt||'') + ':' + key) % sum;
   let acc = 0; for (const v of exp.variants) { acc += v.weight; if (h < acc) return v.name; }
   return exp.variants[0].name;
 }

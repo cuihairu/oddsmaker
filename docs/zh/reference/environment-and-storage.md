@@ -6,43 +6,33 @@ Oddsmaker 的目标不是做一个”看起来很高级”的多租户 SaaS，�
 
 - 同一家公司内部可以管理多个游戏
 - 同一个游戏可以经历 `dev / staging / prod` 等发布阶段
-- **不同游戏的数据必须物理隔离**：每个游戏独立数据库
+- 不同游戏的数据可以按需隔离（共享分区 → 生产隔离 → 独占后端）
 
-因此，Oddsmaker 采用：
+> **实现状态（2026-10）**：当前落地的是共享 ClickHouse 表，按 `(game_id, environment)` 分区隔离；「每个游戏独立数据库」是目标形态，走存储 profile 的 `isolationStrategy`，物理分库尚未接线。本文其余小节按目标形态展开，阅读时对照此注。
 
-`Game -> Environment -> 独立数据库`
+设计取向是：
 
-**核心架构**：
+`Game -> Environment -> StorageProfile`（隔离强度由 profile 决定）
+
+**当前实现的存储布局**：
 
 ```
-oddsmaker_meta (元数据库)
-├─ games
-├─ environments
-├─ api_keys
-├─ users
-└─ audit_logs
-
-game_demo_prod (游戏数据库)
-├─ events
-├─ sessions
-├─ retention
-├─ resource_changes
-└─ risk_events
-
-game_demo_staging
-└─ (同样的表结构)
-
-game_rpg_prod
+PostgreSQL（元数据）
+├─ games / environments / api_keys
+├─ users / audit_logs / storage_profiles
 └─ ...
+
+ClickHouse（共享表）
+├─ events / sessions / retention / resource_changes
+├─ risk_events / risk_scores / risk_actions
+└─ （全部按 (game_id, environment, 日期) 分区）
 ```
 
-**按游戏分库的优势**：
+**目标形态（按游戏分库）的优势**：
 
-- [物理隔离，完全独立]
-- [独立的容量规划和扩展]
-- [简化查询（不需要 WHERE game_id = 'xxx'）]
-- [便于游戏迁移和归档]
-- [符合”通用平台 + 独立游戏数据”的理念]
+- 物理隔离，独立容量规划与扩展
+- 便于游戏迁移和归档
+- 查询可以省去 `WHERE game_id = ...`（当前共享表查询必须带分区条件）
 
 ## 为什么不删除 Environment
 
@@ -70,13 +60,13 @@ game_rpg_prod
 
 ## Storage Profile 的职责演变
 
-`storage_profile` 的职责从”数据路由”变为”集群配置”：
+`storage_profile` 是游戏/环境与数据面之间的唯一桥：
 
-- 描述 Kafka / ClickHouse / Redis 集群配置
-- **不再负责按 game_id 分表**（已经是分库架构）
+- 描述 Kafka / ClickHouse / Redis / 归档桶的集群配置
+- 用 `isolationStrategy`（`SHARED` / `PROD_ISOLATED` / `DEDICATED`）表达隔离强度——`SHARED` 是当前默认且唯一已接线的形态
 - 负责集群的容量规划和扩容
 
-**按游戏分库后，storage_profile 主要关注**：
+**storage_profile 关注**：
 
 - Kafka 集群配置和 topic 命名空间
 - ClickHouse 集群配置和数据库分布
@@ -287,6 +277,6 @@ Oddsmaker 的推荐模型是：
 
 - `game_id` 负责业务隔离
 - `environment` 负责阶段隔离
-- `storage_profile` 负责物理隔离
+- `storage_profile` 负责隔离强度的配置位（当前只有 `SHARED` 接线）
 
 这套模型比“只保留 game”更真实，也比“每个环境都拆独立库”更可运维。

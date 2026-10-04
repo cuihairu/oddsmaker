@@ -1,5 +1,7 @@
 # 维度数据同步设计
 
+> **实现状态（2026-10）**：已落地的是 Sync Agent（`agents/dimension-sync-agent/`，mysql/postgres/csv/excel/kafka 五类 source）、`/v1/batch` 维度事件通道和 `dimension-sync-job`（消费 `oddsmaker.events_raw` 写 `item_dim`/`level_dim`）。HTTP Pull 与 Debezium CDC 两条链路未实现，配置驱动的 Control 侧 YAML 也未实现——本文对未落地部分逐处标注。
+
 ## 结论
 
 Oddsmaker 不强制游戏方用某种接入方式。本文档定义四类同步方案 + 一个开箱即用的同步 Agent，覆盖游戏从 POC 到成熟期、从独立工作室到大厂的各种场景。
@@ -25,7 +27,7 @@ Oddsmaker 不强制游戏方用某种接入方式。本文档定义四类同步�
 
 | 方案 | 谁读源头 | 谁推 oddsmaker | 游戏方要做的事 | 延迟 |
 |---|---|---|---|---|
-| **Webhook Push** | 游戏方代码 | 游戏方调 API | 在物品变更时调 Gateway 上报 `item_define` 事件 | 实时 |
+| **Webhook Push** | 游戏方代码 | 游戏方调 API | 在物品变更时调 Gateway 上报 `dimension_define` 事件 | 实时 |
 | **Sync Agent** | Agent（游戏方内网） | Agent 推 Gateway | 部署一个 binary + 填连接串 | 分钟级 |
 | **HTTP Pull** | Oddsmaker | Oddsmaker 拉 | 暴露 `/items?since=...` 增量查询接口 | 分钟级 |
 | **Debezium CDC** | Debezium 读 binlog | Debezium 写 Kafka | 部署 Kafka Connect + 开 binlog | 秒级 |
@@ -109,13 +111,15 @@ Oddsmaker 不强制游戏方用某种接入方式。本文档定义四类同步�
 游戏方在物品变更时（新增、修改、下架），主动调 Oddsmaker Gateway 上报维度事件。
 
 ```
-POST /v1/dimension
+POST /v1/batch
 X-Api-Key: pk_game_xxx
 Content-Type: application/x-ndjson
 
-{"event_type":"dimension_define","dim_type":"item","resource_id":"sword_001","name":"铁剑","rarity":"common","op":"upsert","version_ts":1760000000000}
-{"event_type":"dimension_define","dim_type":"item","resource_id":"sword_002","name":"钢剑","rarity":"rare","op":"upsert","version_ts":1760000000001}
+{"event_id":"01JE...","event_type":"dimension","event_name":"dimension_define","game_id":"game_x","environment":"prod","dim_type":"item","resource_id":"sword_001","name":"铁剑","rarity":"common","op":"upsert","version_ts":1760000000000,"ts_client":1760000000000}
+{"event_id":"01JE...","event_type":"dimension","event_name":"dimension_define","game_id":"game_x","environment":"prod","dim_type":"item","resource_id":"sword_002","name":"钢剑","rarity":"rare","op":"upsert","version_ts":1760000000001,"ts_client":1760000000001}
 ```
+
+没有独立的 `/v1/dimension` 端点——维度事件与普通事件同走 `/v1/batch`，用 `event_type=dimension` 区分，复用现有鉴权、限流、PII 治理。
 
 - `op`：`upsert`（新增/更新）或 `delete`（下架）。
 - `version_ts`：源头变更时间，用于 SCD2 和幂等。
@@ -211,9 +215,9 @@ status.source-key=agent-mysql-main
 
 这也是 **FileImport 方案的归宿**——文件导入本质是 Agent 的一个 source 类型，不用单独立项。
 
-### HTTP Pull
+### HTTP Pull（未实现）
 
-Oddsmaker 主动拉取游戏方暴露的查询接口。
+Oddsmaker 主动拉取游戏方暴露的查询接口。本方案当前没有对应实现（无 scheduler、无凭证托管），属规划。
 
 ```
 GET https://api.game-x.com/v1/items?updated_after=1760000000000&limit=1000
@@ -227,9 +231,9 @@ Authorization: Bearer ***
 - 适合**游戏方有 API 能力、不愿部署 Agent、不愿开 binlog**的场景。
 - Oddsmaker 侧需要维护游戏方的 API 凭证（在 Control Service 加密存储）。
 
-### Debezium CDC
+### Debezium CDC（未实现）
 
-游戏方部署 Kafka Connect + Debezium Source Connector，把 `items` 表的 binlog 变更写到 Kafka topic，Oddsmaker 订阅这个 topic 做转换。
+游戏方部署 Kafka Connect + Debezium Source Connector，把 `items` 表的 binlog 变更写到 Kafka topic，Oddsmaker 订阅这个 topic 做转换。本方案当前没有对应实现，属规划；落地时消费端可复用 `dimension-sync-job` 的事件入口。
 
 ```
 游戏 MySQL → Debezium → Kafka topic: game_x.db.items
@@ -293,9 +297,9 @@ ORDER BY (game_id, environment, resource_id, valid_from);
 
 SCD2 逻辑放在转换层，**所有 Provider 共享**，不要散落到各 Provider 实现。
 
-## 配置驱动
+## 配置驱动（未实现）
 
-每个游戏的维度同步在 Control Service 配置，接入新游戏只填表，不改代码。
+每个游戏的维度同步在 Control Service 配置，接入新游戏只填表，不改代码——这是目标形态。当前配置走 Agent 本地 `agent.properties` 与 Flink 作业的 System properties（`kafka.topic`、`clickhouse.*` 等），Control 侧没有维度同步的 YAML 配置面。
 
 ```yaml
 # 游戏 A：大厂、走 CDC
@@ -346,11 +350,11 @@ Control Service 暴露每个游戏的维度同步状态：
 
 不需要一上来全做。建议按价值/成本排序：
 
-1. **Webhook Push**：成本最低（复用 Gateway，加一个事件类型），覆盖愿意改造的成长期客户。
-2. **Sync Agent（MySQL/PostgreSQL source）**：覆盖不愿写代码的独立游戏和存量游戏，最大客户群。
-3. **HTTP Pull**：覆盖不愿部署 Agent 但有 API 能力的客户。
-4. **Sync Agent（CSV/Excel source）**：覆盖传统游戏公司，source 适配器加一个就能用。
-5. **Debezium CDC**：大厂场景，价值高但接入复杂，放最后。
+1. **Webhook Push**：已可用（`/v1/batch` + `event_type=dimension`，零新增组件）。
+2. **Sync Agent（MySQL/PostgreSQL source）**：已实现。
+3. **HTTP Pull**：未实现。
+4. **Sync Agent（CSV/Excel source）**：已实现。
+5. **Debezium CDC**：未实现。
 
 ## 与资源事件设计的关系
 

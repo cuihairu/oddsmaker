@@ -39,7 +39,7 @@ Oddsmaker 采用 **资源流水事实模型**：
 
 一次业务操作产生多条资源流水，每条流水只表达一种资源。
 
-**注意**：`game_id` 和 `environment` 已在数据库/表层级体现，不需要作为字段存储。
+**注意**：设计早期曾设想 `game_id`/`environment` 只在表层级体现；最终实现两者都是事件必填字段，且是 ClickHouse 的分区键（`PARTITION BY (game_id, environment, 日期)`）。
 
 ```json
 {
@@ -105,7 +105,7 @@ Oddsmaker 采用 **资源流水事实模型**：
 | `reason` | string | 资源变化原因 |
 | `balance_after` | decimal/int64 | 可选，变化后的余额，用于风控校验 |
 
-**注意**：`game_id` 和 `environment` 已在数据库/表层级体现，不需要作为字段。
+**注意**：同上——`game_id` 和 `environment` 是事件字段与分区键，不在表名层级。
 
 保留 `operation_id` 是关键。它解决了”单资源流水高性能”和”一次业务操作可追溯”之间的矛盾。
 
@@ -139,7 +139,7 @@ Oddsmaker 采用 **资源流水事实模型**：
 
 ## 与当前仓库的关系
 
-**数据库架构**：按游戏分库
+> **实现状态（2026-10）**：按游戏分库未实现；共享 ClickHouse 表按 `(game_id, environment)` 分区，隔离强度由存储 profile 的 `isolationStrategy` 配置（当前只有 `SHARED` 接线）。也没有独立的 `resource_changes` 表——资源流水落在 `events` 主表（`resource_id`/`resource_amount`/`flow_type`/`operation_id` 等列，DDL 见 `schema/sql/clickhouse/schema.sql`）。下图为设计期的目标形态。
 
 ```
 oddsmaker_meta (元数据库)
@@ -148,9 +148,9 @@ oddsmaker_meta (元数据库)
 ├─ api_keys
 └─ audit_logs
 
-game_demo_prod (游戏数据库)
+game_demo_prod (游戏数据库，目标形态)
 ├─ events
-├─ resource_changes    -- 资源流水专用表
+├─ resource_changes    -- 资源流水专用表（未建，流水在 events 主表）
 ├─ sessions
 └─ risk_events
 
@@ -227,7 +227,7 @@ oddsmaker.resourceBatch({
 
 ## ClickHouse 查询形态
 
-**注意**：由于按游戏分库，查询时不需要过滤 `game_id` 和 `environment`。
+**注意**：当前是共享表，查询必须过滤 `game_id` 和 `environment`（分区裁剪依赖这两个条件）；按游戏分库落地后才可省略。
 
 单玩家资源暴增：
 
@@ -291,14 +291,14 @@ ORDER BY sequence;
 | 资源标识 | 字符串为主，可选数字 ID | 兼顾灵活性和内部系统映射 |
 | 数组资源 | 只做原始上下文 | 不进入 canonical 分析路径 |
 
-## 后续改造建议
+## 后续改造建议（落地情况标注）
 
-1. **数据库架构**：实现按游戏分库，每个游戏独立 ClickHouse 数据库。
-2. 更新 JSON Schema 和 Avro Schema，加入 `server_id`、`operation_id`、`operation_type`、`sequence`、`resource_type`、`resource_id`、`resource_numeric_id`、`resource_amount`、`flow_type`、`reason`、`balance_after`，**移除 `game_id` 和 `environment`**（已在表层级）。
-3. ClickHouse 增加通用资源字段，兼容保留 `virtual_currency` / `virtual_amount`。
-4. SDK 增加 `resource()` 和 `resourceBatch()`。
-5. Gateway 对资源事件做基础校验：金额必须为正、`flow_type` 必须为 `source|sink`、`resource_id` 不能为空。
-6. Flink 或 ClickHouse MV 增加资源风控聚合视图。
-7. Control API 支持数据库路由，根据 `game_id + environment` 路由到对应的数据库。
-8. Tracking Plan 支持按游戏配置资源 ID 白名单、允许的 `operation_type` 和单次变动阈值。
+1. **数据库架构**：实现按游戏分库，每个游戏独立 ClickHouse 数据库。→ 未实现；隔离配置位已建（storage profile `isolationStrategy`）。
+2. 更新 JSON Schema 和 Avro Schema，加入资源字段，**移除 `game_id` 和 `environment`**。→ 字段已加入（`server_id`/`operation_id`/`operation_type`/`resource_id`/`resource_amount`/`flow_type` 等已在 schema 与 events 表）；`game_id`/`environment` 保留为必填字段（不随此建议移除）。
+3. ClickHouse 增加通用资源字段，兼容保留 `virtual_currency` / `virtual_amount`。→ 已实现。
+4. SDK 增加 `resource()` 和 `resourceBatch()`。→ 未实现。
+5. Gateway 对资源事件做基础校验（金额为正、`flow_type ∈ source|sink`、`resource_id` 非空）。→ 未做资源专项校验（仅通用 schema 校验）。
+6. Flink 或 ClickHouse MV 增加资源风控聚合视图。→ 资源专项 MV 未建；风控走 risk-job 规则链路。
+7. Control API 支持数据库路由，根据 `game_id + environment` 路由到对应的数据库。→ 未实现（storage profile 是配置位，路由未接线）。
+8. Tracking Plan 支持按游戏配置资源 ID 白名单、允许的 `operation_type` 和单次变动阈值。→ Tracking Plan 管理面已建，资源专项约束未实现。
 

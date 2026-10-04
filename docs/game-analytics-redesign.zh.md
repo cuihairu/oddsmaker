@@ -20,7 +20,7 @@
 现有仓库在基础设施层已经比较完整：
 
 - 采集链路完整：`SDK -> Gateway -> Kafka -> Flink -> ClickHouse -> Superset`
-- 多端 SDK 已有雏形：`Web / Android / iOS / Unity`
+- 多端 SDK 已有雏形：`Web / Android / iOS / Unity / Server`
 - 实时计算链路已具备：富化、会话、留存、漏斗
 - BI 资产已落地：Superset bundle 和 starter SQL
 

@@ -10,32 +10,27 @@
 - `Environment`：逻辑发布阶段
 - `StorageProfile`：集群配置和容量规划
 
-**数据库架构**：按游戏分库
+**数据库架构**（当前实现）：PostgreSQL 元数据库 + 共享 ClickHouse 表，事件与聚合表按 `(game_id, environment)` 分区。「按游戏分库」是目标形态，由存储 profile 的 `isolationStrategy`（`shared` / `prod_isolated` / `dedicated`）表达，物理分库尚未接线。
 
 ```
-oddsmaker_meta (元数据库)
-├─ games
-├─ environments
-├─ api_keys
-└─ audit_logs
+PostgreSQL（元数据）
+├─ games / environments / api_keys
+├─ users / roles / user_role_assignments
+├─ tracking_plans / risk_rules / block_lists / audit_logs
+└─ storage_profiles ...
 
-game_demo_prod (游戏数据库)
-├─ events
-├─ resource_changes
-└─ risk_events
-
-game_demo_staging
-└─ (同样的表结构)
+ClickHouse（共享表，按 game_id + environment 分区）
+├─ events / resource_changes
+├─ risk_events / risk_scores / risk_actions
+└─ ...
 ```
-
-Control API 需要根据 `gameId + environment` 路由到对应的数据库。
 
 ## 字段命名约定
 
 - `gameId` / `environmentId`：控制面 API 使用的内部标识符
 - `game_id` / `environment`：事件协议使用的逻辑名称（如 `prod`、`staging`）
 - API Key 绑定到 `gameId + environmentId`（内部 ID）
-- **事件上报**：`game_id` 和 `environment` 已在数据库/表层级体现，不需要作为字段
+- **事件上报**：`game_id` 和 `environment` 是事件必填字段，也是 ClickHouse 的分区键（不是"表层级就不需要存"）
 - **新增 `server_id`**：MMORPG 游戏必需，用于区分不同服务器/大区
 
 ## 核心资源
@@ -58,12 +53,14 @@ POST /api/games/{gameId}/unpublish
 {
   "id": "game_demo",
   "name": "Demo Game",
-  "genre": "rpg",
-  "platforms": ["android", "ios"],
-  "timezone": "Asia/Shanghai",
+  "genre": "RPG",
+  "platforms": ["MOBILE", "PC"],
+  "defaultTimezone": "Asia/Shanghai",
   "defaultCurrency": "USD"
 }
 ```
+
+`genre` 枚举大写（RPG/STRATEGY/ACTION/.../RACING/OTHER 共 13 类）；`platforms` 取值 `WEB/MOBILE/PC/CONSOLE/VR/AR`（没有 android/ios）；时区字段名是 `defaultTimezone`。创建成功后自动建 `dev` / `staging` / `prod` 三个环境。
 
 ### Environment
 
@@ -77,15 +74,7 @@ DELETE /api/games/{gameId}/environments/{environmentName}
 
 推荐默认环境：`dev`、`staging`、`prod`。
 
-环境配置包括：
-
-- 数据保留时间。
-- 采样策略。
-- Schema 校验模式。
-- PII 策略绑定。
-- 风控策略绑定。
-- 限流默认值。
-- `storageProfile` 绑定。
+环境级配置：启用状态、采样开关与采样率（网关对非 active 环境回 503）。数据保留时间不是环境字段——由 ClickHouse TTL 与存储 profile 决定。
 
 ### Storage Profile
 
@@ -151,13 +140,18 @@ Key 类型：
 ### Tracking Plan
 
 ```http
-POST /api/games/{gameId}/environments/{environmentName}/tracking-plans
-GET /api/games/{gameId}/environments/{environmentName}/tracking-plans/current
-POST /api/tracking-plans/{planId}/publish
-POST /api/tracking-plans/{planId}/rollback
+POST /api/games/{gameId}/tracking-plans
+GET /api/games/{gameId}/tracking-plans
+GET /api/games/{gameId}/tracking-plans/{trackingPlanId}
+GET /api/games/{gameId}/tracking-plans/active
+GET /api/games/{gameId}/tracking-plans/environment/{environmentId}
+PUT /api/games/{gameId}/tracking-plans/{trackingPlanId}
+POST /api/games/{gameId}/tracking-plans/{trackingPlanId}/activate
+POST /api/games/{gameId}/tracking-plans/{trackingPlanId}/deactivate
+DELETE /api/games/{gameId}/tracking-plans/{trackingPlanId}
 ```
 
-说明：Tracking Plan 相关接口目前仍属于规划中的目标形态，当前仓库优先落地 Game / Environment / Storage Profile / API Key / Experiments。
+事件与属性字典挂在计划下：`.../{trackingPlanId}/events[/{eventDefinitionId}]` 与 `.../events/{eventDefinitionId}/properties[/{propertyDefinitionId}]` 的标准 CRUD。没有 `publish` / `rollback`——启用状态用 `activate` / `deactivate` 切换。
 
 ### Experiments
 
@@ -197,87 +191,95 @@ Tracking Plan 管理：
 - cardinality 上限。
 - 兼容性策略。
 
-### PII Policy
+### PII 策略（Key 级）
+
+没有独立的 `/api/pii-policies` 资源。PII 策略挂在 API Key 上：
 
 ```http
-POST /api/pii-policies
-GET /api/pii-policies/{policyId}
-PUT /api/pii-policies/{policyId}
+PUT /api/keys/{keyId}/policy
 ```
-
-示例：
 
 ```json
 {
-  "name": "default-prod",
-  "email": "mask",
-  "phone": "drop",
-  "ip": "coarse",
+  "piiEmail": "mask",
+  "piiPhone": "drop",
+  "piiIp": "coarse",
   "denyKeys": ["password", "credit_card"],
-  "maskKeys": ["email", "mobile"]
+  "maskKeys": ["email", "mobile"],
+  "propsAllowlist": ["level", "vip"],
+  "rpm": 600,
+  "ipRpm": 300
 }
 ```
+
+Gateway 按 key 缓存执行 deny / mask / coarse / drop。
 
 ### Risk Rule
 
 ```http
 POST /api/risk-rules
-GET /api/risk-rules?gameId=&environmentId=
+GET /api/risk-rules?gameId=&status=&page=&size=
 GET /api/risk-rules/{ruleId}
 PUT /api/risk-rules/{ruleId}
 DELETE /api/risk-rules/{ruleId}
-POST /api/risk-rules/{ruleId}/publish
+POST /api/risk-rules/{ruleId}/enable
 POST /api/risk-rules/{ruleId}/disable
 ```
 
-示例：
+没有 `publish` 端点——启停即 `enable` / `disable`。示例（字段是 `RiskRuleEntity` 的形状，`ruleConditions` 是 JSON 字符串）：
 
 ```json
 {
   "gameId": "game_demo",
-  "environmentId": "env_game_demo_prod",
-  "ruleId": "payment_receipt_reuse",
-  "riskType": "payment",
-  "severity": "high",
-  "ruleType": "threshold",
-  "window": "24h",
-  "condition": {
-    "receiptHashDistinctUsersGt": 1
-  },
-  "action": "block"
+  "name": "收据复用检测",
+  "category": "PAYMENT",
+  "riskLevel": "HIGH",
+  "ruleType": "THRESHOLD",
+  "ruleConditions": "{\"receiptHashDistinctUsersGt\": 1}",
+  "actionType": "BLOCK",
+  "blockDuration": 1440
 }
 ```
 
-### User 与 RoleBinding
+状态：`DRAFT` / `ACTIVE` / `PAUSED` / `ARCHIVED` / `DEPRECATED`。
+
+### User 与 RoleAssignment
 
 ```http
 GET /api/users
 POST /api/users
 GET /api/users/{userId}
 PUT /api/users/{userId}
-POST /api/users/{userId}/role-bindings
-DELETE /api/users/{userId}/role-bindings/{bindingId}
+GET /api/users/{userId}/role-assignments
+POST /api/users/{userId}/role-assignments
+DELETE /api/users/{userId}/role-assignments?roleId=&gameId=&environment=
 ```
 
-权限范围：
+授权请求体：
 
-- `global`
-- `game`
-- `environment`
+```json
+{ "roleId": "role_analyst", "gameId": "game_demo", "environment": null }
+```
 
-角色：
+`gameId` / `environment` 均缺省即全局范围。权限范围：`global` / `game` / `environment`。
 
-- `owner`
-- `operator`
-- `analyst`
-- `developer`
-- `risk_admin`
-- `viewer`
+角色（V0.2.3 种子 8 个，`roles` 表是存储位置，没有 `owner` / `risk_admin`）：
+
+- `operator`（GLOBAL，全权限）
+- `game_admin`（GAME，继承 analyst/marketing/finance/developer/viewer/qa）
+- `analyst`、`marketing`、`finance`、`developer`（GAME）
+- `viewer`、`qa`（ENVIRONMENT）
 
 ### Audit Log
 
 ```http
-GET /api/audit-logs?gameId=&environmentId=&actor=&action=&from=&to=
+GET /api/audit-logs?gameId=&action=&from=&to=
+GET /api/audit-logs/user/{userId}
+GET /api/audit-logs/resource/{resourceType}/{resourceId}
+GET /api/audit-logs/action/{action}
+GET /api/audit-logs/time-range?start=&end=
+GET /api/audit-logs/statistics
+GET /api/audit-logs/{logId}
 ```
 
 必须审计：
@@ -291,14 +293,9 @@ GET /api/audit-logs?gameId=&environmentId=&actor=&action=&from=&to=
 
 ## 网关集成
 
-Gateway 根据 `x-api-key` 从控制面拉取并缓存：
+Gateway 当前从控制面拉取并缓存（`/internal/api-keys` 等 internal 端点）：
 
-- `game_id`
-- `environment`
-- key 类型和状态
-- 限流策略
-- PII 策略
-- Tracking Plan 版本
-- 风控策略版本
+- key 上下文：`game_id`、`environment`、档位（client/server/admin）与启用状态
+- PII / props 策略与限流（`rpm` / `ipRpm`）
 
-缓存建议 30-60 秒，策略发布可通过事件或主动刷新缩短生效时间。
+风控侧：规则由 Flink risk-job 每 60 秒拉取一次；黑名单走批量校验。Tracking Plan 尚未接入 Gateway 的实时校验链（schema 校验目前用内置 JSON Schema），缓存为进程内短 TTL。

@@ -90,6 +90,14 @@ GET /api/analytics/revenue/game_123/overview?startDate=2024-01-01&endDate=2024-0
 
 ---
 
+### 1.3 按平台收入分布
+
+**端点:** `GET /revenue/{gameId}/by-platform?date=2024-01-15`
+
+按单日返回各平台的收入行（`platform`、收入额等字段）。
+
+---
+
 ## 二、广告分析
 
 ### 2.1 广告性能概览
@@ -112,6 +120,12 @@ GET /api/analytics/revenue/game_123/overview?startDate=2024-01-01&endDate=2024-0
 - **填充率** = 填充次数 / 请求次数
   - 反映广告可用性
 
+### 2.2 按广告网络性能
+
+**端点:** `GET /ads/{gameId}/by-network?startDate=2024-01-01&endDate=2024-01-31`
+
+按日期区间返回各广告网络的性能行（展示、收入、eCPM 等字段）。
+
 ---
 
 ## 三、会话分析
@@ -132,6 +146,12 @@ GET /api/analytics/revenue/game_123/overview?startDate=2024-01-01&endDate=2024-0
 - **会话时长** - 用户单次游戏时长
 - **会话深度** - 每会话事件数，反映用户参与度
 - **跳出率** - 只有 1 个事件的会话占比
+
+### 3.2 会话趋势
+
+**端点:** `GET /sessions/{gameId}/trends?startDate=2024-01-01&endDate=2024-01-31`
+
+按日期区间返回逐日会话趋势行（会话数、时长等字段）。
 
 ---
 
@@ -154,6 +174,21 @@ GET /api/analytics/revenue/game_123/overview?startDate=2024-01-01&endDate=2024-0
 - **卡顿** - 画面停顿时长（毫秒）
 - **崩溃** - 应用崩溃次数
 - **内存** - 内存使用量（MB）
+
+### 4.2 崩溃分组
+
+**端点:** `GET /performance/{gameId}/crashes`
+
+返回崩溃指纹分组列表（`crash_hash` 分组，与 `/api/crash-metrics` 的 top-groups 同源）。
+
+更完整的崩溃专项指标在 `/api/crash-metrics` 下：
+
+```http
+GET /api/crash-metrics/{gameId}/top-groups
+GET /api/crash-metrics/{gameId}/trend
+GET /api/crash-metrics/{gameId}/rate-by-version
+POST /api/crash-metrics/{gameId}/symbolicate
+```
 
 ---
 

@@ -35,11 +35,11 @@
 - 漏斗补齐无序口径：FunnelType 新增 UNORDERED；STANDARD/UNORDERED 走任意顺序完成判定（UnorderedFunnelLogic：全步骤完成 + 时间跨度约束，超窗重置，每用户一次转化）；SEQUENTIAL/TIME_WINDOW 保持原顺序推进逻辑
 - 事件类型推断补全九类：inferEventType 新增 user/resource/design 映射（session/user/business/resource/progression/design/error/ad/risk + experiment 附加）
 - Identity Merge、商业化（IAP/广告/LTV 视图）、玩法分析（关卡进度/经济流转视图）经核对已具备，勾选完成
-- 实验平台（A/B 测试）闭环：ExperimentSplitter 确定性分流（SHA-256(salt+subjectId) 分桶 + 权重分配，SDK/服务端算法一致）；服务端分流 API `GET /api/experiments/{id}/assign`（非 running 实验兜底 control）；指标快照接收 API（聚合管道按窗口幂等回填每变体 count/sum/sumSquares/successes）；结果 API 输出比例 z-test / Welch t-test 检验（lift、95% CI、p 值、显著性、小样本 low_power 提示），多变体以 control_variant 为基线两两对比
+- 实验平台（A/B 测试）闭环：ExperimentSplitter 确定性分流（hash32（FNV-1a 32 位变体）对 `experiment.id + ':' + salt + ':' + subjectId` 分桶 + 权重分配，SDK/服务端算法一致；锚点 hash32("a")=0xe40c292c、hash32("foobar")=0xbf9cf968）；服务端分流 API `GET /api/experiments/{id}/assign`（非 running 实验兜底 control）；指标快照接收 API（聚合管道按窗口幂等回填每变体 count/sum/sumSquares/successes）；结果 API 输出比例 z-test / Welch t-test 检验（lift、95% CI、p 值、显著性、小样本 low_power 提示），多变体以 control_variant 为基线两两对比
 - Gateway 风控前置：新增 ReplayGuard（签名重放 401 replay_detected、event_id 幂等吸收计入 duplicates），事件时间戳信差 ±24h 检查（invalid_timestamp）；黑名单/签名时间窗/非法环境/body size 此前已具备
 - Flink risk job 新增两类检测：DUPLICATE_RECEIPT（同 subject 同 receipt_hash/order_id 窗口内 ≥2 次，CRITICAL/REVIEW）、AD_REWARD（激励广告 reward 窗口超频，HIGH/ALERT）；RuleConfig 默认兜底同步扩展
 - 风控 Webhook 闭环：BLOCK/REVIEW/MARK/THROTTLE 处置后统一通过 `risk_action` webhook 输出到游戏服；REVIEW 升级为创建 RiskCase 进入审核队列（CRITICAL 优先级 1）；新增 MARK 动作分发
-- 公司内 RBAC 落地：六角色权限矩阵（owner/operator/analyst/developer/risk_admin/viewer），支持 global/game/environment 三级 scope 分配与精确回收；新增 `/api/users/{userId}/role-assignments` API，GRANT_ROLE/REVOKE_ROLE 全量审计
+- 公司内 RBAC 落地：支持 global/game/environment 三级 scope 分配与精确回收；新增 `/api/users/{userId}/role-assignments` API，GRANT_ROLE/REVOKE_ROLE 全量审计（后续 V0.2.3 种子收敛为 8 角色：operator/game_admin/analyst/marketing/finance/developer/viewer/qa，无 owner/risk_admin；此处早期的六角色提法已被取代）
 - 修复失效鉴权：RiskRuleController/ReportController 的 `@PreAuthorize(hasAuthority(...))` 无 authority 供给（实际永远拒绝），替换为 AccessGuard 显式 scope 检查；SecurityException 统一映射 403
 - 审计日志补齐密钥与环境资源：API Key 创建/策略变更/删除、环境创建/更新/删除全量记录（含变更前后值）
 - Tracking Plan 字段字典规格化：属性定义新增 `cardinalityLimit` 上限（防高基数字段打爆存储）；ENUM 类型强制要求非空、无重复的 allowedValues JSON 数组且 cardinalityLimit ≥ 候选数；ARRAY 强制声明 arrayElementType
@@ -54,6 +54,10 @@
 - 客户端 SDK 移除 HMAC：iOS 删除 HMACManager，Unity 移除签名代码；HMAC 仅保留给 Server SDK
 - Gateway HmacFilter 加固：client key 携带签名头返回 401 `signature_not_supported`，杜绝无 secret 验签 NPE；补充 client/server key 行为测试
 - RiskRule API：新增 `/api/risk-rules` CRUD + enable/disable，Specification 多条件分页查询，操作全量写入审计日志
+- Oddsmaker 2.0 重构 B1（文档与批次基线）：新增 `docs/zh/redesign/06-od2-restructure-plan.md` 计划书（领域模型/模块边界/数据契约一次性定死，B1~B10 可执行批次带验收标准）；`todo.md` 重排为 B1~B10 批次跟踪表（旧 80 项清单作废归档）；两份完成度评估补 2026-10 归档横幅、措辞改游戏口径；redesign index 文档结构表补 06 计划书行
+- Oddsmaker 2.0 重构 B2（权限单真源收敛）：回填迁移把用户-角色关系收敛到 `user_role_assignments` 单一真源；`POST /api/users` 与 `PUT /api/users/{userId}/roles` 改写 RBAC 新体系（roles 表 + user_role_assignments），废弃旧 `users.role` 展示字段的写入语义
+- Oddsmaker 2.0 重构 B3（Server SDK 骨架）：新增 `sdks/server` 零仓库内依赖模块（独立 Gradle 模块，可 subtree 拆出）；SERVER key 发放校验——服务端事件强制 SERVER 档 key + HMAC
+- Oddsmaker 2.0 重构 B4（事件契约 v2 增量）：`event_version`/`source`/`trust_level`/`event_origin` 四字段网关权威回填（TrustPolicy：source 按 key 档位推导、trust_level 一律由 source 推导、发送方声明永不采信）；自抬拒绝（CLIENT key 声明 server 档或高于推导档 trust_level → 整事件 `trust_escalation`）；schema/Avro/ClickHouse/events 表列与四端契约同步
 
 ## v0.1.0 (initial release)
 - Unified Java stack for ingest + streaming + analytics

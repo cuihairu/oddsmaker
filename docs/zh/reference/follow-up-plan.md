@@ -171,7 +171,7 @@ risk-job 检测逻辑（按规则配置执行）
 ### 设计
 
 见 [dimension-sync.md](./dimension-sync) 的完整设计。Agent 是独立仓库 `oddsmaker-agent`，本仓库只负责：
-- Gateway 侧的 `/v1/dimension` 事件接收（**复用现有 Gateway，加 event_type='dimension' 路由**）
+- Gateway 侧的维度事件接收（**复用 `/v1/batch`，`event_type='dimension'`，无独立端点**）
 - Flink 侧消费 `dimension_define` 事件写 `item_dim` / `level_dim`
 - Control Service 侧的同步状态监控
 

@@ -24,7 +24,7 @@
 
 | 功能 | 状态 | 说明 |
 |------|------|------|
-| 多平台 SDK | ✅ | Web、Android、iOS、Unity |
+| 多平台 SDK | ✅ | Web、Android、iOS、Unity、Server（HMAC 签名） |
 | 批量/实时模式 | ✅ | 灵活的事件上报方式 |
 | 事件 Schema | ✅ | 标准事件 + 自定义属性 |
 | 数据校验 | ✅ | Tracking Plan 校验 |

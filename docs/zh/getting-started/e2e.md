@@ -7,7 +7,7 @@ bash scripts/e2e.sh
 流程
 1) 启动依赖（Kafka/ClickHouse/Apicurio/OTel/Superset）
 2) 启动 control-service 与 gateway-service
-3) 通过控制面 API 创建项目 p1 与 API Key（admin token 默认 admin）
+3) 通过控制面 API 创建 gameId=`p1`、environment=`dev` 的 API Key（admin token 默认 admin；没有"项目"资源，gameId 只是字符串标识）
 4) 使用新 Key 发送两条 NDJSON 事件到 /v1/batch
 5) 若本机有 Flink CLI，则构建并启动 4 个 Flink 作业（enrich/sessions/retention/funnels），等待 10s 后到 ClickHouse 校验 `events` 行数
 

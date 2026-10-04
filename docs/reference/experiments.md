@@ -13,6 +13,10 @@ A/B 测试分析 API，用于分析实验数据和转化率。
 | DELETE | `/api/experiments/{id}` | 删除实验 |
 | POST | `/api/experiments/{id}/publish` | 发布实验 |
 | POST | `/api/experiments/{id}/pause` | 暂停实验 |
+| GET | `/api/experiments/{id}/assign?userId=&deviceId=` | 服务端确定性分流 |
+| POST | `/api/experiments/{id}/metrics` | 接收指标快照 |
+| POST | `/api/experiments/{id}/metrics/aggregate` | 按窗口聚合指标 |
+| GET | `/api/experiments/{id}/results` | 实验结果（lift、置信区间、p 值、SRM） |
 | GET | `/api/config/{gameId}/{environment}` | 获取运行中的实验配置 |
 
 ## 实验状态
@@ -101,9 +105,10 @@ GET /api/config/{gameId}/{environment}
 // 获取实验配置
 const experiments = await fetch('/api/config/game_abc123/prod');
 
-// 分流
+// 分流（hash32 = FNV-1a 32 位变体，四端 SDK 与服务端 ExperimentSplitter 同款算法；
+// 锚定向量：hash32("a")=0xe40c292c、hash32("foobar")=0xbf9cf968）
 function assignVariant(experiment, userId) {
-  const hash = murmur3(experiment.id + ':' + experiment.salt + ':' + userId);
+  const hash = hash32(experiment.id + ':' + experiment.salt + ':' + userId) >>> 0;
   const bucket = hash % 100;
   let acc = 0;
   for (const variant of experiment.config.variants) {
