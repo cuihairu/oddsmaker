@@ -117,6 +117,13 @@ public class GameEntity implements org.springframework.data.domain.Persistable<S
     @Column(name = "has_pvp")
     public Boolean hasPvp = false;
 
+    /**
+     * server 事件能力开关（B3）：SERVER 型 API key（持有 secret、强制 HMAC）只允许
+     * 发放给启用该能力的游戏（ControlService.createKey 校验）。
+     */
+    @Column(name = "server_events_enabled")
+    public Boolean serverEventsEnabled = false;
+
     // 数据配置
     @Column(name = "data_retention_days")
     public Integer dataRetentionDays = 90;

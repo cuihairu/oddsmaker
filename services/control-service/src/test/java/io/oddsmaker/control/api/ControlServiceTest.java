@@ -23,9 +23,12 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -78,6 +81,35 @@ class ControlServiceTest {
         assertThrows(IllegalArgumentException.class, () -> service.createKey("nope", "prod", "k"));
         when(envRepo.findById("nope")).thenReturn(Optional.empty());
         assertThrows(IllegalArgumentException.class, () -> service.createKey("g", "nope", "k"));
+    }
+
+    @Test
+    @DisplayName("SERVER key 发放校验：game 未启用 server 事件能力直接拒绝（B3）")
+    void createServerKeyRejectedWhenServerEventsDisabled() {
+        // game.serverEventsEnabled 默认 false（字段初始化器）
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+            () -> service.createKey("g", "prod", "srv-key", "server"));
+        assertTrue(ex.getMessage().contains("server events enabled"));
+
+        game.serverEventsEnabled = false;
+        assertThrows(IllegalArgumentException.class,
+            () -> service.createKey("g", "prod", "srv-key", "server"));
+        verify(keyRepo, never()).save(any(ApiKeyEntity.class));
+    }
+
+    @Test
+    @DisplayName("SERVER key 发放校验：已启用则创建成功且强制 HMAC")
+    void createServerKeyAllowedWhenServerEventsEnabled() {
+        game.serverEventsEnabled = true;
+        Models.ApiKeyResp resp = service.createKey("g", "prod", "srv-key", "server");
+        assertNotNull(resp.apiKey);
+        assertEquals("server", resp.keyRole);
+        assertNotNull(resp.secret);
+        org.mockito.ArgumentCaptor<ApiKeyEntity> captor =
+            org.mockito.ArgumentCaptor.forClass(ApiKeyEntity.class);
+        verify(keyRepo).save(captor.capture());
+        assertEquals(ApiKeyEntity.ApiKeyType.SERVER, captor.getValue().keyType);
+        assertEquals(Boolean.TRUE, captor.getValue().requireHmac);
     }
 
     @Test

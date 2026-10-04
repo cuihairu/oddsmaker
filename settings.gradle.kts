@@ -5,6 +5,7 @@ include(
   "libs:common-auth",
   "libs:common-kafka",
   "libs:common-otel",
+  "sdks:server",
   "services:gateway-service",
   "services:control-service",
   "jobs:flink:events-enrich-job",

@@ -55,6 +55,9 @@ public class GameDTO {
     public Boolean hasGuilds;
     public Boolean hasPvp;
 
+    /** server 事件能力（B3）：SERVER 型 key 发放前置条件 */
+    public Boolean serverEventsEnabled;
+
     // 数据配置
     @Min(value = 30, message = "数据保留天数至少为30天")
     public Integer dataRetentionDays;
@@ -104,6 +107,7 @@ public class GameDTO {
         this.hasMultiplayer = entity.hasMultiplayer;
         this.hasGuilds = entity.hasGuilds;
         this.hasPvp = entity.hasPvp;
+        this.serverEventsEnabled = entity.serverEventsEnabled;
         this.dataRetentionDays = entity.dataRetentionDays;
         this.enableRealTimeAnalytics = entity.enableRealTimeAnalytics;
         this.enableCrashReporting = entity.enableCrashReporting;
@@ -140,6 +144,7 @@ public class GameDTO {
         entity.hasMultiplayer = this.hasMultiplayer != null ? this.hasMultiplayer : false;
         entity.hasGuilds = this.hasGuilds != null ? this.hasGuilds : false;
         entity.hasPvp = this.hasPvp != null ? this.hasPvp : false;
+        entity.serverEventsEnabled = this.serverEventsEnabled != null ? this.serverEventsEnabled : false;
         entity.dataRetentionDays = this.dataRetentionDays != null ? this.dataRetentionDays : 90;
         entity.enableRealTimeAnalytics = this.enableRealTimeAnalytics != null ? this.enableRealTimeAnalytics : true;
         entity.enableCrashReporting = this.enableCrashReporting != null ? this.enableCrashReporting : true;
@@ -173,6 +178,7 @@ public class GameDTO {
         if (this.hasMultiplayer != null) entity.hasMultiplayer = this.hasMultiplayer;
         if (this.hasGuilds != null) entity.hasGuilds = this.hasGuilds;
         if (this.hasPvp != null) entity.hasPvp = this.hasPvp;
+        if (this.serverEventsEnabled != null) entity.serverEventsEnabled = this.serverEventsEnabled;
         if (this.dataRetentionDays != null) entity.dataRetentionDays = this.dataRetentionDays;
         if (this.enableRealTimeAnalytics != null) entity.enableRealTimeAnalytics = this.enableRealTimeAnalytics;
         if (this.enableCrashReporting != null) entity.enableCrashReporting = this.enableCrashReporting;

@@ -60,7 +60,13 @@ public class ControlService {
         e.keyType = role;
         switch (role) {
             case SERVER -> {
-                // Server SDK 持有 secret，必须强制签名
+                // Server SDK 持有 secret，必须强制签名；发放前置：游戏已启用 server 事件
+                // 能力（B3，与 06 计划书 §4.3「充值/结算只认 server 事件」对齐，默认收口）
+                if (!Boolean.TRUE.equals(game.serverEventsEnabled)) {
+                    throw new IllegalArgumentException(
+                        "Game does not have server events enabled: " + gameId
+                        + " (set server_events_enabled before issuing SERVER keys)");
+                }
                 e.requireHmac = true;
                 e.canWrite = true;
             }

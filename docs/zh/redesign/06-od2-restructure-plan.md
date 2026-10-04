@@ -102,7 +102,7 @@
 | `services/control-service` | 控制面 7 个资源组（见 3.2） | ✅ |
 | `jobs/flink/*`（7 作业） | 状态计算：enrich / identity-merge / sessions / retention / funnels / risk / dimension-sync | ✅ |
 | `sdks/{web,android,ios,unity}` | 客户端采集（documented 边界：无 secret、无 HMAC） | ✅ |
-| **`sdks/server`（新增）** | **一等公民**：服务端可信事件 + HMAC（B3） | 缺 |
+| **`sdks/server`（新增）** | **一等公民**：服务端可信事件 + HMAC（B3） | ✅（B3 落地：零依赖 Java 模块，Memory→Disk Queue→Batch→Gzip→HMAC） |
 | `web/` | 控制台 SPA | ✅ |
 | `deploy/` + `docker/` | 组合矩阵（§7） | ✅ |
 

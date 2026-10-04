@@ -633,6 +633,7 @@ class FinalSweep2Test {
         GameEnvironmentEntity prod = environment("g", "prod", "prod");
         prod.enableSampling = false;
         prod.sampleRate = 0.5;
+        demo.serverEventsEnabled = true;  // B3：SERVER 档位发放前置（发放校验细节见 ControlServiceTest）
         lenient().when(gameRepo.findById("g")).thenReturn(Optional.of(demo));
         lenient().when(gameEnvironmentRepo.findById("prod")).thenReturn(Optional.of(prod));
         lenient().when(apiKeyRepo.save(any(ApiKeyEntity.class))).thenAnswer(inv -> inv.getArgument(0));
