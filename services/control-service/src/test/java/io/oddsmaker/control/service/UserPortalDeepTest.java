@@ -19,6 +19,8 @@ import io.oddsmaker.control.jpa.TelemetryConfigEntity;
 import io.oddsmaker.control.jpa.TelemetryConfigRepo;
 import io.oddsmaker.control.jpa.UserEntity;
 import io.oddsmaker.control.jpa.UserRepo;
+import io.oddsmaker.control.jpa.UserRoleRepo;
+import io.oddsmaker.control.jpa.RoleRepo;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -45,6 +47,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.lenient;
@@ -63,6 +66,10 @@ class UserPortalDeepTest {
     private UserRepo userRepo;
     @Mock
     private AuditLogRepo auditLogRepo;
+    @Mock
+    private UserRoleRepo userRoleRepo;
+    @Mock
+    private RoleRepo roleRepo;
     @Mock
     private PasswordEncoder passwordEncoder;
     @InjectMocks
@@ -171,6 +178,8 @@ class UserPortalDeepTest {
         lenient().when(userRepo.existsByUsername("deepuser")).thenReturn(false);
         lenient().when(userRepo.existsByEmail("deepuser@example.com")).thenReturn(false);
         lenient().when(userRepo.save(any(UserEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+        lenient().when(userRoleRepo.findByUserId(any())).thenReturn(List.of());
+        lenient().when(roleRepo.existsById("role_viewer")).thenReturn(true);
 
         UserEntity created = userService.createUser(u, "op_1");
 
@@ -182,6 +191,10 @@ class UserPortalDeepTest {
         assertEquals(UserEntity.GlobalRole.USER, created.globalRole);
         verify(userRepo).existsByEmail("deepuser@example.com");
         verify(auditLogRepo).save(any(AuditLogEntity.class));
+        // B2 单真源：建号即落全局 role_viewer 分配行（此前只写 users.roles，权限门全拒）
+        verify(userRoleRepo).save(argThat(a -> "role_viewer".equals(a.roleId)
+            && a.gameId == null && a.environment == null
+            && Boolean.TRUE.equals(a.enabled) && "op_1".equals(a.assignedBy)));
     }
 
     @Test

@@ -2,8 +2,12 @@ package io.oddsmaker.control.service;
 
 import io.oddsmaker.control.jpa.UserEntity;
 import io.oddsmaker.control.jpa.UserRepo;
+import io.oddsmaker.control.jpa.UserRoleEntity;
+import io.oddsmaker.control.jpa.UserRoleRepo;
+import io.oddsmaker.control.jpa.RoleRepo;
 import io.oddsmaker.control.jpa.AuditLogRepo;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -12,11 +16,13 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -31,6 +37,12 @@ class UserServiceTest {
     @Mock
     private PasswordEncoder passwordEncoder;
 
+    @Mock
+    private UserRoleRepo userRoleRepo;
+
+    @Mock
+    private RoleRepo roleRepo;
+
     @InjectMocks
     private UserService userService;
 
@@ -38,6 +50,8 @@ class UserServiceTest {
 
     @BeforeEach
     void setUp() {
+        // 权限单真源同步（B2）的既有全局行读取；lenient：未走角色写路径的用例不触发
+        lenient().when(userRoleRepo.findByUserId(any())).thenReturn(List.of());
         testUser = new UserEntity();
         testUser.id = "user_test123";
         testUser.username = "testuser";
@@ -166,6 +180,83 @@ class UserServiceTest {
         assertEquals(newRoles, result.roles);
         verify(userRepo).save(testUser);
         verify(auditLogRepo).save(any());
+    }
+
+    @Test
+    @DisplayName("createUser：VIEWER 角色同步落 user_role_assignments 全局行（B2 单真源）")
+    void createUser_SyncsGlobalAssignment() {
+        when(userRepo.existsByUsername("testuser")).thenReturn(false);
+        when(userRepo.existsByEmail("test@example.com")).thenReturn(false);
+        when(userRepo.save(any(UserEntity.class))).thenReturn(testUser);
+        when(roleRepo.existsById("role_viewer")).thenReturn(true);
+
+        userService.createUser(testUser, "operator");
+
+        verify(userRoleRepo).save(argThat(a -> "role_viewer".equals(a.roleId)
+            && a.gameId == null && a.environment == null
+            && Boolean.TRUE.equals(a.enabled) && "operator".equals(a.assignedBy)));
+    }
+
+    @Test
+    @DisplayName("createUser：roles 表无对应行的档位（ADMIN）不产生哑行")
+    void createUser_SkipsRolesWithoutRoleRow() {
+        testUser.roles = Set.of(UserEntity.UserRole.ADMIN);
+        when(userRepo.existsByUsername("testuser")).thenReturn(false);
+        when(userRepo.existsByEmail("test@example.com")).thenReturn(false);
+        when(userRepo.save(any(UserEntity.class))).thenReturn(testUser);
+        // roles 表种子 8 行（V0.2.3）无 role_admin——existsById 默认 false
+
+        userService.createUser(testUser, "operator");
+
+        verify(userRoleRepo, never()).save(any(UserRoleEntity.class));
+    }
+
+    @Test
+    @DisplayName("updateRoles：目标新增角色落新全局行，既有启用行保留不动")
+    void updateRoles_AddsMissingGlobalAssignment() {
+        UserRoleEntity viewerRow = new UserRoleEntity();
+        viewerRow.id = 1L;
+        viewerRow.userId = "user_test123";
+        viewerRow.roleId = "role_viewer";
+        viewerRow.enabled = true;
+        when(userRepo.findById("user_test123")).thenReturn(Optional.of(testUser));
+        when(userRepo.save(any(UserEntity.class))).thenReturn(testUser);
+        when(userRoleRepo.findByUserId("user_test123")).thenReturn(List.of(viewerRow));
+        when(roleRepo.existsById("role_viewer")).thenReturn(true);
+        when(roleRepo.existsById("role_analyst")).thenReturn(true);
+
+        userService.updateRoles("user_test123",
+            Set.of(UserEntity.UserRole.VIEWER, UserEntity.UserRole.ANALYST), "operator");
+
+        verify(userRoleRepo).save(argThat(a -> "role_analyst".equals(a.roleId)
+            && a.gameId == null && a.environment == null
+            && Boolean.TRUE.equals(a.enabled) && "operator".equals(a.assignedBy)));
+        verify(userRoleRepo, never()).deleteAllById(any());
+    }
+
+    @Test
+    @DisplayName("updateRoles：目标外的既有启用行删除，目标内禁用行重新启用")
+    void updateRoles_RemovesStaleAndReenables() {
+        UserRoleEntity viewerRow = new UserRoleEntity();
+        viewerRow.id = 1L;
+        viewerRow.userId = "user_test123";
+        viewerRow.roleId = "role_viewer";
+        viewerRow.enabled = true;
+        UserRoleEntity analystRow = new UserRoleEntity();
+        analystRow.id = 2L;
+        analystRow.userId = "user_test123";
+        analystRow.roleId = "role_analyst";
+        analystRow.enabled = false;
+        when(userRepo.findById("user_test123")).thenReturn(Optional.of(testUser));
+        when(userRepo.save(any(UserEntity.class))).thenReturn(testUser);
+        when(userRoleRepo.findByUserId("user_test123")).thenReturn(List.of(viewerRow, analystRow));
+        when(roleRepo.existsById("role_analyst")).thenReturn(true);
+
+        userService.updateRoles("user_test123", Set.of(UserEntity.UserRole.ANALYST), "operator");
+
+        verify(userRoleRepo).deleteAllById(List.of(1L));
+        verify(userRoleRepo).save(argThat(a -> "role_analyst".equals(a.roleId)
+            && Boolean.TRUE.equals(a.enabled) && "operator".equals(a.assignedBy)));
     }
 
     @Test

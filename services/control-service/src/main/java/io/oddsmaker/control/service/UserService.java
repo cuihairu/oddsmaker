@@ -2,6 +2,9 @@ package io.oddsmaker.control.service;
 
 import io.oddsmaker.control.jpa.UserEntity;
 import io.oddsmaker.control.jpa.UserRepo;
+import io.oddsmaker.control.jpa.UserRoleEntity;
+import io.oddsmaker.control.jpa.UserRoleRepo;
+import io.oddsmaker.control.jpa.RoleRepo;
 import io.oddsmaker.control.jpa.AuditLogEntity;
 import io.oddsmaker.control.jpa.AuditLogRepo;
 import org.slf4j.Logger;
@@ -34,6 +37,12 @@ public class UserService {
 
     @Autowired
     private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private UserRoleRepo userRoleRepo;
+
+    @Autowired
+    private RoleRepo roleRepo;
 
     /**
      * 创建用户
@@ -81,6 +90,11 @@ public class UserService {
         }
 
         user = userRepo.save(user);
+
+        // 权限单真源（B2）：user_role_assignments 是权限门唯一读取对象，建号即落行——
+        // 此前只写 users.roles，账号登录后受权限门端点全量拒绝（deploy/demo README §5
+        // 曾被迫用手工 psql 补插兜底）。
+        syncGlobalRoleAssignments(user.id, user.roles, operatorId);
 
         // 记录审计日志
         auditLogRepo.save(createAuditLog(
@@ -135,6 +149,12 @@ public class UserService {
         }
 
         user = userRepo.save(user);
+
+        // 角色经 updateUser 变更时同样同步权限单真源（否则改角色又不落 assignments，
+        // 双轨坑从建号蔓延到改档）
+        if (updates.roles != null) {
+            syncGlobalRoleAssignments(user.id, user.roles, operatorId);
+        }
 
         // 记录审计日志
         String newValue = String.format("username=%s, email=%s, status=%s",
@@ -248,6 +268,9 @@ public class UserService {
         user.roles = roles;
         user = userRepo.save(user);
 
+        // 权限单真源（B2）：PUT /{id}/roles 以 user_role_assignments 为准，users.roles 只是展示投影
+        syncGlobalRoleAssignments(user.id, roles, operatorId);
+
         // 记录审计日志
         auditLogRepo.save(createAuditLog(
             operatorId, "operator", AuditLogEntity.AuditAction.GRANT_ROLE,
@@ -257,6 +280,62 @@ public class UserService {
 
         logger.info("Roles updated successfully for user: {}", userId);
         return user;
+    }
+
+    /**
+     * 权限单真源同步（B2）：把目标角色集写入 user_role_assignments 的全局作用域行
+     * （gameId/environment 均空）。权限门（PermissionService.findValidByUserId →
+     * RoleEntity.hasPermission）只读这张表；users.roles 自 V0.9.16 起只是展示投影。
+     *
+     * 映射规则：role_id = "role_" + 枚举名小写；roles 表不存在该 id 的角色
+     * （ADMIN/MANAGER/SUPER_ADMIN——登录即有 ROLE_ADMIN 直通，V0.2.3 种子无对应行）
+     * 不落行，避免指向不存在角色的哑行（与回填迁移 V0.9.16 JOIN roles 同口径）。
+     * 目标集合内的既有禁用行重新启用；目标集合外的既有启用全局行删除
+     * （与 PermissionService.revokeRole 的删除语义一致，不留下陈旧授权）。
+     * 游戏/环境作用域行不在此管理（RoleAssignmentController 的专职范畴）。
+     */
+    private void syncGlobalRoleAssignments(String userId, Set<UserEntity.UserRole> targetRoles, String operatorId) {
+        List<String> targetRoleIds = targetRoles.stream()
+            .map(UserService::toRoleId)
+            .filter(roleId -> roleRepo.existsById(roleId))
+            .toList();
+
+        List<UserRoleEntity> globalAssignments = userRoleRepo.findByUserId(userId).stream()
+            .filter(a -> a.gameId == null && a.environment == null)
+            .toList();
+
+        for (String roleId : targetRoleIds) {
+            UserRoleEntity existing = globalAssignments.stream()
+                .filter(a -> roleId.equals(a.roleId))
+                .findFirst().orElse(null);
+            if (existing == null) {
+                UserRoleEntity assignment = new UserRoleEntity();
+                assignment.userId = userId;
+                assignment.roleId = roleId;
+                assignment.enabled = true;
+                assignment.assignedBy = operatorId;
+                assignment.assignedAt = LocalDateTime.now();
+                userRoleRepo.save(assignment);
+            } else if (!existing.isEnabled()) {
+                existing.enabled = true;
+                existing.assignedBy = operatorId;
+                existing.expiresAt = null;
+                userRoleRepo.save(existing);
+            }
+        }
+
+        List<Long> staleIds = globalAssignments.stream()
+            .filter(a -> a.isEnabled() && !targetRoleIds.contains(a.roleId))
+            .map(a -> a.id)
+            .toList();
+        if (!staleIds.isEmpty()) {
+            userRoleRepo.deleteAllById(staleIds);
+        }
+    }
+
+    /** UserRole 枚举 → roles 表 id（"role_" + 小写枚举名） */
+    private static String toRoleId(UserEntity.UserRole role) {
+        return "role_" + role.name().toLowerCase(Locale.ROOT);
     }
 
     /**

@@ -36,6 +36,8 @@ import io.oddsmaker.control.jpa.TrackingPlanEntity;
 import io.oddsmaker.control.jpa.TrackingPlanRepo;
 import io.oddsmaker.control.jpa.UserEntity;
 import io.oddsmaker.control.jpa.UserRepo;
+import io.oddsmaker.control.jpa.UserRoleRepo;
+import io.oddsmaker.control.jpa.RoleRepo;
 import io.oddsmaker.control.jpa.WebhookConfigEntity;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -86,12 +88,18 @@ class CoverageTopUpTest {
     void userServiceCreateDefaults() {
         UserRepo userRepo = mock(UserRepo.class);
         AuditLogRepo auditLogRepo = mock(AuditLogRepo.class);
+        UserRoleRepo userRoleRepo = mock(UserRoleRepo.class);
+        RoleRepo roleRepo = mock(RoleRepo.class);
         when(userRepo.existsByUsername("u1")).thenReturn(false);
         when(userRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(auditLogRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(userRoleRepo.findByUserId(any())).thenReturn(List.of());
+        when(roleRepo.existsById("role_viewer")).thenReturn(true);
         UserService service = new UserService();
         ReflectionTestUtils.setField(service, "userRepo", userRepo);
         ReflectionTestUtils.setField(service, "auditLogRepo", auditLogRepo);
+        ReflectionTestUtils.setField(service, "userRoleRepo", userRoleRepo);
+        ReflectionTestUtils.setField(service, "roleRepo", roleRepo);
 
         UserEntity user = new UserEntity();
         user.username = "u1";
