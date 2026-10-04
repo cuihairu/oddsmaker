@@ -29,7 +29,7 @@
 - [x] Gateway 验签：SERVER key 请求 200；伪造/过期 HMAC 401
 - [x] SERVER 型 key 发放校验（game 未启用 server 事件能力拒绝创建）
 
-**验收：** ✅（提交后回填）全量 211 suite + web build 双绿；`sdks/server` 零依赖模块落地（subtree 可拆，自带独立 settings）：`OddsmakerIntegrationTest` 4 臂——内存溢出落盘+跨进程续传（close 时内存残留强制溢写，死 endpoint 下 close 不丢事件）、HMAC 正臂（JDK HttpServer 按 HmacFilter 同口径验签 200）、伪造签名负臂（secret 轮换→401 整批丢弃不重试）、5xx 整批退回止步恢复重发；`ControlServiceTest` +2（SERVER 发放拒绝/放行）。Gateway 正/负臂已有在仓测试（HmacSignatureWindowTest 200/过期 401/缺签名 401、HmacFilterCoverageTest 伪造 401、ReplayGuardRotationTest 重放 401），B3 未改网关代码。发放校验：`games.server_events_enabled`（V0.9.17 迁移）+ createKey SERVER 档位拒绝未启用游戏。
+**验收：** ✅（115b51f 后回填）全量 211 suite + web build 双绿；`sdks/server` 零依赖模块落地（subtree 可拆，自带独立 settings）：`OddsmakerIntegrationTest` 4 臂——内存溢出落盘+跨进程续传（close 时内存残留强制溢写，死 endpoint 下 close 不丢事件）、HMAC 正臂（JDK HttpServer 按 HmacFilter 同口径验签 200）、伪造签名负臂（secret 轮换→401 整批丢弃不重试）、5xx 整批退回止步恢复重发；`ControlServiceTest` +2（SERVER 发放拒绝/放行）。Gateway 正/负臂已有在仓测试（HmacSignatureWindowTest 200/过期 401/缺签名 401、HmacFilterCoverageTest 伪造 401、ReplayGuardRotationTest 重放 401），B3 未改网关代码。发放校验：`games.server_events_enabled`（V0.9.17 迁移）+ createKey SERVER 档位拒绝未启用游戏。
 
 ## B4 事件契约 v2 增量
 
