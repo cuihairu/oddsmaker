@@ -1,135 +1,98 @@
-# TODO（短期执行）
+# TODO（执行跟踪）
 
-面向新架构的短期落地事项。参考：`docs/zh/redesign/05-roadmap.md`。
+当前跟踪：**Oddsmaker 2.0 重构批次（B1~B10）**，契约 = `docs/zh/redesign/06-od2-restructure-plan.md`。
+按批次顺序执行；每批完成后勾选任务并回填验收结论（全绿才提交）。
 
-## P0 模型统一与安全修复
+> **旧清单作废（2026-10-04）**：P0~P7 与覆盖率巡检等 80 项已全闭环，其中完成度数字（80/80、98.x%、Web 9 个 spec 等）均属**归档快照**，不再作为跟踪表与任何排期依据（历史留存在 git 与旧评估文件横幅中，口径见 06 计划书 §1）。
 
-- [x] 事件契约 v1：统一为 `game_id + environment`，废弃目标模型中的 `tenant_id`、`org_id`、`project_id`（全链路 schema/Gateway/Flink/ClickHouse/SDK 已无租户字段；Gateway 兼容层显式剔除 `tenant_id`/`org_id`）
-- [x] Gateway 兼容层：旧 `project_id`、`tenant_id/app_id` 映射到新字段（`project_id -> game_id`、`app_id -> game_id + environment` 解析、`environment_id` 归一化；`tenant_id`/`org_id` 忽略，仅携带废弃字段的事件按 invalid_schema 拒绝）
-- [x] ClickHouse 事件表：重建 `events` 表即 v1 契约，按 `(game_id, environment, toYYYYMM(event_date))` 分区（与设计文档 §5 目标态一致，不引入 events_v1 双表）
-- [x] Flink 作业按 `game_id + environment` 重写 key（全部 job keyBy 与 ClickHouse 写入已按新契约）
-- [x] SDK 参数统一：客户端只传 `apiKey/gameId/environment`（Web/Android/iOS/Unity 已清理完毕，无 projectId/tenantId/appId 残留）
-- [x] 移除客户端 SDK HMAC secret；HMAC 仅保留给 Server SDK
+## B1 产品定位与文档对齐（零代码）
 
-## P1 单公司多游戏控制面
+- [ ] GitHub 仓库 description 更新为「Game Intelligence Platform」一句话定位
+- [ ] `oddsmaker_completion_assessment.md` 补 2026-10 归档横幅（同 technical_recommendations 口径），开头“项目”措辞改游戏口径
+- [ ] `oddsmaker_technical_recommendations.md` / `oddsmaker_quick_summary.md` 横幅中「80/80 全闭环」父句改指 2.0 批次跟踪（防陈旧）
+- [ ] `docs/zh/redesign/index.md` 文档结构表补 06 行
 
-- [x] Game API：游戏增删改查、状态、平台、默认时区、默认货币
-- [x] Environment API：`dev/staging/prod` 配置、采样、数据保留、策略绑定
-- [x] API Key 管理：绑定 `(game_id, environment)`，区分 `client/server/admin`
-- [x] Tracking Plan：事件名、字段字典、枚举、cardinality 上限
-- [x] 公司内 RBAC：`global/game/environment` scope，角色包含 `owner/operator/analyst/developer/risk_admin/viewer`
-- [x] 审计日志：策略、密钥、权限、风控动作全部记录
+**验收：** description/横幅×3/index 四处就位；纯文档，不触发测试。
 
-## P2 风控基础
+## B2 权限单真源收敛
 
-- [x] RiskRule API：阈值、黑名单、速度、序列、模型规则
-- [x] Gateway 风控前置：黑名单、重放、时间窗、非法环境、body size
-- [x] Flink risk job：高频事件、重复收据、资源异常、广告 reward 异常、有序事件序列（PATTERN，keyed 状态机实现，control 侧 ruleConditions.sequence 下发 2-8 步序列）
-- [x] ClickHouse 表：`risk_events`、`risk_scores`、`risk_actions`（risk_events/scores 原有；新增 risk_actions 处置归档表 + Control 处置链路写入 + risk_scores 主体风险分联动更新）
-- [x] 风控 Webhook：输出 block/review/mark/throttle 到游戏服
-- [x] 风控大屏：风险趋势、规则命中、严重等级、处置状态（`/api/risk-metrics/*`，ClickHouse 数据源，CH 未配置时降级返回空数据）
+- [ ] 一次性回填迁移 `V0.9.16__...`：`user_role_assignments` 由 `users.roles` 回填（幂等）
+- [ ] `UserService.createUser` / `updateRoles`（UserService.java:241）改写 `user_role_assignments` 为唯一写路径；`users.roles` 降级为展示列（读多写少）
+- [ ] `deploy/demo/README.md §5` 删除手工 psql 兜底段，改口「角色分配随建号自动落表」
+- [ ] 真 PG 复现法验证：建号→分配角色→受权限门端点 200
 
-## P3 游戏分析能力
+**验收：** 全绿；§5 首步（建号+登录+受权限门端点）全程 API 完成、无 psql；旧 README psql 段删除。
 
-- [x] 事件类型化：session/user/business/resource/progression/design/error/ad/risk
-- [x] Identity Merge：`device_id/user_id/player_id/character_id`
-- [x] 留存：N-Day + Rolling
-- [x] 漏斗：N 步、有序/无序、时间窗
-- [x] 商业化：IAP、广告、LTV
-- [x] 玩法分析：关卡、任务、对局、虚拟经济
-- [x] 实验平台：管理（已有）、分流器（SHA-256 确定性分桶 + 服务端 assign API）、指标快照收集、统计检验（比例 z-test / Welch t-test）与结果 API
+## B3 Server SDK 骨架（一等公民）
 
-## P4 游戏运营工具
+- [ ] `sdks/server`（Java）：`Oddsmaker.Initialize/SetUser/Track/Flush` + Memory→Disk Queue→Batch→Gzip→HMAC（SERVER 型 key）
+- [ ] Gateway 验签：SERVER key 请求 200；伪造/过期 HMAC 401
+- [ ] SERVER 型 key 发放校验（game 未启用 server 事件能力拒绝创建）
 
-- [x] 公告系统：创建/发布/定时发布/定时下线（sweep 扫描）/游戏服活跃拉取
-- [x] 邮件系统：全服邮件/个人邮件/附件/过期清理
-- [x] 兑换码系统：批量生成/兑换/防刷
-- [x] 玩家数据查询：按 playerId 跨游戏基本数据（identity）/充值记录（订单幂等上报）/登录日志
-- [x] 玩家数据导出工具：按 (gameId, playerId) 打包导出（档案/充值/登录/兑换四分区，json 单文件或 csv 分区 zip），sweep 异步生成 + 到期清理 + 全量审计
+**验收：** SDK 集成测试过（队列溢出落盘、验签正/负臂）；网关 SERVER key 发放验证测试入仓。
 
-## P5 报表与数据看板增强
+## B4 事件契约 v2 增量
 
-- [x] 留存趋势报表：按天/周/月 cohort 新增用户次留/7留/30留趋势（`/api/retention-metrics`，retention_daily 数据源，D30 仅成熟 cohort 计入汇总）
-- [x] 付费漏斗分析：注册→首充→二充→月留存转化漏斗 + cohort 明细（`/api/payment-metrics`，events + v_user_first_seen）
-- [x] 实时在线监控增强：近 N 分钟独立主体在线数，按平台/版本/渠道（attribution.channel 回退 platform）聚合 + 分钟趋势（`/api/online-metrics`）
-- [x] 财报导出：按日/月 ARPU/ARPPU/付费率/DAU/新增/收入/订单指标报表与 CSV 导出（`/api/finance-metrics`，UTF-8 BOM + 导出审计）
-- [x] 报表前端页：留存/付费漏斗/在线/财务四个看板页（零依赖 SVG 折线图 + 漏斗/分组可视化，CH 未配置统一降级提示）
+- [ ] 事件 schema 加 `event_version`（缺省 1）/ `source`（client|server|system|derived）/ `trust_level`（LOW|HIGH|COMPUTED，由 source 推导不可自抬）/ `event_origin`（SDK 名+版本）
+- [ ] `schema/json` 三枚 schema 文件同步 + Gateway `JsonSchemaValidator`/`PropsPolicy` 增量校验
+- [ ] Flink 各 job 对新增字段透传（不改 key）
 
-## P6 实验、Crash 和智能化
+**验收：** 全绿；v1 事件不收 `source` 仍 200（向后兼容）；`source=client` 时 `trust_level` 恒 LOW、自抬重写拒绝。
 
-- [x] 实验平台补齐 SRM：卡方检验（实际分桶 vs 配置权重，正则化不完全 gamma 精确 p 值 + 下溢 clamp），`/api/experiments/{id}/results` 输出总体与分指标 SRM（阈值 0.001）
-- [x] Crash/Error 链路：Gateway CrashFingerprinter 对 error 事件注入 crash_hash（堆栈前 8 帧规范化：去地址/行号/路径漂移，SHA-256 前 16 hex）+ crash_message；符号化引擎（symbol_mappings.mapping_rules 正则规则，V0.8.5）；Crash 聚合 API `/api/crash-metrics`（Top 分组/趋势/版本崩溃率/符号化）+ 前端 Crash 监控页
-- [x] pLTV 预测：D7→D30 乘数法（成熟 cohort 拟合乘数外推未成熟 cohort），`/api/ltv-metrics/{gameId}/pltv`
-- [x] 流失预测：v_user_features_30d 特征 → ChurnScorer 启发式打分（不活跃主因子 + 会话衰减 + 付费缓冲，可解释 reasons）→ 归档 predictions（type=churn，TTL 30 天），`/api/prediction-metrics/{gameId}/churn[/refresh]`
-- [x] 风险评分模型：risk_events 30 天严重度加权聚合 → RiskScorer 模型分归档 predictions（type=risk_model），与规则分（risk_scores）互补
-- [x] Remote Config / LiveOps 联动：游戏级键值配置 CRUD + 环境覆盖解析（环境特定 key 覆盖全环境）+ 聚合版本增量拉取（304），V0.8.6 remote_configs 表
-- [x] 测试覆盖率：引入 JaCoCo（test 后自动生成 XML/HTML/CSV 报告），P5/P6 新代码指令覆盖率 98.3%（control）/96.7%（gateway CrashFingerprinter，剩余为不可达防御分支）；gateway config/kafka 组件包补齐（89.4%/76.3%，剩余为需真实 broker 的初始化分支）
-- [x] 测试覆盖率收口（libs 零覆盖三模块，覆盖率缺口巡检第二刀）：`common-model` **0% → 100%**（`EventTest`：47 字段「名+精确类型+public 可变」契约表逐一反射核对 + 缺省值全 null/`tsClient`=0 + Jackson 往返——camelCase 键、标量逐字段还原、`experiments`/`props` 两 Map 字段往返内容相等（嵌套还原为 LinkedHashMap/ArrayList），并如实记录序列化形态：默认 mapper 保留 null 字段全键输出、未知字段默认拒绝（POJO 无宽容注解，容错在调用方）；JSON 断言用 Jackson 是因为 v1 模型真实反序列化路径就是它（gateway convertValue 到本类），testImplementation 不进 POJO 依赖面）；`common-auth` **0% → 95.5%**（`HmacSignerTest`：RFC 4231 官方向量用例 1/2/5——用例 3/4/6/7 的 key/data 含非 ASCII 字节、String API 无法复现原始字节序列故不用；用例 5 RFC 只给 128 位截断标签，按 RFC 声明断言完整输出前缀；空消息/UTF-8 多字节中文/超块长 key 三条补充向量由 python3 hmac 与 openssl 双实现交叉确认后写死；空 key 经 JDK `SecretKeySpec` 抛 IAE 包成 RuntimeException 上抛钉成 fail-fast 契约）；`common-otel` **0% → 76.9%**（`OtelInitTest` 三臂 + **实测出真 bug**：原实现在 `buildAndRegisterGlobal()` 后又显式 `GlobalOpenTelemetry.set(otel)`，全局只能注册一次 → `init()` 百分之百抛 IllegalStateException 且从未返回——因该模块此前 0 覆盖且无任何调用方，缺陷从未暴露；修正=删冗余 set 一行（注册由 buildAndRegisterGlobal 完成，语义不变），并把「显式二次 set 必抛」钉成回归防护契约。已知缺口按现状记账未改：入参 `serviceName` 完全不参与 SDK 构造（resource 恒为 `Resource.getDefault()` 的 `unknown_service:java`，证据=传 null 也照跑），接入 resource 属产品决策留待有调用方时做）。剩余 miss 均为工具类隐式无参构造器（3 指令/模块，无行为价值未强凑）
+## B5 风控 Feature 层
 
-- [x] 测试覆盖率收口（web 前端零测试，覆盖率缺口巡检第三刀）：`web/` 从 0 测试引入 vitest 5 + @vue/test-utils + jsdom 30 + @vitest/coverage-v8（独立工程不进根 pnpm-workspace，`web/` 下安装；新增 `pnpm test` / `pnpm coverage` 脚本 + 独立 `vitest.config.js`——build/dev 走原 vite.config.js 互不干扰），9 个 spec 75 用例全绿。**核心逻辑 7 文件行+分支双 100%**：`services/api.js`（自定义 adapter 截获真实 axios 管线而非 mock 内部——Bearer 注入/无 token 不注入、401 清 token 且错误继续 reject、非 401 与网络错误 token 保留、请求拦截器错误臂借 axios「后注册先执行」语义经真实管线触发；`window.location.href='/login'` 在 jsdom 下 navigation 未实现且 location 不可 stub（window/Location 实例均 non-configurable，实测），如实记账为 no-op、断言落在可观测副作用）、`stores/auth.js`（token 初始化自 localStorage 的刷新存活、login 成功/失败两路、logout 忽略错误照样清场、fetchUser 401 清认证、isAdmin/userName 可选链兜底）、`router/index.js`（守卫矩阵：未登录→login、已登录非 ADMIN 访问 admin 路由→dashboard、catch-all 放行 not-found + 28 条路由懒加载 chunk 全遍历冒烟）、`useGameList`/`useSegments`（模块级单例逐用例 resetModules 隔离；首次加载自动选中+持久化、已有选择不覆盖、loading 互斥并发只发一次、失败不置 loaded 下次重试、ACTIVE 过滤、响应 null 的 `|| []` 兜底臂、切游戏重置 segmentId）、`components/TrendChart.vue`（数据→SVG 换算手工常量钉住而非复刻公式：x 等距 56/420/784、单点居中 420、yMax=峰值×1.1、null 断段、20 标签步长 3 取 7 刻度、y 轴 4 类格式化分支——100×1.1 浮点污染使中间刻度全落 toFixed(2)，仅 0 走整数分支，按实测钉住）、`GameSelector.vue`（禁用态/displayName‖name 回退/change emit+持久化）。视图层：`RetentionView` **行 54/54 分支 63/63 双 100%**（未选游戏不发请求、默认 day/90 参数、summary `?? 0` 兜底、错误两臂、ClickHouse available:false、segment 下拉只列 ACTIVE 且选中进查询参数、真实 TrendChart 出 3 折线）、`GamesView` **行 58/59（98.3%）分支 61/62（98.4%）**（加载/空态/卡片跳转/创建成功重载/创建失败 alert 两臂/空态按钮与取消/平台复选框增删；唯一残行 DA:185 为 SFC 编译产物 v8 块映射伪影——该行两分支臂 17/4 次均已命中执行，lcov BRDA 为证，非未测行为）。`web/src` 全量行 33.2%/分支 8.4% 如实记账：21 个未测视图（路由 chunk 冒烟已把其模块顶层抬到 13%~54%）与 App/main/AppLayout 不在本轮范围。业务代码零改动（纯增量：tests/ 9 文件 + package.json 脚本 + vitest.config.js + pnpm-workspace.yaml（vue-demi 构建放行）+ .gitignore 补 `web/coverage/`）
+- [ ] 迁移 + `RiskFeatureEntity`：`risk_features`（game_id, environment, scope_key, feature_name, window, value, as_of）
+- [ ] `jobs/flink/risk-job` 特征作业分支：首批 6 特征（gold_gain_1h/24h、device_count、account_count_per_ip、win_rate…清单以计划书 §5.1 为准）
+- [ ] `RiskRuleEntity.ruleConditions` 改从特征取值（事件→特征→规则三段解耦）
 
-- [x] 测试覆盖率收口（control-service 分支覆盖专项，覆盖率缺口巡检第四刀）：control-service 分支 **98.81% → 99.50%**（未覆盖 82 → 34/总 6864），业务源码零改动（新增 `BranchTopUpCTest` 32 用例，全 mock/内存库/@TempDir 离线可跑）。五目标类：`DashboardService` **80.4% → 100%**、`SegmentService` **86.5% → 100%**、`InspectorProxyService` **84.6% → 100%**、`MlArtifactRegistry` **90.4% → 100%**、`EventsExportService` **89.6% → 97.9%**（唯一残臂 L111 `rows > MAX_ROWS` 需单分区 500 万行 JSONL+gzip 落盘，离线单测 GB 级磁盘/分钟级时长不可承受，按既定做法测试类 javadoc 记账）。关键发现：既有定义校验用例中 `event_name`/`within_days` 等 snake_case 键会被 Jackson `FAIL_ON_UNKNOWN_PROPERTIES` 在 JSON 解析期拒绝，实际从未抵达目标校验臂（断言只查 BusinessException 类型故一直绿）——补测一律 camelCase 直击目标分支；`compile()` 两处 `IllegalStateException("unreachable")` 兜底经包私有方法直调（直接构造未知 kind/op 对象绕过前置校验）合法覆盖，非凑数。剩余 34 miss 分布于非本轮范围的其余 14 类（PredictionMetricsService 7、DimensionSyncStatusService 4、Risk/Crash/Retention/MlRetrainScheduler 各 3 等），无真 bug 暴露
+**验收：** 见计划书 §5.4 端到端：灌超阈值金币事件 → `risk_features` 出 1h 窗口行 → 规则命中 → 决策链路。
 
-- [x] 测试覆盖率收口（PredictionMetricsService 分支清零，覆盖率缺口巡检第五刀·首类）：`PredictionMetricsService` 分支 **95.3% → 100%**（7 miss：refreshPropensity 入口查询环境三元 isBlank 侧与 avgScore 空集侧、refreshPltv 产物乘数 null/≤0 两回落臂、d7 查询空白环境侧、resolveModel 系数长度不匹配与 intercept 缺失两回落臂——均为既有用例未触达的对侧输入，非防御性不可达），control-service 模块分支 **99.50% → 99.61%**（27/6864）。业务源码零改动，`PredictionMetricsServiceTest` 既有「分支对侧补充」段内追加 5 用例（空白环境 + 空特征集、空白环境模型路径 pLTV、乘数缺失/非正双回落、系数长度不匹配、intercept 缺失），全 mock 离线可跑
-- [x] 测试覆盖率收口（DimensionSyncStatusService 分支清零，覆盖率缺口巡检第五刀·次类）：`DimensionSyncStatusService` 分支 **95.0% → 100%**（4 miss：upsert 必填校验三条件的「非空但空白/null」对侧臂——gameId 空白串、environment null、sourceKey 空白串，及 sourceType 非空引用但空白时跳过合并保留既有值），control-service 模块分支 **99.61% → 99.66%**（23/6864）。业务源码零改动，`DimensionSyncStatusServiceTest` 追加「分支对侧补充（BRANCH 收口）」段 2 用例（必填校验对侧三元一组、空白 sourceType 保留既有 sourceType），全 mock 离线可跑。剩余 23 miss 分布 12 类（Risk/Crash/Retention/MlRetrainScheduler 各 3、OnlineMetrics/PaymentFunnel/FinanceMetrics 各 2、SegmentEntity/DashboardEntity/RiskRule/MLModel 各 1、EventsExportService L111 已记账不可达），列为下一刀候选
-- [x] 测试覆盖率收口（RiskMetricsService 分支清零，覆盖率缺口巡检第五刀·第三类）：`RiskMetricsService` 分支 **90.0% → 100%**（3 miss：segmentFilter/args/base 三处 segmentId 三元条件的「非空引用但空白串」对侧臂——既有用例只输入过 null 与合法 "seg1"，空白串视同无分群口径从未触达），control-service 模块分支 **99.66% → 99.71%**（20/6864）。业务源码零改动，`RiskServicesDeepTest` 追加「分支对侧补充（BRANCH 收口）」段 1 用例（trend 一次调用同时击中三处：SQL 无 subject_id 片段、参数不尾插仍三元、响应无 segmentId 键），全 mock 离线可跑。剩余 20 miss 分布 11 类（Crash/Retention/MlRetrainScheduler 各 3、OnlineMetrics/PaymentFunnel/FinanceMetrics 各 2、SegmentEntity/DashboardEntity/RiskRule/MLModel 各 1、EventsExportService L111 已记账不可达），列为下一刀候选
-- [x] 测试覆盖率收口（CrashMetricsService 分支清零，覆盖率缺口巡检第五刀·第四类）：`CrashMetricsService` 分支 **90.6% → 100%**（3 miss：segmentFilter/addSegmentArgs/base 三处 segmentId 三元条件的「非空引用但空白串」对侧臂——与上一刀 RiskMetricsService 同根因同构，既有用例只输入过 null 与合法 "seg1"），control-service 模块分支 **99.71% → 99.75%**（17/6864）。业务源码零改动，`CrashMetricsServiceTest` 追加「分支对侧补充（BRANCH 收口）」段 1 用例（trend 一次调用同时击中三处：SQL 无 subject_id 片段、参数不尾插仍三元、响应无 segmentId 键），全 mock 离线可跑。剩余 17 miss 分布 10 类（Retention/MlRetrainScheduler 各 3、OnlineMetrics/PaymentFunnel/FinanceMetrics 各 2、SegmentEntity/DashboardEntity/RiskRule/MLModel 各 1、EventsExportService L111 已记账不可达），列为下一刀候选
-- [x] 测试覆盖率收口（RetentionMetricsService 分支清零，覆盖率缺口巡检第五刀·第五类）：`RetentionMetricsService` 分支 **90.0% → 100%**（3 miss：trend/segmentTrend/realtimeSegmentTrend 三处 segmentId 与 environment 的「非空引用但空白串」对侧臂——既有用例只输入过 null 与合法值，空白串从未触达），control-service 模块分支 **99.75% → 99.79%**（14/6864）。业务源码零改动，`RetentionMetricsServiceTest` 追加「分支对侧补充（BRANCH 收口）」段 1 用例（segmentId 空白走 aggregateTrend、environment 空白视同无环境双路径同时覆盖预聚合与回退），全 mock 离线可跑。剩余 14 miss 分布 9 类（MlRetrainScheduler 3、OnlineMetrics/PaymentFunnel/FinanceMetrics 各 2、SegmentEntity/DashboardEntity/RiskRule/MLModel 各 1、EventsExportService L111 已记账不可达），列为下一刀候选
-- [x] 测试覆盖率收口（MlRetrainScheduler 分支清零，覆盖率缺口巡检第五刀·第六类）：`MlRetrainScheduler` 分支 **95.2% → 100%**（3 miss：resolveClickhouseHttpUrl 显式 clickhouseUrl 为 null 侧回落 JDBC 推导、safeScore scoring 返回 null 记跳过不进 errors、envOrNull 的 environment==null 臂。前两臂经公共路径补测；第三臂公共路径不可达——environment=null 时 buildCommand 的 `List.of(..., "--environment", environment, ...)` 先抛 NPE（实测栈：ImmutableCollections.listFromArray → buildCommand → retrainForGame，先于打分执行），且 Spring @Value 默认 "prod" 不会注入 null，按仓内既有惯例（SecurityComponentsTest / ExperimentMetricsAggregatorTest 反射直调私有 helper）覆盖，并并列断言非空白透传/空白归一 null 两臂钉住三态契约），control-service 模块分支 **99.79% → 99.84%**（11/6864）。业务源码零改动，`MlRetrainSchedulerTest` 追加「分支对侧补充（BRANCH 收口）」段 2 用例，全 mock 离线可跑。剩余 11 miss 分布 8 类（OnlineMetrics/PaymentFunnel/FinanceMetrics 各 2、SegmentEntity/DashboardEntity/RiskRule/MLModel 各 1、EventsExportService L111 已记账不可达），列为下一刀候选
-- [x] 测试覆盖率收口（OnlineMetricsService 分支清零，覆盖率缺口巡检第五刀·第七类）：`OnlineMetricsService` 分支 **91.7% → 100%**（2 miss：overview 入口 segmentFilter 与私有 query 方法两处 segmentId 三元条件的「非空引用但空白串」对侧臂——既有用例只输入过 null 与合法 seg 值），control-service 模块分支 **99.84% → 99.87%**（9/6864）。业务源码零改动，`OnlineMetricsServiceTest` 追加「分支对侧补充（BRANCH 收口）」段 1 用例（overview 一次调用同时击中两处：SQL 不注入 segment_members 成员子查询、total/三维度/trend 五查询参数均不尾插 (segmentId, gameId) 仍三元），全 mock 离线可跑。剩余 9 miss 分布 7 类（PaymentFunnel/FinanceMetrics 各 2、SegmentEntity/DashboardEntity/RiskRule/MLModel 各 1、EventsExportService L111 已记账不可达），列为下一刀候选
-- [x] 测试覆盖率收口（PaymentFunnelService 分支清零，覆盖率缺口巡检第五刀·第八类）：`PaymentFunnelService` 分支 **94.7% → 100%**（2 miss：funnel 入口 segmentId 守卫与 hasSegment 两处三元条件的「非空引用但空白串」对侧臂——既有用例只输入过 null 与合法 "seg1"），control-service 模块分支 **99.87% → 99.90%**（7/6864）。业务源码零改动，`PaymentFunnelServiceTest` 追加「分支对侧补充（BRANCH 收口）」段 1 用例（funnel 一次调用同时击中两处：漏斗/留存 SQL 均不注入 segment_members 子查询、参数无 (segmentId, gameId) 尾插、响应无 segmentId 键），全 mock 离线可跑。剩余 7 miss 分布 6 类（FinanceMetrics 2、SegmentEntity/DashboardEntity/RiskRule/MLModel 各 1、EventsExportService L111 已记账不可达），列为下一刀候选
-- [x] 测试覆盖率收口（FinanceMetricsService 分支清零，覆盖率缺口巡检第五刀·第九类）：`FinanceMetricsService` 分支 **95.2% → 100%**（2 miss：report 入口 segmentId 守卫与 queryRows 的 hasSegment 两处三元条件的「非空引用但空白串」对侧臂——既有用例只输入过 null 与合法 "seg1"），control-service 模块分支 **99.90% → 99.93%**（5/6864）。业务源码零改动，`FinanceMetricsServiceTest` 追加「分支对侧补充（BRANCH 收口）」段 1 用例（report 一次调用同时击中两处：activity/new_users SQL 均不注入 segment_members 子查询、参数无 (segmentId, gameId) 尾插、响应无 segmentId 键），全 mock 离线可跑。剩余 5 miss 分布 5 类（SegmentEntity/DashboardEntity/RiskRule/MLModel 各 1、EventsExportService L111 已记账不可达），列为下一刀候选
-- [x] 测试覆盖率收口（最后 4 可达臂清零，覆盖率缺口巡检第五刀·收官）：`SegmentEntity`/`DashboardEntity` ensureId 各 1（既有用例 DisplayName 称「三侧」但每实体各缺一臂——Segment 缺「已有 id 不覆盖」侧、Dashboard 缺「空串生成」侧，补齐）+ `RiskRuleService` parseSequence 1（ruleConditions 空白串 isBlank 侧，经 create PATTERN 公共路径拒绝）+ `MLModelService` scheduledMlRetrain 1（mlRetrainScheduler 装配缺失 null 臂——裸 `new MLModelService()` 诚实跳过），control-service 模块分支 **99.93% → 99.99%**（1/6864）。业务源码零改动，3 测试文件追加/补齐 4 臂，全 mock/同包直调/裸实例离线可跑。**唯一残臂 `EventsExportService` L111（rows > MAX_ROWS）维持 javadoc 记账不可达排除——可达口径 100% 收官**，后续巡检无新增刀
-- [x] 收尾审计轮（P8 MMP 前置未达成，转构建/静态面复核）：go vet/gofmt/go build **不适用**（全仓 0 个 .go 文件、无 go.mod，登记）；前后端构建复核绿——全量 `./gradlew test`、`pnpm -C web build`；SDK 面复核——`sdks/web` build 绿 + 测试 46/46、`sdks/unity` dotnet test 46/46（2 个测试侧 warning 登记不修：xUnit2031 Where+Assert.Single 用法、CA1416 UnixFileMode 平台标注）；`sdks/ios` swift 未安装不可构建、`sdks/android` 无 Android SDK 工具链（均登记）。**发现项已修**：`sdks/web` 测试 2 例 flaky 失败（「自动 flush:size 达 maxBatch」「send 成功:真 gzip」）——根因为测试用固定 sleep(20/30) 等待 gzip 异步流水线（实测耗时 1~40ms 波动，最小复现确认产品代码无 bug），加 `waitUntil` 轮询 helper 替换 8 处同语义等待（负向断言/退避计时语义保留），3 连跑 46/46 全绿
-- [x] 测试覆盖率批次续（control-service 可达臂 100% 收官后，跨模块普查挑缺口最大模块）：`agents/dimension-sync-agent` 分支覆盖 **86.1% → 97.2%**（miss 60 → 10/总 354）。业务源码零改动，5 测试文件追加/扩展 12 用例（`CsvSourceTest`：数据行单元格多于表头列数忽略超出列；`ExcelSourceTest`：同 CSV 对侧 + 表头空白单元格跳过已有；`GatewaySinkTest`：1xx 状态码 < 200 分支兜底处理超时；`KafkaRecordMapperTest` 既有三条不可达臂已 javadoc 记账；`KafkaSourceTest` 既有 drain/位点/坏消息路径已覆盖）。剩余 10 miss 均为不可达或需真实 broker：KafkaSource 1（resourceId isBlank 意图性不可达）、StatusReporter 1（statusCode < 200 ∥ >= 300 短路已由 503/302 覆盖）、CsvSource/ExcelSource 各 1（resourceId isBlank 意图性不可达）、CsvParser 1（\\r 非 \\r\\n 分支极难构造）、GatewaySink 2（excerpt null 响应体不可达、长度截断已由 300 字符用例覆盖）、KafkaRecordMapper 2（root==null/node==null 意图性不可达）。全量 `./gradlew test` 绿、`npm -C web run build` 绿
-- [x] 测试覆盖率缺口巡检第六刀（web 侧，SegmentsView 之后取缺口最大模块，分支缺口优先）：`WebhooksView.vue` 行 **42/176 → 176/176（100%）**、分支 **0/217 → 217/217（100%）**；`SegmentsView.vue` 行 157/157 保持、分支 **164/166 → 166/166（100%）**（`c.op || 'gte'` / `Number(c.count) || 1` 两 false 侧经 devtoolsRawSetupState 注入缝直击，先前记账不可达现已实测覆盖）；`web/src` 全量行 **1113/2341（47.54%）→ 1247/2341（53.27%）**、分支 **629/2403（26.18%）→ 848/2403（35.29%）**（增量 +134 行 = Webhooks 134；+219 臂 = Webhooks 217 + Segments 2，数字闭合）。业务源码零改动，新增 `WebhooksView.spec.js` 18 用例（列表三行全字段/统计四卡/空态/慢载、load 四变体 catch 链、stats null、新建必填+authConfig 六臂校验、全字段/最小表单 POST body、slack/稀疏/secret 三编辑臂、保存 busy+四变体、测试 busy/结果卡/四变体、启停双向+四变体、删除 confirm 双侧+四变体、日志三态/四变体/遮罩）。后端普查快照（只测不动）：control-service 行 25 miss/分支 1 miss（EventsExportService L111 已记账）、gateway 1/3、dimension-sync-agent 13/6、risk-job 1/4、common-auth/kafka/otel 各 1 行、其余 100%——后端合计行 miss ~43 已饱和不重复动。测试手法：盒子高负载（Tauri 链接 + 安卓模拟器并行）下固定轮数 settle 边际不足致初载未完成（rowBtn 空指针 TypeError）与横幅缺失漂移红（双文件并行复现率 ~50%），宏任务链尾部断言一律改条件轮询 `waitFor`（命中即返，绿路径不加耗时；同步路径保持直接断言），`mountView` 以「刷新按钮解除 disabled」（loading 复位在 load finally 之后）为初载完成门；8 连跑双文件并行 + 2 遍全量 136/136 全绿后收口。实测修正两处跟源码：成功后重载 GET 计两次、编辑/新建成功文案取表单 name（submitForm 用 f.name.trim()）。核心 7 文件双 100%、GamesView/RetentionView/DashboardsView 均无回退
+## B6 RiskScore 独立 + Decision 状态机
 
-## P7 竞品差距收敛（依据 `docs/competitive-analysis.md`，2026-09 竞品调研）
+- [ ] 评估产出 `risk_scores`（subject、累计分、规则明细 JSON）；Rule 静态 riskScore 降为“该规则最大贡献分”
+- [ ] `RiskCaseEntity.status` 状态机：`OPEN → REVIEW|ALERT|MARK → THROTTLE|BLOCK → RESOLVED`（流转合法表入测试）
+- [ ] Block 级动作要求输入事件 `trust_level=HIGH`（server 事件才能驱动）
 
-- [x] P7-1 实时事件检视器（Live Inspector / Debug View）：Gateway 内存环形缓冲记录每条事件结局（accepted/rejected/sampled_out/duplicate + 拒绝原因与 schema 明细）+ `/v1/inspector/recent` 检视 API（API Key 作用域过滤）+ Control 代理端点 + 控制台 Live Inspector 页（轮询刷新）
-- [x] P7-2 可复用用户分群（Segments）：分群定义（属性 + 行为条件）→ ClickHouse 物化（segment_members ReplacingMergeTree）→ 报表注入 segment 过滤（在线/留存/付费漏斗/财务/Crash/风控）；留存分群优先走 retention_daily 预聚合（表已加 subject_id 维度并进排序键，SummingMergeTree 需重建表迁移），预聚合无数据时回退 events 实时计算（窗口钳制 90 天 + max_execution_time 15s 限流）→ 控制台分群管理页（创建/计算/成员预览/启停/软删）；权限 segment:read / segment:manage
-- [x] P7-2 收尾：retention_daily 主体维度重建迁移脚本 `schema/sql/clickhouse/migrations/2026-09-retention-daily-subject-id.sql`（停旧 job → 空串保留历史行 → 原子换名 → 起新 job，一次性执行非幂等）
-- [x] P7-3 自定义仪表盘 widget 化：仪表盘 CRUD（V0.9.13 迁移 + dashboard:read/manage 权限）+ 布局 JSON 校验（widget 类型/数据源白名单、params 数值钳制、span 规范化）+ 控制台 widget 编辑器（KPI/折线/柱状/表格 × 在线/留存/付费漏斗/Crash 四数据源、12 栅格布局、按游戏保存）；权限 dashboard:read / dashboard:manage
-- [x] P7-4 全量原始数据导出：events 按日分区导出 JSONL（gzip 可选）到导出目录（对象存储由运维同步该目录），分批游标读取（单分区上限 500 万行）+ manifest（行数/字节/SHA-256）原子写 + 分区列表 API + 控制台导出页；权限复用 export:execute
-- [x] P7-5 MMP 归因接入评估：AppsFlyer/Adjust 数据源与建表调研（`docs/mmp-attribution-evaluation.md`）——调研结论：三家主流 MMP 均支持 Webhook 实时推 + 定时落自有云存储两类原始数据通道；推荐方案 B（定时云存储导出 → 加载 job → `attribution_installs` 表，与 P7-4 导出目录模式对称），有条件立项进 P8（前置：真实 MMP 原始数据套餐权限）；不做广告平台直连
+**验收：** 全绿；状态机合法/非法流转各 ≥3 用例；§5.4 端到端全链路可跑。
 
-明确不跟进（详见竞品分析 §4）：Session Replay、行业基准、游戏后端（排行榜/成就/多人服务器）、自建推送通道、广告平台直连、多租户 SaaS 化。
+## B7 EventSchema 一等资源化
 
-## P7 后续批次（2026-09）
+- [ ] TrackingPlan→EventSchema 升级：补 compatibility / PII policy / retention / sampling / owner 字段与版本发布/兼容检查 API
+- [ ] `rejectUnknownEvents` 默认值改 true（随本批验收，dev 模式豁免）
+- [ ] web 控制台 schemas 资源组页面/入口
 
-- [x] 维度同步 Agent + sync-status API：`agents/dimension-sync-agent/`（零仓库内依赖的独立 Gradle 模块，可 subtree 拆出）——mysql/postgres 增量查询 source（单 ? 占位、ORDER BY 水位列、`n:/t:/s:` 类型标签水位按原类型绑定）+ CSV 目录 source（RFC 4180、文件粒度断点）；checkpoint.json 原子落盘、推送成功才前进（失败重放，ReplacingMergeTree 幂等）；NDJSON 推 Gateway `/v1/batch`（event_name=dimension_define）；Control 侧 V0.9.14 `dimension_sync_status` 表 + `/api/dimensions/sync-status` 心跳上报/查询（dimension:read/manage 权限，两口径延迟 sinceLastPushSeconds / sinceLastEventSeconds）；excel/kafka source 与控制台管理页见下条
-- [x] 维度同步 Agent 收尾：excel/kafka source + 控制台管理页——`excel` source（标准库 zip+xml 最小 xlsx 解析器 XlsxParser：共享/内联字符串、布尔、`r` 列引用定位空洞补位、E 记法大数还原、禁 DTD 防 XXE；首个工作表 + 文件粒度断点，语义同 CSV）+ `kafka` source（消息体 = JSON 对象经 KafkaRecordMapper 复用控制列语义，嵌套字段序列化保留；位点 checkpoint 自管 `k:0=42;1=57` 不依赖 broker group offset，cursor-initial 复用同编解码；坏消息跳过但 offset 前进防毒丸；drain 上限 100 轮防高速 topic 饿死推送）——两者位点推进/断点续传/坏消息路径全部假端口/手工 xlsx 单测覆盖，kafka 真实 broker 端到端核对见下条；控制台维度同步管理页（web `/dimensions`，`dimension:read` 只读：心跳健康度 180s/900s 分档 + 两口径延迟 + 最近错误，5s 轮询可关，403/空数据诚实降级）
-- [x] 维度同步 kafka source 真实 broker 端到端核对：docker 起 apache/kafka:3.7.0 单节点 KRaft（宿主 29092），`KafkaSourceBrokerE2ETest` 六用例——earliest 起步 / 断点 seek 续传（checkpoint 位点优先于 broker group offset：alterConsumerGroupOffsets 布假位点对照；旧断点重放可复达）/ cursor-initial（含残缺值无害回落）/ 运行中扩分区（同实例感知新分区、未覆盖分区 earliest 追上、cursor 合并三分区位点）/ 毒丸跳过 offset 前进 / drain 上限 100 轮真实分批（fetch 每轮批大小不定，断上限界）与续传无丢失；broker 不可达整类自动 SKIP 不误报绿。实测抓出并修复真 bug：本轮无新数据的分区在 cursor 丢条目（KafkaSource 位点簿记改为以断点起点为底）；扩分区感知默认 metadata.max.age 5min 过钝（实测 36s 仍陈旧）→ 压到 1s + assign 前 listTopics 全刷；另附离线回归：有位点分区无新数据时位点保留进 cursor
-- [x] gateway kafka 组件真实 broker 覆盖 + agent SASL/多 broker 收口：gateway `PublishersBrokerE2ETest`（apache/kafka:3.7.0 + Apicurio Registry 2.6.5.Final，环境不可达自动 SKIP）——DlqPublisher 真实回路 wire 载荷/key 逐字节核对、AvroPublisher 自动注册 schema 全回路（AvroKafkaDeserializer 回读字段、routing key/topic）、registry 不可达调用线程同步抛 RestClientException；common-kafka 补测试基建 + `KafkaProducersBrokerE2ETest` 字节 producer 真实回路；PublishersTest 补离线 broker 不可达路径。实测两项运维发现：①producer.send() 调用线程挂满 max.block.ms（默认 60s）且 TimeoutException 进 FutureFailure——DLQ fire-and-forget 忽略 future，消息静默丢失无日志；②Avro REQUIRED 字段真实序列化器才校验 null（mock 不暴露），生产链路靠 BatchController 前置拒绝兜底。agent 侧：`source.kafka.security-protocol/sasl-mechanism/username/password` 配置 + fail-fast 校验（SASL_* 必带 SCRAM 凭证）+ adapter JAAS 注入（离线单测含转义），`KafkaSourceSaslBrokerE2ETest`（SASL_PLAINTEXT+SCRAM-SHA-256 真实回路 + 错误凭证 SaslAuthenticationException 同步可见）；3 节点 KRaft `KafkaSourceMultiBrokerE2ETest`（多地址 bootstrap / 死地址容错 / 停一台 broker 2/3 存活全绿——实测 2 节点 KRaft voters 多数派 2/2 任一宕机即丢 controller quorum，元数据操作挂起）；独立探针量级：200k 条 drain 16k msg/s 零丢失、-Xmx256m 峰值堆 139MB
-- [x] agent kafka TLS(SSL) 证书链真实 broker 实测（仓库自述覆盖缺口收口，release-notes/adapter 注释原记「尚未覆盖」）：客户端新增信任库三键 `source.kafka.ssl-truststore-path/-password/-type`（AgentConfig 映射 + validate fail-fast：明文协议配信任库=配置漂移启动即拒、type 白名单 JKS/PKCS12；adapter `applySecurityProps` 注入 `ssl.truststore.*`，SSL/SASL_SSL 通用）；`KafkaSourceSslBrokerE2ETest` 三臂（apache/kafka:3.7.0 单节点 KRaft，SSL 29097 + SASL_SSL 29098 双证书 listener、自签 CA、broker 证书 SAN=localhost/127.0.0.1）——①SSL 完整回路 + 断点续传位点（`k:0=3`→`k:0=5` 精确推进）②不可信信任链（不配 truststore→JVM cacerts）实测同步抛 `SslAuthenticationException`（cause 链 `SSLHandshakeException`→PKIX path building failed，api timeout 内可见非静默降级）③SASL_SSL = SCRAM+证书链叠加臂（错凭证仍 `SaslAuthenticationException` 确定性可见，独立探活、只起 SSL 臂环境下该臂 SKIP）；环境编排 `src/test/ssl/gen-pki.sh`+`run-broker.sh`（私钥只落 OUT_DIR 不进仓库），broker/truststore 不可达整类自动 SKIP 不误报。实测暴露三点运维知识：①openssl 3.x `pkcs12 -export -nokeys` 纯证书 truststore JDK 读出 0 条目（加载不报错、信任锚为空、握手全挂且报错形态隐蔽）→ 信任库必须 keytool 生成（脚本已修正并跑通）②镜像 configure 脚本 SSL 块按 advertised listeners 字面量 `SSL://` 匹配才注入 keystore——listener 名不含该字面量时需直设 `KAFKA_SSL_KEYSTORE_LOCATION` 等 broker 级 env ③listener 名带下划线会被 `KAFKA_<NAME>_<PROP>` env 转换误切。遗留：长稳/性能压测未覆盖（mTLS 双向认证已由随后两条收口）
-- [x] agent mTLS 配置面先行（SslSettings 改造，为 mTLS 真实回路 E2E 铺路）：`KafkaConsumerAdapter.SslSettings` record（truststore 三键 + keystore 三键合一，`truststoreOnly()` 便捷构造保 10 参旧入口行为不变）；`applySecurityProps` 增 keystore 注入 `ssl.keystore.location/-password/-type` + `ssl.key.password`（私钥口令复用库口令 = PKCS12 单一口令语义，JKS 分密不进配置面；path 空白整组不注入，type 空白不写交回 kafka-clients 缺省）；`AgentConfig` 新增 `source.kafka.ssl-keystore-path/-password/-type` 三键，校验改 `requireCertMaterial` 统一助手——truststore/keystore 同规则（明文协议配证书材料=配置漂移启动即拒、type 白名单 JKS/PKCS12），`AgentMain.sourceOf` 接全参构造。离线单测 +4（`KafkaConsumerAdapterPropsTest`：keystore 注入/mTLS 全组合/SASL_SSL 三方叠加/truststoreOnly 语义）+ `AgentConfigTest` keystore 面（load 三键、缺省值、SSL+SASL_SSL 通过、明文漂移与 type=PEM fail-fast、copy() 补拷）。文档三处同步（properties.example、模块 README TLS 条目、reference/dimension-sync.md）。真实 broker mTLS 回路（listener require client auth + 客户端证书 + 正/负 E2E 臂）已由下一条收口
-- [x] agent kafka mTLS 双向认证真实 broker 实测（SSL 批次自记遗留「mTLS 双向认证未覆盖」收口，配置面先行后的第二刀）：`KafkaSourceSslBrokerE2ETest` 三臂→五臂，broker 加 `MTLSHOST://:29099` listener 且 **listener 级** `listener.name.mtlshost.ssl.client.auth=required` + listener 级 broker 信任库（broker 级 `ssl.client.auth` 留 none，否则 29097/29098 两臂一起被要求出证）。④mTLS 正臂：`gen-pki.sh` 新增客户端证书（`CN=oddsmaker-kafka-e2e-client` + `EKU=critical,clientAuth`，同 CA 签发）与 `client-keystore.p12`（叶证书+CA+私钥，PKCS12 单一口令 = 库口令即私钥口令，与 `SslSettings` 口径一致），建 topic / 生产 / 消费**全程只走 29099**（管理面也双向），`AgentConfig.validate()` → `SslSettings` 六键 → adapter 注入真实链路，消费 3 条 + 断点续传 `k:0=3`→`k:0=5` 位点精确推进；⑤mTLS 负臂：只配 truststore 不配 keystore → 实测（TLS1.3）拒绝发生在**握手末段之后**，顶层 `SslAuthenticationException("Failed to process post-handshake messages")`、cause `SSLHandshakeException("(bad_certificate) Received fatal alert: bad_certificate")`，与臂②的 PKIX 形态明确可辨；断言同时钉「链上不含 PKIX」以反证 listener 真在要求客户端证书（否则负臂会以另一种形式溜过）
-  - 运维/排障知识（均为实测）：①**listener 名不能带下划线**——镜像把 `KAFKA_<REST>` 的全部下划线转成点，`MTLS_HOST` 会落成 `listener.name.mtls.host.ssl.client.auth`（broker 按第一个点切 listener 名 → 名不匹配 + 未知属性，配置**静默失效**），故用 `MTLSHOST`；正面验证 listener 级覆盖确实生效（`docker exec grep server.properties` + broker 拒绝行为双证据）②**TLS1.3 下 openssl s_client 看不出 mTLS 拒绝**——`CertificateRequest` 的拒绝在握手完成后送达，certless 连接依旧打印 `Verify return code: 0`（那只是服务端链结果），负向自检必须以 broker 日志 `Failed authentication ... (SSL handshake failed)` 为判据（`run-broker.sh` 已按此写，并在 mTLS listener 未就绪时 fail-loud 打日志，避免「环境没起」被当成 SKIP 静默）③broker 侧校验客户端证书需自己的 truststore，与客户端 truststore 同用 keytool 生成（避开 openssl `-nokeys` 的 0 条目坑）
-  - SKIP 约定复核：mTLS 两臂各自单独探活（证书库文件 + 29099 双向 `describeCluster`）。**实测证据**：用 HEAD 版 `run-broker.sh` 只起 29097/29098 后跑该类 → `tests=5 failures=0 skipped=2`，两 mTLS 臂 SKIP、三既有臂 PASS（不是把环境缺失报成功，也不是报成功能坏）；起全 listener 后同一条类 `5/0/0` 全绿
-- [x] agent 模块单测覆盖率补齐（覆盖率缺口巡检第一刀，**业务源码零改动**）：`agents/dimension-sync-agent` 指令覆盖率 **87.6% → 96.7%**（miss 496 → 132）、分支覆盖 **77.8% → 89.1%**。前后两次测量同环境同 SKIP 状态（docker kafka 29092 起、SASL/多 broker/SSL 三套 E2E 各自 SKIP，唯一变量是本次新增的离线用例），基线由 `git stash` 本次测试改动后重跑得到，非引用旧报告。新增/扩展：
-  - `JdbcSourcePollTest`（新）：**自注册假 JDBC 驱动**（URL 前缀 `jdbc:oddsmaker-fake:`）+ JDK 动态代理伪造 Connection/PreparedStatement/ResultSet/ResultSetMetaData，`JdbcSource` 走的就是真实 `DriverManager` 路径故无需任何 seam；`@AfterEach` 必 deregister（假驱动留在 DriverManager 会污染同 JVM 其它测试的 getConnection）。覆盖 `poll()` 全体（57.4% → **100%**）：首轮绑 cursor-initial 判型值（整数→Long）/ 续传优先 checkpoint 且 `t:` 还原成 Timestamp 绑定 / 未配 cursor-initial 绑 null 全表起 / 列名大小写归一与控制列不入 attributes / null 单元格不串列（`DimensionChange.attr` 拒收 null）/ 空结果集位点与 lastEventTs 不回退 / 缺 cursor 列 SQLException / 连接失败与查询失败原样上抛且 try-with-resources 关连接
-  - `AgentMainTest` +5：`sourceOf` 五类装配（csv/excel/mysql/postgres/kafka——kafka 臂真实构造 consumer，反射取 `port` 断言是 `KafkaConsumerAdapter` 并 close 释放线程与 MBean；未知 type 抛 IAE）+ 两条失败细节（异常 `getMessage()==null` 时 lastError 取 `toString`；**checkpoint 落盘自身失败**——把 checkpoint 父目录做成普通文件必然 FileAlreadyExistsException——时 errorCount 仍计数、异常不外逃、心跳继续上报）。53.3% → 81.2%
-  - `XlsxParserTest` +8（86.1% → 98.9%）：t=s 无 `v` / inlineStr 无 `is` / 数值无 `v` → 空串，t=b 无 `v` 或非 `1` → false；无 `r` 引用退文档序；共享字符串索引非法与越界各自 fail-loud（越界臂带「共 N 条」上下文）；rels 指向的工作表条目不在 zip 内 → 「缺少工作表条目」；rels 缺失与 Id 不匹配 → 约定路径兜底；Target 以 `/` 开头去前导斜杠；多 Relationship 循环按 Id 命中不被首条带偏；XML 损坏（非 IOException 内部异常）包装为 `xlsx 解析失败` + cause；`normalizeNumber` null/无指数记号/E 记法整数还原/小数不还原/超 9.2e18/解析成无穷/非法数字各臂；`colOf` 小写字母与空引用
-  - `KafkaConsumerAdapterCtorTest`（新）：把 props 交给**真实 kafka-clients 校验**（不 assign/不 poll，故不触网）——3/7/10 参构造链 consumer 建得起来且 `close()` 干净（离线 props 单测只能证明键值拼对，构造期才证明 kafka-clients 认这份配置，含 JAAS 行可被解析）；非法 `security.protocol` 在构造线程同步抛 `ConfigException`（`AgentConfig.validate` 之外的第二道防线）。`PropsTest` 补 keystore 口令 null→空串（库口令与私钥口令同步归一）与 type 空白不注入臂。adapter 88.1% → 97.2%
-  - `DimensionChangeTest`（新）：钉无参构造默认值（op=upsert、attributes 为空可变映射，Jackson 反序列化依赖）与 `attr` 丢弃 null/空白键及 null 值。77.6% → 100%
-  - **剩余缺口均为不可达臂或需真实 broker 的臂，未改源码去凑**（已写进测试类 javadoc 记账）：`AgentMain.main()`（validate 后进 `run()` 无限循环 + shutdown hook，进程级启停无法单测化，剩余 54 miss 全在此）、XlsxParser `getAttributeNS` 回退（parseXml 未开 namespace-aware，`getAttribute("r:id")` 恒取到字面属性）与 `setFeature(disallow-doctype-decl)` 抛错 catch（JDK 解析器恒支持该特性）、CheckpointStore `AtomicMoveNotSupportedException` 回退（平台相关）、adapter `assign` 的「topic 无可用分区」与 `startOffsets==null` 两臂（已由 KafkaSource*BrokerE2ETest 真实覆盖，SKIP 时不计入）
-- [x] agent 模块单测覆盖率补齐（覆盖率缺口巡检第二刀，**业务源码零改动**）：`agents/dimension-sync-agent` 分支覆盖 **89.1% → 97.7%**（miss 432 → 10/总 432），指令覆盖 **96.7% → 98.9%**（miss 132 → 26）。本轮新增/扩展（全 mock 离线可跑、不造假用例、不可达臂 javadoc 记账）：
-  - `AgentConfigTest` +10：load 非 config 参数忽略、orDefault 空白回退默认值、intOf/longOf 合法解析与空白回退、require 空白串拒绝、requireCertMaterial truststore/keystore 在 SASL_SSL 下合法/非法 type 拒绝、truststore/keystore 空白视为未配置早期返回
-  - `KafkaConsumerAdapterPropsTest` +4：SslSettings 版 applySecurityProps 的 truststoreType/keystoreType null/blank 不注入 type 配置分支
-  - `CsvParserTest` +3：空串返回空列表、仅 CR 换行、引号字段开启非引号字符累积
-  - `StatusReporterTest` +1：3xx 重定向判失败（resp.statusCode() >= 300 分支）
-  - `KafkaRecordMapperTest` +2：textOf 显式 NullNode 返回 null、writeValueAsString 异常回退 toString（兜底记账）
-  - `CursorCodecTest` 既有用例已覆盖全分支（28/28=100%）
-  - `XlsxParserTest` 既有用例已覆盖全分支（78/78=100%）
-  - `KafkaConsumerAdapterAssignPollTest` +1：Mockito eq 修复 stub 命中（assign 部分 offset seekToBeginning 对侧）
-  - **全量模块分支 97.7% 到达实用阈值，剩余 10 miss 分布 7 类**（StatusReporter 1、CsvParser 1、KafkaRecordMapper 2、KafkaSource 1、CsvSource 1、ExcelSource 2、GatewaySink 2），均为非核心离线类或需真实 broker/网络的臂，无真 bug 暴露
-- [x] ml 产物写回链路（P4.4 收尾）：Control 侧 `MlArtifactRegistry` + V0.9.15 `ml_model_artifacts` 表——`POST /api/ml-artifacts` 注册版本化产物（校验语义对齐 Python validate_artifact，同 (game,type,version) 重训覆盖，写审计；`ml:read / ml:manage` 权限种子已在 V0.9.8）+ 版本列表 / active 查询；`PredictionMetricsService` 批量打分回写 predictions——churn/risk 按 feature_names 从 ClickHouse 取特征线性点积 + sigmoid（golden case 与 Python 同输入同结果），pltv 为未成熟用户 D7 收入 × 产物乘数（无产物回落 cohort 比值均值，无成熟 cohort 不写回）；模型/启发式双路径以返回体 path 与落库 model_id/model_version 可区分，产物损坏或特征口径不匹配整体回落启发式，ClickHouse 未配置诚实降级 available=false
-- [x] Python 训练管线（P4.4）：`ml/`（`oddsmaker-ml`，numpy/pandas/scikit-learn）——churn（LR，标签=快照后 14 天无事件）/ pltv（D7→D30 乘数过原点 WLS，w=cohort 人数，留出 cohort MAPE 对照等权比值均值基线）/ risk（LR balanced，标签=risk_actions block/review 升级处置）；产物为版本化 JSON（feature_names + coefficients + intercept，Java 点积 + sigmoid 打分、无需 Python 运行时），自带启发式基线对照（auc_gain_vs_heuristic / holdout MAPE）；`python3 -m oddsmaker_ml train --source synthetic` 种子合成数据离线一键跑通且可复现，ClickHouse HTTP 真实数据入口仅依赖标准库 urllib（JSONEachRow）；propensity / GBDT / 产物注册回写 predictions 按需再加
-- [x] ml 训练调度（P4.4 后续衔接点）：`MLModelService.scheduledMlRetrain()`（cron `oddsmaker.ml.retrain.*` 可配，默认每日 04:20、开关默认关闭）委托 `MlRetrainScheduler`——发现 `ml_model_artifacts` 已注册的游戏 → 进程执行器 `MlTrainingRunner` 跑 `python3 -m oddsmaker_ml train --model all`（数据源优先 ClickHouse：CH 可用且 HTTP url 可推导（显式 `clickhouse-url` 优先否则 JDBC url 推导 `jdbc:clickhouse://host/db` → `http://host/?database=db`）；不可用按 `allow-synthetic`（默认 true）回落合成数据跑通，设 false 时 SKIPPED 审计不落合成产物）→ 产物逐个校验注册（同版本覆盖即幂等）→ 触发四类批量打分回写 predictions；训练失败 / 产物非法 / 打分异常写审计（FAILURE / PARTIAL / SKIPPED，actor=ml-retrain）诚实降级不阻塞既有链路，单游戏失败不阻断其余游戏
-- [x] propensity 付费倾向模型（P4.4 第四类）：`ml/` 侧 `models_propensity.py`（标签 = 快照后 14 天内有付费事件，特征口径与 churn 同款 `v_user_features_30d`，StandardScaler + LR 线性可解释）+ 合成数据生成器（潜在状态条件生成 + 非线性标签映射，5 种子 auc_gain_vs_heuristic 全正）+ `--model propensity|all` CLI；Control 侧 `PropensityScorer` 启发式回落（与 Python heuristic 逐字镜像，双端 golden 锁定）+ `refreshPropensity / topPropensity`（predictions type=propensity，HIGH=0.5 / MEDIUM=0.25 分级）+ `/api/prediction-metrics/{gameId}/propensity[/refresh]`（game:read / game:update）+ 注册表 propensity 类型校验
+**验收：** 全绿；EventSchema CRUD + 版本发布与兼容检查测试；未知事件默认拒收行为有测试钉住。
 
-## 暂停项
+## B8 实验平台形式化
 
-- [x] 不继续实现 Organization/Tenant 相关新功能（2026-10-02 收尾核验：功能面零残留——schema/services 主干/前端 grep 无 organization/tenant 命中，P0 起全链路已无租户字段，维持不跟进）
-- [x] 不继续做租户套餐、租户升级、跨公司 Row Policy（2026-10-02 收尾核验：全仓无套餐/租户升级/行级策略任何实现痕迹，与竞品分析 §4「不跟进多租户 SaaS 化」一致，维持不做）
-- [x] P8 MMP 归因接入（有条件立项，2026-09-26 核对 → 2026-10-02 收尾核验）：前置条件为拿到任一 MMP 的原始数据导出权限（Data Locker / CSV uploads 任一），仓库侧复核仍无任何 MMP 数据接入痕迹（无凭据/配置/接收端点/建表，`ad_network` 等四列为游戏服自报回退维度与 MMP 归因无关），前置未达成——仅保留调研文档 `docs/mmp-attribution-evaluation.md`，达成前不启动
+- [ ] `ExperimentEntity` 显式字段化：Audience（segment 引用）/ Guardrail / Decision（status ∈ {DRAFT, LIVE, PAUSED, ENDED} 枚举化）/ Variant 与 Allocation 从 configJson 提列
+- [ ] `experiment-config.schema.json` 同步升级、旧 configJson 向前兼容
+- [ ] `experiment.exposure` 列入平台事件清单（§4）
+
+**验收：** 全绿；Splitter/Aggregator 存量测试零改动通过；audience/guardrail 创建与发布动作测试。
+
+## B9 运行模式矩阵
+
+- [ ] `deploy/MODES.md`：Lite / Standard / Production 三档组件矩阵（对齐现有三套编排）
+- [ ] `deploy/demo` 编排注明「本档 = Lite」；quickstart = Standard；infra = Production
+
+**验收：** 矩阵与仓库现有编排逐一核对一致（读码比对，改错即拒）。
+
+## B10 Data Quality 与共享特征（收口批）
+
+- [ ] `event_valid_rate / drop_rate / unknown_event_rate / duplicate_rate / late_event_rate` 指标落库 + Game Data Health 页
+- [ ] 共享 Feature 双写 schema 定稿（risk_features + feature_store 摘要表）——**Data Lineage 仅记方向不建系统**
+
+**验收：** 指标表可查、健康页有数可看；feature_store 建表迁移与双写合成器测试；无 Lineage 代码。
+
+---
+
+## 边界（不跟进，评审转审查项）
+
+- 不做多租户/SaaS（Organization/Workspace/Project/Tenant 概念不入新代码）
+- 不删 Gateway `project_id` 兼容层（已闭环项，删除破坏 v0 SDK 兼容）
+- 不搞事件自由流动：dev 模式外未注册 schema 的事件默认拒收（B7 后）
+- SDK/业务层不持有物理路由（storage_profile 是唯一桥）
+- 不做 Data Lineage 系统化、不做新客户端端（移动端原生队列之外）
+- P8 MMP 归因接入保持暂停（前置：MMP 原始数据导出权限，未达成，仅存调研文档）
+- 旧评估完成度数字不得再引用为现状
