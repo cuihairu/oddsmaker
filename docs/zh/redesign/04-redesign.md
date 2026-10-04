@@ -331,11 +331,12 @@ ORDER BY (identity_id);
 
 ### 6.4 风控策略示例
 
-**注意**：`game_id` 和 `environment` 已在数据库/表层级体现，风控策略配置时不需要指定。
+风控规则按 `game_id` 创建（`POST /api/risk-rules`，`gameId` 必填）；示例省略了其余字段：
 
 ```yaml
 rule_id: payment_receipt_reuse
-# game_id 和 environment 在数据库层级：game_demo_prod
+game_id: game_demo
+environment: prod
 risk_type: payment
 severity: high
 window: 24h
@@ -346,7 +347,8 @@ action: block
 
 ```yaml
 rule_id: resource_inflation_spike
-# game_id 和 environment 在数据库层级：game_demo_prod
+game_id: game_demo
+environment: prod
 risk_type: economy
 severity: medium
 window: 10m
@@ -367,7 +369,7 @@ action: alert
 | ClickHouse | tenant_id/app_id 分区 | game_id/environment 分区 |
 | SDK | 参数不统一 | typed game events + public api_key |
 | 权限 | 多租户 RBAC 过重 | 公司内按游戏/环境授权 |
-| 风控 | 概念化 | risk_events + risk_rules + actions 闭环 |
+| 风控 | 概念化 | risk_events + risk_rules + actions 全链路 |
 
 ## 8. 迁移策略
 

@@ -39,7 +39,7 @@ Oddsmaker 采用 **资源流水事实模型**：
 
 一次业务操作产生多条资源流水，每条流水只表达一种资源。
 
-**注意**：设计早期曾设想 `game_id`/`environment` 只在表层级体现；最终实现两者都是事件必填字段，且是 ClickHouse 的分区键（`PARTITION BY (game_id, environment, 日期)`）。
+设计早期曾设想 `game_id`/`environment` 只在表层级体现；最终实现两者都是事件必填字段，且是 ClickHouse 的分区键（`PARTITION BY (game_id, environment, 日期)`）。
 
 ```json
 {
@@ -105,7 +105,7 @@ Oddsmaker 采用 **资源流水事实模型**：
 | `reason` | string | 资源变化原因 |
 | `balance_after` | decimal/int64 | 可选，变化后的余额，用于风控校验 |
 
-**注意**：同上——`game_id` 和 `environment` 是事件字段与分区键，不在表名层级。
+同上：`game_id` 和 `environment` 是事件字段与分区键，不在表名层级。
 
 保留 `operation_id` 是关键。它解决了”单资源流水高性能”和”一次业务操作可追溯”之间的矛盾。
 
@@ -227,7 +227,7 @@ oddsmaker.resourceBatch({
 
 ## ClickHouse 查询形态
 
-**注意**：当前是共享表，查询必须过滤 `game_id` 和 `environment`（分区裁剪依赖这两个条件）；按游戏分库落地后才可省略。
+当前是共享表，查询必须过滤 `game_id` 和 `environment`（分区裁剪依赖这两个条件）；按游戏分库落地后才可省略。
 
 单玩家资源暴增：
 

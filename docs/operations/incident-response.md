@@ -276,7 +276,7 @@ psql -c "SELECT client_ip, count(*) FROM audit_logs WHERE result = 'FAILURE' GRO
 
 **Initial Notification:**
 ```
-🚨 Incident Alert - [Severity]
+Incident Alert - [Severity]
 
 Service: Oddsmaker Control Service
 Impact: [Description]
@@ -288,7 +288,7 @@ Updates will follow every [15/30/60] minutes.
 
 **Status Update:**
 ```
-📊 Incident Update - [Severity]
+Incident Update - [Severity]
 
 Service: Oddsmaker Control Service
 Status: [Investigating/Identified/Monitoring/Resolved]

@@ -25,7 +25,7 @@ features:
   - icon:
       src: /icons/shield.svg
     title: Risk Control
-    details: Comprehensive risk management with real-time evaluation and blocking
+    details: Rule-based risk rules with real-time evaluation, blocking, and review queues
   - icon:
       src: /icons/experiment.svg
     title: A/B Test Analysis
@@ -37,7 +37,7 @@ features:
   - icon:
       src: /icons/security.svg
     title: Enterprise Security
-    details: MFA, RBAC, and comprehensive audit logging
+    details: MFA, RBAC with 8 roles, and audit logging on control-plane writes
 ---
 
 ## Quick Start

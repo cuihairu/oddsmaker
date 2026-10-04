@@ -139,7 +139,7 @@ ORDER BY (game_id, environment, event_type, event_date, player_id, user_id, devi
 - Schema 治理：Tracking Plan 管事件名、字段字典、枚举、cardinality 上限。
 - 客户端安全：客户端只持 public `api_key`；HMAC 只用于 Server SDK。
 - PII 治理：Gateway 执行 deny/mask/coarse，违规事件进入 DLQ。
-- 风控闭环：Gateway 硬拦截，Flink 实时检测，ClickHouse 回溯，Webhook 输出处置。
+- 风控链路：Gateway 硬拦截，Flink 实时检测，ClickHouse 回溯，Webhook 输出处置。
 - 数据隔离：共享表按 `(game_id, environment)` 分区 + 查询必带分区条件；物理分库由存储 profile 的 `isolationStrategy` 预留，尚未接线。
 
 ## 风控能力
@@ -185,5 +185,5 @@ ORDER BY (game_id, environment, event_type, event_date, player_id, user_id, devi
 1. 按游戏分库架构（未实现）：当前共享表按 `(game_id, environment)` 分区，独立库形态走存储 profile 的 `isolationStrategy`。
 2. 接通单公司多游戏控制面。
 3. 扩展游戏事件 v1。
-4. 增加风控规则、实时检测和处置闭环。
+4. 增加风控规则、实时检测和处置联动。
 5. 完善 LTV、广告、实验、Crash 和预测模型。

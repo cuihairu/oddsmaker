@@ -1,6 +1,6 @@
 # Analytics API
 
-分析 API 提供游戏运营所需的全方位数据分析能力，包括收入、广告、会话、性能和社交分析。
+分析 API 覆盖收入、广告、会话、性能和社交五类，均按 gameId 出数。
 
 ## 基础 URL
 
@@ -56,11 +56,6 @@ GET /api/analytics/revenue/game_123/overview?startDate=2024-01-01&endDate=2024-0
 }
 ```
 
-**分析价值:**
-- 了解收入构成（IAP vs 广告 vs 订阅）
-- 识别收入趋势
-- 评估商业化策略效果
-
 ---
 
 ### 1.2 ARPU/ARPPU 趋势
@@ -78,17 +73,10 @@ GET /api/analytics/revenue/game_123/overview?startDate=2024-01-01&endDate=2024-0
 
 **指标含义:**
 - **ARPU** = 总收入 / 总用户数
-  - 反映整体变现能力
   - 健康值：因游戏类型而异
   
 - **ARPPU** = 总收入 / 付费用户数
-  - 反映付费用户消费能力
   - 通常 ARPPU > ARPU * 10
-
-**分析价值:**
-- 评估用户付费意愿
-- 监控付费用户价值
-- 优化定价策略
 
 ---
 
@@ -103,11 +91,6 @@ GET /api/analytics/revenue/game_123/overview?startDate=2024-01-01&endDate=2024-0
 | `revenue` | number | 该平台收入 |
 | `arpu` | number | 该平台 ARPU |
 | `arppu` | number | 该平台 ARPPU |
-
-**分析价值:**
-- 识别高价值平台
-- 优化平台资源分配
-- 制定平台差异化策略
 
 ---
 
@@ -128,17 +111,10 @@ GET /api/analytics/revenue/game_123/overview?startDate=2024-01-01&endDate=2024-0
 
 **指标含义:**
 - **eCPM** = (广告收入 / 展示次数) * 1000
-  - 反映广告变现效率
   - 健康值：$10-$50 (因地区和广告类型而异)
 
 - **填充率** = 填充次数 / 请求次数
-  - 反映广告可用性
   - 健康值：> 90%
-
-**分析价值:**
-- 评估广告变现效率
-- 识别高价值广告类型
-- 优化广告策略
 
 ---
 
@@ -154,11 +130,6 @@ GET /api/analytics/revenue/game_123/overview?startDate=2024-01-01&endDate=2024-0
 | `impressions` | number | 该网络展示次数 |
 | `ecpm` | number | 该网络 eCPM |
 | `fillRate` | number | 该网络填充率 |
-
-**分析价值:**
-- 对比不同广告网络表现
-- 优化网络配置
-- 识别最佳广告合作伙伴
 
 ---
 
@@ -181,17 +152,10 @@ GET /api/analytics/revenue/game_123/overview?startDate=2024-01-01&endDate=2024-0
   - 健康值：> 5 分钟 (休闲游戏), > 30 分钟 (重度游戏)
 
 - **会话深度** - 每会话事件数
-  - 反映用户参与度
   - 健康值：> 10 个事件
 
 - **跳出率** - 只有 1 个事件的会话占比
-  - 反映用户首次体验质量
   - 健康值：< 30%
-
-**分析价值:**
-- 评估用户参与度
-- 识别用户体验问题
-- 优化游戏流程
 
 ---
 
@@ -206,11 +170,6 @@ GET /api/analytics/revenue/game_123/overview?startDate=2024-01-01&endDate=2024-0
 | `avgDuration` | number | 当日平均会话时长 |
 | `avgEvents` | number | 当日平均事件数 |
 | `bounceRate` | number | 当日跳出率 |
-
-**分析价值:**
-- 监控用户参与度变化
-- 识别版本更新影响
-- 发现异常波动
 
 ---
 
@@ -257,11 +216,6 @@ GET /api/analytics/revenue/game_123/overview?startDate=2024-01-01&endDate=2024-0
   - 健康值：< 500MB (移动端)
   - 警告值：> 1GB
 
-**分析价值:**
-- 监控游戏性能
-- 识别性能瓶颈
-- 优化用户体验
-
 ---
 
 ### 4.2 崩溃分组
@@ -275,11 +229,6 @@ GET /api/analytics/revenue/game_123/overview?startDate=2024-01-01&endDate=2024-0
 | `count` | number | 崩溃次数 |
 | `firstSeen` | datetime | 首次出现时间 |
 | `lastSeen` | datetime | 最后出现时间 |
-
-**分析价值:**
-- 识别高频崩溃
-- 优先修复关键问题
-- 监控崩溃趋势
 
 ---
 
@@ -302,11 +251,6 @@ GET /api/analytics/revenue/game_123/overview?startDate=2024-01-01&endDate=2024-0
   - > 1 表示用户自发增长
   - 健康值：> 0.5
 
-**分析价值:**
-- 评估社交功能使用情况
-- 优化社交推荐策略
-- 监控用户增长潜力
-
 ---
 
 ### 5.2 社交对留存的影响
@@ -319,11 +263,6 @@ GET /api/analytics/revenue/game_123/overview?startDate=2024-01-01&endDate=2024-0
 | `socialUsersD7Retention` | number | 社交用户 7 日留存率 |
 | `nonSocialUsersD7Retention` | number | 非社交用户 7 日留存率 |
 | `retentionLift` | number | 社交带来的留存提升 |
-
-**分析价值:**
-- 量化社交功能对留存的影响
-- 优化社交功能设计
-- 证明社交功能 ROI
 
 ---
 

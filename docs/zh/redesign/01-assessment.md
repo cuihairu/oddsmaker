@@ -56,7 +56,7 @@
 | 环境隔离 | 有 `GameEnvironmentEntity` | 事件、配置、密钥、风控策略都按环境隔离 |
 | 多租户 | 设计过重且方向错误 | 从目标架构移除 |
 | 游戏事件模型 | 通用事件字段为主 | 引入 Session/User/Business/Resource/Progression/Design/Error/Ad |
-| 风控 | 只有限流、PII、异常检测概念 | 建立实时风控链路和处置闭环 |
+| 风控 | 只有限流、PII、异常检测概念 | 建立实时风控链路和处置动作落点 |
 | 留存/漏斗 | 留存固定口径，漏斗仅 2 步 | N-Day/Rolling 留存和 N 步漏斗 |
 | Identity Merge | 缺失 | 支持游客、设备、账号、角色合并 |
 | A/B 实验 | 曝光事件为主 | 配置、分桶、SRM、显著性、风控联动 |

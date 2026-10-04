@@ -9,8 +9,8 @@
 
 | 产品 | 厂商 | 形态 | 定位 | 与本项目的关系 |
 |------|------|------|------|----------------|
-| Unity Gaming Services (Analytics + Remote Config + Cloud Diagnostics) | Unity | 商业 SaaS | Unity 生态默认游戏分析与运营后端 | 事件模型、漏斗、崩溃、远程配置的全链路对标 |
-| Firebase (Analytics + Crashlytics + Remote Config + A/B Testing) | Google | 商业 SaaS | 移动/游戏通用分析与实验平台 | 实验闭环、DebugView、App Check 设备完整性对标 |
+| Unity Gaming Services (Analytics + Remote Config + Cloud Diagnostics) | Unity | 商业 SaaS | Unity 内置的游戏分析与运营后端 | 事件模型、漏斗、崩溃、远程配置的全链路对标 |
+| Firebase (Analytics + Crashlytics + Remote Config + A/B Testing) | Google | 商业 SaaS | 移动/游戏通用分析与实验平台 | 实验发布-评估流程、DebugView、App Check 设备完整性对标 |
 | GameAnalytics | GameAnalytics (Moboku) | 免费 SaaS（增值付费） | 游戏原生产品分析标准件 | 事件分类法（本项目 P3 事件类型化的蓝本）、实时视图、基准 |
 | PlayFab | Microsoft | 商业 SaaS | 游戏后端 + LiveOps + 分析全家桶 | LiveOps 面（公告/邮件/兑换/定向投放）的对标 |
 | PostHog | PostHog | 开源（可自托管） | 产品分析 + 实验 + 回放一体化 | 开源形态与自托管诉求的直接对标；flags/实验一体化设计 |
@@ -85,15 +85,15 @@
 
 ## 3. 差距结论：缺失的关键功能（按用户价值排序）
 
-1. **实时事件检视器（Live Inspector / Debug View）** —— 价值★★★★★ 成本★
+1. **实时事件检视器（Live Inspector / Debug View）** —— 价值 5/5 成本 1/5
    接入期第一痛点：SDK 接入后"我的事件到底到没到、为什么被拒"。竞品标配（Firebase DebugView、GA Real-time、PostHog Live）。本项目所有拒绝原因（invalid_schema/api_key_scope_mismatch/pii_blocked/invalid_timestamp/采样/去重/封禁）目前只进 DLQ 与响应体，无处可视化。落地为 Gateway 内存环形缓冲 + 检视 API + 控制台页面。
-2. **可复用用户分群（Segments）** —— 价值★★★★☆ 成本★★★
+2. **可复用用户分群（Segments）** —— 价值 4.5/5 成本 3/5
    竞品全有，且是定向触达（Firebase Audiences、PlayFab Offers）的基础设施。定义（属性+行为条件）→ 物化（ClickHouse 主体集合）→ 注入留存/漏斗/财务/在线报表过滤 + LiveOps 定向投放。注意与现有留存 CohortService 区分（那是留存口径 cohort 计算，非用户分群）。
-3. **自定义仪表盘 widget 化** —— 价值★★★☆ 成本★★
+3. **自定义仪表盘 widget 化** —— 价值 3.5/5 成本 2/5
    Report 模块已有雏形；补 widget 卡片（图/表/KPI）自由组合与保存，追赶全部竞品的 Dashboard Builder。
-4. **全量原始数据导出（S3/对象存储 定期导出）** —— 价值★★★ 成本★★
+4. **全量原始数据导出（S3/对象存储 定期导出）** —— 价值 3/5 成本 2/5
    对标 Firebase BigQuery。归档 infra 已在架构图中（Object Storage/Archive），补按日分区导出任务即可，是 BI 下钻（Superset/Metabase）的喂料通道。
-5. **归因/买量分析（MMP 集成）** —— 价值★★★（买量型工作室为★★★★★）成本★★★★
+5. **归因/买量分析（MMP 集成）** —— 价值 3/5（买量型工作室 5/5）成本 4/5
    依赖外部 MMP（AppsFlyer/Adjust）数据源接入与建表，外部依赖重，放中期评估。
 
 ## 4. 明确不跟进的功能及理由

@@ -245,6 +245,8 @@ bash scripts/run_flink.sh
 
 ## Tech Stack
 
+底座是开源组件：Spring Boot、Kafka、Flink、ClickHouse、PostgreSQL、Redis、Superset 等；本仓自写的是接线、业务层与 SDK。
+
 - Java 21
 - Spring Boot 3 WebFlux
 - Kafka + Apicurio Schema Registry

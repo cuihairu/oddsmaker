@@ -213,14 +213,14 @@ curl http://localhost:8086/actuator/prometheus
 
 ## Best Practices
 
-1. **Use Infrastructure as Code**: Manage infrastructure with Terraform/Pulumi
-2. **Automate Deployments**: Use CI/CD pipelines
-3. **Monitor Everything**: Set up comprehensive monitoring
-4. **Test Backups**: Regularly test backup restoration
-5. **Document Runbooks**: Keep runbooks up to date
-6. **Conduct DR Drills**: Practice disaster recovery
-7. **Review Security**: Regular security audits
-8. **Optimize Performance**: Regular performance reviews
+1. Manage infrastructure with Terraform/Pulumi.
+2. Deploy through CI/CD pipelines.
+3. Set up monitoring on every service and dependency.
+4. Test backup restoration regularly.
+5. Keep runbooks up to date.
+6. Run disaster recovery drills.
+7. Audit security on a schedule.
+8. Review performance regularly and act on the findings.
 
 ## Support
 

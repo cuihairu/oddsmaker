@@ -2,7 +2,7 @@
 
 > **身份**：本文是把 04-redesign（新架构）与 05-roadmap（实施路线）收束成一份**可直接交给 Code Agent 分批执行**的契约：
 > 领域模型、模块边界、数据契约一次性定死，后续按 §8 批次逐批执行，每批附验收标准与门禁。
-> 依据材料：本文 + `04-redesign.md` + `05-roadmap.md` + 根目录 `todo.md`（80/80 闭环即当前状态）。
+> 依据材料：本文 + `04-redesign.md` + `05-roadmap.md` + 根目录 `todo.md`（80/80 全部勾销即当时状态）。
 > 编制日期：2026-10-04。涉及旧评估文件（`oddsmaker_completion_assessment.md` 等）的措辞与数字**一律视为归档快照，不构成现状**。
 
 ---
@@ -50,7 +50,7 @@
 |---|---|---|---|---|---|
 | **Game** | `game_id`（小写 `[a-z0-9_]+`，≤64） | 全局唯一、创建后**不可变** | 平台上每个 game_id 恰存在一个 Game（含 SUNSET 态） | `GameEntity`（jpa 包） | 无结构性动作；补 `game_id` 校验单元测试 |
 | **Environment** | `environment`：`dev/qa/staging/prod/loadtest` 五标准值 | `(game_id, environment)` 全局唯一 | 同一 game 内环境名不重复；环境必须挂一个 `storageProfileId` | `GameEnvironmentEntity`（含 `dataNamespace`/`kafkaTopicPrefix`/`databaseName` 直连物理字段） | **物理字段收敛**：`kafkaTopicPrefix`/`clickhouse...` 类直连字段移至 StorageProfile（见 2.2），Environment 只留 `storageProfileId` + 逻辑 `dataNamespace` |
-| **StorageProfile** | `storage_profile_id` | 全局 | 业务/事件层**永不持有** profile 内部物理细节；`isolationStrategy ∈ {SHARED, DEDICATED}` | `StorageProfileEntity`（IsolationStrategy.SHARED 已实现） | 成为环境物理路由的**唯一入口**；补“从 profile 解析出 kafka topic/CH 库名/归档桶”的单一解析器 |
+| **StorageProfile** | `storage_profile_id` | 全局 | 业务/事件层**不持有** profile 内部物理细节；`isolationStrategy ∈ {SHARED, DEDICATED}` | `StorageProfileEntity`（IsolationStrategy.SHARED 已实现） | 成为环境物理路由的**唯一入口**；补“从 profile 解析出 kafka topic/CH 库名/归档桶”的单一解析器 |
 
 ### 2.2 网关与密钥
 
@@ -122,9 +122,9 @@ system       → User / Role / AuditLog / Webhook / RateLimit / Security / Flink
 
 ### 3.3 依赖纪律（穿越即算缺陷）
 
-1. **业务层永不接触物理路由**：topic/CH 库名/归档桶只能经 StorageProfile 解析器得出（§2.1）。
+1. **业务层不接触物理路由**：topic/CH 库名/归档桶只能经 StorageProfile 解析器得出（§2.1）。
 2. **事件只进 Gateway**：SDK、Flink、任何模块不得直写 Kafka/ClickHouse 事件表（control 侧分析查询走 ClickHouseClient 只读接口除外）。
-3. **`project_id` 兼容层保留**：todo.md 已 `[x]` 闭环（旧字段映射 game_id、纯遗留字段 invalid_schema 拒绝）。本计划**不删除兼容层**（删了会破坏 v0 SDK 兼容），只禁止兼容层之外的 `project_id` 出现。
+3. **`project_id` 兼容层保留**：todo.md 已 `[x]` 勾销（旧字段映射 game_id、纯遗留字段 invalid_schema 拒绝）。本计划**不删除兼容层**（删了会破坏 v0 SDK 兼容），只禁止兼容层之外的 `project_id` 出现。
 4. **SDK 契约**：客户端只发事件、只持 `api_key`；SEREVR SDK 可发可信事件 + HMAC，二者都不得内置存储/路由知识。
 
 ---

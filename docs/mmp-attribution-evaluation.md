@@ -5,7 +5,7 @@
 
 ## 1. 背景
 
-竞品分析（2026-09）将 MMP 归因列为差距第 5 名：价值 ★★★（买量型工作室 ★★★★★）、成本 ★★★★，标注"先调研后立项"。本仓库当前状态：
+竞品分析（2026-09）将 MMP 归因列为差距第 5 名：价值 3/5（买量型工作室 5/5）、成本 4/5，标注"先调研后立项"。本仓库当前状态：
 
 - **已有**：`events` 表的 `attribution Map(String,String)` 兜底字段、`ad_network / ad_placement / ad_format / ad_impression_id` 四个回退维度列、在线报表按 `attribution.channel` 回退 `platform` 的渠道聚合。
 - **缺失**：MMP 侧原始归因数据（安装归因、归因的 in-app 事件、广告花费）没有接入通道，无法回答"哪个渠道来的用户、花了多少钱、回收了多少"。当前 `attribution` 字段只承载游戏服自己打上来的渠道标签，与 MMP 的归因判定（最后一次点击/展示匹配）无关。
@@ -40,7 +40,7 @@
 1. **所有主流 MMP 都支持两种交付形态**：实时 Webhook（Push API / real-time callbacks）与定时落你自己的云存储（Data Locker / CSV uploads / cloud storage export）。
 2. 原始数据（非聚合报表）通道普遍**锁在高阶付费套餐**——外部成本主要是 MMP 侧订阅，不是开发量。
 3. 数据对齐键是 MMP 的 app 标识（`app_id` / app token）+ 设备 ID（IDFA/GAID 或其 hash），需要一张 **MMP app ↔ `game_id + environment` 映射配置**才能落进 oddsmaker 的隔离契约。
-4. 广告花费（cost）通常不在安装原始数据里，而在 MMP 的 campaign 报表 API——CPI/ROAS 完整闭环需要额外接一个报表拉取 job。
+4. 广告花费（cost）通常不在安装原始数据里，而在 MMP 的 campaign 报表 API——CPI/ROAS 完整链路需要额外接一个报表拉取 job。
 
 ## 3. 接入路径对比（oddsmaker 视角）
 
@@ -114,8 +114,8 @@ ORDER BY (game_id, environment, mmp_app_id, subject, install_time);
 
 | 项 | 评估 |
 |---|---|
-| 外部依赖 | **重**：需要真实 MMP 账号 + 原始数据导出套餐（Data Locker/CSV uploads 均非免费档）；无账号则闭环无法验证 |
-| 开发量（方案 B 最小闭环） | 约 5–7 人日：DDL + `mmp_connections` CRUD + 加载 job（CSV/JSON 各一解析器）+ 渠道安装分布报表 1 张 |
+| 外部依赖 | **重**：需要真实 MMP 账号 + 原始数据导出套餐（Data Locker/CSV uploads 均非免费档）；无账号则整条链路无法验证 |
+| 开发量（方案 B 最小可运行集） | 约 5–7 人日：DDL + `mmp_connections` CRUD + 加载 job（CSV/JSON 各一解析器）+ 渠道安装分布报表 1 张 |
 | 二期（CPI/ROAS） | +4–6 人日：campaign 花费报表 API 拉取 + 归因收入 join；需 MMP 报表 API 权限 |
 | 风险 | MMP 字段各家且版本多变（AppsFlyer/Adjust 列名不同）——解析器必须按 `mmp` 维度隔离 + `raw` Map 兜底 |
 
@@ -124,7 +124,7 @@ ORDER BY (game_id, environment, mmp_app_id, subject, install_time);
 **有条件立项（进 P8 路线图）**：
 
 - 触发条件：拿到任一 MMP 的原始数据导出权限（Data Locker 或 CSV uploads 任一即可启动）。
-- 启动范围：方案 B 最小闭环 + 安装归因渠道分布报表；CPI/ROAS 等花费数据接入放二期。
+- 启动范围：方案 B 最小可运行集 + 安装归因渠道分布报表；CPI/ROAS 等花费数据接入放二期。
 - 明确不做（与竞品分析 §4 一致）：广告平台直连（Facebook/Google Ads API 直接拉数）、MMP 聚合看板复刻、移动归因 SDK 自行开发。
 - 在触发条件达成前，P7 系列到此收口；后续优先级回归补测试覆盖与运营工具打磨。
 

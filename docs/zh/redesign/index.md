@@ -27,13 +27,13 @@ Oddsmaker 不应该做“多公司共享的一套分析 SaaS”。更真实的�
 
 ## 新架构核心理念
 
-**GameAnalytics 事件体系 + ClickHouse 实时分析 + Flink 状态计算 + 单公司多游戏控制面 + 内置风控闭环**
+**GameAnalytics 事件体系 + ClickHouse 实时分析 + Flink 状态计算 + 单公司多游戏控制面 + 内置风控链路**
 
 - 事件主键：`game_id + environment + event_id`
 - 查询分区：`game_id + environment + event_date`
 - 权限边界：用户角色绑定到游戏或环境
 - 配置边界：API Key、Tracking Plan、采样、PII、风控策略按游戏环境下发
-- 风控闭环：规则/模型检测 → 风险事件表 → 告警 → 处置动作 → 审计回溯
+- 风控链路：规则/模型检测 → 风险事件表 → 告警 → 处置动作 → 审计回溯
 
 ## P0 立即修正
 

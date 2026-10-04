@@ -1,6 +1,6 @@
 # 分析 API
 
-分析 API 提供游戏运营所需的全方位数据分析能力，包括收入、广告、会话、性能和社交分析。
+分析 API 覆盖收入、广告、会话、性能和社交五类，均按 gameId 出数。
 
 ## 基础 URL
 
@@ -56,11 +56,6 @@ GET /api/analytics/revenue/game_123/overview?startDate=2024-01-01&endDate=2024-0
 }
 ```
 
-**分析价值:**
-- 了解收入构成（IAP vs 广告 vs 订阅）
-- 识别收入趋势
-- 评估商业化策略效果
-
 ---
 
 ### 1.2 ARPU/ARPPU 趋势
@@ -78,15 +73,8 @@ GET /api/analytics/revenue/game_123/overview?startDate=2024-01-01&endDate=2024-0
 
 **指标含义:**
 - **ARPU** = 总收入 / 总用户数
-  - 反映整体变现能力
   
 - **ARPPU** = 总收入 / 付费用户数
-  - 反映付费用户消费能力
-
-**分析价值:**
-- 评估用户付费意愿
-- 监控付费用户价值
-- 优化定价策略
 
 ---
 
@@ -115,10 +103,8 @@ GET /api/analytics/revenue/game_123/overview?startDate=2024-01-01&endDate=2024-0
 
 **指标含义:**
 - **eCPM** = (广告收入 / 展示次数) * 1000
-  - 反映广告变现效率
   
 - **填充率** = 填充次数 / 请求次数
-  - 反映广告可用性
 
 ### 2.2 按广告网络性能
 
@@ -220,7 +206,3 @@ POST /api/crash-metrics/{gameId}/symbolicate
 | `nonSocialUsersD7Retention` | number | 非社交用户 7 日留存率 |
 | `retentionLift` | number | 社交带来的留存提升 |
 
-**分析价值:**
-- 量化社交功能对留存的影响
-- 优化社交功能设计
-- 证明社交功能 ROI

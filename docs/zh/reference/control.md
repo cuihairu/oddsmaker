@@ -129,7 +129,7 @@ DELETE /api/keys/{keyId}
 }
 ```
 
-> **注意**：`environmentId` 是环境的内部标识符（如 `env_game_demo_prod`），而非逻辑名称（如 `prod`）。创建环境时会自动生成内部 ID。
+> `environmentId` 是环境的内部标识符（如 `env_game_demo_prod`），不是逻辑名称（如 `prod`）；创建环境时自动生成。
 
 Key 类型：
 

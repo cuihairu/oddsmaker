@@ -1,8 +1,10 @@
 # Oddsmaker（游戏实时分析与风控平台）
 
-Oddsmaker 面向一个游戏公司内部使用：一套平台管理多个游戏、多个环境，提供实时采集、游戏分析、A/B 实验和风控闭环。核心边界是 `game_id + environment`。
+Oddsmaker 面向一个游戏公司内部使用：一套平台管理多个游戏、多个环境，提供实时采集、游戏分析、A/B 实验和风控处置链路。核心边界是 `game_id + environment`。
 
 ## 主链路
+
+底座是开源组件（Spring Boot、Kafka、Flink、ClickHouse、PostgreSQL、Redis、Superset），本仓自写接线、业务层与 SDK。
 
 - SDK：Web / Android / iOS / Unity / Server
 - 采集：Spring Boot Gateway，负责 API Key、Server HMAC、Schema、PII、限流和风控前置

@@ -109,4 +109,4 @@ DELETE /api/games/{gameId}
 Authorization: Bearer {token}
 ```
 
-**注意:** 只有非 LIVE 状态的游戏才能删除。
+只有非 LIVE 状态的游戏才能删除。
