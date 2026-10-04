@@ -7,12 +7,12 @@
 
 ## B1 产品定位与文档对齐（零代码）
 
-- [ ] GitHub 仓库 description 更新为「Game Intelligence Platform」一句话定位
-- [ ] `oddsmaker_completion_assessment.md` 补 2026-10 归档横幅（同 technical_recommendations 口径），开头“项目”措辞改游戏口径
-- [ ] `oddsmaker_technical_recommendations.md` / `oddsmaker_quick_summary.md` 横幅中「80/80 全闭环」父句改指 2.0 批次跟踪（防陈旧）
-- [ ] `docs/zh/redesign/index.md` 文档结构表补 06 行
+- [x] GitHub 仓库 description 更新为「Game Intelligence Platform」一句话定位（`gh repo edit`，单公司多游戏多环境 + 分析/实验/风控内建）
+- [x] `oddsmaker_completion_assessment.md` 补 2026-10 归档横幅（同 technical_recommendations 口径），PIT→Oddsmaker（历史代号 PIT）、管理项目→管理游戏（0f8617a）
+- [x] `oddsmaker_technical_recommendations.md` / `oddsmaker_quick_summary.md` 横幅中「80/80 全闭环」父句改指 2.0 批次跟踪（防陈旧，4a86775）
+- [x] `docs/zh/redesign/index.md` 文档结构表补 06 行（568ffcb）
 
-**验收：** description/横幅×3/index 四处就位；纯文档，不触发测试。
+**验收：** ✅ description/横幅×3/index 四处就位（2026-10-04 核对：gh description 查询回显新定位；三份旧评估横幅口径一致指向 B1~B10 跟踪表；index.md 文档结构表含 06-od2-restructure-plan 行）；纯文档，未触发测试。
 
 ## B2 权限单真源收敛
 
