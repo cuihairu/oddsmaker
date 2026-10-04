@@ -33,11 +33,11 @@ features:
   - icon:
       src: /icons/ml.svg
     title: Predictive Models
-    details: Churn prediction, fraud detection, LTV forecasting, and player segmentation
+    details: Churn prediction, risk scoring, LTV forecasting, and payment propensity
   - icon:
       src: /icons/security.svg
     title: Enterprise Security
-    details: MFA, SSO, RBAC, and comprehensive audit logging
+    details: MFA, RBAC, and comprehensive audit logging
 ---
 
 ## Quick Start
@@ -83,7 +83,7 @@ graph TB
 Manage multiple games with isolated environments, API keys, and configurations.
 
 ### Real-time Processing
-Process millions of events per second with Kafka + Flink + ClickHouse pipeline.
+Event pipeline built on Kafka + Flink + ClickHouse (design target 10k–50k events/s per node, see operations/perf-tuning).
 
 ### Risk Control
 Detect and prevent cheating, payment fraud, and other suspicious activities.
@@ -93,12 +93,12 @@ Analyze experiment results with conversion rates, statistical significance testi
 
 ### Predictive Models
 - **Churn Prediction** - Identify players likely to churn before they leave
-- **Fraud Detection** - Detect cheating and suspicious behavior patterns
-- **LTV Forecasting** - Predict player lifetime value for acquisition optimization
-- **Risk Scoring** - Real-time risk assessment for transactions and actions
+- **Risk Scoring** - Risk assessment for suspicious behavior (heuristic baseline + trained model)
+- **LTV Forecasting** - Predict player lifetime value (D7→D30 multiplier model)
+- **Payment Propensity** - Score likelihood of a player making a purchase
 
 ### Enterprise Security
-MFA, SSO, RBAC, audit logging, and compliance features.
+MFA (two-factor), RBAC with 8 roles and global/game/environment scopes, and full audit logging.
 
 ## Documentation
 

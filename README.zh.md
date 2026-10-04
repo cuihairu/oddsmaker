@@ -9,7 +9,7 @@ Oddsmaker 面向一个游戏公司内部使用：一套平台管理多个游戏�
 - 消息：Kafka + Avro + Schema Registry
 - 计算：Flink 富化、去重、会话、留存、漏斗、收入、风控
 - 存储：ClickHouse 事件与聚合，PostgreSQL 元数据，Redis 实时计数和风控短窗状态
-- 展示：Superset / Metabase / 自研实时与风控大屏
+- 展示：Superset / Metabase / 自行开发实时与风控大屏
 
 ## 快速体验
 

@@ -37,7 +37,7 @@ features:
   - icon:
       src: /icons/security.svg
     title: 企业安全
-    details: MFA、SSO、RBAC 和完整审计日志
+    details: MFA、RBAC 和完整审计日志
 ---
 
 ## 快速开始
@@ -69,7 +69,7 @@ curl http://localhost:38085/actuator/health
 支持多个游戏，每个游戏可配置独立的环境（dev/staging/prod）和 API Key。
 
 ### 实时分析
-基于 Kafka + Flink + ClickHouse 的实时事件处理管道，支持百万级事件/秒。
+基于 Kafka + Flink + ClickHouse 的实时事件处理管道（单节点设计目标 1万–5万 事件/秒，见运维 perf-tuning）。
 
 ### 风险控制
 完整的风控规则引擎，支持实时评估、自动封禁和人工审核。
@@ -81,7 +81,7 @@ curl http://localhost:38085/actuator/health
 ML 模型管理，支持训练、部署、A/B 测试和漂移检测。
 
 ### 企业安全
-MFA、SSO、RBAC 权限控制和完整审计日志。
+MFA（两步验证）、RBAC 权限控制（8 角色 × global/game/environment 三级范围）和完整审计日志。
 
 ## 文档
 

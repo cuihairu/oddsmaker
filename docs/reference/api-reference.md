@@ -1,15 +1,18 @@
 # Oddsmaker Control Service API Reference
 
-Oddsmaker is a single-company, multi-game analytics and risk-control platform. The control service manages games, environments, storage profiles, API keys, tracking plans, PII policies, risk rules, users, role bindings, and audit logs.
+Oddsmaker is a single-company, multi-game analytics and risk-control platform. The control service manages games, environments, storage profiles, API keys, tracking plans, risk rules, users, role assignments, and audit logs.
 
 Oddsmaker does not model `Organization` or `Tenant` as target business resources. The core business boundary is `game_id + environment`, while physical routing is controlled by `storage_profile`.
 
+This page is a curated index, not the complete surface — every controller also serves an OpenAPI document at `GET /v3/api-docs` (Swagger UI at `/swagger-ui.html`). Resource groups not detailed below are listed under "Other resource groups" near the end.
+
 ## Authentication
 
-Most endpoints require an admin session or bearer token:
+Most endpoints accept a bearer token from `POST /api/auth/login`; bootstrap/admin-only endpoints (user creation, key issuance, key policy) accept `x-admin-token`:
 
 ```http
 Authorization: Bearer YOUR_TOKEN
+x-admin-token: YOUR_ADMIN_TOKEN
 ```
 
 ## Resources
@@ -73,12 +76,21 @@ Key types:
 
 ### Tracking Plans
 
+Plans are scoped to a game (not per environment). A plan is activated or deactivated; there is no separate publish/rollback endpoint.
+
 | Method | Endpoint | Description |
 |---|---|---|
-| POST | `/api/games/{gameId}/environments/{environmentName}/tracking-plans` | Planned draft endpoint |
-| GET | `/api/games/{gameId}/environments/{environmentName}/tracking-plans/current` | Planned current plan endpoint |
-| POST | `/api/tracking-plans/{planId}/publish` | Publish a plan |
-| POST | `/api/tracking-plans/{planId}/rollback` | Roll back a plan |
+| POST | `/api/games/{gameId}/tracking-plans` | Create a plan (draft) |
+| GET | `/api/games/{gameId}/tracking-plans` | List plans for a game |
+| GET | `/api/games/{gameId}/tracking-plans/active` | Get the active plan |
+| GET | `/api/games/{gameId}/tracking-plans/environment/{environmentId}` | Get the active plan for an environment |
+| GET | `/api/games/{gameId}/tracking-plans/{trackingPlanId}` | Get plan details |
+| PUT | `/api/games/{gameId}/tracking-plans/{trackingPlanId}` | Update a draft plan |
+| DELETE | `/api/games/{gameId}/tracking-plans/{trackingPlanId}` | Delete a plan |
+| POST | `/api/games/{gameId}/tracking-plans/{trackingPlanId}/activate` | Activate a plan |
+| POST | `/api/games/{gameId}/tracking-plans/{trackingPlanId}/deactivate` | Deactivate a plan |
+| POST/GET | `/api/games/{gameId}/tracking-plans/{trackingPlanId}/events` | Register / list events in the plan |
+| POST | `/api/games/{gameId}/tracking-plans/{trackingPlanId}/properties` | Register a property definition |
 
 ### Experiments
 
@@ -91,6 +103,10 @@ Key types:
 | DELETE | `/api/experiments/{id}` | Delete an experiment |
 | POST | `/api/experiments/{id}/publish` | Start an experiment |
 | POST | `/api/experiments/{id}/pause` | Pause an experiment |
+| GET | `/api/experiments/{id}/assign?userId=&deviceId=` | Deterministic variant assignment |
+| POST | `/api/experiments/{id}/metrics` | Receive a metrics snapshot |
+| POST | `/api/experiments/{id}/metrics/aggregate` | Aggregate metrics over a window |
+| GET | `/api/experiments/{id}/results` | Results with lift/CI/p-value/SRM |
 
 **Public endpoint** (no authentication):
 | GET | `/api/config/{gameId}/{environment}` | Get running experiment configs for SDK |
@@ -99,25 +115,29 @@ Key types:
 - `environmentId`: internal environment ID (alternative to `environment`)
 - `environment`: logical environment name like `dev`/`staging`/`prod` (alternative to `environmentId`)
 
-### PII Policies
+### PII And Sampling Policies
+
+There is no standalone PII-policy resource. Ingest policy is bound per API key and updated through the key policy endpoint:
 
 | Method | Endpoint | Description |
 |---|---|---|
-| POST | `/api/pii-policies` | Create a PII policy |
-| GET | `/api/pii-policies/{policyId}` | Get policy details |
-| PUT | `/api/pii-policies/{policyId}` | Update a policy |
+| PUT | `/api/keys/{keyId}/policy` | Set PII handling (`piiEmail`/`piiPhone`/`piiIp`), props allowlist, deny/mask keys, and rate limits (`rpm`, `ipRpm`) |
+
+The gateway enforces these fields on `/v1/batch`. See the [collect API](/zh/reference/api) for the enforcement semantics.
 
 ### Risk Rules
 
 | Method | Endpoint | Description |
 |---|---|---|
 | POST | `/api/risk-rules` | Create a risk rule |
-| GET | `/api/risk-rules?gameId=&environmentId=` | Planned list endpoint |
+| GET | `/api/risk-rules?gameId=&environmentId=&status=` | List rules (multi-condition, paginated) |
 | GET | `/api/risk-rules/{ruleId}` | Get risk rule details |
 | PUT | `/api/risk-rules/{ruleId}` | Update a rule |
 | DELETE | `/api/risk-rules/{ruleId}` | Delete a rule |
-| POST | `/api/risk-rules/{ruleId}/publish` | Publish a rule |
+| POST | `/api/risk-rules/{ruleId}/enable` | Enable a rule |
 | POST | `/api/risk-rules/{ruleId}/disable` | Disable a rule |
+
+The risk-job picks up enabled rules from `GET /api/risk-dashboard/rules/{gameId}` on a timer (60s default), so rule changes apply without restarts.
 
 ### Block Lists
 
@@ -150,6 +170,7 @@ Key types:
 | GET | `/api/flink-jobs/running/{gameId}` | List running jobs |
 | POST | `/api/flink-jobs/{jobId}/deploy` | Deploy job to Flink cluster |
 | POST | `/api/flink-jobs/{jobId}/stop` | Stop a running job |
+| POST | `/api/flink-jobs/{jobId}/refresh` | Refresh job status from the Flink cluster |
 | GET | `/api/flink-jobs/stats/{gameId}` | Get job statistics |
 | GET | `/api/flink-jobs/{jobId}/config` | Get job configuration |
 | GET | `/api/flink-jobs/{jobId}/rules` | Get associated risk rules |
@@ -170,6 +191,7 @@ Key types:
 | GET | `/api/risk-dashboard/block-stats/{gameId}` | Get block statistics |
 | GET | `/api/risk-dashboard/job-stats/{gameId}` | Get Flink job statistics |
 | GET | `/api/risk-dashboard/dashboard/{gameId}?since=` | Get complete dashboard data |
+| GET | `/api/risk-dashboard/rules/{gameId}` | Active rules for a game (read by the risk-job) |
 | GET | `/api/risk-dashboard/recent-cases/{gameId}?limit=` | Get recent risk cases |
 | GET | `/api/risk-dashboard/review-queue-stats/{gameId}` | Get review queue statistics |
 
@@ -190,8 +212,9 @@ Key types:
 | GET | `/api/webhooks/logs/{configId}` | Get webhook delivery logs |
 | GET | `/api/webhooks/stats/{gameId}` | Get webhook statistics |
 | POST | `/api/webhooks/test/{configId}` | Test webhook endpoint |
+| POST/PUT/DELETE | `/api/webhooks/game/{gameId}/configs` | Manage webhook configurations |
 
-**Webhook authentication types**: `none`, `basic`, `bearer`, `api_key`, `hmac`, `oauth2`
+**Webhook authentication types**: `none`, `basic`, `bearer`, `api_key` (values outside this set are rejected at config time)
 
 **Webhook statuses**: `ACTIVE`, `INACTIVE`, `PAUSED`, `FAILED`
 
@@ -561,7 +584,7 @@ Key types:
 
 **Config statuses**: `DRAFT`, `ACTIVE`, `INACTIVE`, `ARCHIVED`
 
-### Users And Role Bindings
+### Users And Role Assignments
 
 | Method | Endpoint | Description |
 |---|---|---|
@@ -569,29 +592,76 @@ Key types:
 | POST | `/api/users` | Create a user |
 | GET | `/api/users/{userId}` | Get user details |
 | PUT | `/api/users/{userId}` | Update a user |
-| POST | `/api/users/{userId}/role-bindings` | Add a role binding |
-| DELETE | `/api/users/{userId}/role-bindings/{bindingId}` | Remove a role binding |
+| GET | `/api/users/{userId}/role-assignments` | List a user's role assignments |
+| POST | `/api/users/{userId}/role-assignments` | Assign a role (`roleId`, optional `gameId`, `environment`) |
+| DELETE | `/api/users/{userId}/role-assignments?roleId=&gameId=&environment=` | Revoke a role assignment |
 
-Scopes:
+`user_role_assignments` is the only write path for permissions; `users.roles` is a display column.
 
-- `global`
-- `game`
-- `environment`
+Scopes: `global`, `game`, `environment` (environment scope requires a gameId).
 
-Roles:
-
-- `owner`
-- `operator`
-- `analyst`
-- `developer`
-- `risk_admin`
-- `viewer`
+Built-in roles (seeded in `V0.2.3`, the `roles` table is the single source of truth): `operator` (global, all permissions), `game_admin`, `analyst`, `marketing`, `finance`, `developer`, `viewer`, `qa`. There is no `owner` or `risk_admin` role.
 
 ### Audit Logs
 
 | Method | Endpoint | Description |
 |---|---|---|
-| GET | `/api/audit-logs?gameId=&environmentId=&actor=&action=&from=&to=` | Planned search endpoint |
+| GET | `/api/audit-logs?gameId=&environmentId=&actor=&action=&from=&to=` | Filtered search |
+| GET | `/api/audit-logs/user/{userId}` | By actor |
+| GET | `/api/audit-logs/resource/{resourceType}/{resourceId}` | By resource |
+| GET | `/api/audit-logs/action/{action}` | By action |
+| GET | `/api/audit-logs/status/{status}` | By result status |
+| GET | `/api/audit-logs/time-range?from=&to=` | By time range |
+| GET | `/api/audit-logs/game/{gameId}` | By game |
+| GET | `/api/audit-logs/failed` | Failed operations |
+| GET | `/api/audit-logs/auth` | Login/logout/failed-login records |
+| GET | `/api/audit-logs/sensitive` | Sensitive-permission reads (requires `audit:sensitive`) |
+| GET | `/api/audit-logs/search?query=` | Keyword search |
+| GET | `/api/audit-logs/statistics` | Aggregate statistics |
+| GET | `/api/audit-logs/{logId}` | Single record |
+| DELETE | `/api/audit-logs/cleanup` | Purge old records |
+
+### Other Resource Groups
+
+All of the following are implemented and exposed through the same auth model; see `/v3/api-docs` for per-endpoint parameters:
+
+| Group | Base path | What it covers |
+|---|---|---|
+| Analytics | `/api/analytics` | Revenue / ads / sessions / performance / social overviews, ARPU, by-platform, by-network, trends, crashes |
+| Announcements | `/api/games/{gameId}/announcements` | Ops announcement lifecycle (draft/schedule/publish/offline) |
+| Block lists | `/api/block-lists` | Blocked targets, unblock, stats (see section above) |
+| Cohorts | `/api/cohorts` | Cohort definitions, calculation, results |
+| Crash metrics | `/api/crash-metrics` | Crash aggregation and symbolication (`/{gameId}/symbolicate`) |
+| Dashboards | `/api/games/{gameId}/dashboards` | Custom dashboard layouts and widgets |
+| Dimension sync | `/api/dimensions` | `/sync-status` heartbeat from the dimension-sync agent |
+| Event export | `/api/games/{gameId}/events-export` | Raw event export jobs (daily JSONL + manifest) |
+| Funnels | `/api/funnels` | Funnel definitions and results |
+| Identities | `/api/identities` | Identity merge state |
+| Event inspector | `/api/inspector` (control) and gateway `/v1/inspector/recent` | Recent raw events for debugging |
+| Integrations | `/api/integrations` | Slack/Discord/email/payment/webhook integrations |
+| LTV metrics | `/api/ltv-metrics` | LTV forecast queries |
+| Mail | `/api/games/{gameId}/mails` | Player mail with attachments and claim receipts |
+| Metric alerts | `/api/games/{gameId}/alert-rules`, `/api/games/{gameId}/alerts` | Threshold alert rules and alert instances |
+| ML artifacts | `/api/ml-artifacts` | Versioned model artifact registry (register/list/active) |
+| Online metrics | `/api/online-metrics` | Real-time online player counts |
+| Payment funnel | `/api/payment-metrics` | Payment funnel metrics |
+| Player data | `/api/player-data/{playerId}/...` | Cross-game profile, payments, login logs (permission-filtered) |
+| Player erasure | `/api/privacy/erasure-requests` | GDPR-style erasure request lifecycle |
+| Player exports | `/api/player-exports` | Player data export jobs |
+| Prediction metrics | `/api/prediction-metrics` | churn / risk-score / pltv / propensity batch scoring + refresh |
+| Rate limits | `/api/rate-limits` | Per-game rate limit and quota rules |
+| Redeem codes | `/api/games/{gameId}/redeem-batches` | Redeem code batches, redemption, history |
+| Remote config | `/api/games/{gameId}/remote-configs` | Key-value remote config versions |
+| Retention | `/api/retention/enforcements` | Retention enforcement runs |
+| Retention metrics | `/api/retention-metrics` | N-day / rolling retention queries |
+| Risk metrics | `/api/risk-metrics` | Trend / rule-hits / severity / action distributions |
+| Roles | `/api/roles` | Role CRUD, permission binding (roles table is the source of truth) |
+| Segments | `/api/games/{gameId}/segments` | User segment definitions, compute, members |
+| Symbol mappings | `/api/symbols` | Crash symbolication regex rules |
+| System | `/api/system` | Maintenance windows, system configs, feature flags (see section above) |
+| Tracking plans | `/api/games/{gameId}/tracking-plans` | See section above |
+| Users | `/api/users` | See section above |
+| Webhooks | `/api/webhooks` | See section above |
 
 ## Response Format
 

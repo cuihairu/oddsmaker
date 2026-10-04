@@ -137,5 +137,5 @@ Superset 适合探索式分析，不适合所有实时运营和风控告警。
 正确做法：
 
 - Superset 保留为 BI。
-- 自研轻量 Dashboard 用于今日实时指标和风控告警。
+- 自行开发轻量 Dashboard 用于今日实时指标和风控告警。
 - Redis + ClickHouse 聚合表支持秒级或分钟级刷新。

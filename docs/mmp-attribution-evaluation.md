@@ -125,7 +125,7 @@ ORDER BY (game_id, environment, mmp_app_id, subject, install_time);
 
 - 触发条件：拿到任一 MMP 的原始数据导出权限（Data Locker 或 CSV uploads 任一即可启动）。
 - 启动范围：方案 B 最小闭环 + 安装归因渠道分布报表；CPI/ROAS 等花费数据接入放二期。
-- 明确不做（与竞品分析 §4 一致）：广告平台直连（Facebook/Google Ads API 直接拉数）、MMP 聚合看板复刻、移动归因 SDK 自研。
+- 明确不做（与竞品分析 §4 一致）：广告平台直连（Facebook/Google Ads API 直接拉数）、MMP 聚合看板复刻、移动归因 SDK 自行开发。
 - 在触发条件达成前，P7 系列到此收口；后续优先级回归补测试覆盖与运营工具打磨。
 
 ## 7. 参考资料

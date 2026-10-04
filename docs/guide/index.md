@@ -7,18 +7,18 @@ Welcome to Oddsmaker, the professional gaming analytics platform for single comp
 Oddsmaker provides:
 
 - **Multi-Game Architecture**: Manage multiple games with isolated environments
-- **Real-time Analytics**: Process millions of events with Kafka + Flink + ClickHouse
+- **Real-time Analytics**: Event pipeline on Kafka + Flink + ClickHouse
 - **Risk Control**: Detect and prevent cheating and fraud
 - **A/B Testing**: Run experiments with statistical analysis
-- **Machine Learning**: Deploy ML models for predictions
-- **Enterprise Security**: MFA, SSO, RBAC, and audit logging
+- **Machine Learning**: Train and deploy ML models for predictions
+- **Enterprise Security**: MFA, RBAC, and audit logging
 
 ## Prerequisites
 
 Before getting started, ensure you have:
 
 - Java 21
-- Gradle 8.10+ or 9.x installed locally
+- Gradle 8.10+ (the repo ships a Gradle Wrapper 8.10.1 — prefer `./gradlew`)
 - Docker and Docker Compose
 - PostgreSQL 16+
 - Redis 7+
@@ -26,28 +26,36 @@ Before getting started, ensure you have:
 
 ## Quick Start
 
-### Option 1: Docker Compose (Recommended)
+### Option 1: Docker Compose full stack (Recommended)
+
+The root `docker-compose.quickstart.yml` brings up control + gateway (single image, two services) plus all dependencies (PostgreSQL / Redis / Kafka / Apicurio / ClickHouse). Control listens on 38085, gateway on 38080:
 
 ```bash
 # Clone the repository
 git clone https://github.com/cuihairu/oddsmaker.git
 cd oddsmaker
 
-# Start local infrastructure
-docker-compose -f infra/docker-compose.yml up -d
+# Optional: adjust ports / passwords / tokens (see .env.example)
+cp .env.example .env
+
+# Start control + gateway + all dependencies
+docker compose -f docker-compose.quickstart.yml up -d
 
 # Verify services are running
-docker-compose ps
+docker compose -f docker-compose.quickstart.yml ps
 
 # Check health
-curl http://localhost:8085/actuator/health
+curl http://localhost:38085/actuator/health   # control (management plane)
+curl http://localhost:38080/actuator/health   # gateway (ingest)
 ```
+
+`infra/docker-compose.yml` is dependencies-only (Kafka / ClickHouse / Apicurio / Superset / observability) — it does not include control or gateway.
 
 ### Option 2: Local Development
 
 ```bash
 # Start dependencies
-docker-compose -f infra/docker-compose.yml up -d kafka clickhouse apicurio
+docker compose -f infra/docker-compose.yml up -d kafka clickhouse apicurio
 
 # Build the project
 gradle :services:control-service:bootJar
@@ -60,15 +68,17 @@ gradle :services:control-service:bootRun
 
 ### 1. Create a Game
 
+`genre` accepts: ACTION, RPG, STRATEGY, PUZZLE, CASUAL, SIMULATION, SPORTS, RACING, SHOOTER, MMORPG, MOBA, BATTLE_ROYALE, OTHER. `platforms` accepts: WEB, MOBILE, PC, CONSOLE, VR, AR. Creating a game also seeds `dev` / `staging` / `prod` environments automatically.
+
 ```bash
-curl -X POST http://localhost:8085/api/games \
+curl -X POST http://localhost:38085/api/games \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "x-admin-token: YOUR_ADMIN_TOKEN" \
   -d '{
     "name": "My Game",
-    "genre": "rpg",
-    "platforms": ["android", "ios"],
-    "timezone": "UTC",
+    "genre": "RPG",
+    "platforms": ["MOBILE", "PC"],
+    "defaultTimezone": "UTC",
     "defaultCurrency": "USD"
   }'
 ```
@@ -76,9 +86,9 @@ curl -X POST http://localhost:8085/api/games \
 ### 2. Create an Environment
 
 ```bash
-curl -X POST http://localhost:8085/api/games/GAME_ID/environments \
+curl -X POST http://localhost:38085/api/games/GAME_ID/environments \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "x-admin-token: YOUR_ADMIN_TOKEN" \
   -d '{
     "name": "production",
     "type": "PRODUCTION",
@@ -89,9 +99,9 @@ curl -X POST http://localhost:8085/api/games/GAME_ID/environments \
 ### 3. Create an API Key
 
 ```bash
-curl -X POST http://localhost:8085/api/api-keys \
+curl -X POST http://localhost:38085/api/api-keys \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "x-admin-token: YOUR_ADMIN_TOKEN" \
   -d '{
     "gameId": "GAME_ID",
     "environmentId": "ENV_ID",
@@ -102,22 +112,13 @@ curl -X POST http://localhost:8085/api/api-keys \
 
 ### 4. Send Events
 
+Ingest goes to the **gateway**, not control: `/v1/batch` on port 38080 (NDJSON or a JSON array). `environment` is the environment *name* as configured for the game (`dev` / `staging` / `prod` by default), not the environment type:
+
 ```bash
-curl -X POST http://localhost:8085/v1/batch \
-  -H "Content-Type: application/json" \
+curl -X POST http://localhost:38080/v1/batch \
+  -H "Content-Type: application/x-ndjson" \
   -H "x-api-key: YOUR_API_KEY" \
-  -d '[
-    {
-      "event_id": "evt_001",
-      "game_id": "GAME_ID",
-      "environment": "production",
-      "event_type": "session",
-      "event_name": "session:start",
-      "device_id": "device_123",
-      "user_id": "user_456",
-      "ts_client": 1700000000000
-    }
-  ]'
+  -d '{"event_id": "evt_001", "game_id": "GAME_ID", "environment": "prod", "event_type": "session", "event_name": "session_start", "device_id": "device_123", "user_id": "user_456", "ts_client": 1700000000000}'
 ```
 
 ## Next Steps
