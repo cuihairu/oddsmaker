@@ -41,11 +41,11 @@
 
 ## B5 风控 Feature 层
 
-- [ ] 迁移 + `RiskFeatureEntity`：`risk_features`（game_id, environment, scope_key, feature_name, window, value, as_of）
-- [ ] `jobs/flink/risk-job` 特征作业分支：首批 6 特征（gold_gain_1h/24h、device_count、account_count_per_ip、win_rate…清单以计划书 §5.1 为准）
-- [ ] `RiskRuleEntity.ruleConditions` 改从特征取值（事件→特征→规则三段解耦）
+- [x] 迁移 + `RiskFeatureEntity`：`risk_features`（game_id, environment, scope_key, feature_name, window, value, as_of）
+- [x] `jobs/flink/risk-job` 特征作业分支：首批 6 特征（gold_gain_1h/24h、device_count、account_count_per_ip、win_rate…清单以计划书 §5.1 为准）
+- [x] `RiskRuleEntity.ruleConditions` 改从特征取值（事件→特征→规则三段解耦）
 
-**验收：** 见计划书 §5.4 端到端：灌超阈值金币事件 → `risk_features` 出 1h 窗口行 → 规则命中 → 决策链路。
+**验收：** ✅（3c592f2 后回填）全量 gradle 测试 + web test/build 绿；V0.9.18 迁移（`risk_features` 六列唯一约束 + JDBC ON CONFLICT upsert）+ `RiskFeatureEntity`/`RiskFeatureRepo`（EntitiesSchemaAlignmentTest 自动对账列对齐）；risk-job 特征作业分支 SlidingEventTimeWindows 首 6 特征——gold_gain_1h（1h/5m）、gold_gain_24h（24h/30m）、device_count（DEVICE 口径）、account_count_per_ip（IP 口径）、win_rate（match:complete/:end 胜场比，无结果不产出）、event_count_10m（第 6 特征取事件计数，10m/1m）——窗口行真落 PostgreSQL control 库（watermark delay/特征开关入 config 槽）；三段解耦：新增 `ruleType=FEATURE`（实体枚举 + RuleFetcher 解析 `ruleConditions.features` + web 规则页色/标签），评估在 KeyedBroadcastProcessFunction 按特征广播快照逐条件全 AND 取值，无值不判真，IP 条件取本事件 IP 退化主体最近上报（keyed TTL 1 天兜底），命中 RiskHit 进既有 risk_events Kafka+ClickHouse 双 sink；既有 7 类事件规则与规则轮询原样保留，risk_scores/Decision/Action 段属 B6 未含。测试：RiskFeatureTest 16 例（真实 local env 窗口滑动：1h/5m 12 行错位、24h 48 行、跨桶拆分、IP/DEVICE 口径、win_rate；条件解析合法+8 非法；快照语义；命中证据形状；RuleFetcher FEATURE 合并；新 config 槽；JDBC 绑定对齐；特征开关接线）；§5.4 真 PG 端到端 RiskFeaturePgE2eTest（postgres:16 容器 + bootRun Flyway 全量迁移复现：2 条 600k 超阈值金币事件 → `risk_features` 1h 行值=600000 → FEATURE 规则命中；`-Drisk.pg.e2e=true` 显式门禁、CI 无 PG 自跳过；本地执行无 checkpoint 时跨 task partial buffer 无周期 flush，广播行到达有秒级抖动——评估载体排 3 连梯子拉长观测窗保证确定性）。
 
 ## B6 RiskScore 独立 + Decision 状态机
 
