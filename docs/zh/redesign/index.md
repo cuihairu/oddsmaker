@@ -19,6 +19,7 @@
 | [03-open-source-reference](./03-open-source-reference) | 对标参考：只吸收架构和分析能力，不复制 SaaS 多租户模型 |
 | [04-redesign](./04-redesign) | 新架构：单公司多游戏、事件模型、数据链路、风控体系 |
 | [05-roadmap](./05-roadmap) | 实施路线：先统一模型，再补游戏分析和风控 |
+| [06-od2-restructure-plan](./06-od2-restructure-plan) | 2.0 重构计划书：领域模型/模块边界/数据契约一次性定死，B1~B10 可执行批次 |
 
 ## 一句话结论
 
