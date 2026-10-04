@@ -21,7 +21,7 @@
 - [x] `deploy/demo/README.md §5` 删除手工 psql 兜底段，改口「角色分配随建号自动落表」
 - [x] 真 PG 复现法验证：建号→分配角色→受权限门端点 200
 
-**验收：** ✅（提交后回填）全量 208 suite + web build 双绿；真 PG（postgres:16:15433 + bootRun SQL bind TRACE）验证：V0.9.16 迁移 54→v0.9.16 一次应用、回填跑两遍 INSERT 1 行→0 行（幂等，ADMIN 无 roles 行被 JOIN 滤掉不落哑行）；createUser 落 role_viewer 全局行（enabled、assigned_by=admin）；demo 登录受权限门端点 game:read 200 / audit:sensitive 403（B2 前无 assignment 行会双 403）；PUT roles→ANALYST 后 role_viewer 删、role_analyst 落；updateUser 携带 roles 同走同步；§5 psql 段已删、改口自动落表。
+**验收：** ✅（ace946f 后回填）全量 208 suite + web build 双绿；真 PG（postgres:16:15433 + bootRun SQL bind TRACE）验证：V0.9.16 迁移 54→v0.9.16 一次应用、回填跑两遍 INSERT 1 行→0 行（幂等，ADMIN 无 roles 行被 JOIN 滤掉不落哑行）；createUser 落 role_viewer 全局行（enabled、assigned_by=admin）；demo 登录受权限门端点 game:read 200 / audit:sensitive 403（B2 前无 assignment 行会双 403）；PUT roles→ANALYST 后 role_viewer 删、role_analyst 落；updateUser 携带 roles 同走同步；§5 psql 段已删、改口自动落表。
 
 ## B3 Server SDK 骨架（一等公民）
 
