@@ -106,7 +106,7 @@ class FeatureRuleFunction extends KeyedBroadcastProcessFunction<
                 in.gameId, in.environment, in.ts, UUID.randomUUID().toString(), in.eventId,
                 spec.ruleId != null ? spec.ruleId : "risk-feature-rule", "FEATURE", spec.riskLevel,
                 RiskJob.subjectType(in), RiskJob.subjectId(in),
-                spec.riskScore, spec.actionType, reason.toString(), ev);
+                spec.riskScore, spec.actionType, reason.toString(), ev, in.trustLevel);
     }
 
     private static String format(double v) {

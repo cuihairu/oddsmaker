@@ -832,7 +832,7 @@ class RiskJobTest {
         RiskJob.RiskHit h = new RiskJob.RiskHit(
                 "g", "prod", new Timestamp(1_000L), "rid", "sid",
                 "rule-1", "THRESHOLD", "HIGH", "PLAYER", "u1", 85f, "ALERT",
-                "says \"hi\"", ev);
+                "says \"hi\"", ev, "HIGH");
         String json = RiskJob.toJson(h);
         assertTrue(json.startsWith("{\"game_id\":\"g\",\"environment\":\"prod\""), json);
         assertTrue(json.contains("\"ts\":1000"));
@@ -845,6 +845,7 @@ class RiskJobTest {
         assertTrue(json.contains("\"subject_id\":\"u1\""));
         assertTrue(json.contains("\"score\":85.0"));
         assertTrue(json.contains("\"action\":\"ALERT\""));
+        assertTrue(json.contains("\"trust_level\":\"HIGH\""));
         assertTrue(json.contains("\"reason\":\"says \\\"hi\\\"\""));
         assertTrue(json.contains("\"evidence\":{\"k\"1\":\"v\\\"2\"}"));   // key 原样、value 转义（现状）
         assertTrue(json.endsWith("}}"));
@@ -857,7 +858,7 @@ class RiskJobTest {
         RiskJob.RiskHit h = new RiskJob.RiskHit(
                 "g", "prod", new Timestamp(1_000L), "rid", "sid",
                 "rule-1", "THRESHOLD", "HIGH", "PLAYER", "u1", 85.5f, "ALERT",
-                "reason", ev);
+                "reason", ev, "");
 
         Map<String, Object> calls = new LinkedHashMap<>();
         PreparedStatement ps = (PreparedStatement) Proxy.newProxyInstance(
@@ -1144,7 +1145,7 @@ class RiskJobTest {
         ev.put("b", "2");
         RiskJob.RiskHit h = new RiskJob.RiskHit(
                 "g", "prod", new Timestamp(1_000L), "rid", "sid",
-                "rule-1", "THRESHOLD", "HIGH", "PLAYER", "u1", 85f, "ALERT", "r", ev);
+                "rule-1", "THRESHOLD", "HIGH", "PLAYER", "u1", 85f, "ALERT", "r", ev, "");
         assertTrue(RiskJob.toJson(h).contains("\"evidence\":{\"a\":\"1\",\"b\":\"2\"}"));
     }
 }

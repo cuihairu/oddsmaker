@@ -210,6 +210,10 @@ public class RiskJob {
                     .union(duplicateReceiptHits).union(adRewardHits).union(patternHits);
         }
 
+        // B6 §5.2：BLOCK 高信任门槛在 union 后统一收敛——非 HIGH 输入的 BLOCK 降级 REVIEW，
+        // 下游 Kafka / risk_events / risk_scores 三个出口看到同一份已定的动作
+        allHits = allHits.map(RiskJob::applyTrustGate).returns(Types.POJO(RiskHit.class));
+
         KafkaSink<String> kafkaSink = KafkaSink.<String>builder()
                 .setBootstrapServers(bootstrap)
                 .setRecordSerializer(KafkaRecordSerializationSchema.builder()
@@ -233,6 +237,26 @@ public class RiskJob {
         );
 
         allHits.addSink(jdbcSink).name("clickhouse-risk-events");
+
+        // B6 §5.2：评估产出 risk_scores（主体累计分 + 规则触发明细 JSON），与 risk_events 同源分叉
+        DataStream<RiskScoreRow> scores = allHits
+                .keyBy(RiskJob::scoreKey)
+                .process(new RiskScoreFunction())
+                .returns(Types.POJO(RiskScoreRow.class));
+
+        var scoreJdbcSink = JdbcSink.<RiskScoreRow>sink(
+                "INSERT INTO risk_scores (game_id, environment, subject_type, subject_id, score, updated_at, reasons) VALUES (?,?,?,?,?,?,?)",
+                RiskJob::bindRiskScore,
+                JdbcExecutionOptions.builder().withBatchIntervalMs(500).withBatchSize(500).withMaxRetries(3).build(),
+                new JdbcConnectionOptions.JdbcConnectionOptionsBuilder()
+                        .withUrl(chUrl)
+                        .withDriverName("com.clickhouse.jdbc.ClickHouseDriver")
+                        .withUsername(chUser)
+                        .withPassword(chPass)
+                        .build()
+        );
+
+        scores.addSink(scoreJdbcSink).name("clickhouse-risk-scores");
 
         return allHits;
     }
@@ -384,6 +408,9 @@ public class RiskJob {
         in.propsJson = r.props_json;
         in.receiptKey = firstNonBlank(r.receipt_hash, r.order_id);
         in.revenueAmount = parseAmount(r.revenue_amount);
+        // B6 §5.2：信任档位为网关权威值（B4 契约 v2），null 归一为空串——
+        // 与 CH 事件表迁移同款语义：'' 天然不满足 HIGH 精确匹配，安全侧收敛（fail-closed）
+        in.trustLevel = nz(str(r.trust_level));
         String adFormat = nz(r.ad_format);
         // schema 无 game_event_type 字段：gameEventType 是空串字面量，
         // "ad_reward".equalsIgnoreCase("") 恒 false，死枝等价删除
@@ -410,7 +437,7 @@ public class RiskJob {
                 subjectType(i), subjectId(i),
                 spec.riskScore, spec.actionType,
                 "resource amount " + i.amount.toPlainString() + " exceeds threshold " + spec.triggerThreshold,
-                ev);
+                ev, i.trustLevel);
     }
 
     /** VELOCITY 口径：携带正数金额。 */
@@ -449,9 +476,11 @@ public class RiskJob {
             RuleConfig.RuleSpec spec = RuleConfig.byType("FREQUENCY");
             long count = 0;
             RiskInput last = null;
+            boolean allHigh = true;
             for (RiskInput e : events) {
                 count++;
                 last = e;
+                if (!"HIGH".equals(e.trustLevel)) allHigh = false;
             }
             int limit = spec.triggerThreshold;
             if (count > limit && last != null) {
@@ -465,7 +494,7 @@ public class RiskJob {
                         subjectType(last), subjectId(last),
                         spec.riskScore, spec.actionType,
                         "event burst " + count + " in " + windowMin + "min (limit " + limit + ")",
-                        ev));
+                        ev, trustScope(allHigh)));
             }
         }
     }
@@ -491,10 +520,12 @@ public class RiskJob {
             BigDecimal sum = BigDecimal.ZERO;
             long count = 0;
             RiskInput last = null;
+            boolean allHigh = true;
             for (RiskInput e : events) {
                 sum = sum.add(e.amount);
                 count++;
                 last = e;
+                if (!"HIGH".equals(e.trustLevel)) allHigh = false;
             }
             BigDecimal limit = BigDecimal.valueOf(spec.triggerThreshold);
             if (sum.compareTo(limit) > 0 && last != null) {
@@ -509,7 +540,7 @@ public class RiskJob {
                         subjectType(last), subjectId(last),
                         spec.riskScore, spec.actionType,
                         "resource velocity " + sum.toPlainString() + " in " + windowMin + "min exceeds " + limit.toPlainString(),
-                        ev));
+                        ev, trustScope(allHigh)));
             }
         }
     }
@@ -535,10 +566,12 @@ public class RiskJob {
             BigDecimal sourceSum = BigDecimal.ZERO;
             BigDecimal sinkSum = BigDecimal.ZERO;
             RiskInput last = null;
+            boolean allHigh = true;
             for (RiskInput e : events) {
                 if ("source".equals(e.flowType)) sourceSum = sourceSum.add(e.amount);
                 else if ("sink".equals(e.flowType)) sinkSum = sinkSum.add(e.amount);
                 last = e;
+                if (!"HIGH".equals(e.trustLevel)) allHigh = false;
             }
             // sinkSum > 0 蕴含窗口循环至少执行过一次（同一循环里给 last 赋值），
             // last != null 恒真，等价删枝
@@ -558,7 +591,7 @@ public class RiskJob {
                             subjectType(last), subjectId(last),
                             spec.riskScore, spec.actionType,
                             "source/sink ratio " + ratio.toPlainString() + " in " + windowMin + "min exceeds " + limit.toPlainString(),
-                            ev));
+                            ev, trustScope(allHigh)));
                 }
             }
         }
@@ -584,9 +617,11 @@ public class RiskJob {
             RuleConfig.RuleSpec spec = RuleConfig.byType("DUPLICATE_RECEIPT");
             long count = 0;
             RiskInput last = null;
+            boolean allHigh = true;
             for (RiskInput e : events) {
                 count++;
                 last = e;
+                if (!"HIGH".equals(e.trustLevel)) allHigh = false;
             }
             if (count >= spec.triggerThreshold && last != null) {
                 Map<String, String> ev = new HashMap<>();
@@ -600,7 +635,7 @@ public class RiskJob {
                         subjectType(last), subjectId(last),
                         spec.riskScore, spec.actionType,
                         "receipt " + last.receiptKey + " submitted " + count + " times in " + windowMin + "min",
-                        ev));
+                        ev, trustScope(allHigh)));
             }
         }
     }
@@ -626,10 +661,12 @@ public class RiskJob {
             long count = 0;
             BigDecimal revenueSum = BigDecimal.ZERO;
             RiskInput last = null;
+            boolean allHigh = true;
             for (RiskInput e : events) {
                 count++;
                 if (e.revenueAmount != null) revenueSum = revenueSum.add(e.revenueAmount);
                 last = e;
+                if (!"HIGH".equals(e.trustLevel)) allHigh = false;
             }
             if (count > spec.triggerThreshold && last != null) {
                 Map<String, String> ev = new HashMap<>();
@@ -643,7 +680,7 @@ public class RiskJob {
                         subjectType(last), subjectId(last),
                         spec.riskScore, spec.actionType,
                         "ad reward burst " + count + " in " + windowMin + "min (limit " + spec.triggerThreshold + ")",
-                        ev));
+                        ev, trustScope(allHigh)));
             }
         }
     }
@@ -765,7 +802,90 @@ public class RiskJob {
                 subjectType(last), subjectId(last),
                 spec.riskScore, spec.actionType,
                 "sequence matched in " + windowMin + "min: " + seqText,
-                ev);
+                ev, last.trustLevel);
+    }
+
+    /**
+     * B6 §5.2 RiskScore 独立：按主体键累计各规则对主体的最大贡献分——Rule 静态 riskScore
+     * 降级为「该规则最大贡献分」，同规则重复命中取高不叠加；每次评估触发产出一行 risk_scores
+     * （subject、累计分、规则触发明细 JSON），ReplacingMergeTree 按主体保留最新累计快照。
+     */
+    static class RiskScoreFunction extends KeyedProcessFunction<String, RiskHit, RiskScoreRow> {
+        private transient ValueState<Map<String, Float>> contributions;
+
+        @Override
+        public void open(org.apache.flink.configuration.Configuration parameters) {
+            ValueStateDescriptor<Map<String, Float>> desc =
+                    new ValueStateDescriptor<>("risk-score-contributions", Types.MAP(Types.STRING, Types.FLOAT));
+            // 状态兜底回收（同 PatternFunction 惯例）：主体 7 天无命中则累计清零重新起算
+            desc.enableTimeToLive(StateTtlConfig.newBuilder(org.apache.flink.api.common.time.Time.days(7)).build());
+            contributions = getRuntimeContext().getState(desc);
+        }
+
+        @Override
+        public void processElement(RiskHit h, Context ctx, Collector<RiskScoreRow> out) throws Exception {
+            Map<String, Float> byRule = contributions.value();
+            if (byRule == null) byRule = new HashMap<>();
+            Float prev = byRule.get(h.ruleId);
+            if (prev == null || h.score > prev) byRule.put(h.ruleId, h.score);
+            contributions.update(byRule);
+
+            float total = 0f;
+            List<String> reasons = new java.util.ArrayList<>(byRule.size());
+            for (Map.Entry<String, Float> e : byRule.entrySet()) {
+                total += e.getValue();
+                reasons.add("{\"rule_id\":\"" + jsonEscape(e.getKey())
+                        + "\",\"contribution\":" + e.getValue() + "}");
+            }
+            reasons.sort(null); // 明细顺序确定，便于断言与回溯
+            out.collect(new RiskScoreRow(h.gameId, h.environment, h.subjectType, h.subjectId,
+                    total, h.ts, reasons));
+        }
+    }
+
+    /** risk_scores 落行载体（对应 ClickHouse 同名表 7 列）。 */
+    public static final class RiskScoreRow implements java.io.Serializable {
+        public String gameId;
+        public String environment;
+        public String subjectType;
+        public String subjectId;
+        public float score;
+        public Timestamp updatedTs;
+        public List<String> reasons;
+
+        public RiskScoreRow() {}
+
+        public RiskScoreRow(String gameId, String environment, String subjectType, String subjectId,
+                            float score, Timestamp updatedTs, List<String> reasons) {
+            this.gameId = gameId;
+            this.environment = environment;
+            this.subjectType = subjectType;
+            this.subjectId = subjectId;
+            this.score = score;
+            this.updatedTs = updatedTs;
+            this.reasons = reasons;
+        }
+    }
+
+    /** risk_scores 的主体分键：game|env|subjectType:subjectId（与表 ORDER BY 主体维度对齐）。 */
+    static String scoreKey(RiskHit h) {
+        return h.gameId + "|" + h.environment + "|" + h.subjectType + ":" + h.subjectId;
+    }
+
+    /** risk_scores 表写入绑定（7 列；reasons 为规则触发明细 JSON 数组）。 */
+    static void bindRiskScore(java.sql.PreparedStatement ps, RiskScoreRow r) throws java.sql.SQLException {
+        ps.setString(1, r.gameId);
+        ps.setString(2, r.environment);
+        ps.setString(3, r.subjectType);
+        ps.setString(4, r.subjectId);
+        ps.setFloat(5, r.score);
+        ps.setTimestamp(6, r.updatedTs);
+        ps.setArray(7, ps.getConnection().createArrayOf("String", r.reasons.toArray(new String[0])));
+    }
+
+    /** JSON 字符串字面量转义（ruleId 等标识符防御性转义）。 */
+    static String jsonEscape(String s) {
+        return s == null ? "" : s.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 
     /** 控制面规则拉取参数（窗口算子 open 时启动单例 fetcher）。 */
@@ -823,6 +943,30 @@ public class RiskJob {
         return subjectWindowKey(i) + "|" + i.receiptKey;
     }
 
+    /** 窗口口径信任档位：窗口内事件全为 HIGH 才收敛为 "HIGH"，否则 ""（混杂窗口 fail-closed）。 */
+    static String trustScope(boolean allHigh) {
+        return allHigh ? "HIGH" : "";
+    }
+
+    /**
+     * BLOCK 级动作高信任门槛（计划书 §5.2/§4.3）：BLOCK 只允许 trust_level=HIGH 的输入驱动；
+     * ''/null/LOW/COMPUTED 或窗口混杂一律降级 REVIEW——安全侧收敛，宁转人审不放行封禁。
+     * 其余动作不受门槛影响，原样返回。
+     */
+    static String gateAction(String action, String trustLevel) {
+        return "BLOCK".equalsIgnoreCase(action) && !"HIGH".equals(trustLevel) ? "REVIEW" : action;
+    }
+
+    /** 命中流统一门槛（union 后、进 sink 前）：BLOCK 降级时 reason 打 trust_gate 标记便于回溯。 */
+    static RiskHit applyTrustGate(RiskHit h) {
+        String gated = gateAction(h.action, h.trustLevel);
+        if (!gated.equals(h.action)) {
+            h.action = gated;
+            h.reason = "[trust_gate] " + h.reason;
+        }
+        return h;
+    }
+
     static String str(Object v) { return v == null ? null : v.toString(); }
 
     static String nz(String s) { return s == null ? "" : s; }
@@ -856,6 +1000,7 @@ public class RiskJob {
         sb.append(",\"subject_id\":\"").append(h.subjectId).append("\"");
         sb.append(",\"score\":").append(h.score);
         sb.append(",\"action\":\"").append(h.action).append("\"");
+        sb.append(",\"trust_level\":\"").append(h.trustLevel == null ? "" : h.trustLevel).append("\"");
         sb.append(",\"reason\":\"").append(h.reason.replace("\"", "\\\"")).append("\"");
         sb.append(",\"evidence\":{");
         boolean first = true;
@@ -890,6 +1035,8 @@ public class RiskJob {
         public BigDecimal revenueAmount;
         /** 是否为激励广告 reward 事件 */
         public boolean adReward;
+        /** 信任档位（LOW/HIGH/COMPUTED；网关权威回填，缺失归一为 ""），BLOCK 级动作门槛输入 */
+        public String trustLevel;
     }
 
     public static final class RiskHit {
@@ -907,12 +1054,14 @@ public class RiskJob {
         public String action;
         public String reason;
         public Map<String, String> evidence;
+        /** 判定输入的信任口径（单事件=该事件 trust_level；窗口=窗口内全 HIGH 才 "HIGH"），BLOCK 门槛依据 */
+        public String trustLevel;
 
         public RiskHit() {}
 
         public RiskHit(String gameId, String environment, Timestamp ts, String riskEventId, String sourceEventId,
                        String ruleId, String riskType, String severity, String subjectType, String subjectId,
-                       float score, String action, String reason, Map<String, String> evidence) {
+                       float score, String action, String reason, Map<String, String> evidence, String trustLevel) {
             this.gameId = gameId;
             this.environment = environment;
             this.ts = ts;
@@ -927,6 +1076,7 @@ public class RiskJob {
             this.action = action;
             this.reason = reason;
             this.evidence = evidence;
+            this.trustLevel = trustLevel;
         }
     }
 }
