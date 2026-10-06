@@ -304,4 +304,4 @@ Gateway 当前从控制面拉取并缓存（`/internal/api-keys` 等 internal �
 - key 上下文：`game_id`、`environment`、档位（client/server/admin）与启用状态
 - PII / props 策略与限流（`rpm` / `ipRpm`）
 
-风控侧：规则由 Flink risk-job 每 60 秒拉取一次；黑名单走批量校验。Tracking Plan 尚未接入 Gateway 的实时校验链（schema 校验目前用内置 JSON Schema），缓存为进程内短 TTL。
+风控侧：规则由 Flink risk-job 每 60 秒拉取一次；黑名单走批量校验。risk-job 命中事件经 Kafka 回流后由 RiskEventConsumer 判定落库（`risk_cases` 判定状态机 OPEN → REVIEW/ALERT/MARK → THROTTLE/BLOCK → RESOLVED，Decision 先于 Action，非法流转拒绝执行并归档 decision_rejected；BLOCK 级动作要求输入事件 trust_level=HIGH，非 HIGH fail-closed 降级 REVIEW）。Tracking Plan 尚未接入 Gateway 的实时校验链（schema 校验目前用内置 JSON Schema），缓存为进程内短 TTL。

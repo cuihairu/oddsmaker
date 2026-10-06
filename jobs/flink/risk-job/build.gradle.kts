@@ -42,9 +42,13 @@ tasks.named<Test>("test") {
     "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
     "--add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED"
   )
-  // §5.4 真 PG 端到端（RiskFeaturePgE2eTest，@EnabledIfSystemProperty）：本地门禁 -Drisk.pg.e2e=true
-  // 显式开启；CI 无 PG 自跳过。url/user/pass 仅在显式传入时透传（缺省保留测试内默认值）。
-  for (key in listOf("risk.pg.e2e", "risk.pg.e2e.url", "risk.pg.e2e.user", "risk.pg.e2e.pass")) {
+  // §5.4 真 PG 端到端（RiskFeaturePgE2eTest / RiskScorePgE2eTest，@EnabledIfSystemProperty）：
+  // 本地门禁 -Drisk.pg.e2e=true 显式开启；CI 无 PG 自跳过。url/user/pass 仅在显式传入时
+  // 透传（缺省保留测试内默认值）；risk.ch.e2e.* 为 B6 risk_events/risk_scores ClickHouse 出口参数。
+  for (key in listOf(
+      "risk.pg.e2e", "risk.pg.e2e.url", "risk.pg.e2e.user", "risk.pg.e2e.pass",
+      "risk.ch.e2e.url", "risk.ch.e2e.user", "risk.ch.e2e.pass"
+  )) {
     val v = System.getProperty(key)
     if (v != null && v.isNotEmpty()) systemProperty(key, v)
   }

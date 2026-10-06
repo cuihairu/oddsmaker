@@ -98,6 +98,7 @@ Authorization: Bearer {token}
   "targetId": "user_123",
   "riskLevel": "HIGH",
   "riskScore": 85,
+  "status": "BLOCK",
   "actionTaken": "BLOCK",
   "executionStatus": "EXECUTED",
   "executedAt": "2024-01-01T00:00:00Z",
@@ -105,7 +106,7 @@ Authorization: Bearer {token}
 }
 ```
 
-`targetType` 取值 `user_id` / `device_id` / `player_id` / `ip`；`executionStatus` 取值 `PENDING` / `EXECUTED` / `FAILED` / `CANCELLED` / `APPEALED`。
+`targetType` 取值 `user_id` / `device_id` / `player_id` / `ip`；`status` 为判定状态（`OPEN → REVIEW|ALERT|MARK → THROTTLE|BLOCK → RESOLVED` 分层前向，OPEN 不直达 RESOLVED）；`executionStatus` 取值 `PENDING` / `EXECUTED` / `FAILED` / `CANCELLED` / `APPEALED`。
 
 ## 解除封禁
 
@@ -123,7 +124,7 @@ Authorization: Bearer {token}
 
 ## 实时风险评估
 
-风险评估由 Flink risk-job 实时执行：消费事件流，按 Control 下发的规则（60 秒拉取一次）匹配，命中后写 `risk_events` / `risk_scores` / `risk_cases` 并联动黑名单、审核队列与 Webhook。
+风险评估由 Flink risk-job 实时执行：消费事件流，按 Control 下发的规则（60 秒拉取一次）匹配，命中后写 `risk_events` / `risk_scores`（主体累计分，评估侧单写）到 ClickHouse，并把事件发回 Control（Kafka `oddsmaker.risk_events`）；Control 的 RiskEventConsumer 按判定状态机落 `risk_cases`（Decision 先于 Action：非法流转的处置动作被拒绝），并联动黑名单、审核队列与 Webhook，处置归档 `risk_actions`。BLOCK 级动作要求输入事件 `trust_level=HIGH`（risk-job 与 Control 两侧同语义双门槛，非 HIGH fail-closed 降级 REVIEW）。
 
 ## 风控大屏
 

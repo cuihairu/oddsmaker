@@ -72,8 +72,8 @@
 | **Signal** | 流水，非实体 | Gateway 校验后的原始事件即信号（`risk_context` 字段已入事件契约） | 显式定义信号清单（gold_gain/login_ip/device/…），不需要新表 |
 | **Feature**（**新增**） | `(game_id, scope_key, feature_name)` 时间窗值 | ✅（B5 落地：`risk_features` 表 + risk-job 特征作业首 6 特征滑动窗口） | ANALYTICS 侧共享 `feature_store` 双写见 §5.3（B10） |
 | **RiskRule** | `rule_id`，`environmentId` 可空（全局规则） | `RiskRuleEntity` 已具（THRESHOLD/SEQUENCE、riskScore、actionType、enableAutoBlock） | 收敛 `ruleConditions` 为结构化 JSON schema（引 EventSchema 字段），保持现状字段名 |
-| **RiskScore** | `(game_id, subject, as_of)` 值对象 | 内嵌于 Rule（每条规则一个 riskScore） | **从 rule 提出**：一次评估产生一个累计分数记录（B6） |
-| **Decision**（**新增**） | 判定 `(case_id → status)` | **空缺**——现有 `RiskCaseEntity`/`ReviewQueueEntity` 是处置落点雏形 | B6：判定状态机 `OPEN → REVIEW/ALERT/MARK → THROTTLE/BLOCK → RESOLVED` |
+| **RiskScore** | `(game_id, subject, as_of)` 值对象 | ✅（B6 落地：risk-job 评估产出 CH `risk_scores`——主体累计各规则最大贡献分 + 规则触发明细 JSON，ReplacingMergeTree 主体快照） | **从 rule 提出**：一次评估产生一个累计分数记录（B6） |
+| **Decision**（**新增**） | 判定 `(case_id → status)` | ✅（B6 落地：`RiskCaseEntity.status` 分层前向状态机，Decision-first 判定先行、非法流转拒绝执行动作） | B6：判定状态机 `OPEN → REVIEW/ALERT/MARK → THROTTLE/BLOCK → RESOLVED` |
 | **Action** | 处置动作 | `RiskRuleEntity.ActionType`（ALERT/MARK/REVIEW/THROTTLE/BLOCK 语义已实现）+ BlockList/封禁 | 与 Decision 绑定（Decision 决定动作，不反推） |
 
 ### 2.5 实验域
@@ -172,8 +172,8 @@ Signal → Feature → Rule → Risk Score → Decision → Action
 - **Signal** ✅：Gateway 校验后事件 + `risk_context`；risk-job `RuleConfig` 按 ruleType 索引、同型多条取最高 riskScore（`jobs/flink/risk-job/.../RuleConfig.java:13`）。
 - **Feature** ✅（B5 落地）：risk-job 特征作业首 6 特征滑动窗口 upsert `risk_features`；`FEATURE` 规则 `ruleConditions.features` 从特征快照取值（共享 `feature_store` 双写留 B10，§5.3）。
 - **Rule** ✅：`RiskRuleEntity`（THRESHOLD/SEQUENCE、riskLevel、actionType、enableAutoBlock/blockDuration）。
-- **Risk Score** 🟡：内嵌 rule（每条规则一个静态 riskScore），**不是一次评估的累计分数**。
-- **Decision** ❌ 空缺：`RiskCaseEntity`/`ReviewQueueEntity`/`BlockListEntity` 是处置落点，没有判定状态机。
+- **Risk Score** ✅（B6 落地）：risk-job 评估侧 `RiskScoreFunction` 按主体累计各规则最大贡献分（Rule 静态 riskScore 降为该规则最大贡献分，同规则重复命中取高不叠加），每次评估落 CH `risk_scores` 行（主体累计分 + 规则触发明细 JSON）；处置动作侧不回写（control 单写 `risk_actions`）。
+- **Decision** ✅（B6 落地）：`RiskCaseEntity.status` 分层前向状态机（`OPEN → REVIEW/ALERT/MARK → THROTTLE/BLOCK → RESOLVED`，严格升层 + OPEN 不直达 RESOLVED），`RiskEventConsumer` Decision-first——判定先落 status、动作执行只发生在 Decision 之后，非法流转拒绝执行并归档 `decision_rejected`；BLOCK 级动作要求输入 `trust_level=HIGH`（risk-job/control 两侧同语义双门槛）。
 - **Action** ✅：ActionType + BlockList/封禁 + Webhook 告警已通。
 
 ### 5.1 B5：Feature 层（风险先行）

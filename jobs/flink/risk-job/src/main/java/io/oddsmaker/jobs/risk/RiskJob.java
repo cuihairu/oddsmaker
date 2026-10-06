@@ -224,19 +224,7 @@ public class RiskJob {
 
         allHits.map(RiskJob::toJson).returns(Types.STRING).sinkTo(kafkaSink).name("kafka-risk-events");
 
-        var jdbcSink = JdbcSink.<RiskHit>sink(
-                "INSERT INTO risk_events (game_id, environment, ts, risk_event_id, source_event_id, rule_id, risk_type, severity, subject_type, subject_id, score, action, reason, evidence) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                RiskJob::bindRiskHit,
-                JdbcExecutionOptions.builder().withBatchIntervalMs(500).withBatchSize(500).withMaxRetries(3).build(),
-                new JdbcConnectionOptions.JdbcConnectionOptionsBuilder()
-                        .withUrl(chUrl)
-                        .withDriverName("com.clickhouse.jdbc.ClickHouseDriver")
-                        .withUsername(chUser)
-                        .withPassword(chPass)
-                        .build()
-        );
-
-        allHits.addSink(jdbcSink).name("clickhouse-risk-events");
+        allHits.addSink(riskEventsJdbcSink(chUrl, chUser, chPass)).name("clickhouse-risk-events");
 
         // B6 §5.2：评估产出 risk_scores（主体累计分 + 规则触发明细 JSON），与 risk_events 同源分叉
         DataStream<RiskScoreRow> scores = allHits
@@ -244,19 +232,7 @@ public class RiskJob {
                 .process(new RiskScoreFunction())
                 .returns(Types.POJO(RiskScoreRow.class));
 
-        var scoreJdbcSink = JdbcSink.<RiskScoreRow>sink(
-                "INSERT INTO risk_scores (game_id, environment, subject_type, subject_id, score, updated_at, reasons) VALUES (?,?,?,?,?,?,?)",
-                RiskJob::bindRiskScore,
-                JdbcExecutionOptions.builder().withBatchIntervalMs(500).withBatchSize(500).withMaxRetries(3).build(),
-                new JdbcConnectionOptions.JdbcConnectionOptionsBuilder()
-                        .withUrl(chUrl)
-                        .withDriverName("com.clickhouse.jdbc.ClickHouseDriver")
-                        .withUsername(chUser)
-                        .withPassword(chPass)
-                        .build()
-        );
-
-        scores.addSink(scoreJdbcSink).name("clickhouse-risk-scores");
+        scores.addSink(riskScoresJdbcSink(chUrl, chUser, chPass)).name("clickhouse-risk-scores");
 
         return allHits;
     }
@@ -344,6 +320,34 @@ public class RiskJob {
                         .withUsername(pgUser)
                         .withPassword(pgPass)
                         .build());
+    }
+
+    /** risk_events 写入 sink（ClickHouse 风控事件流，14 列）——buildPipeline 与 §5.4 端到端共用 */
+    static org.apache.flink.streaming.api.functions.sink.SinkFunction<RiskHit> riskEventsJdbcSink(String chUrl, String chUser, String chPass) {
+        return JdbcSink.sink(
+                "INSERT INTO risk_events (game_id, environment, ts, risk_event_id, source_event_id, rule_id, risk_type, severity, subject_type, subject_id, score, action, reason, evidence) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                RiskJob::bindRiskHit,
+                JdbcExecutionOptions.builder().withBatchIntervalMs(500).withBatchSize(500).withMaxRetries(3).build(),
+                chJdbcOptions(chUrl, chUser, chPass));
+    }
+
+    /** risk_scores 写入 sink（ClickHouse 主体累计分评估产出，7 列）——buildPipeline 与 §5.4 端到端共用 */
+    static org.apache.flink.streaming.api.functions.sink.SinkFunction<RiskScoreRow> riskScoresJdbcSink(String chUrl, String chUser, String chPass) {
+        return JdbcSink.sink(
+                "INSERT INTO risk_scores (game_id, environment, subject_type, subject_id, score, updated_at, reasons) VALUES (?,?,?,?,?,?,?)",
+                RiskJob::bindRiskScore,
+                JdbcExecutionOptions.builder().withBatchIntervalMs(500).withBatchSize(500).withMaxRetries(3).build(),
+                chJdbcOptions(chUrl, chUser, chPass));
+    }
+
+    /** ClickHouse JDBC 连接参数（risk_events / risk_scores 两个出口共用） */
+    private static JdbcConnectionOptions chJdbcOptions(String chUrl, String chUser, String chPass) {
+        return new JdbcConnectionOptions.JdbcConnectionOptionsBuilder()
+                .withUrl(chUrl)
+                .withDriverName("com.clickhouse.jdbc.ClickHouseDriver")
+                .withUsername(chUser)
+                .withPassword(chPass)
+                .build();
     }
 
     /** risk_features 表写入绑定（8 列）。 */

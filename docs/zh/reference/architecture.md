@@ -97,7 +97,7 @@ ClickHouse（事件与聚合，共享表）
 ├─ retention / funnels / resource_changes
 ├─ risk_events / risk_scores / risk_actions
 └─ （全部按 (game_id, environment, 日期) 分区）
-（risk_cases 是 PostgreSQL 表，记录案例与处置状态）
+（risk_cases 是 PostgreSQL 表，记录案例与判定状态机：OPEN → REVIEW/ALERT/MARK → THROTTLE/BLOCK → RESOLVED，分层前向单向流转）
 ```
 
 存储 profile 是游戏与存储之间的唯一桥：`SHARED` 用共享表，`PROD_ISOLATED`/`DEDICATED` 预留给独立库形态。
@@ -155,8 +155,8 @@ ORDER BY (game_id, environment, event_type, event_date, player_id, user_id, devi
 
 - `risk_events`：每次命中规则的事实表。
 - `risk_features`：窗口特征层（PostgreSQL），`FEATURE` 规则的取值来源。
-- `risk_scores`：账号、设备、玩家、IP 的风险评分。
-- `risk_actions`：block、review、mark、throttle、webhook。
+- `risk_scores`：主体累计风险评分（risk-job 评估侧单写：按主体累计各规则最大贡献分，规则触发明细 JSON 随行；处置动作不回写）。
+- `risk_actions`：block、review、mark、throttle、webhook 等处置归档（判定型处置携带 risk_case_id；非法判定流转归档 decision_rejected）。
 
 ## 组件与语言
 
