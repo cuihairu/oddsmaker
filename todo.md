@@ -49,11 +49,11 @@
 
 ## B6 RiskScore 独立 + Decision 状态机
 
-- [ ] 评估产出 `risk_scores`（subject、累计分、规则明细 JSON）；Rule 静态 riskScore 降为“该规则最大贡献分”
-- [ ] `RiskCaseEntity.status` 状态机：`OPEN → REVIEW|ALERT|MARK → THROTTLE|BLOCK → RESOLVED`（流转合法表入测试）
-- [ ] Block 级动作要求输入事件 `trust_level=HIGH`（server 事件才能驱动）
+- [x] 评估产出 `risk_scores`（subject、累计分、规则明细 JSON）；Rule 静态 riskScore 降为“该规则最大贡献分”
+- [x] `RiskCaseEntity.status` 状态机：`OPEN → REVIEW|ALERT|MARK → THROTTLE|BLOCK → RESOLVED`（流转合法表入测试）
+- [x] Block 级动作要求输入事件 `trust_level=HIGH`（server 事件才能驱动）
 
-**验收：** 全绿；状态机合法/非法流转各 ≥3 用例；§5.4 端到端全链路可跑。
+**验收：** ✅（980ad8b 后回填）全量 gradle 测试 + web test/build 双绿；三箱落地：①risk_scores——risk-job `RiskScoreFunction` 按主体累计各规则最大贡献分（静态 riskScore 降为该规则最大贡献分，重复命中取高不叠加），每次评估落 CH `risk_scores`（7 列 ReplacingMergeTree 主体快照，明细 JSON `{"rule_id","contribution"}` 排序确定），risk_scores 归评估侧单写——`RiskActionRecorder.updateSubjectScore` 移除、收敛 risk_actions-only（判定型处置携 risk_case_id，非法判定流转归档 decision_rejected）；②状态机——V0.9.19 迁移 status 列+索引，DecisionStatus 分层前向 OPEN(0)→REVIEW/ALERT/MARK(1)→THROTTLE/BLOCK(2)→RESOLVED(3)，canTransition 严格升层+OPEN 不直达 RESOLVED，RiskEventConsumer Decision-first（decide 先落判定、非法流转拒绝执行动作仅归档、actionTaken=actionOf(decision)），`RiskDecisionStateMachineTest` 11 例覆盖**合法/非法流转各 ≥3**（分带、OPEN 全去向、一级→二级、判定后结案、OPEN↛RESOLVED、同层改判×2、回退与复活、null、transitionTo 执行表、completeReview 存量兼容）；③trust 门槛——risk-job union 后 `applyTrustGate`（Kafka/risk_events/risk_scores 三出口同一已定动作）+ control onRiskEvent 入口二次 gate（非 HIGH 的 BLOCK fail-closed 降级 REVIEW + `[trust_gate]` 标记），两侧同语义双保险。**§5.4 端到端实跑通**：`RiskScorePgE2eTest`（risk-job——2×600k 金币 → PG risk_features 1h 行 → FEATURE 命中 → trust 门槛 → CH risk_events 落行 + risk_scores 累计分 85/明细 JSON；RiskJob 双出口抽 sink 工厂与 buildPipeline 共用）+ `RiskDecisionPgE2eTest`（control——@SpringBootTest 全上下文 + postgres:16 容器空库 Flyway 57 迁移直跑 + CH 容器，直驱 onRiskEvent 钉四链：BLOCK+HIGH 判定落库+block_lists+BLOCK 审计+risk_actions 归档携 rc_ 案件 id；BLOCK+非 HIGH 降级 REVIEW 入审核队列不入名单；ALERT→THROTTLE 同案件 tier1→2 升层两次处置均归档；BLOCK 后 MARK 非法拒绝——案件保持 BLOCK、无审计、归档 decision_rejected），均 `-Drisk.pg.e2e=true` 显式门禁 CI 自跳过。测试增量：RiskEventConsumerTest 增 BLOCK 双门槛/非法流转拒绝（verifyNoInteractions 全处置依赖）/webhook 不建案；RiskActionRecorderTest/FinalSweep2Test 换 never 回写 risk_scores 断言；BranchTopUpBTest/ServicesFinalSweepTest/FinalSweep6Test 补 trust_level=HIGH 契约；两模块 build.gradle 补 risk.pg.e2e*/risk.ch.e2e.* 属性透传。**边界：risk_scores 只落 CH 暂无控制面读取端点；decision_rejected 不触发审计/通知（动作未执行）；e2e 事件引用主数据须真实存在（外键），空库环境行由测试 @BeforeEach 补种子**。
 
 ## B7 EventSchema 一等资源化
 
