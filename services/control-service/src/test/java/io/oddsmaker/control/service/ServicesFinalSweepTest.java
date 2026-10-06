@@ -569,6 +569,7 @@ class ServicesFinalSweepTest {
             .append(",\"subject_type\":\"").append(subjectType).append("\"")
             .append(",\"subject_id\":\"").append(subjectId).append("\"")
             .append(",\"score\":0.9")
+            .append(",\"trust_level\":\"HIGH\"")   // B6 §4.3 BLOCK 门槛：默认高信任，BLOCK 才放行
             .append(",\"action\":").append(action == null ? "null" : "\"" + action + "\"");
         if (severity != null) {
             sb.append(",\"severity\":\"").append(severity).append("\"");
@@ -685,7 +686,10 @@ class ServicesFinalSweepTest {
             eq("game_demo"), eq("prod"), eq("device_id"), eq("dev_1"),
             anyString(), anyString(), eq(io.oddsmaker.control.jpa.BlockListEntity.BlockType.HARD),
             eq(false), eq(1440), eq("risk-automation"), isNull(), anyString());
-        verify(riskActionRecorder).record(any(), eq("block"), eq("blocked"), isNull());
+        // B6 Decision 先行：BLOCK 判定先建案，归档携带案件 id
+        ArgumentCaptor<String> caseId = ArgumentCaptor.forClass(String.class);
+        verify(riskActionRecorder).record(any(), eq("block"), eq("blocked"), caseId.capture());
+        assertTrue(caseId.getValue().startsWith("rc_"), caseId.getValue());
     }
 
     // =========================================================

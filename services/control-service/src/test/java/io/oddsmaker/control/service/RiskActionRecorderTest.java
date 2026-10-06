@@ -22,11 +22,13 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * 风控处置归档测试：risk_actions 写入参数、risk_scores 联动更新、
+ * 风控处置归档测试：risk_actions 写入参数、
  * ClickHouse 不可用/写失败时的降级（不影响处置主链路）。
+ * B6「RiskScore 独立」（计划书 §5.2）：risk_scores 由 risk-job 评估随事件产出，
+ * 归档侧不再回写（单规则分回写会覆盖主体累计分语义）。
  */
 @ExtendWith(MockitoExtension.class)
-@DisplayName("风控处置归档（risk_actions/risk_scores）")
+@DisplayName("风控处置归档（risk_actions；risk_scores 归评估侧）")
 class RiskActionRecorderTest {
 
     @Mock private ClickHouseClient client;
@@ -67,7 +69,8 @@ class RiskActionRecorderTest {
                 eq("DEVICE"), eq("dev_abc"), eq("HIGH"),
                 eq("block"), eq("blocked"), eq("system"),
                 eq("amount exceeds threshold"), eq(Map.of("amount", "999")));
-        verify(client).execute(any(ConnectionCallback.class));
+        // B6 RiskScore 独立：归档只写 risk_actions，无 risk_scores 联动写
+        verify(client, never()).execute(any(ConnectionCallback.class));
     }
 
     @Test
@@ -91,14 +94,14 @@ class RiskActionRecorderTest {
     }
 
     @Test
-    void record_withoutScore_skipsSubjectScoreUpdate() {
+    void record_neverWritesRiskScoresFromActionSide() {
         when(client.isAvailable()).thenReturn(true);
         RiskEventDto e = event();
-        e.score = null;
 
         recorder.record(e, "alert", "logged", null);
 
         verify(client).update(anyString(), any(Object[].class));
+        // B6 RiskScore 独立：动作侧不再回写 risk_scores（无论 score 是否在位）
         verify(client, never()).execute(any(ConnectionCallback.class));
     }
 
@@ -136,7 +139,7 @@ class RiskActionRecorderTest {
                 eq(""), eq("dev_x"), eq(""),
                 eq("throttle"), eq("throttled"), eq("system"),
                 eq(""), eq(Map.of()));
-        // 无 subjectType/score → 不更新 risk_scores
+        // 归档侧不写 risk_scores（B6 起归 risk-job 评估产出）
         verify(client, never()).execute(any(ConnectionCallback.class));
     }
 
@@ -153,7 +156,7 @@ class RiskActionRecorderTest {
         // 38 行 client == null 侧：直接返回
         assertDoesNotThrow(() -> new RiskActionRecorder(null).record(event(), "block", "blocked", null));
 
-        // 65 行 subjectType 非空但 subjectId null → 跳过 risk_scores 更新
+        // subjectId null 侧：动作行照常归档（nz 归一空串），无联动写
         when(client.isAvailable()).thenReturn(true);
         RiskEventDto noSubjectId = event();
         noSubjectId.subjectId = null;

@@ -111,6 +111,7 @@ class BranchTopUpBTest {
             dto.severity = severity;
             dto.subjectType = subjectType;
             dto.subjectId = subjectId;
+            dto.trustLevel = "HIGH";   // B6 §4.3 BLOCK 门槛：默认高信任，BLOCK 才放行
             return om.writeValueAsString(dto);
         } catch (Exception e) {
             throw new RuntimeException(e);

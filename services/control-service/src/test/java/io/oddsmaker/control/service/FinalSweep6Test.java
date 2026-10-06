@@ -1116,7 +1116,7 @@ class FinalSweep6Test {
         return String.format(
             "{\"riskEventId\":\"re_1\",\"gameId\":\"g\",\"environment\":\"prod\",\"ruleId\":\"rr\","
                 + "\"riskType\":\"cheat\",\"subjectType\":\"%s\",\"subjectId\":\"%s\",\"score\":90,"
-                + "\"severity\":\"%s\",\"action\":\"%s\",\"reason\":\"auto\"}",
+                + "\"severity\":\"%s\",\"trust_level\":\"HIGH\",\"action\":\"%s\",\"reason\":\"auto\"}",
             subjectType, subjectId, severity, action);
     }
 

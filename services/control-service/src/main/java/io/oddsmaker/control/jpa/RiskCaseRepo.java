@@ -30,6 +30,19 @@ public interface RiskCaseRepo extends JpaRepository<RiskCaseEntity, String> {
     List<RiskCaseEntity> findPendingReview(@Param("gameId") String gameId);
 
     /**
+     * 主体当前未结案案件（B6 Decision 状态机落点，最新在前）：
+     * 同一主体的后续判定事件在该案件上按状态机前向流转；无则新建 OPEN 案件。
+     */
+    @Query("SELECT rc FROM RiskCaseEntity rc WHERE rc.gameId = :gameId AND rc.environmentId = :environmentId "
+        + "AND rc.targetType = :targetType AND rc.targetId = :targetId AND rc.status <> :resolved "
+        + "ORDER BY rc.createdAt DESC")
+    List<RiskCaseEntity> findUnresolvedBySubject(@Param("gameId") String gameId,
+                                                 @Param("environmentId") String environmentId,
+                                                 @Param("targetType") String targetType,
+                                                 @Param("targetId") String targetId,
+                                                 @Param("resolved") RiskCaseEntity.DecisionStatus resolved);
+
+    /**
      * 查找已封禁但未解除的案例
      */
     @Query("SELECT rc FROM RiskCaseEntity rc WHERE rc.actionTaken = 'BLOCK' AND rc.executionStatus = 'EXECUTED' AND (rc.unblockedAt IS NULL OR rc.unblockedAt < rc.executedAt) ORDER BY rc.executedAt DESC")

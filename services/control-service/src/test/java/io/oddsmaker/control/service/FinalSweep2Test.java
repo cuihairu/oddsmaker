@@ -83,7 +83,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
  * IdentityConsumerTest / RiskActionRecorderTest / SecurityGameDeepTest /
  * RiskControllersTest / ControlServiceTest / UserPortalDeepTest 互补，
  * 覆盖 AnnouncementService 生命周期残余、SecurityService.disableMFA、
- * IdentityConsumer 合并与 primaryId 回退、RiskActionRecorder 的 risk_scores 回调、
+ * IdentityConsumer 合并与 primaryId 回退、RiskActionRecorder 的 risk_actions 归档（risk_scores 归评估侧）、
  * RiskDashboardController 字段映射、ControlService 密钥与存储档案分支、
  * DeveloperPortalService 密钥/版本/遥测生命周期、MailService.sweep。
  */
@@ -512,23 +512,14 @@ class FinalSweep2Test {
     }
 
     // =========================================================
-    // RiskActionRecorder：risk_scores 的 ConnectionCallback 真实执行
+    // RiskActionRecorder：risk_scores 不再由归档侧回写（B6 RiskScore 独立）
     // =========================================================
 
     @Test
-    @DisplayName("风控归档：risk_scores 回调真实执行并写满 7 个参数，回调异常不外抛")
-    void riskActionRecorderExecutesScoreCallback() throws Exception {
+    @DisplayName("风控归档：只写 risk_actions 一行，risk_scores 回写已移除（累计分归 risk-job 评估产出），写失败不外抛")
+    void riskActionRecorderWritesActionRowOnly() {
         lenient().when(clickHouseClient.isAvailable()).thenReturn(true);
         lenient().when(clickHouseClient.update(anyString(), any(Object[].class))).thenReturn(1);
-
-        Connection connection = mock(Connection.class);
-        PreparedStatement statement = mock(PreparedStatement.class);
-        Array reasons = mock(Array.class);
-        lenient().when(connection.prepareStatement(anyString())).thenReturn(statement);
-        lenient().when(connection.createArrayOf(eq("String"), any(String[].class))).thenReturn(reasons);
-        lenient().when(statement.executeUpdate()).thenReturn(1);
-        doAnswer(inv -> ((ConnectionCallback<?>) inv.getArgument(0)).doInConnection(connection))
-            .when(clickHouseClient).execute(any(ConnectionCallback.class));
 
         RiskEventDto event = new RiskEventDto();
         event.gameId = "game_demo";
@@ -542,17 +533,12 @@ class FinalSweep2Test {
 
         riskActionRecorder.record(event, "block", "blocked", "rc_1");
 
-        verify(statement).setString(1, "game_demo");
-        verify(statement).setString(2, "prod");
-        verify(statement).setString(3, "DEVICE");
-        verify(statement).setString(4, "dev_abc");
-        verify(statement).setFloat(5, 0.95f);
-        verify(statement).setTimestamp(eq(6), eq(new Timestamp(1_730_000_000_000L)));
-        verify(statement).setArray(7, reasons);
-        verify(statement).executeUpdate();
+        verify(clickHouseClient, times(1)).update(anyString(), any(Object[].class));
+        // B6 起主体累计分由 risk-job 评估随事件产出（§5.2），动作侧回写单规则分会覆盖累计语义
+        verify(clickHouseClient, never()).execute(any(ConnectionCallback.class));
 
         doThrow(new RuntimeException("ch down"))
-            .when(clickHouseClient).execute(any(ConnectionCallback.class));
+            .when(clickHouseClient).update(anyString(), any(Object[].class));
         assertDoesNotThrow(() -> riskActionRecorder.record(event, "alert", "logged", null));
     }
 

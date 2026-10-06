@@ -37,6 +37,10 @@ import static org.mockito.Mockito.when;
  * ALERT·REVIEW·THROTTLE→审计），并校验 BLOCK 处置矩阵
  * （subject_type→targetType、severity→duration/permanent）。
  *
+ * B6 Decision→Action（计划书 §5.2）：判定型动作先建案/流转 status（Decision 决定动作，不反推），
+ * 非法流转拒绝执行任何动作（归档 decision_rejected）；BLOCK 级动作要求 trust_level=HIGH，
+ * 非 HIGH fail-closed 降级 REVIEW（与 risk-job 侧门槛同语义双保险）。
+ *
  * 这条测试直接覆盖 Phase 0.1 的核心断点修复："risk_events 有了消费者" +
  * "BLOCK 真正落到封禁名单 + action 正确分发"。
  */
@@ -68,8 +72,14 @@ class RiskEventConsumerTest {
         ReflectionTestUtils.setField(consumer, "riskActionRecorder", riskActionRecorder);
     }
 
-    /** 构造对齐 RiskJob.toJson 输出契约（snake_case）的风控事件 JSON */
+    /** 构造对齐 RiskJob.toJson 输出契约（snake_case）的风控事件 JSON（默认 trust_level=HIGH） */
     private String riskEventJson(String action, String severity, String subjectType, String subjectId, String ruleId) {
+        return riskEventJson(action, severity, subjectType, subjectId, ruleId, "HIGH");
+    }
+
+    /** trust_level 可指定：BLOCK 信任门槛（§4.3）的 HIGH/LOW 两态由此驱动 */
+    private String riskEventJson(String action, String severity, String subjectType, String subjectId,
+                                 String ruleId, String trustLevel) {
         return "{"
             + "\"game_id\":\"game_demo\""
             + ",\"environment\":\"prod\""
@@ -82,6 +92,7 @@ class RiskEventConsumerTest {
             + ",\"subject_type\":\"" + subjectType + "\""
             + ",\"subject_id\":\"" + subjectId + "\""
             + ",\"score\":0.95"
+            + ",\"trust_level\":\"" + trustLevel + "\""
             + ",\"action\":\"" + action + "\""
             + ",\"reason\":\"Amount exceeds threshold\""
             + ",\"evidence\":{\"amount\":\"999\",\"threshold\":\"100\"}"
@@ -280,7 +291,13 @@ class RiskEventConsumerTest {
         verify(blockListService, never()).addBlock(
             any(), any(), any(), any(), any(), any(), any(), anyBoolean(),
             any(), any(), any(), any());
-        verifyNoInteractions(riskCaseRepo, reviewQueueService);
+        // Decision 先行：THROTTLE 判定落案（OPEN→THROTTLE 跨带合法），不进人审队列
+        org.mockito.ArgumentCaptor<io.oddsmaker.control.jpa.RiskCaseEntity> throttleCase =
+            org.mockito.ArgumentCaptor.forClass(io.oddsmaker.control.jpa.RiskCaseEntity.class);
+        verify(riskCaseRepo).save(throttleCase.capture());
+        assertEquals(io.oddsmaker.control.jpa.RiskCaseEntity.DecisionStatus.THROTTLE, throttleCase.getValue().status);
+        assertEquals(io.oddsmaker.control.jpa.RiskCaseEntity.ActionType.THROTTLE, throttleCase.getValue().actionTaken);
+        verifyNoInteractions(reviewQueueService);
 
         org.mockito.ArgumentCaptor<java.util.Map<String, Object>> payload =
             org.mockito.ArgumentCaptor.forClass(java.util.Map.class);
@@ -296,7 +313,13 @@ class RiskEventConsumerTest {
     void mark_notifiesGameServer() {
         consumer.onRiskEvent(riskEventJson("MARK", "LOW", "PLAYER", "user_mk", "rr_model"));
 
-        verifyNoInteractions(blockListService, riskCaseRepo, reviewQueueService);
+        // Decision 先行：MARK 判定落案
+        org.mockito.ArgumentCaptor<io.oddsmaker.control.jpa.RiskCaseEntity> markCase =
+            org.mockito.ArgumentCaptor.forClass(io.oddsmaker.control.jpa.RiskCaseEntity.class);
+        verify(riskCaseRepo).save(markCase.capture());
+        assertEquals(io.oddsmaker.control.jpa.RiskCaseEntity.DecisionStatus.MARK, markCase.getValue().status);
+        assertEquals(io.oddsmaker.control.jpa.RiskCaseEntity.ActionType.MARK, markCase.getValue().actionTaken);
+        verifyNoInteractions(blockListService, reviewQueueService);
 
         org.mockito.ArgumentCaptor<java.util.Map<String, Object>> payload =
             org.mockito.ArgumentCaptor.forClass(java.util.Map.class);
@@ -316,8 +339,10 @@ class RiskEventConsumerTest {
         consumer.onRiskEvent(riskEventJson("BLOCK", "HIGH", "DEVICE", "dev_abc", "rr_threshold"));
         org.mockito.ArgumentCaptor<RiskEventDto> blockEvent =
             org.mockito.ArgumentCaptor.forClass(RiskEventDto.class);
-        verify(riskActionRecorder).record(blockEvent.capture(), eq("block"), eq("blocked"), isNull());
+        org.mockito.ArgumentCaptor<String> blockCaseId = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(riskActionRecorder).record(blockEvent.capture(), eq("block"), eq("blocked"), blockCaseId.capture());
         assertEquals("re_001", blockEvent.getValue().riskEventId);
+        assertTrue(blockCaseId.getValue().startsWith("rc_"), "BLOCK 判定先建案，归档携带案件 id");
 
         consumer.onRiskEvent(riskEventJson("REVIEW", "CRITICAL", "PLAYER", "user_7", "rr_receipt"));
         org.mockito.ArgumentCaptor<RiskEventDto> reviewEvent =
@@ -327,6 +352,81 @@ class RiskEventConsumerTest {
         assertEquals("re_001", reviewEvent.getValue().riskEventId);
         assertNotNull(caseId.getValue());
         assertTrue(caseId.getValue().startsWith("rc_"));
+    }
+
+    @Test
+    @DisplayName("BLOCK + trust_level=HIGH → 先落 BLOCK 判定案件，再执行封禁")
+    void blockHighTrust_landsBlockDecision() {
+        when(riskCaseRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        consumer.onRiskEvent(riskEventJson("BLOCK", "HIGH", "DEVICE", "dev_gate", "rr_threshold"));
+
+        org.mockito.ArgumentCaptor<io.oddsmaker.control.jpa.RiskCaseEntity> caseCaptor =
+            org.mockito.ArgumentCaptor.forClass(io.oddsmaker.control.jpa.RiskCaseEntity.class);
+        verify(riskCaseRepo).save(caseCaptor.capture());
+        assertEquals(io.oddsmaker.control.jpa.RiskCaseEntity.DecisionStatus.BLOCK, caseCaptor.getValue().status);
+        assertEquals(io.oddsmaker.control.jpa.RiskCaseEntity.ActionType.BLOCK, caseCaptor.getValue().actionTaken);
+        verify(blockListService).addBlock(
+            any(), any(), any(), any(), any(), any(), any(), anyBoolean(),
+            any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("BLOCK + trust_level=LOW → fail-closed 降级 REVIEW：不封禁，案件走人审，reason 打 [trust_gate] 标记")
+    void blockLowTrust_downgradedToReview() {
+        when(riskCaseRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        consumer.onRiskEvent(riskEventJson("BLOCK", "HIGH", "DEVICE", "dev_low", "rr_threshold", "LOW"));
+
+        verify(blockListService, never()).addBlock(
+            any(), any(), any(), any(), any(), any(), any(), anyBoolean(),
+            any(), any(), any(), any());
+        org.mockito.ArgumentCaptor<io.oddsmaker.control.jpa.RiskCaseEntity> caseCaptor =
+            org.mockito.ArgumentCaptor.forClass(io.oddsmaker.control.jpa.RiskCaseEntity.class);
+        verify(riskCaseRepo).save(caseCaptor.capture());
+        assertEquals(io.oddsmaker.control.jpa.RiskCaseEntity.DecisionStatus.REVIEW, caseCaptor.getValue().status);
+        assertEquals(io.oddsmaker.control.jpa.RiskCaseEntity.ActionType.REVIEW, caseCaptor.getValue().actionTaken);
+        assertTrue(caseCaptor.getValue().actionDescription.startsWith("[trust_gate]"),
+            "降级判定 reason 打 [trust_gate] 标记: " + caseCaptor.getValue().actionDescription);
+        // 降级为 REVIEW → 走人审队列（CRITICAL→1 否则 2；severity=HIGH → 2）
+        verify(reviewQueueService).addToQueue(
+            org.mockito.ArgumentMatchers.same(caseCaptor.getValue()), eq(2), eq("risk_automation"), eq("fraud"));
+        org.mockito.ArgumentCaptor<java.util.Map<String, Object>> payload =
+            org.mockito.ArgumentCaptor.forClass(java.util.Map.class);
+        verify(webhookService).sendCustomWebhook(eq("game_demo"), eq("risk_action"), payload.capture());
+        assertEquals("review", payload.getValue().get("action"));
+        assertEquals("queued", payload.getValue().get("state"));
+    }
+
+    @Test
+    @DisplayName("非法判定流转（BLOCK 案件再收 THROTTLE，同层改判）→ 拒绝执行任何动作，归档 decision_rejected")
+    void illegalTransition_rejectsAction() {
+        io.oddsmaker.control.jpa.RiskCaseEntity blockedCase = new io.oddsmaker.control.jpa.RiskCaseEntity();
+        blockedCase.id = "rc_blocked";
+        blockedCase.gameId = "game_demo";
+        blockedCase.environmentId = "prod";
+        blockedCase.targetType = "device_id";
+        blockedCase.targetId = "dev_th2";
+        blockedCase.status = io.oddsmaker.control.jpa.RiskCaseEntity.DecisionStatus.BLOCK;
+        when(riskCaseRepo.findUnresolvedBySubject("game_demo", "prod", "device_id", "dev_th2",
+            io.oddsmaker.control.jpa.RiskCaseEntity.DecisionStatus.RESOLVED))
+            .thenReturn(java.util.List.of(blockedCase));
+
+        consumer.onRiskEvent(riskEventJson("THROTTLE", "MEDIUM", "DEVICE", "dev_th2", "rr_freq"));
+
+        verify(riskCaseRepo, never()).save(any());
+        verifyNoInteractions(blockListService, auditLogService, webhookService, reviewQueueService);
+        verify(riskActionRecorder).record(
+            any(RiskEventDto.class), eq("throttle"), eq("decision_rejected"), isNull());
+    }
+
+    @Test
+    @DisplayName("WEBHOOK 不构成判定：不建案不落状态")
+    void webhook_noCaseCreated() {
+        consumer.onRiskEvent(riskEventJson("WEBHOOK", "HIGH", "DEVICE", "dev_wh2", "rr_webhook"));
+
+        verifyNoInteractions(riskCaseRepo, reviewQueueService);
+        verify(webhookService).sendCustomWebhook(eq("game_demo"), eq("risk_event"), anyMap());
     }
 
     @Test
@@ -347,6 +447,7 @@ class RiskEventConsumerTest {
         assertEquals("dev_abc", dto.subjectId);
         assertEquals(0.95f, dto.score, 0.001f);
         assertEquals("BLOCK", dto.action);
+        assertEquals("HIGH", dto.trustLevel);
         assertEquals("Amount exceeds threshold", dto.reason);
         assertNotNull(dto.evidence);
         assertEquals("999", dto.evidence.get("amount"));

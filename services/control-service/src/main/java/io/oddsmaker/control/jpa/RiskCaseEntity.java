@@ -59,6 +59,13 @@ public class RiskCaseEntity {
     @Column(name = "risk_score")
     public Integer riskScore = 50;  // 风险评分
 
+    // 判定状态（B6 §5.2 判定状态机）：OPEN → REVIEW|ALERT|MARK → THROTTLE|BLOCK → RESOLVED，
+    // 分带单向推进 + 同值幂等（V0.9.19 迁移同口径）；流转合法性见 canTransition/transitionTo，
+    // 合法/非法表入 RiskDecisionStateMachineTest
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", nullable = false, length = 20)
+    public DecisionStatus status = DecisionStatus.OPEN;
+
     // 处置动作
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
@@ -140,6 +147,7 @@ public class RiskCaseEntity {
         ALERT,             // 告警
         LOG_ONLY,          // 仅记录
         CHALLENGE,         // 挑战
+        MARK,              // 打标（B6 判定档，与 DecisionStatus.MARK 同名对应）
         THROTTLE,          // 限流
         BLOCK,             // 封禁
         REVIEW,            // 人工审核
@@ -154,7 +162,54 @@ public class RiskCaseEntity {
         APPEALED           // 已申诉
     }
 
+    /**
+     * B6 §5.2 判定状态（Decision）：分层前向——OPEN(0) → 一级判定 REVIEW/ALERT/MARK(1)
+     * → 二级判定 THROTTLE/BLOCK(2) → 终态 RESOLVED(3)。
+     */
+    public enum DecisionStatus {
+        OPEN,              // 初始：已建案未判定
+        REVIEW,            // 一级判定：转人工审核
+        ALERT,             // 一级判定：告警
+        MARK,              // 一级判定：打标
+        THROTTLE,          // 二级判定：限流
+        BLOCK,             // 二级判定：封禁（要求输入事件 trust_level=HIGH）
+        RESOLVED;          // 终态：结案
+
+        /** 层级：合法流转须严格升层（RiskDecisionStateMachineTest 覆盖合法/非法表）。 */
+        public int tier() {
+            return switch (this) {
+                case OPEN -> 0;
+                case REVIEW, ALERT, MARK -> 1;
+                case THROTTLE, BLOCK -> 2;
+                case RESOLVED -> 3;
+            };
+        }
+    }
+
     // 业务方法
+
+    /**
+     * 判定状态机合法转移表（B6 §5.2）：
+     * <ul>
+     *   <li>严格升层：目标 tier 必须大于来源 tier（可跨层判定，如同事件直接 OPEN→BLOCK）；</li>
+     *   <li>OPEN 不直达 RESOLVED——没有判定的案子不允许直接结案；</li>
+     *   <li>RESOLVED 为终态（tier 最大，天然无后继）；同层改判与任何回退均非法。</li>
+     * </ul>
+     */
+    public static boolean canTransition(DecisionStatus from, DecisionStatus to) {
+        if (from == null || to == null) return false;
+        if (from.tier() >= to.tier()) return false;
+        return !(from == DecisionStatus.OPEN && to == DecisionStatus.RESOLVED);
+    }
+
+    /** 按状态机流转；非法流转抛 {@link IllegalStateException}（由调用方决定降级或拒绝）。 */
+    public void transitionTo(DecisionStatus target) {
+        if (!canTransition(status, target)) {
+            throw new IllegalStateException("非法判定流转: " + status + " -> " + target);
+        }
+        status = target;
+    }
+
     public boolean isPending() {
         return executionStatus == ExecutionStatus.PENDING;
     }
@@ -214,6 +269,11 @@ public class RiskCaseEntity {
         reviewNotes = notes;
         this.disposition = disposition;
         resolvedAt = LocalDateTime.now();
+        // 审核完成即结案：判定状态机同步走到 RESOLVED；
+        // 存量行可能仍处 OPEN（无判定），按合法表不强行跳层，保持原状兼容
+        if (canTransition(status, DecisionStatus.RESOLVED)) {
+            status = DecisionStatus.RESOLVED;
+        }
     }
 
     public String getCaseTitle() {

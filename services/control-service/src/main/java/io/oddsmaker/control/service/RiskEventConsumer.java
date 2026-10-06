@@ -16,6 +16,7 @@ import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -24,6 +25,15 @@ import java.util.Map;
  * 按 action 分发处置：BLOCK→封禁名单、REVIEW→审核队列、WEBHOOK→通知、
  * THROTTLE/MARK→审计+指令下发；block/review/mark/throttle 均通过 risk_action
  * webhook 输出到游戏服执行。
+ *
+ * B6 Decision→Action（计划书 §5.2）：
+ * <ul>
+ *   <li>判定型动作（REVIEW/ALERT/MARK/THROTTLE/BLOCK）先在主体未结案案件上按
+ *       {@link RiskCaseEntity#canTransition} 状态机落 status（Decision 决定动作，不反推），
+ *       非法流转直接拒绝——动作执行只发生在 Decision 之后；</li>
+ *   <li>BLOCK 级动作要求输入事件 trust_level=HIGH（§4.3），非 HIGH fail-closed 降级 REVIEW
+ *       并打 [trust_gate] 标记，与 risk-job 侧门槛同语义双保险。</li>
+ * </ul>
  */
 @Component
 public class RiskEventConsumer {
@@ -73,36 +83,59 @@ public class RiskEventConsumer {
             return;
         }
 
+        // B6 §4.3：BLOCK 级动作要求输入事件 trust_level=HIGH（服务端事件驱动），
+        // fail-closed——trust_level 缺失/非 HIGH 一律降级复核，与 risk-job 侧 gateAction 同语义双保险
+        if ("BLOCK".equalsIgnoreCase(event.action) && !"HIGH".equals(event.trustLevel)) {
+            logger.warn("BLOCK downgraded to REVIEW for {}:{} (trust_level={}): {}",
+                event.subjectType, event.subjectId, event.trustLevel, event.riskEventId);
+            event.action = "REVIEW";
+            event.reason = event.reason == null || event.reason.isBlank()
+                ? "[trust_gate]" : "[trust_gate] " + event.reason;
+        }
+
         logger.info("Processing risk event: action={}, ruleId={}, subject={}:{}, score={}",
             event.action, event.ruleId, event.subjectType, event.subjectId, event.score);
 
         try {
+            // Decision 先于 Action（§5.2）：判定型动作先在主体案件上按状态机落 status，
+            // 非法流转（回退/同层改判/终态复活）直接拒绝，不执行任何动作
+            RiskCaseEntity.DecisionStatus decision = decisionOf(event.action);
+            RiskCaseEntity riskCase = null;
+            if (decision != null) {
+                riskCase = decide(event, decision);
+                if (riskCase == null) {
+                    riskActionRecorder.record(event, event.action.toLowerCase(), "decision_rejected", null);
+                    return;
+                }
+            }
+            String caseId = riskCase == null ? null : riskCase.id;
+
             switch (event.action.toUpperCase()) {
                 case "BLOCK":
                     handleBlock(event);
                     notifyGameServer(event, outcome("block", "blocked"));
-                    riskActionRecorder.record(event, "block", "blocked", null);
+                    riskActionRecorder.record(event, "block", "blocked", caseId);
                     break;
                 case "WEBHOOK":
                     handleWebhook(event);
                     riskActionRecorder.record(event, "webhook", "notified", null);
                     break;
                 case "REVIEW":
-                    handleReview(event);
+                    handleReview(event, riskCase);
                     break;
                 case "THROTTLE":
                     handleAuditOnly(event);
                     notifyGameServer(event, outcome("throttle", "throttled"));
-                    riskActionRecorder.record(event, "throttle", "throttled", null);
+                    riskActionRecorder.record(event, "throttle", "throttled", caseId);
                     break;
                 case "MARK":
                     handleAuditOnly(event);
                     notifyGameServer(event, outcome("mark", "marked"));
-                    riskActionRecorder.record(event, "mark", "marked", null);
+                    riskActionRecorder.record(event, "mark", "marked", caseId);
                     break;
                 case "ALERT":
                     handleAuditOnly(event);
-                    riskActionRecorder.record(event, "alert", "logged", null);
+                    riskActionRecorder.record(event, "alert", "logged", caseId);
                     break;
                 default:
                     logger.warn("Unknown risk action: {}, logging as SECURITY_ALERT", event.action);
@@ -113,6 +146,79 @@ public class RiskEventConsumer {
         } catch (Exception e) {
             logger.error("Failed to handle risk event {}: {}", event.riskEventId, e.getMessage(), e);
         }
+    }
+
+    /** 判定型动作 → DecisionStatus；WEBHOOK/未知动作不构成判定（不建案、不落状态） */
+    private static RiskCaseEntity.DecisionStatus decisionOf(String action) {
+        if (action == null) return null;
+        return switch (action.toUpperCase()) {
+            case "REVIEW" -> RiskCaseEntity.DecisionStatus.REVIEW;
+            case "ALERT" -> RiskCaseEntity.DecisionStatus.ALERT;
+            case "MARK" -> RiskCaseEntity.DecisionStatus.MARK;
+            case "THROTTLE" -> RiskCaseEntity.DecisionStatus.THROTTLE;
+            case "BLOCK" -> RiskCaseEntity.DecisionStatus.BLOCK;
+            default -> null;
+        };
+    }
+
+    /** 判定 → 处置动作（Decision 决定动作，不反推）：五个判定档与 ActionType 同名一一对应 */
+    private static RiskCaseEntity.ActionType actionOf(RiskCaseEntity.DecisionStatus decision) {
+        return RiskCaseEntity.ActionType.valueOf(decision.name());
+    }
+
+    /**
+     * Decision 落点（§5.2「动作执行只发生在 Decision 之后」）：
+     * 判定型事件先在主体未结案案件上按状态机前向流转（严格升层，回退/同层改判非法），
+     * 无未结案案件则新建 OPEN 案件再判定；非法流转返回 null，调用方不执行动作。
+     */
+    private RiskCaseEntity decide(RiskEventDto event, RiskCaseEntity.DecisionStatus decision) {
+        RiskCaseEntity riskCase = findOpenCase(event);
+        if (riskCase == null) {
+            riskCase = newCase(event);
+        }
+        if (!RiskCaseEntity.canTransition(riskCase.status, decision)) {
+            logger.warn("Illegal decision transition {} -> {} for subject {}:{} (event {}), action rejected",
+                riskCase.status, decision, event.subjectType, event.subjectId, event.riskEventId);
+            return null;
+        }
+        riskCase.transitionTo(decision);
+        riskCase.actionTaken = actionOf(decision);
+        RiskCaseEntity saved = riskCaseRepo.save(riskCase);
+        return saved != null ? saved : riskCase;
+    }
+
+    /** 主体未结案案件（状态非 RESOLVED，最新在前）；无则 null → 新建 */
+    private RiskCaseEntity findOpenCase(RiskEventDto event) {
+        List<RiskCaseEntity> found = riskCaseRepo.findUnresolvedBySubject(
+            event.gameId, event.environment, targetTypeOf(event), event.subjectId,
+            RiskCaseEntity.DecisionStatus.RESOLVED);
+        return found == null || found.isEmpty() ? null : found.get(0);
+    }
+
+    /** 新建案件：id/编号/触发信息/等级齐备，status=OPEN 等待判定 */
+    private RiskCaseEntity newCase(RiskEventDto event) {
+        RiskCaseEntity riskCase = new RiskCaseEntity();
+        riskCase.id = "rc_" + java.util.UUID.randomUUID().toString().replace("-", "").substring(0, 16);
+        riskCase.gameId = event.gameId;
+        riskCase.environmentId = event.environment;
+        riskCase.riskRuleId = event.ruleId;
+        riskCase.caseNumber = "CASE_" + System.currentTimeMillis();
+        riskCase.targetType = targetTypeOf(event);
+        riskCase.targetId = event.subjectId;
+        riskCase.triggerEventId = event.sourceEventId;
+        riskCase.actionDescription = event.reason;
+        riskCase.riskLevel = parseRiskLevel(event.severity);
+        riskCase.executionStatus = RiskCaseEntity.ExecutionStatus.PENDING;
+        return riskCase;
+    }
+
+    /** subject_type → targetType 映射（PLAYER→player_id、DEVICE→device_id，null→unknown） */
+    private static String targetTypeOf(RiskEventDto event) {
+        return switch (event.subjectType != null ? event.subjectType.toUpperCase() : "") {
+            case "PLAYER" -> "player_id";
+            case "DEVICE" -> "device_id";
+            default -> event.subjectType != null ? event.subjectType.toLowerCase() : "unknown";
+        };
     }
 
     /** 构造下发游戏服的处置结果说明 */
@@ -142,30 +248,10 @@ public class RiskEventConsumer {
     }
 
     /**
-     * REVIEW 动作：创建风控案件并进入人工审核队列，同时通知游戏服。
+     * REVIEW 动作：案件已由 decide() 落定判定（Decision 先于 Action），
+     * 此处只做 risk_case webhook、入审核队列、审计与通知。
      */
-    private void handleReview(RiskEventDto event) {
-        String targetType = switch (event.subjectType != null ? event.subjectType.toUpperCase() : "") {
-            case "PLAYER" -> "player_id";
-            case "DEVICE" -> "device_id";
-            default -> event.subjectType != null ? event.subjectType.toLowerCase() : "unknown";
-        };
-
-        RiskCaseEntity riskCase = new RiskCaseEntity();
-        riskCase.id = "rc_" + java.util.UUID.randomUUID().toString().replace("-", "").substring(0, 16);
-        riskCase.gameId = event.gameId;
-        riskCase.environmentId = event.environment;
-        riskCase.riskRuleId = event.ruleId;
-        riskCase.caseNumber = "CASE_" + System.currentTimeMillis();
-        riskCase.targetType = targetType;
-        riskCase.targetId = event.subjectId;
-        riskCase.triggerEventId = event.sourceEventId;
-        riskCase.actionDescription = event.reason;
-        riskCase.riskLevel = parseRiskLevel(event.severity);
-        riskCase.actionTaken = RiskCaseEntity.ActionType.REVIEW;
-        riskCase.executionStatus = RiskCaseEntity.ExecutionStatus.PENDING;
-        riskCase = riskCaseRepo.save(riskCase);
-
+    private void handleReview(RiskEventDto event, RiskCaseEntity riskCase) {
         // 风险案例创建派发 risk_case webhook（按环境与风险等级过滤）
         try {
             webhookService.sendRiskCaseWebhook(event.gameId, event.environment, riskCase);
@@ -194,11 +280,7 @@ public class RiskEventConsumer {
 
     private void handleBlock(RiskEventDto event) {
         // subject_type → targetType 映射
-        String targetType = switch (event.subjectType != null ? event.subjectType.toUpperCase() : "") {
-            case "PLAYER" -> "player_id";
-            case "DEVICE" -> "device_id";
-            default -> event.subjectType != null ? event.subjectType.toLowerCase() : "unknown";
-        };
+        String targetType = targetTypeOf(event);
 
         // severity → 时长推导
         boolean isPermanent = false;
