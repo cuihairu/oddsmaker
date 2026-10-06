@@ -449,6 +449,107 @@ public class TrackingPlanService {
             .collect(Collectors.toList());
     }
 
+    // ========== B7 EventSchema 版本发布与兼容检查 ==========
+
+    /**
+     * B7 版本发布：activate + 兼容门。compatibility≠NONE 时先对基线做兼容检查，
+     * 不兼容直接拒绝（IllegalArgumentException → 400），状态不落库仍为 DRAFT。
+     */
+    public TrackingPlanDTO publishTrackingPlan(String trackingPlanId, String userId) {
+        logger.info("Publishing event schema: {} by user: {}", trackingPlanId, userId);
+
+        TrackingPlanEntity entity = requireTrackingPlan(trackingPlanId);
+        if (entity.compatibility != null && entity.compatibility != TrackingPlanEntity.Compatibility.NONE) {
+            SchemaCompatibilityDTO check = compatibilityCheck(trackingPlanId);
+            if (!check.compatible) {
+                throw new IllegalArgumentException("不兼容的 Schema 版本发布（mode=" + check.mode
+                        + ", baseline=" + check.baselineId
+                        + ", removed=" + check.removedEvents + ", added=" + check.addedEvents + "）");
+            }
+        }
+        entity.activate(userId);
+        entity.updatedAt = LocalDateTime.now();
+        entity = trackingPlanRepo.save(entity);
+        updateEventCounts(entity);
+
+        logger.info("Event schema published: {}", entity.id);
+        return new TrackingPlanDTO(entity);
+    }
+
+    /**
+     * B7 兼容检查（只读，不落库）：draft 事件集 vs 基线（同 game + 同 environmentId 的
+     * 最近 ACTIVE 版本，排除自身）。BACKWARD 违例=removed 非空（旧生产者事件将被拒收）、
+     * FORWARD 违例=added 非空（旧消费方不识别新增）、FULL=两者都须为空、NONE/无基线=恒兼容。
+     */
+    @Transactional(readOnly = true)
+    public SchemaCompatibilityDTO compatibilityCheck(String trackingPlanId) {
+        TrackingPlanEntity entity = requireTrackingPlan(trackingPlanId);
+
+        SchemaCompatibilityDTO out = new SchemaCompatibilityDTO();
+        out.schemaId = entity.id;
+        out.mode = entity.compatibility == null ? TrackingPlanEntity.Compatibility.NONE : entity.compatibility;
+        out.addedEvents = List.of();
+        out.removedEvents = List.of();
+        out.changedEvents = List.of();
+
+        // 基线：同 game + 同 environmentId（null 匹配 null）的最近 ACTIVE、未删除、非自身
+        TrackingPlanEntity baseline = trackingPlanRepo.findActiveByGameId(entity.gameId).stream()
+                .filter(tp -> !tp.id.equals(entity.id))
+                .filter(tp -> java.util.Objects.equals(tp.environmentId, entity.environmentId))
+                .filter(tp -> tp.activatedAt != null)
+                .max(java.util.Comparator.comparing(tp -> tp.activatedAt))
+                .orElse(null);
+        out.baselineId = baseline == null ? null : baseline.id;
+        if (baseline == null || out.mode == TrackingPlanEntity.Compatibility.NONE) {
+            out.compatible = true;
+            return out;
+        }
+
+        // 事件集 diff（只看 ACTIVE 定义，按事件名对齐）
+        java.util.Map<String, io.oddsmaker.control.jpa.EventDefinitionEntity> mine =
+                eventDefinitionsByKey(entity.id);
+        java.util.Map<String, io.oddsmaker.control.jpa.EventDefinitionEntity> base =
+                eventDefinitionsByKey(baseline.id);
+
+        out.addedEvents = mine.keySet().stream().filter(n -> !base.containsKey(n)).sorted().collect(Collectors.toList());
+        out.removedEvents = base.keySet().stream().filter(n -> !mine.containsKey(n)).sorted().collect(Collectors.toList());
+        out.changedEvents = mine.keySet().stream()
+                .filter(base::containsKey)
+                .filter(n -> eventSignatureChanged(mine.get(n), base.get(n)))
+                .sorted()
+                .collect(Collectors.toList());
+
+        boolean backwardOk = out.removedEvents.isEmpty();                       // BACKWARD/FULL 要求
+        boolean forwardOk = out.addedEvents.isEmpty();                          // FORWARD/FULL 要求
+        out.compatible = switch (out.mode) {
+            case BACKWARD -> backwardOk;
+            case FORWARD -> forwardOk;
+            case FULL -> backwardOk && forwardOk;
+            default -> true;
+        };
+        return out;
+    }
+
+    /** ACTIVE 事件定义按事件名索引（重复名取字典序首个，repo 已按名排序保证确定） */
+    private java.util.Map<String, io.oddsmaker.control.jpa.EventDefinitionEntity> eventDefinitionsByKey(String planId) {
+        java.util.Map<String, io.oddsmaker.control.jpa.EventDefinitionEntity> byName = new java.util.LinkedHashMap<>();
+        for (io.oddsmaker.control.jpa.EventDefinitionEntity ed
+                : eventDefinitionRepo.findActiveByTrackingPlanId(planId)) {
+            byName.putIfAbsent(ed.eventName, ed);
+        }
+        return byName;
+    }
+
+    /** 同名事件的签名变化：类型 / 必填位（user/session/player）/ 重要性 */
+    private static boolean eventSignatureChanged(io.oddsmaker.control.jpa.EventDefinitionEntity a,
+                                                 io.oddsmaker.control.jpa.EventDefinitionEntity b) {
+        return !java.util.Objects.equals(a.eventType, b.eventType)
+                || !java.util.Objects.equals(a.importance, b.importance)
+                || Boolean.TRUE.equals(a.requireUserId) != Boolean.TRUE.equals(b.requireUserId)
+                || Boolean.TRUE.equals(a.requireSessionId) != Boolean.TRUE.equals(b.requireSessionId)
+                || Boolean.TRUE.equals(a.requirePlayerId) != Boolean.TRUE.equals(b.requirePlayerId);
+    }
+
     // ========== 辅助方法 ==========
 
     private GameEntity requireGame(String gameId) {

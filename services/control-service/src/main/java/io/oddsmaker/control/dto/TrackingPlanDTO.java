@@ -33,6 +33,12 @@ public class TrackingPlanDTO {
     public TrackingPlanEntity.ValidationStrictness strictness;
     public Boolean enableAutoValidation;
     public Boolean rejectUnknownEvents;
+    // B7 EventSchema 一等资源字段
+    public TrackingPlanEntity.Compatibility compatibility;
+    public String piiPolicy;       // JSON：{email,phone,ip}
+    public Integer retentionDays;
+    public java.math.BigDecimal samplingRate;
+    public String ownerId;
     public Integer totalEvents;
     public Integer activeEvents;
     public LocalDateTime createdAt;
@@ -61,6 +67,11 @@ public class TrackingPlanDTO {
         this.strictness = entity.strictness;
         this.enableAutoValidation = entity.enableAutoValidation;
         this.rejectUnknownEvents = entity.rejectUnknownEvents;
+        this.compatibility = entity.compatibility;
+        this.piiPolicy = entity.piiPolicy;
+        this.retentionDays = entity.retentionDays;
+        this.samplingRate = entity.samplingRate;
+        this.ownerId = entity.ownerId;
         this.totalEvents = entity.totalEvents;
         this.activeEvents = entity.activeEvents;
         this.createdAt = entity.createdAt;
@@ -84,6 +95,11 @@ public class TrackingPlanDTO {
         entity.strictness = this.strictness != null ? this.strictness : TrackingPlanEntity.ValidationStrictness.STRICT;
         entity.enableAutoValidation = this.enableAutoValidation != null ? this.enableAutoValidation : true;
         entity.rejectUnknownEvents = this.rejectUnknownEvents != null ? this.rejectUnknownEvents : false;
+        entity.compatibility = this.compatibility != null ? this.compatibility : TrackingPlanEntity.Compatibility.NONE;
+        entity.piiPolicy = this.piiPolicy;
+        entity.retentionDays = this.retentionDays;
+        entity.samplingRate = this.samplingRate;
+        entity.ownerId = this.ownerId;
         entity.totalEvents = this.totalEvents != null ? this.totalEvents : 0;
         entity.activeEvents = this.activeEvents != null ? this.activeEvents : 0;
         entity.createdBy = this.createdBy;
@@ -97,6 +113,11 @@ public class TrackingPlanDTO {
         if (this.strictness != null) entity.strictness = this.strictness;
         if (this.enableAutoValidation != null) entity.enableAutoValidation = this.enableAutoValidation;
         if (this.rejectUnknownEvents != null) entity.rejectUnknownEvents = this.rejectUnknownEvents;
+        if (this.compatibility != null) entity.compatibility = this.compatibility;
+        if (this.piiPolicy != null) entity.piiPolicy = this.piiPolicy;
+        if (this.retentionDays != null) entity.retentionDays = this.retentionDays;
+        if (this.samplingRate != null) entity.samplingRate = this.samplingRate;
+        if (this.ownerId != null) entity.ownerId = this.ownerId;
     }
 
     public boolean isActive() {

@@ -54,6 +54,29 @@ public class TrackingPlanEntity {
     @Column(name = "reject_unknown_events")
     public Boolean rejectUnknownEvents = false; // 是否拒绝未定义的事件
 
+    // ===== B7 EventSchema 一等资源字段（计划书 §2.3/§4.4） =====
+
+    /** 版本兼容策略：publish 时对同 game+env 基线 ACTIVE 版本做事件集兼容检查（NONE 不检查） */
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    public Compatibility compatibility = Compatibility.NONE;
+
+    /** 事件级 PII 策略（JSON：{email,phone,ip}），优先级 环境级 Schema > ApiKey > 网关默认（§4.4） */
+    @Column(name = "pii_policy", columnDefinition = "TEXT")
+    public String piiPolicy;
+
+    /** 该 Schema 事件数据的保留天数覆盖（null=继承游戏/环境配置） */
+    @Column(name = "retention_days")
+    public Integer retentionDays;
+
+    /** 采样率覆盖（0-1，null=继承环境采样配置） */
+    @Column(name = "sampling_rate", precision = 3, scale = 2)
+    public java.math.BigDecimal samplingRate;
+
+    /** 归属（负责人/组，审计与协作用） */
+    @Column(name = "owner_id", length = 64)
+    public String ownerId;
+
     // 统计信息
     @Column(name = "total_events")
     public Integer totalEvents = 0;  // 定义的事件总数
@@ -107,6 +130,15 @@ public class TrackingPlanEntity {
         OFF,        // 关闭验证
         WARN,       // 仅警告
         STRICT      // 严格模式：拒绝不符合的事件
+    }
+
+    /**
+     * 版本兼容策略（B7 §2.3）：publish 时按此对基线版本做事件集兼容检查——
+     * BACKWARD=新版本须覆盖旧版本全部事件（removed 为空，否则旧生产者事件被拒收）、
+     * FORWARD=新增对旧消费方可见可控（added 为空）、FULL=两者、NONE=不检查。
+     */
+    public enum Compatibility {
+        NONE, BACKWARD, FORWARD, FULL
     }
 
     // 业务方法
