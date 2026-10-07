@@ -157,6 +157,8 @@ class RiskFeaturePgE2eTest {
 
         DataStream<FeatureRow> featureRows = RiskJob.buildFeatureBranch(inputs);
         featureRows.addSink(RiskJob.featureJdbcSink(URL, USER, PASS)).name("postgres-risk-features");
+        // B10：feature_store 摘要双写同批验证
+        featureRows.addSink(RiskJob.featureStoreJdbcSink(URL, USER, PASS)).name("postgres-feature-store");
         inputs.keyBy(RiskJob::subjectWindowKey)
                 .connect(featureRows.broadcast(FeatureRuleFunction.FEATURE_STATE))
                 .process(new FeatureRuleFunction(new RiskJob.RuleSource("http://127.0.0.1:1", "DEFAULT", "", 60_000)))
@@ -182,6 +184,27 @@ class RiskFeaturePgE2eTest {
         for (long[] w : windows) {
             assertEquals(Duration.ofHours(1).toMillis(), w[1] - w[0], "窗口跨度须为 1h");
             assertEquals(600_000L, w[2]);
+        }
+
+        // 2b. 断言 B10：feature_store 摘要双写——同 scope×窗口聚合为单行，features JSON 含该特征
+        try (Connection c = DriverManager.getConnection(URL, USER, PASS);
+             PreparedStatement q = c.prepareStatement(
+                     "SELECT window_start, window_end, features FROM feature_store "
+                     + "WHERE game_id='DEFAULT' AND environment='prod' AND scope_key='PLAYER:e2e-player' "
+                     + "AND features LIKE '%gold_gain_1h%'")) {
+            try (ResultSet rs = q.executeQuery()) {
+                boolean any = false;
+                while (rs.next()) {
+                    any = true;
+                    long start = rs.getTimestamp(1).getTime();
+                    long end = rs.getTimestamp(2).getTime();
+                    assertEquals(Duration.ofHours(1).toMillis(), end - start, "feature_store 行窗口跨度须为 1h");
+                    String features = rs.getString(3);
+                    assertTrue(features.contains("\"gold_gain_1h\":600000.0"),
+                            "features 应含该特征键值，实际=" + features);
+                }
+                assertTrue(any, "feature_store 应有 PLAYER:e2e-player 的摘要行");
+            }
         }
 
         // 3. 断言二：规则命中——载体事件评估特征快照触发 FEATURE 规则
