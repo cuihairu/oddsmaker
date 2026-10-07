@@ -229,6 +229,13 @@ Analytics 的 DAU/留存/ARPU 与风控特征同源（玩家行为特征），B5
 
 矩阵落 `deploy/` 下 `MODES.md`，并在 demo 编排中注明“本档 = Lite”。
 
+> **✅（B9 落地）** `deploy/MODES.md` 已就位；四处编排头注标记：demo=Lite、quickstart=Standard、
+> 根 compose=Production 业务栈、infra=Production 观测/中间件面。与上表的一处对账修正：
+> infra 并非“全量”单档——它是无 postgres/redis/业务服务的中间件+观测面子集，Production 全组件
+> = 根 compose（业务栈 + Flink ×7 + Superset）∥ infra（Kafka/CH/Apicurio/观测面）两件套；
+> 对象存储归档不在任何 compose（`deploy/backup` 脚本 + `deploy/k8s/backup-cronjob`）。
+> Standard 档无 Flink 作业（`events_raw` 无下游消费者、CH 只有 schema 无数据）也已如实入矩阵。
+
 ---
 
 ## 8. 排期批次（Code Agent 执行序）

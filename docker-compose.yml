@@ -1,5 +1,8 @@
 # Oddsmaker Gaming Analytics Platform — 本机单机全栈编排
 #
+# 【本档 = Production 业务栈】与 infra/docker-compose.yml（观测/中间件面）互补组成
+# Production 全组件；运行模式矩阵见 deploy/MODES.md。
+#
 # 形态与 deploy-rt/docker-compose.e2e.yml 一致（该编排已由 e2e-verify 40/40 实证）：
 #   中间件 + control/gateway 镜像构建 + Flink job 以 local executor（fatJar）直跑。
 #

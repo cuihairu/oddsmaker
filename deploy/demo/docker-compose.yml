@@ -1,5 +1,8 @@
 # Oddsmaker 演示站点精简编排（低配单机：postgres + redis + control-service）
 #
+# 【本档 = Lite】运行模式矩阵见 deploy/MODES.md（Standard = 根 quickstart、
+# Production = 根全栈 compose + infra 观测件两件套）。
+#
 # 为何不是 docker-compose.quickstart.yml 的服务子集：quickstart 的 control-service
 # depends_on kafka(healthy) + topic-init(completed)，即使按服务名挑着 up 也会连带
 # 拉起整套 Kafka/Apicurio，1.6G 内存的演示机跑不动；演示面只需要控制面 REST + 登录。

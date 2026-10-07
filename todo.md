@@ -73,10 +73,10 @@
 
 ## B9 运行模式矩阵
 
-- [ ] `deploy/MODES.md`：Lite / Standard / Production 三档组件矩阵（对齐现有三套编排）
-- [ ] `deploy/demo` 编排注明「本档 = Lite」；quickstart = Standard；infra = Production
+- [x] `deploy/MODES.md`：Lite / Standard / Production 三档组件矩阵（对齐现有三套编排）
+- [x] `deploy/demo` 编排注明「本档 = Lite」；quickstart = Standard；infra = Production
 
-**验收：** 矩阵与仓库现有编排逐一核对一致（读码比对，改错即拒）。
+**验收：** ✅ 纯文档批（不触发测试）；`deploy/MODES.md` 三档矩阵逐格读码核对四处编排实际 service 定义（demo 三服务 / quickstart 九服务 / 根 compose 九服务+Flink×7 / infra 七服务），四处编排头注标记「本档 = ×」并经 `docker compose config --quiet` 四文件全过；与计划书 §7 的一处对账修正已回写计划书（infra 并非"全量"单档，Production 全组件=根 compose 业务栈 ∥ infra 观测/中间件面两件套；对象存储归档不在任何 compose 走 `deploy/backup`+k8s cronjob；Standard 档无 Flink 作业、CH 有 schema 无数据已如实入矩阵）。
 
 ## B10 Data Quality 与共享特征（收口批）
 

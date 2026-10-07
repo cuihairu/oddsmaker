@@ -1,5 +1,8 @@
 # Oddsmaker 快速启动编排（单镜像双服务 + 全依赖）
 #
+# 【本档 = Standard】单机默认档（无 Flink 作业，分析产出按根 compose 形态补起）；
+# 运行模式矩阵见 deploy/MODES.md。
+#
 # 用法：
 #   1. cp .env.example .env   # 复制并按需修改（端口/密码/Token 全部有中文注释）
 #   2. docker compose -f docker-compose.quickstart.yml up -d

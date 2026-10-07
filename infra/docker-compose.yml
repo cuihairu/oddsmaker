@@ -1,4 +1,8 @@
 # Oddsmaker 中间件 + 可观测性编排（与仓库根全栈 compose 互补的轻量子集）
+#
+# 【本档 = Production 观测/中间件面】与仓库根 docker-compose.yml（业务栈）互补组成
+# Production 全组件；运行模式矩阵见 deploy/MODES.md。
+#
 # 用途：只想起中间件/看板（如 k8s/helm 之外的快速替代）时使用；
 # 业务服务（control/gateway/Flink job）与完整开发环境见仓库根 docker-compose.yml。
 # 两者可同机并存：本文件宿主端口用 29xxx/18088/13000 段，与根 compose（2xxxx 业务段）、
