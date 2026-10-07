@@ -15,14 +15,7 @@
   --vp-button-brand-hover-bg: #6e0c3b;
   --vp-button-brand-active-bg: #5c0a31;
 
-  --vp-home-hero-name-color: transparent;
-  --vp-home-hero-name-background: linear-gradient(
-    115deg,
-    #6e0c3b 8%,
-    #8c104d 52%,
-    #e8699c 96%
-  );
-
+  /* hero 名沿用默认纯品牌色（--vp-c-brand-1）；字体渐变已全站禁用（主题审核批） */
   --vp-custom-outline: #8c104d;
 
   .VPFeature .icon {
@@ -42,13 +35,6 @@
   --vp-button-brand-bg: #8c104d;
   --vp-button-brand-hover-bg: #e8699c;
   --vp-button-brand-active-bg: #d14d80;
-
-  --vp-home-hero-name-background: linear-gradient(
-    115deg,
-    #e8699c 8%,
-    #d14d80 52%,
-    #8c104d 96%
-  );
 
   --vp-custom-outline: #e8699c;
 }
