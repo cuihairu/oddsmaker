@@ -1,2 +1,6 @@
+overrides:
+  source-map-js: "^1.2.2"     # 源映射分段偏移索引 DoS（GHSA 高危，vue/postcss 传递依赖）
+  postcss-selector-parser: "^7.1.6" # 平铺选择器解析二次复杂度 CPU 耗尽（tailwindcss 传递依赖）
+
 allowBuilds:
-  vue-demi: true
+  vue-demi: true # pinia 依赖的 v2/v3 适配 postinstall（切 v3 模式）
