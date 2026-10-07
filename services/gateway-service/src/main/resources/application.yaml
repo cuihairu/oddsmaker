@@ -42,6 +42,8 @@ oddsmaker:
     internal-token: ${ODDSMAKER_INTERNAL_TOKEN:}
     timeout-ms: 200
     cache-ttl-seconds: 15
+  dataquality:
+    reporting-enabled: true   # 60s 快照 POST control /internal/data-quality；未配 control.internal-token 时自动静默
   props:
     allowlist: []   # 示例: [level,stars,amount,currency,exp,variant]
   event:

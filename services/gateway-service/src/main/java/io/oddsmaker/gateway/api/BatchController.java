@@ -16,6 +16,8 @@ import io.oddsmaker.gateway.crash.CrashFingerprinter;
 import io.oddsmaker.gateway.inspector.EventInspectorBuffer;
 import io.oddsmaker.gateway.kafka.AvroPublisher;
 import io.oddsmaker.gateway.kafka.DlqPublisher;
+import io.oddsmaker.gateway.metrics.DataQualityCounters;
+import io.oddsmaker.gateway.metrics.DataQualityCounters.Counter;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -52,6 +54,10 @@ public class BatchController {
     private final BlockListClient blockListClient;
     private final io.oddsmaker.gateway.security.ReplayGuard replayGuard;
     private final EventInspectorBuffer inspector;
+    private final DataQualityCounters counters;
+
+    /** 迟到阈值 5min，对齐 enrich 侧 BoundedOutOfOrderness（EventsEnrichJob watermark）。 */
+    static final long LATE_THRESHOLD_MS = 300_000L;
 
     public BatchController(
             ObjectMapper om,
@@ -63,7 +69,8 @@ public class BatchController {
             PiiPolicy piiPolicy,
             BlockListClient blockListClient,
             io.oddsmaker.gateway.security.ReplayGuard replayGuard,
-            EventInspectorBuffer inspector
+            EventInspectorBuffer inspector,
+            DataQualityCounters counters
     ) {
         this.om = om;
         this.publisher = publisher;
@@ -75,6 +82,7 @@ public class BatchController {
         this.blockListClient = blockListClient;
         this.replayGuard = replayGuard;
         this.inspector = inspector;
+        this.counters = counters;
     }
 
     public static class BatchResponse {
@@ -120,27 +128,31 @@ public class BatchController {
                 // parseEvents 的 JSON/ndjson 两条路径均已跳过 null（isNull 元素/readCompatEvent 返回 null），
                 // 此处 event 不可能为 null，无需判空
                 normalizeCompatFields(event);
+                // B10 数据质量计数：作用域与 inspect() 同口径（scoped 用 key 作用域，
+                // 携带错误作用域的事件恰恰要落回开发者自己的计数视图）
+                String[] counterScope = counterScope(event, keyContext);
+                counters.record(counterScope[0], counterScope[1], Counter.RECEIVED);
                 if (event.eventId == null || event.eventName == null || event.gameId == null || event.environment == null || event.deviceId == null) {
-                    reject(resp, event, "invalid_schema");
+                    reject(resp, event, keyContext, "invalid_schema");
                     inspect(event, keyContext, EventInspectorBuffer.OUTCOME_REJECTED, "invalid_schema", null);
                     continue;
                 }
                 if (!matchesApiKeyScope(event, keyContext)) {
-                    reject(resp, event, "api_key_scope_mismatch");
+                    reject(resp, event, keyContext, "api_key_scope_mismatch");
                     inspect(event, keyContext, EventInspectorBuffer.OUTCOME_REJECTED, "api_key_scope_mismatch", null);
                     continue;
                 }
                 // B7 §4.4 Schema 事件面收敛：key 作用域的 ACTIVE EventSchema 未定义该事件 → 拒收
                 // （rejectUnknownEvents 默认 true 由 Control 下发；dev 环境豁免：联调期事件先行于 Schema 收敛）
                 if (isUnknownEvent(event, keyContext)) {
-                    reject(resp, event, "unknown_event");
+                    reject(resp, event, keyContext, "unknown_event");
                     inspect(event, keyContext, EventInspectorBuffer.OUTCOME_REJECTED, "unknown_event", null);
                     continue;
                 }
                 // eventType 兜底已由上方 normalizeCompatFields 完成，此处必非空
                 // 风控前置：事件时间戳信差检查（默认 ±24h，可配 oddsmaker.risk.max-event-ts-drift-ms）
                 if (!replayGuard.isTimestampPlausible(event.tsClient, System.currentTimeMillis())) {
-                    reject(resp, event, "invalid_timestamp");
+                    reject(resp, event, keyContext, "invalid_timestamp");
                     inspect(event, keyContext, EventInspectorBuffer.OUTCOME_REJECTED, "invalid_timestamp", null);
                     continue;
                 }
@@ -155,7 +167,7 @@ public class BatchController {
                 }
                 applyPropsFilter(event, policy);
                 if (event.props != null && piiPolicy.hasBlockedKeys(event.props, piiOverrides)) {
-                    reject(resp, event, "pii_blocked");
+                    reject(resp, event, keyContext, "pii_blocked");
                     inspect(event, keyContext, EventInspectorBuffer.OUTCOME_REJECTED, "pii_blocked", null);
                     continue;
                 }
@@ -164,13 +176,13 @@ public class BatchController {
                 }
                 event.clientIp = piiPolicy.sanitizeClientIp(event.clientIp, piiOverrides);
                 if (propsPolicy.exceedsEventLimit(event)) {
-                    reject(resp, event, "payload_too_large");
+                    reject(resp, event, keyContext, "payload_too_large");
                     inspect(event, keyContext, EventInspectorBuffer.OUTCOME_REJECTED, "payload_too_large", null);
                     continue;
                 }
                 String schemaError = schemaValidator.validate(event);
                 if (schemaError != null) {
-                    reject(resp, event, "invalid_schema");
+                    reject(resp, event, keyContext, "invalid_schema");
                     // schema 校验明细进检视面（响应体只回笼统 reason，明细是 Debug View 的核心价值）
                     inspect(event, keyContext, EventInspectorBuffer.OUTCOME_REJECTED, "invalid_schema", schemaError);
                     continue;
@@ -179,7 +191,7 @@ public class BatchController {
                 // 自抬（CLIENT key 声明 server 档、trust_level 高于推导档）整事件拒绝
                 String trustError = TrustPolicy.apply(event, keyContext.keyRole);
                 if (trustError != null) {
-                    reject(resp, event, "trust_escalation", trustError);
+                    reject(resp, event, keyContext, "trust_escalation", trustError);
                     inspect(event, keyContext, EventInspectorBuffer.OUTCOME_REJECTED, "trust_escalation", trustError);
                     continue;
                 }
@@ -188,6 +200,9 @@ public class BatchController {
                 if (!replayGuard.consumeEventId(event.eventId)) {
                     resp.duplicates++;
                     resp.accepted.add(event.eventId);
+                    // 幂等吸收计入 duplicates 且占 accepted 位（恒等式 received = accepted + Σrejected + sampled_out）
+                    counters.record(counterScope[0], counterScope[1], Counter.DUPLICATES);
+                    counters.record(counterScope[0], counterScope[1], Counter.ACCEPTED);
                     inspect(event, keyContext, EventInspectorBuffer.OUTCOME_DUPLICATE, null, null);
                     continue;
                 }
@@ -212,6 +227,8 @@ public class BatchController {
                         sampledEvents.add(event);
                     } else {
                         resp.sampled_out++;
+                        String[] sampledScope = counterScope(event, keyContext);
+                        counters.record(sampledScope[0], sampledScope[1], Counter.SAMPLED_OUT);
                         inspect(event, keyContext, EventInspectorBuffer.OUTCOME_SAMPLED_OUT, null, null);
                     }
                 }
@@ -242,17 +259,23 @@ public class BatchController {
                     .map(blockedMap -> {
                         // 4) 处理事件：封禁的拒绝，非封禁的发布
                         for (Event event : eventsToPublish) {
+                            String[] publishScope = counterScope(event, keyContext);
                             if (isBlocked(event, blockedMap)) {
-                                reject(resp, event, "blocked");
+                                reject(resp, event, keyContext, "blocked");
                                 inspect(event, keyContext, EventInspectorBuffer.OUTCOME_REJECTED, "blocked", null);
                                 continue;
                             }
                             try {
                                 publisher.publish(event);
                                 resp.accepted.add(event.eventId);
+                                counters.record(publishScope[0], publishScope[1], Counter.ACCEPTED);
+                                if (event.tsServer != null
+                                        && event.tsServer - event.tsClient > LATE_THRESHOLD_MS) {
+                                    counters.record(publishScope[0], publishScope[1], Counter.LATE);
+                                }
                                 inspect(event, keyContext, EventInspectorBuffer.OUTCOME_ACCEPTED, null, null);
                             } catch (Exception ex) {
-                                reject(resp, event, "kafka_error");
+                                reject(resp, event, keyContext, "kafka_error");
                                 inspect(event, keyContext, EventInspectorBuffer.OUTCOME_REJECTED, "kafka_error", null);
                             }
                         }
@@ -617,17 +640,45 @@ public class BatchController {
         return overrides;
     }
 
-    private void reject(BatchResponse resp, Event event, String reason) {
-        reject(resp, event, reason, null);
+    private void reject(BatchResponse resp, Event event, AuthService.ApiKeyContext keyContext, String reason) {
+        reject(resp, event, keyContext, reason, null);
     }
 
-    private void reject(BatchResponse resp, Event event, String reason, String detail) {
+    private void reject(BatchResponse resp, Event event, AuthService.ApiKeyContext keyContext,
+                        String reason, String detail) {
         // 全部调用点均传入非 null event（循环内构造），无需判空
         HashMap<String, String> rej = new HashMap<>();
         rej.put("event_id", String.valueOf(event.eventId));
         rej.put("reason", reason);
         resp.rejected.add(rej);
         dlq.publish(event.eventId, reason, toJsonSilently(event));
+        // B10：拒绝计数随 DLQ 发布同点落地（dlq 归档与计数一处收口，不会漏分支）
+        String[] scope = counterScope(event, keyContext);
+        counters.record(scope[0], scope[1], rejectCounter(reason));
+    }
+
+    /** 计数作用域：与 inspect() 同口径——scoped 用 key 作用域，非 scoped 用事件自带字段（可空 → unknown 桶）。 */
+    private static String[] counterScope(Event event, AuthService.ApiKeyContext keyContext) {
+        if (keyContext.isScoped()) {
+            return new String[]{keyContext.gameId, keyContext.environment};
+        }
+        return new String[]{event.gameId, event.environment};
+    }
+
+    /** 拒绝 reason → 计数维度；网关枚举封闭（BatchController 拒绝路径全集），default 不可达。 */
+    private static DataQualityCounters.Counter rejectCounter(String reason) {
+        return switch (reason) {
+            case "invalid_schema" -> Counter.REJECTED_SCHEMA;
+            case "unknown_event" -> Counter.REJECTED_UNKNOWN_EVENT;
+            case "invalid_timestamp" -> Counter.REJECTED_INVALID_TIMESTAMP;
+            case "pii_blocked" -> Counter.REJECTED_PII_BLOCKED;
+            case "payload_too_large" -> Counter.REJECTED_PAYLOAD_TOO_LARGE;
+            case "trust_escalation" -> Counter.REJECTED_TRUST_ESCALATION;
+            case "blocked" -> Counter.REJECTED_BLOCKED;
+            case "api_key_scope_mismatch" -> Counter.REJECTED_SCOPE_MISMATCH;
+            case "kafka_error" -> Counter.REJECTED_KAFKA_ERROR;
+            default -> null;
+        };
     }
 
     /**
