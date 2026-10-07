@@ -65,11 +65,11 @@
 
 ## B8 实验平台形式化
 
-- [ ] `ExperimentEntity` 显式字段化：Audience（segment 引用）/ Guardrail / Decision（status ∈ {DRAFT, LIVE, PAUSED, ENDED} 枚举化）/ Variant 与 Allocation 从 configJson 提列
-- [ ] `experiment-config.schema.json` 同步升级、旧 configJson 向前兼容
-- [ ] `experiment.exposure` 列入平台事件清单（§4）
+- [x] `ExperimentEntity` 显式字段化：Audience（segment 引用）/ Guardrail / Decision（status ∈ {DRAFT, LIVE, PAUSED, ENDED} 枚举化）/ Variant 与 Allocation 从 configJson 提列
+- [x] `experiment-config.schema.json` 同步升级、旧 configJson 向前兼容
+- [x] `experiment.exposure` 列入平台事件清单（§4）
 
-**验收：** 全绿；Splitter/Aggregator 存量测试零改动通过；audience/guardrail 创建与发布动作测试。
+**验收：** ✅（7b2c1f6 后回填）全量 221 suite / 2531 用例绿（failures=0 errors=0）；Entity 字段化 `audienceSegmentId` + variants/allocationInfo/guardrails/decision 四字段 + `ExperimentStatus` 枚举，V0.9.21 迁移含存量 status 大小写归一（running/live 别名→LIVE）与 segments FK；schema 双份（canonical+resources）同步 allocation/guardrails/decision 三节，variants 旧 configJson 回退兼容（`createSyncsVariantsFromLegacyConfig`/`readFallsBackToLegacyConfigVariants` 钉）；exposure 列入 `04-redesign §4.1` 平台事件约定，曝光列经 `/api/experiments/{id}/results` 可查（计划书原写 /exposures 专端点未单设，口径已改）；Splitter 存量测试零改动，Aggregator 测试仅 findByStatus 签名 string→enum 适配 6 行（场景零改动）；audience/guardrail 创建与发布动作测试齐（本游戏 segment 落列+他游戏拒绝、guardrails/decision/allocation/variants 往返、publish DRAFT→LIVE、end LIVE→ENDED 单向终态）。接手收尾修复冻结现场遗留：compileTestJava 不过（4 测试方法缺 throws）；ObjectMapper @Mock 被注入产线致 mock 工厂方法返回 null（6 例 NPE，改 @Spy 真实实例）；GameEnvironmentRepo 同类型双 @Mock 构造注入歧义（合并单 mock）；`createAudienceSegment` save 校验 never→times(1)；环境桩 anyString→any（null 不匹配）；过期用例 status "live"→"archived"（live 已为合法别名）；ResultsController status 输出枚举名；清除无调用方的 `mapStatusToEnum`。
 
 ## B9 运行模式矩阵
 

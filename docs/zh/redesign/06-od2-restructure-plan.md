@@ -209,7 +209,7 @@ Analytics 的 DAU/留存/ARPU 与风控特征同源（玩家行为特征），B5
 |---|---|---|
 | Audience | 缺 | 目标条件（复用 Segment 概念，`audience_segment_id` 引用） |
 | Allocation / Variant | 藏在 configJson | 显式 `variants[]`（name/weight/salt key）提列；`variant_id` 实验创建即生成 |
-| Exposure | ✅ `experiment_exposure` 事件已入 ClickHouse 归因 | 正式列入 §4 平台事件清单，`/api/experiments/{id}/exposures` 可查 |
+| Exposure | ✅ `experiment_exposure` 事件已入 ClickHouse 归因 | 已列入 `04-redesign §4.1` 平台事件约定，曝光列经 `/api/experiments/{id}/results` 可查 |
 | Metric | ✅ `experiment_metric_snapshots` 已回填 | Guardrail 布尔置位（反转指标 crash/refund/complaint，超出即预警） |
 | Decision | 缺（status 自由字符串） | `status ∈ {DRAFT, LIVE, PAUSED, ENDED}` 枚举化 + 发布动作 |
 

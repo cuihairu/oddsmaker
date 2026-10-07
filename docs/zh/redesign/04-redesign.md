@@ -200,6 +200,12 @@ RiskRule
 }
 ```
 
+### 4.1 平台事件约定
+
+以下事件按约定事件名上报，走同一信封，不另立 schema：
+
+- `experiment_exposure`：实验曝光。SDK 在分流命中后上报，props 携带 `exp`（实验 id）与 `variant`（变体名）。聚合为 `experiment_metric_snapshots.exposure_users`（SRM 样本量基础），经 `/api/experiments/{id}/results` 曝光列可查；SDK 接入见 `analysis/experiments`。
+
 ## 5. ClickHouse 核心表
 
 **数据库架构**：每个游戏独立数据库
