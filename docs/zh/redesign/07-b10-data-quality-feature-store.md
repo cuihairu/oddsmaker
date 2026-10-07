@@ -99,13 +99,15 @@ CREATE INDEX idx_data_quality_recent
 
 ### 4.2 网关侧写入路径
 
-网关进程内维护 `(game_id, environment, window)` 键的计数器，`@Scheduled` 每 60 秒快照 POST 到 control `/internal/data-quality`（internal-token 鉴权，与 `InternalBlockListController` 同一通道模式；网关侧调用先例是 `BlockListClient`）。每份快照携带自窗口起点以来的累计值，control 按 `uq_data_quality_window` 直接覆盖该键，乱序与重复投递无害，不做增量合并。
+网关进程内维护 `(game_id, environment, window)` 键的计数器，`@Scheduled` 每 60 秒快照 POST 到 control `/internal/data-quality`（internal-token 鉴权，与 `InternalBlockListController` 同一通道模式；网关侧调用先例是 `BlockListClient`）。每份快照携带自窗口起点以来的累计值，control 按 `uq_data_quality_window` 覆盖该键**的网关自有列**，乱序与重复投递无害，不做增量合并。
+
+**列所有权**（实施定稿）：`duplicates_enrich` / `dlq_other` 两列归 DLQ 消费者所有（§4.3 增量合并），网关快照不携带、覆盖时保留既有值——否则 60 秒快照会把 enrich 侧增量抹掉。其余列为网关自有。
 
 网关重启丢失当前窗口内存计数：60 秒快照下最多损失一个窗口的部分计数。指标是观测面不是计费面，接受。
 
 ### 4.3 enrich 层 duplicate 写入路径
 
-control-service 新增轻量 Kafka 消费者订阅 `oddsmaker.deadletter`：reason=`duplicate` 的记录按 `game_id`/`environment`/事件时间归窗累加 `duplicates_enrich`，其余 reason 累加 `dlq_other`。这同时闭合 deadletter 自上线无消费者的缺口。行数速率 = 每秒事件量级，单分区顺序消费即可，不引消费组并发。
+control-service 新增轻量 Kafka 消费者订阅 `oddsmaker.deadletter`（`DeadLetterConsumer`）：reason=`duplicate` 的记录按 `game_id`/`environment`/事件时间归窗累加 `duplicates_enrich`；**网关 9 个拒绝 reason 跳过**——同一消息在 `reject()` 里已计入对应 `rejected_*` 列（DLQ 发布与计数同点双写），消费者再计即双计；其余未知 reason（未来的第三方 DLQ 生产者）才累加 `dlq_other` 兜底。这同时闭合 deadletter 自上线无消费者的缺口。行数速率 = 每秒事件量级，单分区顺序消费即可，不引消费组并发。作用域缺失（raw 无 game_id/environment）落 `unknown` 桶当前窗口——观测面不丢计数。
 
 ### 4.4 保留策略
 
@@ -121,7 +123,7 @@ web 新页，control 提供两个只读端点：窗口序列（五率 + 恒等�
 
 ```sql
 -- B10 共享 Feature 摘要表（计划书 §5.3）：risk-job 特征作业与 risk_features 同源双写。
--- features 为该 (scope, 窗口) 全部特征值的扁平映射，键编码窗口避免同名特征互踩；
+-- features 为该 (scope, 窗口) 全部特征值的扁平映射；
 -- Analytics 侧取数不再对 risk_features 做 pivot。scope_key 编码沿用 risk_features 约定
 -- （PLAYER:<user_id> / DEVICE:<device_id> / IP:<client_ip>）。
 
@@ -132,7 +134,7 @@ CREATE TABLE feature_store (
     scope_key VARCHAR(256) NOT NULL,
     window_start TIMESTAMP NOT NULL,
     window_end TIMESTAMP NOT NULL,
-    features JSONB NOT NULL,
+    features TEXT NOT NULL,
     as_of TIMESTAMP NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (game_id) REFERENCES games(id),
@@ -143,9 +145,11 @@ CREATE INDEX idx_feature_store_scope
     ON feature_store (game_id, environment, scope_key, window_end DESC);
 ```
 
-`features` JSONB 形如 `{"events_5m": 42.0, "fail_ratio_5m": 0.17}`——与 `risk_features` 中该 scope 同窗口的行一一对应的扁平映射，窗口编码进键名。行数与 risk_features 同量级（每 scope 每窗口一行，pivot 收敛），不超过原表。
+`features` 为扁平 JSON 串（列型 TEXT，实况见下）形如 `{"events_5m": 42.0, "fail_ratio_5m": 0.17}`——与 `risk_features` 中该 scope 同窗口的行一一对应的 pivot 收敛。行内键用裸特征名：`(scope, window_end)` 唯一键已保证跨窗口不互踩，行内同名键冲突即迟到重算的覆盖语义（见下）。行数与 risk_features 同量级（每 scope 每窗口一行），不超过原表。
 
-双写机制：risk-job 落库点是 `RiskJob.featureJdbcSink`（`RiskJob.java:312`，`SinkFunction<FeatureRow>` JDBC upsert）。双写在同一 sink、同一连接、同一批内追加第二条 upsert——同库无需分布式事务；`feature_store` 写失败与 `risk_features` 写失败同等对待（sink 抛错、作业重放），不做主表成功/摘要表失败的拆分语义。
+**实施偏差定稿（4cc8c29）**：`features` 用 TEXT 而非 JSONB——control 侧只存取原串、查询走 `(game_id, environment, scope_key, window_end)` 索引，本批无 json 算子需求；出现 json 查询需求时 `ALTER COLUMN features TYPE jsonb USING features::jsonb` 即可原地升级，TEXT→JSONB 无损。
+
+双写机制（实施定稿 4cc8c29）：risk-job 落库点是 `RiskJob.featureJdbcSink`（`SinkFunction<FeatureRow>` JDBC upsert）；双写为 `featureRows` 流并行挂第二 sink `featureStoreJdbcSink`（连接参数与批次参数同 `featureJdbcSink`）。FeatureRow 是长格式（每特征一行），`feature_store` 侧依赖 SQL 层 jsonb 合并聚行：`ON CONFLICT ... DO UPDATE SET features = (features::jsonb || EXCLUDED.features::jsonb)::text`——长格式行各自携带单特征 JSON 片段，冲突时同名键取右值（迟到重算覆盖），`as_of` 随之刷新；合并语义经一次性 postgres:16 容器三插同键实测。同库无需分布式事务；`feature_store` 写失败与 `risk_features` 写失败同等对待（sink 抛错、作业重放），不做主表成功/摘要表失败的拆分语义。
 
 消费方：实施批在 control 增加只读端点（按 scope 取最近窗口行）。Analytics 真实消费属后续批次，本批交付表与写入即满足「不占用 B5/B6 关键路径」。保留策略与 risk_features 保持一致（当前两者均无 TTL，不单方面加）。
 

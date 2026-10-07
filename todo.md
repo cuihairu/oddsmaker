@@ -80,10 +80,10 @@
 
 ## B10 Data Quality 与共享特征（收口批）
 
-- [ ] `event_valid_rate / drop_rate / unknown_event_rate / duplicate_rate / late_event_rate` 指标落库 + Game Data Health 页
-- [ ] 共享 Feature 双写 schema 定稿（risk_features + feature_store 摘要表）——**Data Lineage 仅记方向不建系统**
+- [x] `event_valid_rate / drop_rate / unknown_event_rate / duplicate_rate / late_event_rate` 指标落库 + Game Data Health 页
+- [x] 共享 Feature 双写 schema 定稿（risk_features + feature_store 摘要表）——**Data Lineage 仅记方向不建系统**
 
-**验收：** 指标表可查、健康页有数可看；feature_store 建表迁移与双写合成器测试；无 Lineage 代码。
+**验收：** ✅（8eba96c 后回填）全量 228 suite / 2551 用例绿（failures=0 errors=0）+ web build 绿 + docs build 绿。分五批落地：设计定稿（b782201，五指标口径/恒等式/落库 DDL/feature_store schema/Lineage 方向表）→ control 落库与取数面（ffab91c，V0.9.22 双表迁移 + DataQualityService 摄取/序列/汇总 + /internal/data-quality 摄取端点 + /api/data-quality 与 /api/feature-store 只读端点，恒等式 received = accepted + Σrejected + sampled_out 落表校验破式告警不拒收，率一律读时算）→ 网关计数与上报（3316d73，BatchController 全路径埋点 14 维计数（缺作用域落 unknown 桶）、幂等吸收占 accepted 位使恒等式在网关边缘即守恒、60s 快照 POST internal-token 同通道、payload 键集与 control Snapshot 逐字段对账测试）→ DLQ 消费者（e43901a，闭合 deadletter 无消费者缺口，防双计口径：duplicate→duplicates_enrich（仅 enrich 产生）/网关 9 拒绝 reason 跳过（埋点已计）/未知→dlq_other；enrich 两列列所有权归 DLQ consumer，网关快照覆盖保留既有值）→ risk-job 双写（4cc8c29，featureRows 流第二 sink，长格式行经 jsonb 合并聚行，合并语义一次性 postgres:16 容器实测）→ 健康页（8eba96c，五率卡片/恒等式警示条/rejectTop（kafka_error 单列平台故障）/窗口序列/feature_store 取数）。设计文档对账四处已回写 07-b10（列所有权/防双计口径/TEXT 替代 JSONB 与升级路径/双写机制实况）。Lineage 仅 §6 方向表，无代码。
 
 ---
 
