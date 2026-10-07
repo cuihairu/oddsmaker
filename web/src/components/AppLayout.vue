@@ -13,6 +13,7 @@ const navigation = [
   { name: 'API密钥', href: '/api-keys', icon: 'key' },
   { name: '实验管理', href: '/experiments', icon: 'flask' },
   { name: '风控规则', href: '/risk-rules', icon: 'shield' },
+  { name: '事件 Schema', href: '/schemas', icon: 'schema' },
   { name: 'Flink 作业', href: '/flink-jobs', icon: 'cpu' },
   { name: '维度同步', href: '/dimensions', icon: 'sync' },
   { name: '留存趋势', href: '/analytics/retention', icon: 'trend' },
@@ -61,6 +62,7 @@ const iconPaths = {
   download: 'M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z',
   privacy: 'M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z',
   archive: 'M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5m16.5 0h-16.5m16.5 0c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125M10 11.25h4',
+  schema: 'M12 3v18m0-18l7 3.5v5L12 15l-7-3.5v-5L12 3zm-7 12.5L12 19l7-3.5',
   link: 'M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244',
   flag: 'M4 3v18M4 4h12l-2 4 2 4H4',
 }

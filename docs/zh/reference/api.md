@@ -153,6 +153,7 @@ Gateway 默认校验 5 分钟时间窗。客户端 SDK 不应使用 HMAC。
 - `payload_too_large`: 请求体或单事件超过上限。
 - `invalid_timestamp`: 事件时间戳偏离服务器时间过远（默认 ±24h，可配）。
 - `invalid_schema`: 单个事件不符合 schema。
+- `unknown_event`: 事件名不在该 key 作用域 ACTIVE Schema 的事件面内（`rejectUnknownEvents` 开启时；dev 环境豁免）。
 - `trust_escalation`: v2 字段自抬（source/trust_level 声明高于 key 档位）。
 - `pii_blocked`: 命中 PII 阻断。
 - `blocked`: 命中风控黑名单硬拦截。

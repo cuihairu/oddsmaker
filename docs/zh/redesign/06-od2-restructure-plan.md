@@ -63,7 +63,7 @@
 | 对象 | 标识 | 关键不变式 | 现状 | 2.0 动作 |
 |---|---|---|---|---|
 | **Event** | `event_id`+`event_name`+`ts_client` 三元组；契约主键 `game_id+environment+event_id`（见 index.md） | 事件**不是控制面资源**（流对象），但契约定死，见 §4 | `schema/json/oddsmaker-event-schema.json`（v1，约 50 属性，无版本/来源/信任字段） | 按 §4 增量升 v2：`event_version`、`source`、`trust_level`、`event_origin` |
-| **EventSchema** | `(game_id, event_name, major_version)` | 同一 event_name 只允许一个 ACTIVE 版本；版本兼容策略由 schema 指定 | `TrackingPlanEntity` + `EventDefinitionEntity`/`EventPropertyDefinitionEntity` 已具雏形（strictness/rejectUnknownEvents/enableAutoValidation） | **升级为一等资源**（B7）：补齐 compatibility / PII policy / retention / sampling / owner 字段；对外 API 与 UI 以 EventSchema 命名暴露 |
+| **EventSchema** | `(game_id, event_name, major_version)` | 同一 event_name 只允许一个 ACTIVE 版本；版本兼容策略由 schema 指定 | `TrackingPlanEntity` + `EventDefinitionEntity`/`EventPropertyDefinitionEntity` 已具雏形（strictness/rejectUnknownEvents/enableAutoValidation） | ✅（B7 落地：tracking_plans 补 compatibility(NONE/BACKWARD/FORWARD/FULL)/pii_policy/retention_days/sampling_rate/owner_id 五列（V0.9.20）；publish 兼容门——compatibility≠NONE 时对同 game+env 最近 ACTIVE 基线做事件集 diff（BACKWARD 违例=removed 非空、FORWARD 违例=added 非空、changed 仅信息项），不兼容拒绝发布保持 DRAFT；`/api/games/{gameId}/schemas` 资源 API（publish/compatibility/deactivate 子资源，与 tracking-plans 同底层）+ web `/schemas` 页面） |
 
 ### 2.4 风控域（六层抽象，见 §5）
 
@@ -256,7 +256,7 @@ Analytics 的 DAU/留存/ARPU 与风控特征同源（玩家行为特征），B5
 
 1. **不做**多租户/SaaS 化（Organization/Workspace/Project/Tenant 概念不入新代码）。
 2. **不删** Gateway `project_id` 兼容层（§3.3）。
-3. **不搞**事件自由流动：dev 模式外，未注册 schema 的事件默认拒收（现状 `rejectUnknownEvents` 默认 false——B7 时将默认值改为 true，随 B7 验收）。
+3. **不搞**事件自由流动：dev 模式外，未注册 schema 的事件默认拒收（B7 落地：新 Schema 默认 `rejectUnknownEvents=true`（V0.9.20 收口），ACTIVE Schema 事件面经 internal feed 下发网关，未定义事件按 `unknown_event` 事件级拒收，dev 环境豁免）。
 4. **不让** SDK/业务层持有物理路由（storage_profile 是唯一桥）。
 5. **不做** Data Lineage 系统化、不做跨公司数据交换、不做移动端原生队列之外的新端。
 6. 旧评估文件中的“权限 15% 完成度”“12 周计划”等数字**任何人不得再引用为现状**（B1 横幅补齐后全仓口径统一）。

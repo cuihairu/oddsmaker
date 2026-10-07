@@ -47,6 +47,12 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: '/schemas',
+      name: 'schemas',
+      component: () => import('@/views/SchemasView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
       path: '/flink-jobs',
       name: 'flink-jobs',
       component: () => import('@/views/FlinkJobsView.vue'),

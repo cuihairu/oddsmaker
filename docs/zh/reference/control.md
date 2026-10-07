@@ -153,6 +153,26 @@ DELETE /api/games/{gameId}/tracking-plans/{trackingPlanId}
 
 事件与属性字典挂在计划下：`.../{trackingPlanId}/events[/{eventDefinitionId}]` 与 `.../events/{eventDefinitionId}/properties[/{propertyDefinitionId}]` 的标准 CRUD。没有 `publish` / `rollback`——启用状态用 `activate` / `deactivate` 切换。
 
+### Event Schema（B7 一等资源化）
+
+与追踪计划同一底层（同库同实体），以 EventSchema 语义暴露的版本化资源 API（B7）：
+
+```http
+POST /api/games/{gameId}/schemas
+GET /api/games/{gameId}/schemas
+GET /api/games/{gameId}/schemas/active
+GET /api/games/{gameId}/schemas/{schemaId}
+PUT /api/games/{gameId}/schemas/{schemaId}
+POST /api/games/{gameId}/schemas/{schemaId}/publish?userId=
+GET /api/games/{gameId}/schemas/{schemaId}/compatibility
+POST /api/games/{gameId}/schemas/{schemaId}/deactivate
+DELETE /api/games/{gameId}/schemas/{schemaId}
+```
+
+事件与属性定义子资源与追踪计划完全同形（`.../{schemaId}/events[...]`）。与 `activate` 的差别在 `publish` 带**兼容门**：Schema 的 `compatibility` 非 NONE 时，发布前对同 game + 同 environment 的最近 ACTIVE 基线版本做事件集 diff——BACKWARD 要求 `removed` 为空（旧生产者事件不被新版本拒收）、FORWARD 要求 `added` 为空（旧消费方不识别新增）、FULL 两者、NONE 不检查；同名事件的类型/必填位/重要性变化记入 `changedEvents` 仅作信息项不判兼容。检查为只读端点 `GET .../compatibility`，返回 `{schemaId, mode, baselineId, compatible, addedEvents, removedEvents, changedEvents}`；不兼容的发布直接 400，Schema 保持 DRAFT。
+
+B7 起新增字段：`compatibility`（默认 NONE）、`piiPolicy`（事件级 PII 策略 JSON）、`retentionDays`、`samplingRate`、`ownerId`；`rejectUnknownEvents` 默认值收口为 `true`——ACTIVE Schema 的事件名清单随 internal feed（`/internal/api-keys/{key}`）下发网关（环境绑定版优先、回退全局版），网关对未定义事件按 `unknown_event` 拒收，dev 环境豁免。web 控制台入口：`/schemas`（事件 Schema 页）。
+
 ### Experiments
 
 ```http
