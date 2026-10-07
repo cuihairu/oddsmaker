@@ -32,6 +32,7 @@ const navigation = [
   { name: '数据保留', href: '/data-retention', icon: 'archive' },
   { name: '原始数据导出', href: '/raw-export', icon: 'download' },
   { name: '监控', href: '/monitoring', icon: 'chart' },
+  { name: '数据健康', href: '/data-health', icon: 'chart' },
 ]
 
 const adminNavigation = [

@@ -83,6 +83,12 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: '/data-health',
+      name: 'data-health',
+      component: () => import('@/views/DataHealthView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
       path: '/analytics/retention',
       name: 'retention',
       component: () => import('@/views/RetentionView.vue'),
