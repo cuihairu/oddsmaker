@@ -10,3 +10,6 @@ overrides:
   esbuild: "^0.25.0"
   postcss: "^8.5.23"   # GHSA-r28c-9q8g-f849 / GHSA-fxqj-rqcc-2cmp（sourceMappingURL 路径穿越）
   dompurify: "^3.4.16" # GHSA-p98j-92pf-mc4p（afterSanitize 钩子删节点留下带事件的游离子树 → DOM XSS）
+  vue: "^3.5.42"              # @vue/server-renderer XSS（CR 缺失属性名黑名单）——server-renderer 随 vue 同步升
+  source-map-js: "^1.2.2"     # 源映射分段偏移索引 DoS
+  katex: "^0.18.2"            # 原型污染绕过信任限制（mermaid 数学渲染传递依赖）
