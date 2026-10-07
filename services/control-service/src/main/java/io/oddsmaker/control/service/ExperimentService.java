@@ -13,6 +13,8 @@ import io.oddsmaker.control.jpa.GameEntity;
 import io.oddsmaker.control.jpa.GameEnvironmentEntity;
 import io.oddsmaker.control.jpa.GameEnvironmentRepo;
 import io.oddsmaker.control.jpa.GameRepo;
+import io.oddsmaker.control.jpa.SegmentEntity;
+import io.oddsmaker.control.jpa.SegmentRepo;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
@@ -34,11 +36,13 @@ import java.util.stream.Collectors;
 @Transactional
 public class ExperimentService {
 
-    private static final Set<String> STATUSES = Set.of("draft", "running", "paused");
+    /** 枚举化后的实验生命周期（B8）：与 ExperimentEntity.ExperimentStatus 对齐 */
+    private static final Set<String> STATUSES = Set.of("DRAFT", "LIVE", "PAUSED", "ENDED");
 
     private final ExperimentRepo experimentRepo;
     private final GameRepo gameRepo;
     private final GameEnvironmentRepo environmentRepo;
+    private final SegmentRepo segmentRepo;
     private final ObjectMapper objectMapper;
 
     /** 审计日志（构造器注入保持类风格一致；@InjectMocks 场景字段注入会被构造器注入短路） */
@@ -47,11 +51,13 @@ public class ExperimentService {
     public ExperimentService(ExperimentRepo experimentRepo,
                              GameRepo gameRepo,
                              GameEnvironmentRepo environmentRepo,
+                             SegmentRepo segmentRepo,
                              ObjectMapper objectMapper,
                              AuditLogService auditLog) {
         this.experimentRepo = experimentRepo;
         this.gameRepo = gameRepo;
         this.environmentRepo = environmentRepo;
+        this.segmentRepo = segmentRepo;
         this.objectMapper = objectMapper;
         this.auditLog = auditLog;
     }
@@ -80,7 +86,7 @@ public class ExperimentService {
         var result = experimentRepo.search(
             resolvedGameId,
             resolvedEnvironmentId,
-            normalizeStatusFilter(status),
+            parseStatusFilter(status),
             pageable
         );
         return new ControlService.Paged<>(
@@ -105,9 +111,9 @@ public class ExperimentService {
             throw new IllegalArgumentException("Experiment already exists: " + id);
         }
 
-        String status = normalizeStatus(dto.status, "draft");
+        String status = normalizeStatus(dto.status, "DRAFT");
         JsonNode config = normalizeConfig(dto.config);
-        validateConfig(config, "running".equals(status));
+        validateConfig(config, "LIVE".equals(status));
 
         LocalDateTime now = LocalDateTime.now();
         ExperimentEntity entity = new ExperimentEntity();
@@ -115,9 +121,10 @@ public class ExperimentService {
         entity.gameId = dto.gameId;
         entity.environmentId = environment.id;
         entity.name = requireName(dto.name);
-        entity.status = status;
+        entity.status = ExperimentEntity.ExperimentStatus.valueOf(status);
         entity.salt = dto.salt == null || dto.salt.isBlank() ? id : dto.salt.trim();
         entity.configJson = writeConfig(config);
+        applyFormalizedFields(entity, dto, config);
         entity.createdAt = now;
         entity.updatedAt = now;
         return toDto(experimentRepo.save(entity));
@@ -143,18 +150,20 @@ public class ExperimentService {
         if (dto.salt != null) {
             entity.salt = dto.salt.isBlank() ? entity.id : dto.salt.trim();
         }
+        JsonNode config = null;
         if (dto.config != null) {
-            JsonNode config = normalizeConfig(dto.config);
-            validateConfig(config, "running".equals(entity.status));
+            config = normalizeConfig(dto.config);
+            validateConfig(config, entity.status == ExperimentEntity.ExperimentStatus.LIVE);
             entity.configJson = writeConfig(config);
         }
         if (dto.status != null) {
-            String status = normalizeStatus(dto.status, entity.status);
-            if ("running".equals(status)) {
+            String status = normalizeStatus(dto.status, entity.status != null ? entity.status.name() : "DRAFT");
+            if ("LIVE".equals(status)) {
                 validateConfig(readConfig(entity.configJson), true);
             }
-            entity.status = status;
+            entity.status = ExperimentEntity.ExperimentStatus.valueOf(status);
         }
+        applyFormalizedFields(entity, dto, config);
         entity.updatedAt = LocalDateTime.now();
         return toDto(experimentRepo.save(entity));
     }
@@ -163,7 +172,7 @@ public class ExperimentService {
         ExperimentEntity entity = experimentRepo.findById(id)
             .orElseThrow(() -> new IllegalArgumentException("Experiment not found: " + id));
         validateConfig(readConfig(entity.configJson), true);
-        entity.status = "running";
+        entity.status = ExperimentEntity.ExperimentStatus.LIVE;
         entity.updatedAt = LocalDateTime.now();
         return toDto(experimentRepo.save(entity));
     }
@@ -171,7 +180,7 @@ public class ExperimentService {
     public ExperimentDTO pauseExperiment(String id) {
         ExperimentEntity entity = experimentRepo.findById(id)
             .orElseThrow(() -> new IllegalArgumentException("Experiment not found: " + id));
-        entity.status = "paused";
+        entity.status = ExperimentEntity.ExperimentStatus.PAUSED;
         entity.updatedAt = LocalDateTime.now();
         return toDto(experimentRepo.save(entity));
     }
@@ -198,7 +207,7 @@ public class ExperimentService {
     }
 
     /**
-     * 服务端分流：为主体分配变体（仅 running 实验分流，draft/paused 返回 null 由调用方兜底）。
+     * 服务端分流：为主体分配变体（仅 LIVE 实验分流，DRAFT/PAUSED 返回 null 由调用方兜底）。
      * 与 SDK 端使用相同的确定性哈希算法（ExperimentSplitter）。
      */
     @Transactional(readOnly = true)
@@ -208,7 +217,7 @@ public class ExperimentService {
         }
         ExperimentEntity entity = experimentRepo.findById(experimentId)
             .orElseThrow(() -> new IllegalArgumentException("Experiment not found: " + experimentId));
-        if (!"running".equals(entity.status)) {
+        if (entity.status != ExperimentEntity.ExperimentStatus.LIVE) {
             return null;
         }
         JsonNode config = readConfig(entity.configJson);
@@ -221,6 +230,38 @@ public class ExperimentService {
         return assigned;
     }
 
+    /**
+     * B8 形式化字段写入：audience 引用校验 + variants/allocation/guardrails/decision 落列。
+     * 全部字段「提供才写、缺席保留现值」（部分更新不清空既有列）；variants 与 configJson
+     * 保持同步——dto.variants 直写优先，否则从本次随带的 config 提取，使旧 configJson
+     * 路径写入的 variants 同样落列、新列缺失时读路径回退 config。
+     */
+    private void applyFormalizedFields(ExperimentEntity entity, ExperimentDTO dto, JsonNode config) {
+        String audienceSegmentId = blankToNull(dto.audienceSegmentId);
+        if (audienceSegmentId != null) {
+            requireSegment(entity.gameId, audienceSegmentId);
+            entity.audienceSegmentId = audienceSegmentId;
+        } else if (dto.audienceSegmentId != null) {
+            entity.audienceSegmentId = null;  // 显式传空串 = 清除引用
+        }
+
+        JsonNode variants = dto.variants != null && !dto.variants.isNull() && !dto.variants.isMissingNode()
+            ? dto.variants
+            : (config != null ? config.get("variants") : null);
+        if (variants != null) {
+            entity.variantsJson = writeConfig(variants);
+        }
+        if (dto.allocationInfo != null) {
+            entity.allocationInfo = writeConfig(dto.allocationInfo);
+        }
+        if (dto.guardrails != null) {
+            entity.guardrailsJson = writeConfig(dto.guardrails);
+        }
+        if (dto.decision != null) {
+            entity.decisionJson = writeConfig(dto.decision);
+        }
+    }
+
     private GameEntity requireGame(String gameId) {
         if (gameId == null || gameId.isBlank()) {
             throw new IllegalArgumentException("gameId is required");
@@ -228,6 +269,15 @@ public class ExperimentService {
         return gameRepo.findById(gameId)
             .filter(game -> game.deletedAt == null)
             .orElseThrow(() -> new IllegalArgumentException("Game not found: " + gameId));
+    }
+
+    private void requireSegment(String gameId, String segmentId) {
+        SegmentEntity segment = segmentRepo.findById(segmentId)
+            .filter(s -> s.deletedAt == null)
+            .orElseThrow(() -> new IllegalArgumentException("Segment not found: " + segmentId));
+        if (!segment.gameId.equals(gameId)) {
+            throw new IllegalArgumentException("Segment does not belong to game: " + segmentId);
+        }
     }
 
     private GameEnvironmentEntity resolveEnvironment(String gameId, String environmentId, String environmentName) {
@@ -267,11 +317,19 @@ public class ExperimentService {
             .map(environment -> environment.name)
             .orElse(null);
         dto.name = entity.name;
-        dto.status = entity.status;
+        dto.status = entity.status.name();
         dto.salt = entity.salt;
         dto.config = readConfig(entity.configJson);
         dto.createdAt = entity.createdAt;
         dto.updatedAt = entity.updatedAt;
+        // B8 形式化字段：新列优先，variants 回退旧 configJson（向前兼容）
+        dto.audienceSegmentId = entity.audienceSegmentId;
+        dto.variants = entity.variantsJson != null
+            ? readConfig(entity.variantsJson)
+            : dto.config.path("variants");
+        dto.allocationInfo = entity.allocationInfo != null ? readConfig(entity.allocationInfo) : null;
+        dto.guardrails = entity.guardrailsJson != null ? readConfig(entity.guardrailsJson) : null;
+        dto.decision = entity.decisionJson != null ? readConfig(entity.decisionJson) : null;
         return dto;
     }
 
@@ -354,18 +412,22 @@ public class ExperimentService {
         }
     }
 
-    private String normalizeStatusFilter(String status) {
+    private ExperimentEntity.ExperimentStatus parseStatusFilter(String status) {
         if (status == null || status.isBlank()) {
             return null;
         }
-        return normalizeStatus(status, null);
+        return ExperimentEntity.ExperimentStatus.valueOf(normalizeStatus(status, null));
     }
 
     private String normalizeStatus(String status, String defaultStatus) {
         // 调用点的 defaultStatus 均非 null（filter 入口已提前拦截 blank），normalized 不会为 null
         String normalized = status == null || status.isBlank()
             ? defaultStatus
-            : status.trim().toLowerCase(Locale.ROOT);
+            : status.trim().toUpperCase(Locale.ROOT);
+        // 向前兼容：旧 API 值 "running" 映射枚举名 "LIVE"（存储与输出一律枚举名）
+        if ("RUNNING".equals(normalized)) {
+            normalized = "LIVE";
+        }
         if (!STATUSES.contains(normalized)) {
             throw new IllegalArgumentException("Unsupported experiment status: " + status);
         }
@@ -382,4 +444,20 @@ public class ExperimentService {
     private String blankToNull(String value) {
         return value == null || value.isBlank() ? null : value.trim();
     }
+
+    /**
+     * B8 形式化：实验结束（LIVE → ENDED，单向不可逆）。
+     * 与状态机对齐：ENDED 为终态，不能再次状态变更。
+     */
+    public ExperimentDTO endExperiment(String id) {
+        ExperimentEntity entity = experimentRepo.findById(id)
+            .orElseThrow(() -> new IllegalArgumentException("Experiment not found: " + id));
+        if (entity.status != ExperimentEntity.ExperimentStatus.LIVE) {
+            throw new IllegalStateException("Only LIVE experiments can be ended");
+        }
+        entity.status = ExperimentEntity.ExperimentStatus.ENDED;
+        entity.updatedAt = LocalDateTime.now();
+        return toDto(experimentRepo.save(entity));
+    }
 }
+

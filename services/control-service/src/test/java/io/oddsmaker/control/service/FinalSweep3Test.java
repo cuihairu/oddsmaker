@@ -374,7 +374,7 @@ class FinalSweep3Test {
         e.gameId = "g1";
         e.environmentId = "env1";
         e.name = "old";
-        e.status = "draft";
+        e.status = ExperimentEntity.ExperimentStatus.DRAFT;
         e.salt = "salt1";
         e.configJson = "{\"variants\":[{\"name\":\"a\",\"weight\":1},{\"name\":\"b\",\"weight\":2}]}";
         when(experimentRepo.findById("exp1")).thenReturn(Optional.of(e));
@@ -387,11 +387,11 @@ class FinalSweep3Test {
         dto.name = "new-name";
         dto.salt = "   ";
         dto.config = objectMapper.readTree("{\"variants\":[{\"name\":\"a\",\"weight\":3},{\"name\":\"b\",\"weight\":7}]}");
-        dto.status = "running";
+        dto.status = "LIVE";
 
         ExperimentDTO out = experimentService.updateExperiment("exp1", dto);
         assertEquals("new-name", out.name);
-        assertEquals("running", out.status);
+        assertEquals("LIVE", out.status);
         assertEquals("exp1", out.salt);
         assertTrue(out.config.has("variants"));
         verify(experimentRepo, times(1)).save(any(ExperimentEntity.class));
@@ -405,7 +405,7 @@ class FinalSweep3Test {
         e.gameId = "g1";
         e.environmentId = "env1";
         e.name = "n";
-        e.status = "draft";
+        e.status = ExperimentEntity.ExperimentStatus.DRAFT;
         when(experimentRepo.findById("exp1")).thenReturn(Optional.of(e));
         ExperimentDTO dto = new ExperimentDTO();
         dto.gameId = "g2";
@@ -421,7 +421,7 @@ class FinalSweep3Test {
         e.gameId = "g1";
         e.environmentId = "env1";
         e.name = "n";
-        e.status = "draft";
+        e.status = ExperimentEntity.ExperimentStatus.DRAFT;
         when(experimentRepo.findById("exp1")).thenReturn(Optional.of(e));
         when(gameEnvironmentRepo.findByGameIdAndNameAndDeletedAtIsNull("g1", "prod"))
             .thenReturn(List.of(env("env2", "g1", "prod")));
@@ -440,7 +440,7 @@ class FinalSweep3Test {
         e.gameId = "g1";
         e.environmentId = "env1";
         e.name = "n";
-        e.status = "draft";
+        e.status = ExperimentEntity.ExperimentStatus.DRAFT;
         when(experimentRepo.findById("exp1")).thenReturn(Optional.of(e));
 
         GameEnvironmentEntity foreign = env("envX", "g2", "dev");
@@ -475,11 +475,11 @@ class FinalSweep3Test {
         e.gameId = "g1";
         e.environmentId = "env1";
         e.name = "n";
-        e.status = "draft";
+        e.status = ExperimentEntity.ExperimentStatus.DRAFT;
         e.configJson = "{}";
         when(experimentRepo.findById("exp1")).thenReturn(Optional.of(e));
         ExperimentDTO dto = new ExperimentDTO();
-        dto.status = "running";
+        dto.status = "LIVE";
         assertThrows(IllegalArgumentException.class,
             () -> experimentService.updateExperiment("exp1", dto));
 
@@ -524,7 +524,7 @@ class FinalSweep3Test {
         assertCreateConfigFails(null, "{\"variants\":[{\"name\":\"a\",\"weight\":1},{\"name\":\"a\",\"weight\":2}]}");
         assertCreateConfigFails(null, "{\"variants\":[{\"name\":\"a\",\"weight\":0},{\"name\":\"b\",\"weight\":2}]}");
         assertCreateConfigFails(null, "{\"variants\":[{\"name\":\"a\",\"weight\":1.5},{\"name\":\"b\",\"weight\":2}]}");
-        assertCreateConfigFails("running", "{}");
+        assertCreateConfigFails("LIVE", "{}");
         assertCreateConfigFails("bogus", "{}");
     }
 
@@ -545,7 +545,7 @@ class FinalSweep3Test {
         dto.config = objectMapper.readTree(
             "{\"variants\":[{\"name\":\"a\",\"weight\":1},{\"name\":\"b\",\"weight\":2}],\"targeting\":{},\"metrics\":{}}");
         ExperimentDTO out = experimentService.createExperiment(dto);
-        assertEquals("draft", out.status);
+        assertEquals("DRAFT", out.status);
         assertEquals(out.id, out.salt);
         assertEquals("env1", out.environmentId);
         assertTrue(out.config.has("variants"));

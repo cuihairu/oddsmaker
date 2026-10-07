@@ -122,7 +122,7 @@ class ApiControllersDeepTest {
         dto.id = id;
         dto.gameId = "game_1";
         dto.name = "实验-" + id;
-        dto.status = "draft";
+        dto.status = "DRAFT";
         return dto;
     }
 
@@ -327,10 +327,10 @@ class ApiControllersDeepTest {
     @DisplayName("listExperiments：默认分页 0/50，显式分页透传")
     void listExperimentsPagingDefaults() {
         ControlService.Paged<ExperimentDTO> paged = new ControlService.Paged<>(List.of(expDto("exp_1")), 1L);
-        lenient().when(experimentService.listExperiments("game_1", null, "prod", "running", 0, 50)).thenReturn(paged);
+        lenient().when(experimentService.listExperiments("game_1", null, "prod", "LIVE", 0, 50)).thenReturn(paged);
         lenient().when(experimentService.listExperiments(null, null, null, null, 2, 10)).thenReturn(paged);
 
-        assertSame(paged, apiController.listExperiments("game_1", null, "prod", "running", null, null));
+        assertSame(paged, apiController.listExperiments("game_1", null, "prod", "LIVE", null, null));
         assertSame(paged, apiController.listExperiments(null, null, null, null, 2, 10));
     }
 
@@ -354,16 +354,16 @@ class ApiControllersDeepTest {
         ExperimentDTO in = expDto("exp_1");
         ExperimentDTO updated = expDto("exp_1");
         ExperimentDTO published = expDto("exp_1");
-        published.status = "running";
+        published.status = "LIVE";
         ExperimentDTO paused = expDto("exp_1");
-        paused.status = "paused";
+        paused.status = "PAUSED";
         lenient().when(experimentService.updateExperiment("exp_1", in)).thenReturn(updated);
         lenient().when(experimentService.publishExperiment("exp_1")).thenReturn(published);
         lenient().when(experimentService.pauseExperiment("exp_1")).thenReturn(paused);
 
         assertSame(updated, apiController.updateExperiment("exp_1", in).getBody());
-        assertEquals("running", apiController.publishExperiment("exp_1").getBody().status);
-        assertEquals("paused", apiController.pauseExperiment("exp_1").getBody().status);
+        assertEquals("LIVE", apiController.publishExperiment("exp_1").getBody().status);
+        assertEquals("PAUSED", apiController.pauseExperiment("exp_1").getBody().status);
     }
 
     @Test
@@ -601,7 +601,7 @@ class ApiControllersDeepTest {
     private static ExperimentEntity experiment(String id) {
         ExperimentEntity e = new ExperimentEntity();
         e.id = id;
-        e.status = "running";
+        e.status = ExperimentEntity.ExperimentStatus.LIVE;
         return e;
     }
 

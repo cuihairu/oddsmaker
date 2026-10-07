@@ -803,7 +803,7 @@ class ServicesFinalSweepTest {
         e.gameId = "game_1";
         e.environmentId = "env_game_1_prod";
         e.name = "Sweep Exp";
-        e.status = status;
+        e.status = "running".equals(status) ? ExperimentEntity.ExperimentStatus.LIVE : ExperimentEntity.ExperimentStatus.valueOf(status.toUpperCase());
         e.salt = "salt";
         e.configJson = "{\"variants\":[{\"name\":\"control\",\"weight\":1},"
             + "{\"name\":\"treatment\",\"weight\":1}]}";

@@ -28,6 +28,7 @@ import io.oddsmaker.control.jpa.RemoteConfigRepo;
 import io.oddsmaker.control.jpa.ReviewQueueRepo;
 import io.oddsmaker.control.jpa.SDKKeyEntity;
 import io.oddsmaker.control.jpa.SDKKeyRepo;
+import io.oddsmaker.control.jpa.SegmentRepo;
 import io.oddsmaker.control.jpa.SystemConfigEntity;
 import io.oddsmaker.control.jpa.SystemConfigRepo;
 import io.oddsmaker.control.jpa.TelemetryConfigEntity;
@@ -463,7 +464,7 @@ class CoverageTopUpTest {
     @DisplayName("变体权重和 int 溢出 → 拒绝（两个 MAX_VALUE 相加为负，校验兜底）")
     void experimentWeightOverflowRejected() {
         ExperimentService service = new ExperimentService(mock(ExperimentRepo.class),
-            gameRepoStub(), envRepoStub(), new ObjectMapper(), mock(AuditLogService.class));
+            gameRepoStub(), envRepoStub(), mock(SegmentRepo.class), new ObjectMapper(), mock(AuditLogService.class));
         ExperimentDTO dto = dtoWithConfig("""
             {"variants":[
               {"name":"a","weight":2147483647},
@@ -484,7 +485,7 @@ class CoverageTopUpTest {
             }
         };
         ExperimentService service = new ExperimentService(mock(ExperimentRepo.class),
-            gameRepoStub(), envRepoStub(), broken, mock(AuditLogService.class));
+            gameRepoStub(), envRepoStub(), mock(SegmentRepo.class), broken, mock(AuditLogService.class));
         ExperimentDTO dto = dtoWithConfig("{}");
 
         IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,

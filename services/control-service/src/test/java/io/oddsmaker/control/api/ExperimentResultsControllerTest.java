@@ -64,7 +64,7 @@ class ExperimentResultsControllerTest {
     void resultsIncludeSrmDetection() {
         ExperimentEntity experiment = new ExperimentEntity();
         experiment.id = "exp_1";
-        experiment.status = "RUNNING";
+        experiment.status = ExperimentEntity.ExperimentStatus.LIVE;
         experiment.configJson = "{\"control_variant\":\"control\",\"variants\":"
             + "[{\"name\":\"control\",\"weight\":1},{\"name\":\"treatment\",\"weight\":1}]}";
         when(experimentRepo.findById("exp_1")).thenReturn(Optional.of(experiment));
@@ -94,7 +94,7 @@ class ExperimentResultsControllerTest {
     void resultsSrmHealthy() {
         ExperimentEntity experiment = new ExperimentEntity();
         experiment.id = "exp_2";
-        experiment.status = "RUNNING";
+        experiment.status = ExperimentEntity.ExperimentStatus.LIVE;
         experiment.configJson = "{\"variants\":[{\"name\":\"a\",\"weight\":1},{\"name\":\"b\",\"weight\":1}]}";
         when(experimentRepo.findById("exp_2")).thenReturn(Optional.of(experiment));
         when(snapshotRepo.findByExperimentIdOrderByWindowStartAsc("exp_2")).thenReturn(List.of(
@@ -137,13 +137,13 @@ class ExperimentResultsControllerTest {
     void resultsBadConfigFallsBack() {
         ExperimentEntity experiment = new ExperimentEntity();
         experiment.configJson = "{invalid json";
-        experiment.status = "running";
+        experiment.status = ExperimentEntity.ExperimentStatus.LIVE;
         when(experimentRepo.findById("exp_bad")).thenReturn(Optional.of(experiment));
         when(snapshotRepo.findByExperimentIdOrderByWindowStartAsc("exp_bad")).thenReturn(List.of());
 
         var resp = controller.results("exp_bad");
         assertEquals(200, resp.getStatusCode().value());
-        assertEquals("running", resp.getBody().get("status"));
+        assertEquals("LIVE", resp.getBody().get("status"));
     }
 
     @Test
@@ -192,13 +192,13 @@ class ExperimentResultsControllerTest {
     @DisplayName("results：configJson null 与空白回退空配置")
     void resultsNullAndBlankConfig() {
         ExperimentEntity e1 = new ExperimentEntity();
-        e1.status = "RUNNING";
+        e1.status = ExperimentEntity.ExperimentStatus.LIVE;
         when(experimentRepo.findById("exp_nullcfg")).thenReturn(Optional.of(e1));
         when(snapshotRepo.findByExperimentIdOrderByWindowStartAsc("exp_nullcfg")).thenReturn(List.of());
         assertEquals(200, controller.results("exp_nullcfg").getStatusCode().value());
 
         ExperimentEntity e2 = new ExperimentEntity();
-        e2.status = "RUNNING";
+        e2.status = ExperimentEntity.ExperimentStatus.LIVE;
         e2.configJson = "   ";
         when(experimentRepo.findById("exp_blankcfg")).thenReturn(Optional.of(e2));
         when(snapshotRepo.findByExperimentIdOrderByWindowStartAsc("exp_blankcfg")).thenReturn(List.of());

@@ -28,7 +28,7 @@ public class ExperimentDTO {
     public String name;
 
     /**
-     * draft, running, paused
+     * DRAFT, LIVE, PAUSED, ENDED
      */
     public String status;
 
@@ -36,4 +36,11 @@ public class ExperimentDTO {
     public JsonNode config;
     public LocalDateTime createdAt;
     public LocalDateTime updatedAt;
+
+    // B8 formalization fields
+    public String audienceSegmentId;
+    public JsonNode variants;
+    public JsonNode allocationInfo;
+    public JsonNode guardrails;
+    public JsonNode decision;
 }

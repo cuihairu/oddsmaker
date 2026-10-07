@@ -112,7 +112,7 @@ class ExperimentMetricsAggregatorTest {
 
         aggregator.aggregateRunning();
 
-        verify(experimentRepo, never()).findByStatus(anyString());
+        verify(experimentRepo, never()).findByStatus(any());
         verify(clickHouse, never()).query(anyString());
     }
 
@@ -124,7 +124,7 @@ class ExperimentMetricsAggregatorTest {
         bad.id = "exp_bad";
         ExperimentEntity good = new ExperimentEntity();
         good.id = "exp_good";
-        when(experimentRepo.findByStatus("running")).thenReturn(List.of(bad, good));
+        when(experimentRepo.findByStatus(ExperimentEntity.ExperimentStatus.LIVE)).thenReturn(List.of(bad, good));
         when(clickHouse.query(contains("experiment_exposure"), any(), eq("exp_bad")))
             .thenThrow(new RuntimeException("ch down"));
         when(clickHouse.query(contains("experiment_exposure"), any(), eq("exp_good")))
@@ -162,7 +162,7 @@ class ExperimentMetricsAggregatorTest {
     @DisplayName("aggregateRunning：无运行中实验（!running.isEmpty() 的空侧）")
     void aggregateRunningNoRunningExperiments() {
         when(clickHouse.isAvailable()).thenReturn(true);
-        when(experimentRepo.findByStatus("running")).thenReturn(List.of());
+        when(experimentRepo.findByStatus(ExperimentEntity.ExperimentStatus.LIVE)).thenReturn(List.of());
 
         aggregator.aggregateRunning();
 

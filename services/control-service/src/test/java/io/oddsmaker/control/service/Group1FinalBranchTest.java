@@ -476,7 +476,7 @@ class Group1FinalBranchTest {
         entity.gameId = "g1";
         entity.environmentId = "env1";
         entity.name = "n";
-        entity.status = "draft";
+        entity.status = ExperimentEntity.ExperimentStatus.DRAFT;
         entity.configJson = "{\"trafficPercent\":100,\"variants\":[]}";
         when(experimentRepo.findById("exp_1")).thenReturn(Optional.of(entity));
         when(experimentRepo.save(any(ExperimentEntity.class))).thenAnswer(inv -> inv.getArgument(0));
@@ -500,14 +500,14 @@ class Group1FinalBranchTest {
         toRun.gameId = "g1";
         toRun.environmentId = "env1";
         toRun.name = "n";
-        toRun.status = "draft";
+        toRun.status = ExperimentEntity.ExperimentStatus.DRAFT;
         toRun.configJson = "{\"trafficPercent\":100,\"variants\":"
             + "[{\"name\":\"control\",\"weight\":50},{\"name\":\"treatment\",\"weight\":50}]}";
         when(experimentRepo.findById("exp_torun")).thenReturn(Optional.of(toRun));
         ExperimentDTO start = new ExperimentDTO();
-        start.status = "running";
+        start.status = "LIVE";
         experimentService.updateExperiment("exp_torun", start);
-        assertEquals("running", toRun.status);
+        assertEquals("LIVE", toRun.status.name());
 
         // dto.status 非 null 但 normalize 后非 running → 153 的 equals(false) 侧（不触发 running 校验）
         ExperimentEntity toPause = new ExperimentEntity();
@@ -515,14 +515,14 @@ class Group1FinalBranchTest {
         toPause.gameId = "g1";
         toPause.environmentId = "env1";
         toPause.name = "n";
-        toPause.status = "running";
+        toPause.status = ExperimentEntity.ExperimentStatus.LIVE;
         toPause.configJson = "{\"trafficPercent\":100,\"variants\":"
             + "[{\"name\":\"control\",\"weight\":50},{\"name\":\"treatment\",\"weight\":50}]}";
         when(experimentRepo.findById("exp_pause")).thenReturn(Optional.of(toPause));
         ExperimentDTO pause = new ExperimentDTO();
-        pause.status = "paused";
+        pause.status = "PAUSED";
         experimentService.updateExperiment("exp_pause", pause);
-        assertEquals("paused", toPause.status);
+        assertEquals("PAUSED", toPause.status.name());
     }
 
     // ===== WebhookService =====

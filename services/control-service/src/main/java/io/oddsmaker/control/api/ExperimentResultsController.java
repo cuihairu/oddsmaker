@@ -170,7 +170,7 @@ public class ExperimentResultsController {
 
         Map<String, Object> response = new HashMap<>();
         response.put("experimentId", id);
-        response.put("status", experiment.status);
+        response.put("status", experiment.status.name());
         response.put("control", control);
         response.put("srm", statsService.srm(maxCountsPerVariant, expectedWeights));
         response.put("metrics", metricResults);

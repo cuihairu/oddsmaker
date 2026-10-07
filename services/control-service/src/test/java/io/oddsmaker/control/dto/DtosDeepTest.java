@@ -649,7 +649,7 @@ class DtosDeepTest {
         dto.environmentId = "env-1";
         dto.environment = "prod";
         dto.name = "按钮颜色实验";
-        dto.status = "running";
+        dto.status = "LIVE";
         dto.salt = "salt-1";
         dto.config = MAPPER.valueToTree(Map.of("variants", List.of("a", "b")));
         dto.createdAt = LocalDateTime.of(2023, 11, 15, 1, 33, 20);
@@ -660,7 +660,7 @@ class DtosDeepTest {
         assertEquals("env-1", dto.environmentId);
         assertEquals("prod", dto.environment);
         assertEquals("按钮颜色实验", dto.name);
-        assertEquals("running", dto.status);
+        assertEquals("LIVE", dto.status);
         assertEquals("salt-1", dto.salt);
         assertEquals(2, dto.config.get("variants").size());
         assertEquals("b", dto.config.get("variants").get(1).asText());
@@ -669,7 +669,7 @@ class DtosDeepTest {
 
         JsonNode json = MAPPER.valueToTree(dto);
         assertEquals("exp-1", json.get("id").asText());
-        assertEquals("running", json.get("status").asText());
+        assertEquals("LIVE", json.get("status").asText());
         assertEquals("prod", json.get("environment").asText());
         assertEquals(2, json.get("config").get("variants").size());
         // JavaTimeModule 默认把 LocalDateTime 序列化为数组节点 [年,月,日,时,分,秒]

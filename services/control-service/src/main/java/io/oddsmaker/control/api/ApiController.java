@@ -306,6 +306,11 @@ public class ApiController {
         return ResponseEntity.ok(experimentService.pauseExperiment(id));
     }
 
+    @PostMapping("/experiments/{id}/end")
+    public ResponseEntity<ExperimentDTO> endExperiment(@PathVariable String id) {
+        return ResponseEntity.ok(experimentService.endExperiment(id));
+    }
+
     @GetMapping("/experiments/{id}/assign")
     @Operation(summary = "服务端分流", description = "为主体分配实验变体（确定性哈希，仅 running 实验分流）")
     public ResponseEntity<Map<String, Object>> assignExperiment(@PathVariable String id,

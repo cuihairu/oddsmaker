@@ -46,7 +46,7 @@ public class ExperimentMetricsAggregator {
         if (!clickHouse.isAvailable()) {
             return;
         }
-        List<ExperimentEntity> running = experimentRepo.findByStatus("running");
+        List<ExperimentEntity> running = experimentRepo.findByStatus(ExperimentEntity.ExperimentStatus.LIVE);
         int snapshots = 0;
         for (ExperimentEntity e : running) {
             try {

@@ -9,7 +9,7 @@ import org.springframework.data.repository.query.Param;
 import java.util.List;
 
 public interface ExperimentRepo extends JpaRepository<ExperimentEntity, String> {
-    List<ExperimentEntity> findByStatus(String status);
+    List<ExperimentEntity> findByStatus(ExperimentEntity.ExperimentStatus status);
 
     @Query("SELECT e FROM ExperimentEntity e WHERE " +
            "(:gameId IS NULL OR e.gameId=:gameId) AND " +
@@ -18,10 +18,10 @@ public interface ExperimentRepo extends JpaRepository<ExperimentEntity, String> 
            "ORDER BY e.updatedAt DESC")
     Page<ExperimentEntity> search(@Param("gameId") String gameId,
                                   @Param("environmentId") String environmentId,
-                                  @Param("status") String status,
+                                  @Param("status") ExperimentEntity.ExperimentStatus status,
                                   Pageable pageable);
 
-    @Query("SELECT e FROM ExperimentEntity e WHERE e.gameId=:gameId AND e.environmentId=:environmentId AND e.status='running' ORDER BY e.updatedAt DESC")
+    @Query("SELECT e FROM ExperimentEntity e WHERE e.gameId=:gameId AND e.environmentId=:environmentId AND e.status='LIVE' ORDER BY e.updatedAt DESC")
     List<ExperimentEntity> findRunningConfigs(@Param("gameId") String gameId,
                                               @Param("environmentId") String environmentId);
 

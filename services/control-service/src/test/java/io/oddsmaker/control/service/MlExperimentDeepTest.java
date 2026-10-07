@@ -194,7 +194,7 @@ class MlExperimentDeepTest {
         e.gameId = "game_1";
         e.environmentId = "env_prod";
         e.name = "Old Name";
-        e.status = status;
+        e.status = "running".equals(status) ? ExperimentEntity.ExperimentStatus.LIVE : ExperimentEntity.ExperimentStatus.valueOf(status.toUpperCase());
         e.salt = "salt_1";
         e.configJson = configJson;
         e.createdAt = LocalDateTime.now();
@@ -829,7 +829,7 @@ class MlExperimentDeepTest {
         ExperimentDTO created = experimentService.createExperiment(dto);
 
         assertThat(created.id).startsWith("exp_");
-        assertThat(created.status).isEqualTo("draft");
+        assertThat(created.status).isEqualTo("DRAFT");
         assertThat(created.environment).isEqualTo("prod");
         assertThat(created.environmentId).isEqualTo("env_prod");
         assertThat(created.salt).isEqualTo(created.id);
@@ -889,7 +889,7 @@ class MlExperimentDeepTest {
         dto.gameId = "game_1";
         dto.environment = "prod";
         dto.name = "X";
-        dto.status = "running";
+        dto.status = "LIVE";
         lenient().when(gameRepo.findById("game_1")).thenReturn(Optional.of(game()));
         lenient().when(environmentRepo.findByGameIdAndNameAndDeletedAtIsNull("game_1", "prod"))
             .thenReturn(List.of(env("env_prod")));
@@ -907,7 +907,7 @@ class MlExperimentDeepTest {
         dto.gameId = "game_1";
         dto.environment = "prod";
         dto.name = "X";
-        dto.status = "live";
+        dto.status = "archived";   // B8 起 live 为合法枚举别名，改用真正不支持的状态钉拒绝路径
         lenient().when(gameRepo.findById("game_1")).thenReturn(Optional.of(game()));
         lenient().when(environmentRepo.findByGameIdAndNameAndDeletedAtIsNull("game_1", "prod"))
             .thenReturn(List.of(env("env_prod")));
@@ -939,7 +939,7 @@ class MlExperimentDeepTest {
     @DisplayName("validateConfig - variants 少于两个抛参数异常")
     void createExperiment_variantsNeedTwo() throws Exception {
         ExperimentDTO dto = baseExperimentDto();
-        dto.status = "running";
+        dto.status = "LIVE";
         dto.config = objectMapper.readTree("{\"variants\":[{\"name\":\"control\",\"weight\":1}]}");
 
         assertThatThrownBy(() -> experimentService.createExperiment(dto))
@@ -951,7 +951,7 @@ class MlExperimentDeepTest {
     @DisplayName("validateConfig - 变体名重复抛参数异常")
     void createExperiment_duplicateVariantNamesThrows() throws Exception {
         ExperimentDTO dto = baseExperimentDto();
-        dto.status = "running";
+        dto.status = "LIVE";
         dto.config = objectMapper.readTree(
             "{\"variants\":[{\"name\":\"control\",\"weight\":1},{\"name\":\"control\",\"weight\":1}]}");
 
@@ -964,7 +964,7 @@ class MlExperimentDeepTest {
     @DisplayName("validateConfig - 变体权重非正整数抛参数异常")
     void createExperiment_invalidWeightThrows() throws Exception {
         ExperimentDTO dto = baseExperimentDto();
-        dto.status = "running";
+        dto.status = "LIVE";
         dto.config = objectMapper.readTree(
             "{\"variants\":[{\"name\":\"control\",\"weight\":0},{\"name\":\"treatment\",\"weight\":1}]}");
 
@@ -1008,11 +1008,11 @@ class MlExperimentDeepTest {
 
         ExperimentDTO dto = new ExperimentDTO();
         dto.name = "New Name";
-        dto.status = "running";
+        dto.status = "LIVE";
 
         ExperimentDTO updated = experimentService.updateExperiment("exp_1", dto);
 
-        assertThat(updated.status).isEqualTo("running");
+        assertThat(updated.status).isEqualTo("LIVE");
         assertThat(updated.name).isEqualTo("New Name");
         assertThat(entity.updatedAt).isNotNull();
     }
@@ -1063,7 +1063,7 @@ class MlExperimentDeepTest {
         lenient().when(experimentRepo.findById("exp_1")).thenReturn(Optional.of(entity));
 
         ExperimentDTO dto = new ExperimentDTO();
-        dto.status = "running";
+        dto.status = "LIVE";
 
         assertThatThrownBy(() -> experimentService.updateExperiment("exp_1", dto))
             .isInstanceOf(IllegalArgumentException.class)
@@ -1080,7 +1080,7 @@ class MlExperimentDeepTest {
 
         ExperimentDTO published = experimentService.publishExperiment("exp_1");
 
-        assertThat(published.status).isEqualTo("running");
+        assertThat(published.status).isEqualTo("LIVE");
         assertThat(entity.updatedAt).isNotNull();
     }
 
@@ -1116,7 +1116,7 @@ class MlExperimentDeepTest {
 
         ExperimentDTO paused = experimentService.pauseExperiment("exp_1");
 
-        assertThat(paused.status).isEqualTo("paused");
+        assertThat(paused.status).isEqualTo("PAUSED");
     }
 
     @Test

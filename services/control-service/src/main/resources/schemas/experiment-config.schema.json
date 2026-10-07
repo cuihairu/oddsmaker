@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "classpath:schemas/experiment-config.schema.json",
-  "title": "Oddsmaker Experiment Config v1",
+  "$id": "schema/json/experiment-config.schema.json",
+  "title": "Oddsmaker Experiment Config",
   "type": "object",
   "properties": {
     "variants": {
@@ -32,6 +32,33 @@
       "properties": {
         "primary": { "type": "string" },
         "secondary": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": true
+    },
+    "allocation": {
+      "type": "object",
+      "properties": {
+        "strategy": { "type": "string" },
+        "weights": { "type": "object" }
+      },
+      "additionalProperties": true
+    },
+    "guardrails": {
+      "type": "object",
+      "properties": {
+        "maxExposure": { "type": "integer", "minimum": 0 },
+        "minSampleSize": { "type": "integer", "minimum": 0 },
+        "stopConditions": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": true
+    },
+    "decision": {
+      "type": "object",
+      "properties": {
+        "status": { "type": "string", "enum": ["PENDING", "ADOPTED", "REJECTED", "INCONCLUSIVE"] },
+        "winner": { "type": "string" },
+        "decidedAt": { "type": "string" },
+        "reason": { "type": "string" }
       },
       "additionalProperties": true
     }

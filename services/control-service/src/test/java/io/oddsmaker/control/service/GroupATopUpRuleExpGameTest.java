@@ -14,6 +14,7 @@ import io.oddsmaker.control.jpa.GameEnvironmentRepo;
 import io.oddsmaker.control.jpa.GameRepo;
 import io.oddsmaker.control.jpa.RiskRuleEntity;
 import io.oddsmaker.control.jpa.RiskRuleRepo;
+import io.oddsmaker.control.jpa.SegmentRepo;
 import io.oddsmaker.control.jpa.StorageProfileRepo;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.Predicate;
@@ -25,6 +26,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
@@ -58,11 +60,19 @@ import static org.mockito.Mockito.when;
 @DisplayName("片A分支补充：风控规则/实验/游戏")
 class GroupATopUpRuleExpGameTest {
 
-    // ===== RiskRuleService =====
+    // ===== 共享 Mocks =====
 
     @Mock RiskRuleRepo ruleRepo;
     @Mock GameRepo gameRepo;
+    @Mock GameEnvironmentRepo environmentRepo;
+    @Mock ExperimentRepo experimentRepo;
+    @Mock SegmentRepo segmentRepo;
     @Mock AuditLogService auditLog;
+    // 真实 mapper（@Spy）：ExperimentService 的 config 解析与测试侧 JSON 构造都要真实行为，mock 会返回 null
+    @Spy ObjectMapper experimentMapper = new ObjectMapper();
+
+    @InjectMocks
+    private ExperimentService experimentService;
 
     private RiskRuleService ruleService() {
         return new RiskRuleService(ruleRepo, gameRepo, auditLog);
@@ -134,17 +144,14 @@ class GroupATopUpRuleExpGameTest {
     }
 
     // ===== ExperimentService =====
+    // 共享 mocks 已在类顶部声明（experimentRepo, environmentRepo, segmentRepo, experimentMapper, auditLog）
 
-    @Mock ExperimentRepo experimentRepo;
-    @Mock GameEnvironmentRepo environmentRepo;
-    private final ObjectMapper experimentMapper = new ObjectMapper();
     @Mock AuditLogService expAuditLog;
-    private ExperimentService experimentService;   // setUp 构造器注入（objectMapper 用真实实例）
 
     // ===== GameService =====
-    // GameService 字段注入按字段名匹配：gameRepo 用上文 RiskRule 段声明的同一 @Mock
-
-    @Mock GameEnvironmentRepo gameEnvironmentRepo;
+    // GameService 字段注入按字段名匹配：gameRepo 与 environmentRepo 均用上文声明的同一 @Mock。
+    // 不能再声明第二个 GameEnvironmentRepo mock——构造器注入对同类型双候选无法按名消歧，
+    // 会把后声明的注入 ExperimentService，踩中「Environment not found」。
     @Mock ApiKeyRepo apiKeyRepo;
     @Mock StorageProfileRepo storageProfileRepo;
     @Mock AuditLogService gameAuditLog;
@@ -162,8 +169,7 @@ class GroupATopUpRuleExpGameTest {
 
     @BeforeEach
     void setUp() {
-        // ExperimentService 依赖（与 GameService 分开的构造器）
-        experimentService = new ExperimentService(experimentRepo, gameRepo, environmentRepo, experimentMapper, expAuditLog);
+        // ExperimentService 依赖（通过 @InjectMocks 注入，objectMapper 为真实实例）
         lenient().when(experimentRepo.save(any(ExperimentEntity.class))).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(experimentRepo.existsById(anyString())).thenReturn(false);
         lenient().when(experimentRepo.search(any(), any(), any(), any(Pageable.class)))
@@ -171,10 +177,11 @@ class GroupATopUpRuleExpGameTest {
         lenient().when(environmentRepo.findById(anyString())).thenReturn(Optional.empty());
         lenient().when(environmentRepo.findByGameIdAndNameAndDeletedAtIsNull(anyString(), anyString()))
             .thenReturn(List.of());
+        lenient().when(segmentRepo.findById(anyString())).thenReturn(Optional.empty());
 
-        // GameService 依赖
+        // GameService 依赖（environmentRepo 共用 Experiment 段的同一 mock）
         lenient().when(gameRepo.save(any(GameEntity.class))).thenAnswer(inv -> inv.getArgument(0));
-        lenient().when(gameEnvironmentRepo.countByGameIdAndDeletedAtIsNull(anyString())).thenReturn(0L);
+        lenient().when(environmentRepo.countByGameIdAndDeletedAtIsNull(anyString())).thenReturn(0L);
         lenient().when(apiKeyRepo.countByGameIdAndStatus(anyString(), any())).thenReturn(0L);
         lenient().when(storageProfileRepo.existsById(anyString())).thenReturn(true);
     }
@@ -294,7 +301,7 @@ class GroupATopUpRuleExpGameTest {
         entity.gameId = "g1";
         entity.environmentId = "env1";
         entity.name = "n";
-        entity.status = "draft";
+        entity.status = ExperimentEntity.ExperimentStatus.DRAFT;
         entity.salt = "s";
         entity.configJson = "{\"variants\":[{\"name\":\"a\",\"weight\":1},{\"name\":\"b\",\"weight\":1}]}";
         when(experimentRepo.findById("exp1")).thenReturn(Optional.of(entity));
@@ -304,13 +311,13 @@ class GroupATopUpRuleExpGameTest {
         assertEquals("exp1", experimentService.updateExperiment("exp1", blankSalt).salt);
 
         ExperimentDTO running = dto("n");
-        running.status = "running";
-        assertEquals("running", experimentService.updateExperiment("exp1", running).status);
+        running.status = "LIVE";
+        assertEquals("LIVE", experimentService.updateExperiment("exp1", running).status);
 
         ExperimentDTO blankStatus = dto("n");
         blankStatus.status = "   ";
         // 上一段已把同一 entity 的 status 改为 running，空白 status 不覆盖 → 保持 running
-        assertEquals("running", experimentService.updateExperiment("exp1", blankStatus).status);
+        assertEquals("LIVE", experimentService.updateExperiment("exp1", blankStatus).status);
     }
 
     @Test
@@ -322,7 +329,7 @@ class GroupATopUpRuleExpGameTest {
         ExperimentEntity withControl = new ExperimentEntity();
         withControl.id = "exp1";
         withControl.salt = "s";
-        withControl.status = "running";
+        withControl.status = ExperimentEntity.ExperimentStatus.LIVE;
         withControl.configJson = "{\"control_variant\":\"cv\"}";   // 无 variants → assign 返回 null → 回落
         when(experimentRepo.findById("exp1")).thenReturn(Optional.of(withControl));
         assertEquals("cv", experimentService.assign("exp1", "subj"));
@@ -330,7 +337,7 @@ class GroupATopUpRuleExpGameTest {
         ExperimentEntity noControl = new ExperimentEntity();
         noControl.id = "exp2";
         noControl.salt = "s";
-        noControl.status = "running";
+        noControl.status = ExperimentEntity.ExperimentStatus.LIVE;
         noControl.configJson = "{}";
         when(experimentRepo.findById("exp2")).thenReturn(Optional.of(noControl));
         assertNull(experimentService.assign("exp2", "subj"));
@@ -343,7 +350,7 @@ class GroupATopUpRuleExpGameTest {
             ExperimentEntity entity = new ExperimentEntity();
             entity.id = "exp1";
             entity.salt = "s";
-            entity.status = "draft";
+            entity.status = ExperimentEntity.ExperimentStatus.DRAFT;
             entity.configJson = configJson;
             when(experimentRepo.findById("exp1")).thenReturn(Optional.of(entity));
             assertThrows(IllegalArgumentException.class, () -> experimentService.publishExperiment("exp1"));
@@ -358,7 +365,7 @@ class GroupATopUpRuleExpGameTest {
         entity.gameId = "g1";
         entity.environmentId = "env_del";
         entity.name = "n";
-        entity.status = "draft";
+        entity.status = ExperimentEntity.ExperimentStatus.DRAFT;
         entity.salt = "s";
         entity.configJson = "{}";
         when(experimentRepo.findById("exp1")).thenReturn(Optional.of(entity));
