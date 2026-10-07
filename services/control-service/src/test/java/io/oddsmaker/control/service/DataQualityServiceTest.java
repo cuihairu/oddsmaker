@@ -60,12 +60,17 @@ class DataQualityServiceTest {
         assertEquals(100, first.getValue().received);
 
         DataQualityMetricsEntity existing = full(100, 90, 0, 5, 0, 0, 0);
+        // enrich/DLQ 两列归 DLQ consumer 所有：快照覆盖必须保留，否则 60s 覆盖会抹掉 enrich 增量
+        existing.duplicatesEnrich = 7;
+        existing.dlqOther = 3;
         when(repo.findByGameIdAndEnvironmentAndWindowStartAndWindowSec(
             any(), any(), any(), anyInt())).thenReturn(Optional.of(existing));
         service.ingest(full(200, 180, 0, 10, 0, 0, 0));
         ArgumentCaptor<DataQualityMetricsEntity> second = ArgumentCaptor.forClass(DataQualityMetricsEntity.class);
         org.mockito.Mockito.verify(repo, org.mockito.Mockito.times(2)).save(second.capture());
         assertEquals(200, second.getValue().received);
+        assertEquals(7, second.getValue().duplicatesEnrich);
+        assertEquals(3, second.getValue().dlqOther);
         assertTrue(second.getValue().updatedAt != null);
     }
 
@@ -99,9 +104,39 @@ class DataQualityServiceTest {
     }
 
     @Test
+    @DisplayName("mergeEnrichCounts：新窗建行增量；既有行累加；网关列不动；缺键跳过")
+    void mergeEnrichCountsIncrements() {
+        when(repo.findByGameIdAndEnvironmentAndWindowStartAndWindowSec(
+            any(), any(), any(), anyInt())).thenReturn(Optional.empty());
+        LocalDateTime win = LocalDateTime.of(2026, 10, 7, 12, 0);
+        service.mergeEnrichCounts("g1", "prod", win, 2, 1);
+        ArgumentCaptor<DataQualityMetricsEntity> created = ArgumentCaptor.forClass(DataQualityMetricsEntity.class);
+        org.mockito.Mockito.verify(repo).save(created.capture());
+        assertEquals(2, created.getValue().duplicatesEnrich);
+        assertEquals(1, created.getValue().dlqOther);
+        assertEquals(0, created.getValue().received);
+        assertEquals(300, created.getValue().windowSec);
+
+        DataQualityMetricsEntity existing = full(100, 90, 0, 5, 0, 0, 0);
+        existing.duplicatesEnrich = 2;
+        existing.dlqOther = 1;
+        when(repo.findByGameIdAndEnvironmentAndWindowStartAndWindowSec(
+            any(), any(), any(), anyInt())).thenReturn(Optional.of(existing));
+        service.mergeEnrichCounts("g1", "prod", win, 3, 0);
+        ArgumentCaptor<DataQualityMetricsEntity> merged = ArgumentCaptor.forClass(DataQualityMetricsEntity.class);
+        org.mockito.Mockito.verify(repo, org.mockito.Mockito.times(2)).save(merged.capture());
+        assertEquals(5, merged.getValue().duplicatesEnrich);
+        assertEquals(1, merged.getValue().dlqOther);
+        assertEquals(100, merged.getValue().received);
+        assertEquals(90, merged.getValue().accepted);
+
+        service.mergeEnrichCounts(" ", "prod", win, 1, 1);
+        org.mockito.Mockito.verify(repo, org.mockito.Mockito.times(2)).save(any());
+    }
+
+    @Test
     @DisplayName("series/summary：五率读时算，0 分母得 0.0，rejectTop 非零降序")
-    void ratesAndRejectTop() {
-        // received=100, accepted=90（含 gateway dup 2）, rejected 5+5=10, sampled 0 → 恒等成立
+    void ratesAndRejectTop() {        // received=100, accepted=90（含 gateway dup 2）, rejected 5+5=10, sampled 0 → 恒等成立
         DataQualityMetricsEntity row = full(100, 90, 0, 5, 2, 1, 4);
         when(repo.findByGameIdAndEnvironmentAndWindowStartGreaterThanEqualOrderByWindowStartDesc(
             any(), any(), any())).thenReturn(List.of(row));

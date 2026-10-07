@@ -19,7 +19,8 @@ import java.util.Optional;
  * B10 数据质量指标服务（设计定稿 07-b10 §4）。
  *
  * 摄取：网关每 60s 快照 POST /internal/data-quality，携带自窗口起点以来的累计值，
- * 按唯一键 (game_id, environment, window_start, window_sec) 整行覆盖——乱序与重复投递无害。
+ * 按唯一键 (game_id, environment, window_start, window_sec) 覆盖网关拥有的列——乱序与重复投递无害。
+ * duplicates_enrich / dlq_other 两列归 DLQ consumer 所有（mergeEnrichCounts 增量合并），快照覆盖不携带。
  * 落表时校验恒等式 received = accepted + Σrejected + sampled_out（accepted 含 duplicates_gateway），
  * 破式记日志不拒收——计数路径漏分支时恒等式先于任何阈值告警发现问题。
  *
@@ -78,11 +79,43 @@ public class DataQualityService {
         entity.rejectedScopeMismatch = incoming.rejectedScopeMismatch;
         entity.rejectedKafkaError = incoming.rejectedKafkaError;
         entity.duplicatesGateway = incoming.duplicatesGateway;
-        entity.duplicatesEnrich = incoming.duplicatesEnrich;
         entity.late = incoming.late;
-        entity.dlqOther = incoming.dlqOther;
+        // duplicates_enrich / dlq_other 两列归 DLQ consumer 所有（网关快照不携带），
+        // 覆盖时保留既有值，否则 60s 快照会把 enrich 侧增量抹掉
+        if (existing.isPresent()) {
+            entity.duplicatesEnrich = existing.get().duplicatesEnrich;
+            entity.dlqOther = existing.get().dlqOther;
+        }
         entity.updatedAt = LocalDateTime.now();
         return repo.save(entity);
+    }
+
+    /**
+     * DLQ 消费增量合并（唯一写入方是 DeadLetterConsumer）：
+     * enrich 侧重复计数与无主 DLQ 兜底按窗口累加；网关拥有的列（received/accepted/拒绝原因等）不动。
+     * 行不存在则建窗（received=0），恒等式余项为负即 enrich 增量先行到达的正常形态。
+     */
+    @Transactional
+    public void mergeEnrichCounts(String gameId, String environment, LocalDateTime windowStart,
+                                  long duplicatesDelta, long otherDelta) {
+        if (gameId == null || gameId.isBlank() || environment == null || environment.isBlank()
+            || windowStart == null) {
+            return;
+        }
+        DataQualityMetricsEntity entity = repo
+            .findByGameIdAndEnvironmentAndWindowStartAndWindowSec(gameId, environment, windowStart, 300)
+            .orElseGet(() -> {
+                DataQualityMetricsEntity fresh = new DataQualityMetricsEntity();
+                fresh.gameId = gameId;
+                fresh.environment = environment;
+                fresh.windowStart = windowStart;
+                fresh.windowSec = 300;
+                return fresh;
+            });
+        entity.duplicatesEnrich += duplicatesDelta;
+        entity.dlqOther += otherDelta;
+        entity.updatedAt = LocalDateTime.now();
+        repo.save(entity);
     }
 
     /** 窗口序列：近 hours 小时，新窗在前；每窗带五率与恒等式余项。 */
