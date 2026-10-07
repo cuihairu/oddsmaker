@@ -20,6 +20,7 @@
 | [04-redesign](./04-redesign) | 新架构：单公司多游戏、事件模型、数据链路、风控体系 |
 | [05-roadmap](./05-roadmap) | 实施路线：先统一模型，再补游戏分析和风控 |
 | [06-od2-restructure-plan](./06-od2-restructure-plan) | 2.0 重构计划书：领域模型/模块边界/数据契约一次性定死，B1~B10 可执行批次 |
+| [07-b10-data-quality-feature-store](./07-b10-data-quality-feature-store) | B10 设计定稿：五项数据质量指标口径与落库方案、feature_store 双写 schema、Lineage 方向记录 |
 
 ## 一句话结论
 
