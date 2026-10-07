@@ -130,6 +130,13 @@ public class BatchController {
                     inspect(event, keyContext, EventInspectorBuffer.OUTCOME_REJECTED, "api_key_scope_mismatch", null);
                     continue;
                 }
+                // B7 §4.4 Schema 事件面收敛：key 作用域的 ACTIVE EventSchema 未定义该事件 → 拒收
+                // （rejectUnknownEvents 默认 true 由 Control 下发；dev 环境豁免：联调期事件先行于 Schema 收敛）
+                if (isUnknownEvent(event, keyContext)) {
+                    reject(resp, event, "unknown_event");
+                    inspect(event, keyContext, EventInspectorBuffer.OUTCOME_REJECTED, "unknown_event", null);
+                    continue;
+                }
                 // eventType 兜底已由上方 normalizeCompatFields 完成，此处必非空
                 // 风控前置：事件时间戳信差检查（默认 ±24h，可配 oddsmaker.risk.max-event-ts-drift-ms）
                 if (!replayGuard.isTimestampPlausible(event.tsClient, System.currentTimeMillis())) {
@@ -308,6 +315,23 @@ public class BatchController {
         }
         return keyContext.gameId.equals(event.gameId)
             && keyContext.environment.equals(event.environment);
+    }
+
+    /**
+     * B7 §4.4 未知事件判定：仅对已下发 Schema 事件面的 scoped key 生效——
+     * rejectUnknownEvents 非 true（未下发/null/false）不启用；dev 环境豁免；
+     * eventNames 空清单=Schema 无事件定义，一切事件视为未知（诚实语义）。
+     * static 便于无容器单测直接覆盖分支。
+     */
+    static boolean isUnknownEvent(Event event, AuthService.ApiKeyContext keyContext) {
+        if (keyContext == null || !keyContext.isScoped()
+                || !Boolean.TRUE.equals(keyContext.rejectUnknownEvents)) {
+            return false;
+        }
+        if ("dev".equalsIgnoreCase(keyContext.environment)) {
+            return false;
+        }
+        return keyContext.eventNames == null || !keyContext.eventNames.contains(event.eventName);
     }
 
     private List<Event> parseEvents(byte[] raw, String contentType) {

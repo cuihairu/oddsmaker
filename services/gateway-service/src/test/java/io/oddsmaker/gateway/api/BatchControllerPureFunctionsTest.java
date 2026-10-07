@@ -249,4 +249,42 @@ class BatchControllerPureFunctionsTest {
         ReflectionTestUtils.invokeMethod(withPolicy, "applyPropsFilter", noProps, (Object) null);
         assertNull(noProps.props);
     }
+
+    @Test
+    @DisplayName("isUnknownEvent：B7 §4.4 分支矩阵——未下发不启用/dev 豁免/清单命中与未命中")
+    void isUnknownEventBranchMatrix() {
+        io.oddsmaker.common.model.Event e = new io.oddsmaker.common.model.Event();
+        e.eventName = "bet_place";
+
+        // keyContext null / 未 scoped：不启用
+        assertEquals(false, BatchController.isUnknownEvent(e, null));
+        io.oddsmaker.gateway.config.AuthService.ApiKeyContext unscoped =
+                new io.oddsmaker.gateway.config.AuthService.ApiKeyContext();
+        unscoped.rejectUnknownEvents = true;
+        assertEquals(false, BatchController.isUnknownEvent(e, unscoped));
+
+        // scoped 但未下发开关（null）或 false：不启用
+        io.oddsmaker.gateway.config.AuthService.ApiKeyContext scoped =
+                new io.oddsmaker.gateway.config.AuthService.ApiKeyContext();
+        scoped.gameId = "g";
+        scoped.environment = "prod";
+        assertEquals(false, BatchController.isUnknownEvent(e, scoped));
+        scoped.rejectUnknownEvents = false;
+        assertEquals(false, BatchController.isUnknownEvent(e, scoped));
+
+        // dev 环境豁免（即使开关打开）
+        scoped.rejectUnknownEvents = true;
+        scoped.environment = "dev";
+        assertEquals(false, BatchController.isUnknownEvent(e, scoped));
+
+        // prod + 开关：eventNames null/空=全未知；命中=已知；未命中=未知
+        scoped.environment = "prod";
+        assertEquals(true, BatchController.isUnknownEvent(e, scoped));
+        scoped.eventNames = List.of();
+        assertEquals(true, BatchController.isUnknownEvent(e, scoped));
+        scoped.eventNames = List.of("bet_settle");
+        assertEquals(true, BatchController.isUnknownEvent(e, scoped));
+        scoped.eventNames = List.of("bet_place", "bet_settle");
+        assertEquals(false, BatchController.isUnknownEvent(e, scoped));
+    }
 }

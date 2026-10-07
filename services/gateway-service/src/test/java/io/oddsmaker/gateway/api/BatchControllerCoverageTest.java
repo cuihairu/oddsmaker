@@ -116,6 +116,71 @@ class BatchControllerCoverageTest {
     }
 
     @Test
+    @DisplayName("B7 §4.4 未知事件拒收：prod 作用域 key 事件面未含该事件 → unknown_event")
+    void unknownEventRejected() {
+        AuthService.ApiKeyContext scoped = unscopedKey();
+        scoped.gameId = "game_x";
+        scoped.environment = "prod";
+        scoped.rejectUnknownEvents = true;
+        scoped.eventNames = List.of("bet_place", "bet_settle");
+        when(authService.getContext("pk_schema")).thenReturn(scoped);
+
+        client.post().uri("/v1/batch")
+            .contentType(MediaType.APPLICATION_JSON)
+            .header("x-api-key", "pk_schema")
+            .bodyValue("[" + event("01JSCHEMA0001", "game_x", "d1", null) + "]")
+            .exchange()
+            .expectStatus().is2xxSuccessful()
+            .expectBody()
+            .jsonPath("$.rejected[0].reason").isEqualTo("unknown_event")
+            .jsonPath("$.accepted.length()").isEqualTo(0);
+    }
+
+    @Test
+    @DisplayName("B7 §4.4 事件面命中：同 key 声明的事件正常接收")
+    void schemaKnownEventAccepted() {
+        AuthService.ApiKeyContext scoped = unscopedKey();
+        scoped.gameId = "game_x";
+        scoped.environment = "prod";
+        scoped.rejectUnknownEvents = true;
+        scoped.eventNames = List.of("level_start");
+        when(authService.getContext("pk_schema")).thenReturn(scoped);
+
+        client.post().uri("/v1/batch")
+            .contentType(MediaType.APPLICATION_JSON)
+            .header("x-api-key", "pk_schema")
+            .bodyValue("[" + event("01JSCHEMA0002", "game_x", "d1", null) + "]")
+            .exchange()
+            .expectStatus().is2xxSuccessful()
+            .expectBody()
+            .jsonPath("$.accepted[0]").isEqualTo("01JSCHEMA0002");
+    }
+
+    @Test
+    @DisplayName("B7 §4.4 dev 环境豁免：开关打开也不拒收未知事件")
+    void devEnvironmentExempt() {
+        AuthService.ApiKeyContext devKey = unscopedKey();
+        devKey.gameId = "game_x";
+        devKey.environment = "dev";
+        devKey.rejectUnknownEvents = true;
+        devKey.eventNames = List.of("bet_place");
+        when(authService.getContext("pk_schema")).thenReturn(devKey);
+
+        // event() 硬编码 prod 环境，dev 豁免用例需 dev 环境事件（scope 要求 key/事件环境一致）
+        String devEvent = "{\"event_id\":\"01JSCHEMA0003\",\"event_name\":\"level_start\","
+            + "\"game_id\":\"game_x\",\"environment\":\"dev\","
+            + "\"device_id\":\"d1\",\"ts_client\":1730000000000}";
+        client.post().uri("/v1/batch")
+            .contentType(MediaType.APPLICATION_JSON)
+            .header("x-api-key", "pk_schema")
+            .bodyValue("[" + devEvent + "]")
+            .exchange()
+            .expectStatus().is2xxSuccessful()
+            .expectBody()
+            .jsonPath("$.accepted[0]").isEqualTo("01JSCHEMA0003");
+    }
+
+    @Test
     @DisplayName("维护态环境拒绝写入：503 environment_unavailable")
     void maintenanceEnvRejected() {
         AuthService.ApiKeyContext maint = unscopedKey();

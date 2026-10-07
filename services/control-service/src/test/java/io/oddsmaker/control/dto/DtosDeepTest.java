@@ -612,7 +612,7 @@ class DtosDeepTest {
         assertEquals(TrackingPlanEntity.PlanStatus.DRAFT, def.status);
         assertEquals(TrackingPlanEntity.ValidationStrictness.STRICT, def.strictness);
         assertEquals(Boolean.TRUE, def.enableAutoValidation);
-        assertEquals(Boolean.FALSE, def.rejectUnknownEvents);
+        assertEquals(Boolean.TRUE, def.rejectUnknownEvents);   // B7 §2.3：默认收口 true（dev 网关豁免）
         assertEquals(0, def.totalEvents);
         assertEquals(0, def.activeEvents);
 

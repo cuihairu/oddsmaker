@@ -97,6 +97,12 @@ class FinalSweep2Test {
     private AuditLogService auditLog;
 
     @Mock
+    private io.oddsmaker.control.jpa.TrackingPlanRepo trackingPlanRepo;
+
+    @Mock
+    private io.oddsmaker.control.jpa.EventDefinitionRepo eventDefinitionRepo;
+
+    @Mock
     private GameRepo gameRepo;
 
     @Mock

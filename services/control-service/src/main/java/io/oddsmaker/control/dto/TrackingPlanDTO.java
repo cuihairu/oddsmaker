@@ -94,7 +94,7 @@ public class TrackingPlanDTO {
         entity.environmentId = this.environmentId;
         entity.strictness = this.strictness != null ? this.strictness : TrackingPlanEntity.ValidationStrictness.STRICT;
         entity.enableAutoValidation = this.enableAutoValidation != null ? this.enableAutoValidation : true;
-        entity.rejectUnknownEvents = this.rejectUnknownEvents != null ? this.rejectUnknownEvents : false;
+        entity.rejectUnknownEvents = this.rejectUnknownEvents != null ? this.rejectUnknownEvents : true;
         entity.compatibility = this.compatibility != null ? this.compatibility : TrackingPlanEntity.Compatibility.NONE;
         entity.piiPolicy = this.piiPolicy;
         entity.retentionDays = this.retentionDays;

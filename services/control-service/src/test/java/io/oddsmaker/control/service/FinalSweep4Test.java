@@ -247,10 +247,17 @@ MLModelService service = new MLModelService();
     @Mock
     private StorageProfileRepo storageProfileRepo;
 
+    @Mock
+    private io.oddsmaker.control.jpa.TrackingPlanRepo trackingPlanRepo;
+
+    @Mock
+    private io.oddsmaker.control.jpa.EventDefinitionRepo eventDefinitionRepo;
+
     @Test
     @DisplayName("网关侧 Key：环境已删/归属不匹配返回 null")
     void gatewayKeyEnvBranches() {
-        ControlService service = new ControlService(keyRepo, gameRepo, envRepo, storageProfileRepo, auditLog);
+        ControlService service = new ControlService(keyRepo, gameRepo, envRepo, storageProfileRepo,
+            trackingPlanRepo, eventDefinitionRepo, auditLog);
         io.oddsmaker.control.jpa.ApiKeyEntity key = new io.oddsmaker.control.jpa.ApiKeyEntity();
         key.apiKey = "ak_1";
         key.gameId = "g";

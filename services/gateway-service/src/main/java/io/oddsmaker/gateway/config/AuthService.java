@@ -58,6 +58,9 @@ public class AuthService {
         public String piiIp;
         public List<String> denyKeys;
         public List<String> maskKeys;
+        // B7 §4.4 Schema 事件面：rejectUnknownEvents=null/缺省=不启用；eventNames=ACTIVE Schema 事件名清单
+        public Boolean rejectUnknownEvents;
+        public List<String> eventNames;
 
         public boolean isScoped() {
             return gameId != null && !gameId.isBlank() && environment != null && !environment.isBlank();

@@ -48,6 +48,8 @@ class ControlServiceBranchTopUpTest {
     @Mock GameRepo gameRepo;
     @Mock GameEnvironmentRepo envRepo;
     @Mock StorageProfileRepo storageProfileRepo;
+    @Mock io.oddsmaker.control.jpa.TrackingPlanRepo trackingPlanRepo;
+    @Mock io.oddsmaker.control.jpa.EventDefinitionRepo eventDefinitionRepo;
     @Mock io.oddsmaker.control.service.AuditLogService auditLog;
 
     @InjectMocks ControlService controlService;

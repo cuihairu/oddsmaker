@@ -52,7 +52,7 @@ public class TrackingPlanEntity {
     public Boolean enableAutoValidation = true;  // 是否启用自动验证
 
     @Column(name = "reject_unknown_events")
-    public Boolean rejectUnknownEvents = false; // 是否拒绝未定义的事件
+    public Boolean rejectUnknownEvents = true; // 是否拒绝未定义的事件（B7 §2.3 默认收口 true，dev 环境网关豁免）
 
     // ===== B7 EventSchema 一等资源字段（计划书 §2.3/§4.4） =====
 

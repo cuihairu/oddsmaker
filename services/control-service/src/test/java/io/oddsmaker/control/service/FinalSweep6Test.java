@@ -957,11 +957,18 @@ class FinalSweep6Test {
     @Mock
     private ApiKeyRepo apiKeyRepoForControl;
 
+    @Mock
+    private io.oddsmaker.control.jpa.TrackingPlanRepo trackingPlanRepoForControl;
+
+    @Mock
+    private io.oddsmaker.control.jpa.EventDefinitionRepo eventDefinitionRepoForControl;
+
     @Test
     @DisplayName("applyStorageProfile：显式 displayName/active/strategy 与空名拒绝分支")
     void controlApplyStorageProfileBranches() {
         ControlService service = new ControlService(
-            apiKeyRepoForControl, gameRepo, gameEnvironmentRepo, storageProfileRepo, auditLog);
+            apiKeyRepoForControl, gameRepo, gameEnvironmentRepo, storageProfileRepo,
+            trackingPlanRepoForControl, eventDefinitionRepoForControl, auditLog);
 
         StorageProfileEntity existing = new StorageProfileEntity();
         existing.id = "sp1";

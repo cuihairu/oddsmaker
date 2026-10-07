@@ -51,6 +51,12 @@ class ControlServiceTest {
     private StorageProfileRepo storageProfileRepo;
 
     @Mock
+    private io.oddsmaker.control.jpa.TrackingPlanRepo trackingPlanRepo;
+
+    @Mock
+    private io.oddsmaker.control.jpa.EventDefinitionRepo eventDefinitionRepo;
+
+    @Mock
     private AuditLogService auditLog;
 
     @InjectMocks

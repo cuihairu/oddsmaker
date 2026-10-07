@@ -19,17 +19,23 @@ public class ControlService {
     private final GameRepo gameRepo;
     private final GameEnvironmentRepo envRepo;
     private final StorageProfileRepo storageProfileRepo;
+    private final TrackingPlanRepo trackingPlanRepo;
+    private final EventDefinitionRepo eventDefinitionRepo;
     private final io.oddsmaker.control.service.AuditLogService auditLog;
 
     public ControlService(ApiKeyRepo keyRepo,
                           GameRepo gameRepo,
                           GameEnvironmentRepo envRepo,
                           StorageProfileRepo storageProfileRepo,
+                          TrackingPlanRepo trackingPlanRepo,
+                          EventDefinitionRepo eventDefinitionRepo,
                           io.oddsmaker.control.service.AuditLogService auditLog) {
         this.keyRepo = keyRepo;
         this.gameRepo = gameRepo;
         this.envRepo = envRepo;
         this.storageProfileRepo = storageProfileRepo;
+        this.trackingPlanRepo = trackingPlanRepo;
+        this.eventDefinitionRepo = eventDefinitionRepo;
         this.auditLog = auditLog;
     }
 
@@ -300,7 +306,35 @@ public class ControlService {
         out.piiIp = key.piiIp;
         out.denyKeys = split(key.denyKeys);
         out.maskKeys = split(key.maskKeys);
+        // B7 §4.4 Schema 事件面下发：环境级 ACTIVE EventSchema 优先，缺位回退全局版；
+        // 无 Schema 则不下发（Gateway 侧 null/缺省=不启用未知事件拒收）
+        TrackingPlanEntity schema = findActiveSchemaPlan(key.gameId, environment.id);
+        if (schema != null) {
+            out.rejectUnknownEvents = Boolean.TRUE.equals(schema.rejectUnknownEvents);
+            out.eventNames = eventDefinitionRepo.findActiveByTrackingPlanId(schema.id).stream()
+                .map(def -> def.eventName)
+                .distinct()
+                .sorted()
+                .collect(Collectors.toList());
+        }
         return out;
+    }
+
+    /**
+     * B7 §4.4：key 作用域的 ACTIVE EventSchema——环境绑定版优先（§4.4 环境级覆盖全局），
+     * 无环境绑定版时回退全局版；同级多个取最近 activatedAt。
+     */
+    private TrackingPlanEntity findActiveSchemaPlan(String gameId, String environmentId) {
+        List<TrackingPlanEntity> active = trackingPlanRepo.findActiveByGameId(gameId).stream()
+            .filter(tp -> tp.activatedAt != null)
+            .collect(Collectors.toList());
+        return active.stream()
+            .filter(tp -> environmentId.equals(tp.environmentId))
+            .max(Comparator.comparing(tp -> tp.activatedAt))
+            .or(() -> active.stream()
+                .filter(tp -> tp.environmentId == null)
+                .max(Comparator.comparing(tp -> tp.activatedAt)))
+            .orElse(null);
     }
 
     private Models.StorageProfileResp toStorageProfile(StorageProfileEntity entity) {

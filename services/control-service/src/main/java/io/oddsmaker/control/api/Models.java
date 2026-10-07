@@ -67,6 +67,9 @@ public class Models {
         public String piiIp;
         public List<String> denyKeys;
         public List<String> maskKeys;
+        // B7 §4.4 Schema 事件面收敛：key 作用域内 ACTIVE EventSchema 的未知事件拒收开关与事件名清单
+        public Boolean rejectUnknownEvents;
+        public List<String> eventNames;
     }
 
     public static class StorageProfileResp {
