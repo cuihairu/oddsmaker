@@ -57,11 +57,11 @@
 
 ## B7 EventSchema 一等资源化
 
-- [ ] TrackingPlan→EventSchema 升级：补 compatibility / PII policy / retention / sampling / owner 字段与版本发布/兼容检查 API
-- [ ] `rejectUnknownEvents` 默认值改 true（随本批验收，dev 模式豁免）
-- [ ] web 控制台 schemas 资源组页面/入口
+- [x] TrackingPlan→EventSchema 升级：补 compatibility / PII policy / retention / sampling / owner 字段与版本发布/兼容检查 API
+- [x] `rejectUnknownEvents` 默认值改 true（随本批验收，dev 模式豁免）
+- [x] web 控制台 schemas 资源组页面/入口
 
-**验收：** 全绿；EventSchema CRUD + 版本发布与兼容检查测试；未知事件默认拒收行为有测试钉住。
+**验收：** ✅（88f99d7 后回填）全量 gradle 测试 + web test/build 双绿；三箱落地：①五字段与发布兼容门（686f700）——V0.9.20 补 `compatibility`（NONE/BACKWARD/FORWARD/FULL 默认 NONE）/`pii_policy`/`retention_days`/`sampling_rate`/`owner_id` 五列 + 实体/DTO 全链映射；`publishTrackingPlan` 兼容门=compatibility≠NONE 时先跑只读 `compatibilityCheck`（基线=同 game+同 environmentId、排除自身、最近 activatedAt 的 ACTIVE 未删除版；事件集 ACTIVE 定义按名 diff 三分类——BACKWARD 违例=removed 非空、FORWARD 违例=added 非空、changed=同名签名（类型/重要性/三必填位）变化仅信息项；NONE/无基线恒兼容），不兼容 IAE→400 且保持 DRAFT 不落库；`/api/games/{gameId}/schemas` 资源 API（SchemasController 全镜像 tracking-plans 子资源 + publish/compatibility/deactivate 子资源，无 AccessGuard 与现状对齐）+ `EventSchemaPublishTest` 10 例钉住（NONE 跳检查激活/BACKWARD removed 拒绝保持 DRAFT/仅新增通过/FORWARD added 拒绝/FULL 双向/changed 不阻塞/无基线/三分类/基线选择排除自身他环境取最近/五字段往返）；②未知事件默认拒收（6925770）——`rejectUnknownEvents` 实体默认 + toEntity 兜底 + V0.9.20 `SET DEFAULT TRUE`（既有行不动）；事件面下发=ControlService `toInternalDetail` 注入两仓取 ACTIVE Schema（环境绑定优先、回退全局、无则两字段 null）出 `rejectUnknownEvents`+`eventNames`，网关 ApiKeyContext JSON 透传，BatchController 校验链 api_key_scope 后插 `isUnknownEvent`（仅 scoped+开关 true 生效、dev 字面豁免、eventNames 空=全未知诚实语义）→ `unknown_event` 事件级拒收 + 检视面明细；`EventSchemaGatewayFeedTest` 5 例 + gateway 分支矩阵 + 端到端三例（未知拒收/事件面命中/dev 豁免）；③web 页面（88f99d7）——`/schemas` 路由 + 侧边导航"事件 Schema" + SchemasView（游戏选择联动、状态/兼容策略/拒收徽标列表、事件清单展开、兼容检查结果面板、发布/弃用/删除 confirm 门控），SchemasView.spec 13 例 + router 契约 28→29 同步；文档对账 plan §2.3/§9、control.md（Event Schema 节）、api.md（unknown_event）、CHANGELOG。**边界：compatibility 只 diff 事件名集与同名签名（属性字典级 diff 不在内）；EventSchema 与 TrackingPlan 同存储双前缀并存未拆表；事件面随网关 key 上下文 60s 缓存收敛；piiPolicy/retentionDays/samplingRate/ownerId 本批仅落库与展示无下游消费；feed 失联时网关沿用缓存/回退本地静态 key 即不启用拒收（fail-open）；dev 豁免按 key 上下文 environment 字面 'dev' 判定**。
 
 ## B8 实验平台形式化
 
