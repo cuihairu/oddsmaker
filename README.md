@@ -1,3 +1,5 @@
+[English](README.md) | [中文](README.zh.md)
+
 <div align="center">
 
 <img src="docs/public/logo.svg" width="64" alt="Oddsmaker logo" />
@@ -10,49 +12,49 @@
 
 </div>
 
-Oddsmaker 是一套面向单个游戏公司的实时分析与风控平台。
+Oddsmaker is a real-time analytics and risk control platform built for a single gaming company.
 
-它的定位是一家公司内部统一管理多个游戏、多个环境的数据基础设施。核心隔离边界是 `game_id + environment`。
+It is positioned as the data infrastructure through which one company manages multiple games across multiple environments. The core isolation boundary is `game_id + environment`.
 
 ## What Oddsmaker Means
 
-`Oddsmaker` 来自赌场和博彩行业，指负责制定赔率的人。这个角色本质上依赖两类能力：
+`Oddsmaker` comes from the casino and betting industry and refers to the person responsible for setting odds. The role fundamentally relies on two capabilities:
 
-- 数据判断：根据历史行为、概率分布、市场变化和结果反馈不断修正判断。
-- 风险控制：赔率不是随便拍脑袋给的，背后一定包含敞口控制、异常识别和动态调整。
+- Data judgment: continuously refining assessments based on historical behavior, probability distributions, market changes, and outcome feedback.
+- Risk control: odds are never set arbitrarily; behind them there is always exposure control, anomaly identification, and dynamic adjustment.
 
-这个名字适合当前项目，因为平台的目标也不是单纯“收集事件”，而是把游戏数据分析、实验优化和风险控制放到同一条链路里。
+The name fits this project because the platform's goal is likewise not merely to "collect events", but to place game data analytics, experiment optimization, and risk control on a single pipeline.
 
 ## Product Positioning
 
-- 单公司部署：一家公司部署一套 Oddsmaker，不做多个公司共用的 SaaS。
-- 多游戏管理：一套平台支持多个游戏。
-- 多环境隔离：每个游戏可以有 `dev`、`staging`、`prod` 等环境。
-- 存储路由解耦：环境表达发布阶段，物理数据路由由 `storage_profile` 决定。
-- 风控内建：风控不是外挂模块，而是接入、计算、告警、处置的主链路能力。
+- Single-company deployment: one company deploys one Oddsmaker instance; it is not a SaaS shared by multiple companies.
+- Multi-game management: one platform supports multiple games.
+- Multi-environment isolation: each game can have environments such as `dev`, `staging`, and `prod`.
+- Decoupled storage routing: the environment expresses the release stage, while physical data routing is determined by `storage_profile`.
+- Built-in risk control: risk control is not a bolt-on module but a core-pipeline capability spanning ingestion, computation, alerting, and disposition.
 
 ## Core Capabilities
 
 ### 1. Real-Time Game Analytics
 
-- 实时采集 Web、Android、iOS、Unity、Server 事件
-- 会话、留存、漏斗、收入、关卡、虚拟经济、广告分析
-- A/B 实验配置、分流、曝光事件与结果分析
-- 统一 `game_id + environment` 数据边界
+- Real-time ingestion of events from the Web, Android, iOS, Unity, and Server SDKs
+- Session, retention, funnel, revenue, level progression, virtual economy, and ad analytics
+- A/B experiment configuration, traffic splitting, exposure events, and results analysis
+- A unified `game_id + environment` data boundary
 
 ### 2. Risk Control
 
-- Gateway 前置校验：API Key、HMAC、时间窗、重放、限流、PII
-- 实时检测：脚本行为、异常资源增长、支付异常、广告奖励异常、账号/设备/IP 聚集
-- 风险输出：`mark`、`alert`、`block`、`review`、`throttle`、Webhook
-- 风险事件与证据落库，支持回溯分析
+- Gateway pre-validation: API key, HMAC, time window, replay, rate limiting, PII
+- Real-time detection: scripting behavior, abnormal resource growth, payment anomalies, ad-reward anomalies, and account/device/IP clustering
+- Risk outputs: `mark`, `alert`, `block`, `review`, `throttle`, and webhooks
+- Risk events and evidence persisted for retrospective analysis
 
 ### 3. Data Governance
 
-- Tracking Plan / Schema 治理
+- Tracking Plan / schema governance
 - JSON Schema + Avro + Registry
-- 属性白名单、PII 策略、事件大小限制
-- 所有新接入统一使用 `game_id + environment`
+- Property allowlists, PII policies, and event size limits
+- All new integrations uniformly use `game_id + environment`
 
 ## Architecture
 
@@ -116,67 +118,67 @@ flowchart TB
 
 ## Canonical Data Boundary
 
-新架构下的核心键：
+Core keys under the target architecture:
 
 ```text
-game_id      = 游戏标识，例如 game_demo
+game_id      = game identifier, e.g. game_demo
 environment  = dev | staging | prod
 storage_profile = shared-nonprod | shared-prod | dedicated-*
-event_id     = 单事件唯一 ID
+event_id     = unique ID per event
 ```
 
-事件、分区、查询、实验和风控规则都应使用 `game_id + environment` 作为逻辑边界。
-`storage_profile` 只负责物理路由，不进入事件契约。
+Events, partitions, queries, experiments, and risk rules all use `game_id + environment` as the logical boundary.
+`storage_profile` is responsible for physical routing only and never enters the event contract.
 
 ## Repository Layout
 
-- `services/gateway-service/`：采集入口、协议校验、限流、PII、前置风控
-- `services/control-service/`：游戏、环境、密钥、策略、实验、风控管理
-- `jobs/flink/`：富化、去重、会话、留存、漏斗、风控、维度同步等流式作业
-- `agents/`：`dimension-sync-agent`——游戏方内网部署的维度同步器（零仓库内依赖）
-- `ml/`：`oddsmaker-ml` 训练管线——churn / pltv / risk / propensity 四类可训练模型（Python，含启发式基线对照）
-- `libs/`：公共模型、鉴权、Kafka、可观测性组件
-- `schema/`：Avro、JSON Schema、ClickHouse DDL、查询脚本
-- `sdks/`：Web、Android、iOS、Unity、Server SDK
-- `bi/`：Superset 资源
-- `infra/`：Docker Compose、K8s、Helm、Grafana、Prometheus
-- `docs/`：架构、API、运维、重设计、路线图
+- `services/gateway-service/`: ingestion entry point, protocol validation, rate limiting, PII, and pre-ingest risk control
+- `services/control-service/`: games, environments, keys, policies, experiments, and risk management
+- `jobs/flink/`: streaming jobs for enrichment, deduplication, sessions, retention, funnels, risk detection, dimension synchronization, and more
+- `agents/`: `dimension-sync-agent` — a dimension synchronizer deployed inside the game studio's intranet (zero in-repo dependencies)
+- `ml/`: the `oddsmaker-ml` training pipeline — four trainable model families (churn / pltv / risk / propensity) in Python, with heuristic baselines for comparison
+- `libs/`: shared models, authentication, Kafka, and observability components
+- `schema/`: Avro, JSON Schema, ClickHouse DDL, and query scripts
+- `sdks/`: Web, Android, iOS, Unity, and Server SDKs
+- `bi/`: Superset resources
+- `infra/`: Docker Compose, K8s, Helm, Grafana, Prometheus
+- `docs/`: architecture, API, operations, redesign, and roadmap
 
 ## Quick Start
 
-### 演示站点
+### Demo Site
 
-演示站点 https://oddsmaker.cuihairu.site/ ｜ 演示账号 `demo` / `EBluYQvTaeN78p`（体验用，数据定期重置）
+Demo site: https://oddsmaker.cuihairu.site/ | Demo account `demo` / `EBluYQvTaeN78p` (for trial use; data is reset periodically)
 
-> 演示站点仅供体验：数据会被定期重置，勿存放真实业务数据；演示账号为只读 VIEWER 角色。
-> 私有部署请走下方 Docker Compose 路径。
+> The demo site is for trial purposes only: data is reset periodically, so do not store real business data there. The demo account has the read-only VIEWER role.
+> For private deployment, follow the Docker Compose path below.
 
-### Docker Compose 快速搭建（推荐）
+### Quick Setup with Docker Compose (Recommended)
 
-一条命令拉起服务端（control + gateway 单镜像）与全部依赖（PostgreSQL / Redis / Kafka / Apicurio / ClickHouse），端口、卷、健康检查齐全：
+A single command brings up the server side (control + gateway in a single image) together with all dependencies (PostgreSQL / Redis / Kafka / Apicurio / ClickHouse), with ports, volumes, and health checks fully configured:
 
 ```bash
-# 可选：复制环境配置并按需修改端口 / 密码 / Token（全部有中文注释）
+# Optional: copy the environment config and adjust ports / passwords / tokens as needed (comments in Chinese)
 cp .env.example .env
 
 docker compose -f docker-compose.quickstart.yml up -d
 
-# 查看健康状态（全部 healthy 即就绪）
+# Check health status (ready once every service is healthy)
 docker compose -f docker-compose.quickstart.yml ps
 
-# 验证 API
-curl http://localhost:38085/actuator/health   # control（管理面）
-curl http://localhost:38080/actuator/health   # gateway（采集入口）
+# Verify the APIs
+curl http://localhost:38085/actuator/health   # control (management plane)
+curl http://localhost:38080/actuator/health   # gateway (ingestion entry)
 ```
 
-### 单容器运行（Docker 镜像）
+### Single-Container Run (Docker Image)
 
-镜像为单镜像双服务：`ghcr.io/cuihairu/oddsmaker`，运行时用 `SERVICE` 环境变量选择 `control`（8085）或 `gateway`（8080）：
+The image ships two services in a single artifact: `ghcr.io/cuihairu/oddsmaker`. At runtime, the `SERVICE` environment variable selects `control` (8085) or `gateway` (8080):
 
 ```bash
 docker pull ghcr.io/cuihairu/oddsmaker:nightly
 
-# 控制服务（SERVICE=control）
+# Control service (SERVICE=control)
 docker run -d --name oddsmaker-control \
   -p 38085:8085 \
   -e SERVICE=control \
@@ -184,7 +186,7 @@ docker run -d --name oddsmaker-control \
   -e ODDSMAKER_ADMIN_TOKEN=dev-admin-token \
   ghcr.io/cuihairu/oddsmaker:nightly
 
-# 网关服务（SERVICE=gateway）
+# Gateway service (SERVICE=gateway)
 docker run -d --name oddsmaker-gateway \
   -p 38080:8080 \
   -e SERVICE=gateway \
@@ -194,23 +196,23 @@ docker run -d --name oddsmaker-gateway \
   ghcr.io/cuihairu/oddsmaker:nightly
 ```
 
-### 本地构建镜像（Dockerfile）
+### Building the Image Locally (Dockerfile)
 
-根目录 `Dockerfile` 为多阶段构建（Gradle 编译 → `eclipse-temurin:21-jre-alpine` 运行），以非 root 用户运行，内置 healthcheck；构建上下文必须是仓库根：
+The root `Dockerfile` is a multi-stage build (Gradle compilation → `eclipse-temurin:21-jre-alpine` runtime), runs as a non-root user, and includes a built-in healthcheck; the build context must be the repository root:
 
 ```bash
 docker build -t ghcr.io/cuihairu/oddsmaker:local .
 ```
 
-镜像 tag 口径：CI 每日/每次 main 推送推 `:nightly`（nightly-build.yml），发版时推 `:<version>` 与 `:latest`（release.yaml）。
+Image tagging: CI publishes `:nightly` on the daily schedule and on every push to main (nightly-build.yml), and publishes `:<version>` and `:latest` on releases (release.yaml).
 
-### Nightly 构建产物
+### Nightly Build Artifacts
 
-每日 UTC 00:00（及每次 main 推送）CI 全量测试通过后，在 [Releases](https://github.com/cuihairu/oddsmaker/releases) 页发布滚动 nightly 构建（tag 固定 `nightly`）：Linux x64/arm64、macOS x64/arm64、Windows x64 五平台服务端分发包（control + gateway + 6 个 Flink 作业 fatJar + 维度同步 agent + Web 控制台/SDK 静态资源 + 启动脚本），包内含 `BUILD_INFO`，Release 附 `VERIFY.md`（全资产 SHA256）。
+After the full CI test suite passes, a rolling nightly build (tag fixed at `nightly`) is published on the [Releases](https://github.com/cuihairu/oddsmaker/releases) page at 00:00 UTC daily and on every push to main: server distribution packages for five platforms — Linux x64/arm64, macOS x64/arm64, and Windows x64 — containing control + gateway, six Flink job fatJars, the dimension-sync agent, Web console/SDK static assets, and startup scripts. Each package carries a `BUILD_INFO` file, and each release includes `VERIFY.md` (SHA256 checksums for all assets).
 
-### 源码开发
+### Working from Source
 
-体验脚本与流式任务：
+To try out the scripts and streaming jobs:
 
 ```bash
 bash scripts/e2e.sh
@@ -218,34 +220,34 @@ bash scripts/superset-import.sh
 bash scripts/run_flink.sh
 ```
 
-说明：
+Notes:
 
-- 全量测试：`./gradlew test --continue`（Gradle Wrapper 8.10.1，JDK 21）。
-- Web 控制台：`pnpm -C web test && pnpm -C web build`（开发态 `pnpm -C web dev`，代理到 control 8085）。
+- Full test suite: `./gradlew test --continue` (Gradle Wrapper 8.10.1, JDK 21).
+- Web console: `pnpm -C web test && pnpm -C web build` (for development, `pnpm -C web dev`, which proxies to control on 8085).
 
 ## Current Direction
 
-当前优先目标是完成这几件事：
+The current priorities are:
 
-1. 把全仓库事件契约统一到 `game_id + environment`
-2. 控制面只围绕 Game / Environment / API Key / Risk Policy 建模
-3. 把风控链路从“概念设计”补成“可运行主链路”
-4. 统一 SDK、Gateway、Flink、ClickHouse、Control 的字段和命名
+1. Unify the event contract across the entire repository to `game_id + environment`
+2. Model the control plane strictly around Game / Environment / API Key / Risk Policy
+3. Build the risk control pipeline out from "conceptual design" into a "runnable main pipeline"
+4. Unify fields and naming across the SDKs, Gateway, Flink, ClickHouse, and Control
 
 ## Documentation
 
-- [总体文档入口](docs/README.md)
-- [系统架构](docs/zh/reference/architecture.md)
-- [环境与存储路由设计](docs/zh/reference/environment-and-storage.md)
-- [重设计方案](docs/zh/redesign/index.md)
-- [采集 API](docs/zh/reference/api.md)
-- [控制面](docs/zh/reference/control.md)
-- [路线图](docs/zh/analysis/roadmap.md)
-- [运维文档](docs/operations/index.md)
+- [Documentation index](docs/README.md)
+- [System architecture](docs/zh/reference/architecture.md)
+- [Environment and storage routing design](docs/zh/reference/environment-and-storage.md)
+- [Redesign plan](docs/zh/redesign/index.md)
+- [Ingestion API](docs/zh/reference/api.md)
+- [Control plane](docs/zh/reference/control.md)
+- [Roadmap](docs/zh/analysis/roadmap.md)
+- [Operations](docs/operations/index.md)
 
 ## Tech Stack
 
-底座是开源组件：Spring Boot、Kafka、Flink、ClickHouse、PostgreSQL、Redis、Superset 等；本仓自写的是接线、业务层与 SDK。
+The foundation is built on open-source components: Spring Boot, Kafka, Flink, ClickHouse, PostgreSQL, Redis, Superset, and others; what this repository implements itself is the wiring, the business layers, and the SDKs.
 
 - Java 21
 - Spring Boot 3 WebFlux
@@ -259,12 +261,12 @@ bash scripts/run_flink.sh
 
 ## Status
 
-当前版本 `v0.2.0 (unreleased)`，仓库定位与命名已收敛：
+The current version is `v0.2.0 (unreleased)`; the repository's positioning and naming have converged:
 
-- 品牌名固定为 `Oddsmaker`，包名统一 `io.oddsmaker`
-- 架构目标固定为“单公司、多游戏、多环境、风控内建”
-- Git remote：`https://github.com/cuihairu/oddsmaker.git`
+- The brand name is fixed as `Oddsmaker`, and the package namespace is unified as `io.oddsmaker`
+- The architecture goal is fixed as "single company, multiple games, multiple environments, built-in risk control"
+- Git remote: `https://github.com/cuihairu/oddsmaker.git`
 
-已交付的能力：采集网关（`/v1/batch` + 事件契约 v2）、控制面（游戏/环境/密钥/权限 8 角色/实验/风控规则）、7 个 Flink 作业（enrich/sessions/retention/funnels/risk/dimension/identity-merge）、维度同步 Agent（5 类 source）、5 端 SDK、4 类 ML 模型训练与批量打分、Web 控制台。
+Delivered capabilities: ingestion gateway (`/v1/batch` + event contract v2), control plane (games / environments / keys / 8-role permissions / experiments / risk rules), seven Flink jobs (enrich/sessions/retention/funnels/risk/dimension/identity-merge), the dimension-sync agent (five source types), SDKs for five platforms, training and batch scoring for four ML model families, and the web console.
 
-2.0 重构进行中（B1–B5 已验收）：事件契约 v2 增量、Server SDK、网关权威回填与自抬拒绝、风控 Feature 层（`risk_features` + FEATURE 规则取值三段解耦）；后续批次（RiskScore/Decision 状态机等）按 `todo.md` 逐批推进。
+Restructure 2.0 batches B1–B10 have all been accepted, including event contract v2 increments, Server SDK, gateway authoritative backfill with self-raised rejection, the risk feature layer (`risk_features` with three-stage decoupling of FEATURE rule values), the RiskScore/Decision state machine, EventSchema as a first-class resource, experiment platform formalization, the runtime mode matrix, and data quality with a shared feature store; further work proceeds batch by batch per `todo.md`.
