@@ -47,6 +47,12 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: '/risk-cases',
+      name: 'risk-cases',
+      component: () => import('@/views/RiskCasesView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
       path: '/schemas',
       name: 'schemas',
       component: () => import('@/views/SchemasView.vue'),

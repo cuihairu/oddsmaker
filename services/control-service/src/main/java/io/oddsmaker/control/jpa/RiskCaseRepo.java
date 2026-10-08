@@ -1,5 +1,6 @@
 package io.oddsmaker.control.jpa;
 
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -16,6 +17,20 @@ public interface RiskCaseRepo extends JpaRepository<RiskCaseEntity, String> {
      */
     @Query("SELECT rc FROM RiskCaseEntity rc WHERE rc.riskRuleId = :riskRuleId ORDER BY rc.createdAt DESC")
     List<RiskCaseEntity> findByRiskRuleId(@Param("riskRuleId") String riskRuleId);
+
+    // ========== 案例回看（RiskCaseController 列表/过滤）：四个过滤组合用派生查询，避免 JPQL 传 null 枚举 ==========
+
+    /** 按游戏分页取案例（最新在前） */
+    List<RiskCaseEntity> findByGameIdOrderByCreatedAtDesc(String gameId, Pageable pageable);
+
+    /** 按游戏 + 判定状态过滤 */
+    List<RiskCaseEntity> findByGameIdAndStatusOrderByCreatedAtDesc(String gameId, RiskCaseEntity.DecisionStatus status, Pageable pageable);
+
+    /** 按游戏 + 风险等级过滤 */
+    List<RiskCaseEntity> findByGameIdAndRiskLevelOrderByCreatedAtDesc(String gameId, RiskCaseEntity.RiskLevel riskLevel, Pageable pageable);
+
+    /** 按游戏 + 判定状态 + 风险等级过滤 */
+    List<RiskCaseEntity> findByGameIdAndStatusAndRiskLevelOrderByCreatedAtDesc(String gameId, RiskCaseEntity.DecisionStatus status, RiskCaseEntity.RiskLevel riskLevel, Pageable pageable);
 
     /**
      * 根据游戏查找案例

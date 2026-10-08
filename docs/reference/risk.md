@@ -14,13 +14,18 @@
 | POST | `/api/risk-rules/{id}/enable` | 启用规则 |
 | POST | `/api/risk-rules/{id}/disable` | 停用规则 |
 
-风控案例（RiskCase）没有独立的 CRUD API。案例由风控链路自动创建，查询与处置走这三个入口：
+风控案例（RiskCase）没有独立的创建/删除 API——案例由风控链路自动创建。查询与处置入口：
 
 | 方法 | 端点 | 说明 |
 |------|------|------|
+| GET | `/api/games/{gameId}/risk-cases` | 案例列表（`status`/`riskLevel` 过滤，`limit` 默认 100、上限 500，最新在前） |
+| GET | `/api/games/{gameId}/risk-cases/{caseId}` | 案例详情（证据/上下文 JSON 解析为对象，解析失败回传原文） |
+| POST | `/api/games/{gameId}/risk-cases/{caseId}/unblock` | 人工解除封禁（误杀处置；须 `BLOCK` 已执行且未解除，联动释放由本案例创建的黑名单记录） |
 | GET | `/api/risk-dashboard/recent-cases/{gameId}` | 最近案例列表 |
 | GET/POST | `/api/review-queue/...` | 人工审核流（分配、认领、完成、升级） |
-| POST | `/api/block-lists/{blockId}/unblock` | 解除封禁（案例触发的封禁也在黑名单表里） |
+| POST | `/api/block-lists/{blockId}/unblock` | 按封禁记录解除（案例触发的封禁也在黑名单表里） |
+
+案例回看控制台页为 `/risk-cases`（列表过滤 + 详情弹层 + 误杀解除），列表/详情鉴权 `game:read`，解除封禁鉴权 `risk:manage`。
 
 ## 规则类别（category）
 
@@ -110,7 +115,7 @@ Authorization: Bearer {token}
 
 ## 解除封禁
 
-解封走黑名单接口，按封禁记录 ID：
+解封有两条路径：按封禁记录 ID 走黑名单接口；按案例走 `POST /api/games/{gameId}/risk-cases/{caseId}/unblock`（案例侧会联动释放由该案例创建、仍活跃的黑名单记录，并记录案例维度审计日志）。按封禁记录 ID：
 
 ```http
 POST /api/block-lists/{blockId}/unblock
