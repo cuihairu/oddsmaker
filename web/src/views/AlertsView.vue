@@ -186,8 +186,71 @@ function fmtValue(v) {
   return v == null ? '-' : Number(v).toLocaleString(undefined, { maximumFractionDigits: 2 })
 }
 
-onMounted(load)
-watch(currentGameId, load)
+// ===== 邮件通知通道（webhook 之外的第二通道，每游戏一条配置） =====
+const emailCfg = reactive({ loaded: false, recipients: '', environment: '', enabled: false, exists: false })
+const emailSaving = ref(false)
+const emailTesting = ref(false)
+const emailMsg = ref('')
+
+async function loadEmailConfig() {
+  if (!currentGameId.value) return
+  emailMsg.value = ''
+  try {
+    const res = await api.get(`/api/games/${currentGameId.value}/alert-email-config`)
+    if (res.data) {
+      Object.assign(emailCfg, {
+        loaded: true, exists: true,
+        recipients: res.data.recipients || '',
+        environment: res.data.environmentId || '',
+        enabled: !!res.data.enabled
+      })
+    } else {
+      Object.assign(emailCfg, { loaded: true, exists: false, recipients: '', environment: '', enabled: false })
+    }
+  } catch (e) {
+    emailCfg.loaded = true
+  }
+}
+
+async function saveEmailConfig() {
+  if (!emailCfg.recipients.trim()) {
+    emailMsg.value = '请填写收件人'
+    return
+  }
+  emailSaving.value = true
+  emailMsg.value = ''
+  try {
+    await api.put(`/api/games/${currentGameId.value}/alert-email-config`, {
+      recipients: emailCfg.recipients,
+      environment: emailCfg.environment.trim() || null,
+      enabled: emailCfg.enabled
+    })
+    emailMsg.value = '邮件通道配置已保存'
+    await loadEmailConfig()
+  } catch (e) {
+    emailMsg.value = e.response?.data?.message || '保存邮件通道配置失败'
+  } finally {
+    emailSaving.value = false
+  }
+}
+
+async function testEmailConfig() {
+  emailTesting.value = true
+  emailMsg.value = ''
+  try {
+    const res = await api.post(`/api/games/${currentGameId.value}/alert-email-config/test`)
+    emailMsg.value = res.data.sent
+      ? `测试邮件已发送（${res.data.recipients} 个收件人）`
+      : '测试发送未执行：SMTP 未配置（需设置 spring.mail.host）或无收件人'
+  } catch (e) {
+    emailMsg.value = e.response?.data?.message || '测试发送失败'
+  } finally {
+    emailTesting.value = false
+  }
+}
+
+onMounted(() => { load(); loadEmailConfig() })
+watch(currentGameId, () => { load(); loadEmailConfig() })
 </script>
 
 <template>
@@ -350,6 +413,39 @@ watch(currentGameId, load)
         </tbody>
       </table>
       <p v-else class="text-sm text-gray-400 py-6 text-center">暂无规则，点击右上角「新建规则」创建第一条告警</p>
+    </div>
+
+    <!-- 邮件通知通道 -->
+    <div class="card mb-8">
+      <h3 class="text-base font-medium text-gray-900 mb-1">邮件通知通道</h3>
+      <p class="text-xs text-gray-400 mb-4">告警触发时同步发邮件（webhook 之外的通道）；SMTP 未配置时投递跳过，不影响告警主链路</p>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="md:col-span-2">
+          <label class="block text-sm font-medium text-gray-700 mb-1">收件人（逗号/分号/空白分隔）</label>
+          <textarea v-model="emailCfg.recipients" rows="2" class="input" placeholder="ops@example.com, lead@example.com"></textarea>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">环境（留空 = 全部）</label>
+          <input v-model="emailCfg.environment" class="input" placeholder="prod" />
+          <label class="flex items-center gap-2 text-sm text-gray-600 mt-3">
+            <input type="checkbox" v-model="emailCfg.enabled" class="rounded border-gray-300 text-primary-600" />
+            启用邮件通知
+          </label>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-3 mt-4">
+        <button @click="saveEmailConfig" class="btn btn-primary" :disabled="emailSaving">
+          {{ emailSaving ? '保存中...' : '保存配置' }}
+        </button>
+        <button @click="testEmailConfig" class="btn btn-secondary" :disabled="emailTesting || !emailCfg.exists">
+          {{ emailTesting ? '发送中...' : '发送测试邮件' }}
+        </button>
+        <span v-if="emailMsg" class="text-sm" :class="emailMsg.includes('失败') || emailMsg.includes('请填写') ? 'text-red-600' : 'text-green-600'">
+          {{ emailMsg }}
+        </span>
+      </div>
     </div>
 
     <!-- 告警历史 -->

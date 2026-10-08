@@ -351,11 +351,12 @@ class BranchTopUpBTest {
     @Mock private MetricAlertRuleRepo ruleRepo;
     @Mock private SystemAlertRepo alertRepo;
     @Mock private WebhookService alertWebhook;
+    @Mock private AlertEmailService alertEmailService;
     @Mock private AuditLogService alertAudit;
 
     private MetricAlertService alertService() {
         return new MetricAlertService(ruleRepo, alertRepo, clickHouse, alertWebhook,
-            alertAudit, om, true);
+            alertEmailService, alertAudit, om, true);
     }
 
     private MetricAlertRuleEntity absolute(MetricAlertRuleEntity.Comparison cmp, double threshold) {

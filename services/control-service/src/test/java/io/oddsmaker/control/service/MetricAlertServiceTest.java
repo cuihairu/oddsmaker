@@ -51,6 +51,9 @@ class MetricAlertServiceTest {
     private WebhookService webhookService;
 
     @Mock
+    private AlertEmailService alertEmailService;
+
+    @Mock
     private AuditLogService auditLog;
 
     private MetricAlertService service;
@@ -58,7 +61,7 @@ class MetricAlertServiceTest {
     @BeforeEach
     void setUp() {
         service = new MetricAlertService(ruleRepo, alertRepo, clickHouse, webhookService,
-                auditLog, new ObjectMapper(), true);
+                alertEmailService, auditLog, new ObjectMapper(), true);
         when(alertRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(ruleRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
     }
@@ -105,7 +108,7 @@ class MetricAlertServiceTest {
     @DisplayName("守卫：enabled=false 或 CH 不可用时不评估任何规则")
     void guardsSkipEvaluation() {
         MetricAlertService disabled = new MetricAlertService(ruleRepo, alertRepo, clickHouse,
-                webhookService, auditLog, new ObjectMapper(), false);
+                webhookService, alertEmailService, auditLog, new ObjectMapper(), false);
         disabled.evaluateAll();
         verify(ruleRepo, never()).findByEnabledTrueAndDeletedAtIsNull();
 

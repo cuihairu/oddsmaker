@@ -39,6 +39,7 @@ public class MetricAlertService {
     private final SystemAlertRepo alertRepo;
     private final ClickHouseClient clickHouse;
     private final WebhookService webhookService;
+    private final AlertEmailService alertEmailService;
     private final AuditLogService auditLog;
     private final ObjectMapper objectMapper;
     private final boolean enabled;
@@ -47,6 +48,7 @@ public class MetricAlertService {
                               SystemAlertRepo alertRepo,
                               ClickHouseClient clickHouse,
                               WebhookService webhookService,
+                              AlertEmailService alertEmailService,
                               AuditLogService auditLog,
                               ObjectMapper objectMapper,
                               @Value("${oddsmaker.metric-alert.enabled:true}") boolean enabled) {
@@ -54,6 +56,7 @@ public class MetricAlertService {
         this.alertRepo = alertRepo;
         this.clickHouse = clickHouse;
         this.webhookService = webhookService;
+        this.alertEmailService = alertEmailService;
         this.auditLog = auditLog;
         this.objectMapper = objectMapper;
         this.enabled = enabled;
@@ -312,6 +315,8 @@ public class MetricAlertService {
             alert.notificationSent = true;   // 语义为"已派发"，投递结果看 webhook_logs
             alertRepo.save(alert);
         }
+        // 邮件通道（尽力而为）：未启用/SMTP 未配置/发送失败均静默降级，不影响告警主链路
+        alertEmailService.sendAlertEmail(rule.gameId, alert);
         logger.warn("metric alert fired: rule={}, metric={}, value={}, baseline={}",
                 rule.id, rule.metricType, current, baseline);
     }

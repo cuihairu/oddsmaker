@@ -641,6 +641,7 @@ All of the following are implemented and exposed through the same auth model; se
 | Integrations | `/api/integrations` | Slack/Discord/email/payment/webhook integrations |
 | LTV metrics | `/api/ltv-metrics` | LTV forecast queries |
 | Mail | `/api/games/{gameId}/mails` | Player mail with attachments and claim receipts |
+| Alert email channel | `/api/games/{gameId}/alert-email-config` (+`/test`) | Per-game alert email recipients; best-effort delivery (skipped when SMTP unconfigured) |
 | Metric alerts | `/api/games/{gameId}/alert-rules`, `/api/games/{gameId}/alerts` | Threshold alert rules and alert instances |
 | ML artifacts | `/api/ml-artifacts` | Versioned model artifact registry (register/list/active) |
 | Online metrics | `/api/online-metrics` | Real-time online player counts |
