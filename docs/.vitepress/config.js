@@ -1,6 +1,36 @@
 import { defineConfig } from 'vitepress'
 import { withMermaid } from 'vitepress-plugin-mermaid'
 
+// 调研报告组：跨目录（docs/research、docs 根、zh/redesign），四份互引成一套
+const researchSidebar = [
+  {
+    text: '调研报告',
+    items: [
+      { text: '成熟产品调研（交互与 SDK）', link: '/research/mature-products-survey' },
+      { text: '竞品对比与功能差距', link: '/competitive-analysis' },
+      { text: 'MMP 归因接入评估', link: '/mmp-attribution-evaluation' },
+      { text: '开源参考项目取舍', link: '/zh/redesign/03-open-source-reference' }
+    ]
+  }
+]
+
+// 重设计系列侧边栏（zh/redesign 01~07），供 03 参考取舍等页挂载
+const redesignSidebar = [
+  {
+    text: '平台重设计',
+    items: [
+      { text: '索引', link: '/zh/redesign/' },
+      { text: '01 现状评估', link: '/zh/redesign/01-assessment' },
+      { text: '02 关键设计问题', link: '/zh/redesign/02-design-issues' },
+      { text: '03 参考项目取舍', link: '/zh/redesign/03-open-source-reference' },
+      { text: '04 新架构', link: '/zh/redesign/04-redesign' },
+      { text: '05 实施路线', link: '/zh/redesign/05-roadmap' },
+      { text: '06 2.0 重构计划书', link: '/zh/redesign/06-od2-restructure-plan' },
+      { text: '07 B10 设计定稿', link: '/zh/redesign/07-b10-data-quality-feature-store' }
+    ]
+  }
+]
+
 export default withMermaid(defineConfig({
   base: '/oddsmaker/',
   ignoreDeadLinks: true,
@@ -15,6 +45,7 @@ export default withMermaid(defineConfig({
         nav: [
           { text: 'Home', link: '/' },
           { text: 'API Reference', link: '/reference/' },
+          { text: '调研报告', link: '/research/mature-products-survey' },
           // 语言切换只用 VitePress 原生 locale 切换器（locales 自动渲染），不在此手写第二套
         ],
         sidebar: {
@@ -38,7 +69,11 @@ export default withMermaid(defineConfig({
                 { text: 'Gaming Scenarios', link: '/reference/gaming-scenarios' },
               ]
             }
-          ]
+          ],
+          // 调研文档在根 locale 各自路径下挂同一组侧边栏
+          '/research/': researchSidebar,
+          '/competitive-analysis': researchSidebar,
+          '/mmp-attribution-evaluation': researchSidebar
         },
         editLink: {
           pattern: 'https://github.com/cuihairu/oddsmaker/edit/main/docs/:path',
@@ -55,6 +90,7 @@ export default withMermaid(defineConfig({
         nav: [
           { text: '首页', link: '/zh/' },
           { text: 'API 文档', link: '/zh/reference/' },
+          { text: '调研报告', link: '/research/mature-products-survey' },
           // 语言切换只用 VitePress 原生 locale 切换器（locales 自动渲染），不在此手写第二套
         ],
         sidebar: {
@@ -80,7 +116,9 @@ export default withMermaid(defineConfig({
                 { text: '游戏分析场景', link: '/zh/reference/gaming-scenarios' },
               ]
             }
-          ]
+          ],
+          // 重设计系列（01~07）挂系列侧边栏，03 参考取舍由此进入导航
+          '/zh/redesign/': redesignSidebar
         },
         editLink: {
           pattern: 'https://github.com/cuihairu/oddsmaker/edit/main/docs/:path',

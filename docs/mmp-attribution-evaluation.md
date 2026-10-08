@@ -16,6 +16,8 @@
 
 ### 2.1 AppsFlyer
 
+> **结论：**四通道齐备——Push API 实时推 + Data Locker 批式最全（高阶套餐），Pull API 适合补数、postbacks 用于对账。
+
 | 机制 | 形态 | 延迟 | 内容 | 备注 |
 |---|---|---|---|---|
 | **Push API** | 实时推流到你的 HTTPS 端点 | 秒级 | 安装 + in-app 事件归因原始数据（含 SKAN） | 需自建接收端点，处理签名/重试/幂等 |
@@ -24,6 +26,8 @@
 | **Postbacks by date API** | 拉取式 | 按需 | 按日期的归因 postback 明细 | 对账用 |
 
 ### 2.2 Adjust
+
+> **结论：**与 AppsFlyer 同构——实时 callbacks + 定时 CSV 上传双形态；S2S 是反向通道，说明同账号可双向。
 
 | 机制 | 形态 | 延迟 | 内容 | 备注 |
 |---|---|---|---|---|
@@ -112,6 +116,8 @@ ORDER BY (game_id, environment, mmp_app_id, subject, install_time);
 
 ## 5. 成本与工作量评估
 
+> **结论：**唯一硬门槛是外部 MMP 账号的原始数据导出权限；方案 B 最小可运行集约 5–7 人日，CPI/ROAS 二期再加 4–6 人日。
+
 | 项 | 评估 |
 |---|---|
 | 外部依赖 | **重**：需要真实 MMP 账号 + 原始数据导出套餐（Data Locker/CSV uploads 均非免费档）；无账号则整条链路无法验证 |
@@ -128,7 +134,20 @@ ORDER BY (game_id, environment, mmp_app_id, subject, install_time);
 - 明确不做（与竞品分析 §4 一致）：广告平台直连（Facebook/Google Ads API 直接拉数）、MMP 聚合看板复刻、移动归因 SDK 自行开发。
 - 在触发条件达成前，P7 系列到此收口；后续优先级回归补测试覆盖与运营工具打磨。
 
-## 7. 参考资料
+## 7. 可参考分析（逐条判定与落点）
+
+> **结论：**路径已定——方案 B 主路径 + 有条件立项（P8），等任一 MMP 原始数据导出权限解锁；3 条可参考（落点均已到表/job 级）、1 条远期可借鉴、2 条不适用。
+
+| 判定 | 条目 | 为什么 | 本仓落点 |
+|------|------|--------|----------|
+| 可参考 | 方案 B：定时云存储导出 → 加载 job（§3） | 与 P7-4 已建立的「导出目录 + manifest + 运维同步」机制对称，批式可重放可对账，无新增公网端点 | P8 解锁后按 §4 DDL 建 `attribution_installs` + 加载 job；todo.md 边界「P8 MMP 归因接入保持暂停」即为该项跟踪位 |
+| 可参考 | MMP app ↔ `game_id + environment` 映射配置（§2.4.3） | 数据对齐键必须落进本仓隔离契约，否则渠道数据游离在 game/environment 边界外 | control 侧 `mmp_connections` 表（§4 配套）：映射、文件路径模式、字段映射版本、启停；权限复用 `export:read` / 新增 `mmp:manage` |
+| 可参考 | 建表草案的幂等设计：`ingest_batch` 去重 + `raw` Map 兜底（§4） | MMP 字段各家且版本多变，批次幂等让解析失败可修后重放，raw 兜底吸收列名漂移 | `schema/sql/clickhouse` 新表 DDL；批次口径与既有导出 manifest 对齐，`media_source` 归一化到 `events.ad_network` 口径 |
+| 可借鉴 | 方案 A：实时 Webhook（Push API / callbacks，§3） | 秒级新鲜度可反哺渠道作弊风控（假量识别） | 远期增量：确需实时反作弊时再开 ingestion 端点；与 P0 安全方向（Gateway 收敛前置校验）的张力需先评审，不随 P8 首发 |
+| 不适用 | 方案 C：postback 冒充渠道事件走 Gateway（§3） | 污染 `event_type` 契约，MMP 归因字段塞不进 `attribution Map` 规范 | 不做（§3 结论） |
+| 不适用 | 广告平台直连 / MMP 聚合看板复刻 / 自研归因 SDK（§6） | 超出分析平台职责，与竞品分析 §4 明确不做清单一致 | 不做（§6） |
+
+## 8. 参考资料
 
 - AppsFlyer dev docs：Push API、Data Locker、Raw Data Pull API V2、Postbacks by date API（dev.appsflyer.com）
 - Adjust help center：Raw data export → Cloud storage upload（help.adjust.com）；S2S 与 callbacks（dev.adjust.com）
