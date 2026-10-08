@@ -3,6 +3,7 @@ import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import api from '@/services/api'
 import GameSelector from '@/components/GameSelector.vue'
 import TrendChart from '@/components/TrendChart.vue'
+import MetricAlertBell from '@/components/MetricAlertBell.vue'
 import { useGameList } from '@/composables/useGameList'
 import { useSegments } from '@/composables/useSegments'
 
@@ -141,7 +142,10 @@ watch(autoRefresh, setupTimer)
 
       <!-- 分钟趋势 -->
       <div class="card">
-        <h3 class="text-lg font-medium text-gray-900 mb-4">在线人数分钟趋势（近 {{ data.trendMinutes }} 分钟）</h3>
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-lg font-medium text-gray-900">在线人数分钟趋势（近 {{ data.trendMinutes }} 分钟）</h3>
+          <MetricAlertBell metric-type="DAU" title="为 DAU 配置告警" />
+        </div>
         <TrendChart :labels="trendLabels" :series="trendSeries" />
       </div>
     </div>

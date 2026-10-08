@@ -3,6 +3,7 @@ import { ref, computed, watch, onMounted } from 'vue'
 import api from '@/services/api'
 import GameSelector from '@/components/GameSelector.vue'
 import TrendChart from '@/components/TrendChart.vue'
+import MetricAlertBell from '@/components/MetricAlertBell.vue'
 import { useGameList } from '@/composables/useGameList'
 import { useSegments } from '@/composables/useSegments'
 
@@ -138,7 +139,10 @@ watch([currentGameId, days, segmentId], load)
 
       <!-- 趋势 -->
       <div class="card mb-8">
-        <h3 class="text-lg font-medium text-gray-900 mb-4">崩溃趋势</h3>
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-lg font-medium text-gray-900">崩溃趋势</h3>
+          <MetricAlertBell metric-type="CRASH_RATE" title="为崩溃率配置告警" />
+        </div>
         <TrendChart :labels="trendLabels" :series="trendSeries" />
       </div>
 
