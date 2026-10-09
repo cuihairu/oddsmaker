@@ -115,6 +115,7 @@
 - [x] 文档对账：risk.md 端点行、调研 §7 样本管理行、挂起项拍板复核与本节
 
 **验收：** ✅ 全量 gradle 237 suite / 2599 用例绿（failures=0 errors=0）+ web 168/168 + web/docs build 双绿。边界：THRESHOLD/FEATURE 逐事件纯函数试算，流式窗口类规则不模拟；样本不落库；样本集持久化（命名/留档/多次对比）仍留待拍板。
+**实机走查（2026-10-10）：** ✅ postgres:16 一次性容器 + bootRun 全量 Flyway 迁移直连——API 层 curl 四样本（严格大于/等于不命中/FEATURE 全 AND/字符串金额/默认编号/needsStreaming 明示）逐项符合语义，空样本 400 文案透出、ruleIds 过滤、rule-stats 真库出 3 规则行；UI 层 playwright 实操 `/risk-lab`（登录→聚合表渲染→载入示例→试算→命中徽章/状态徽章/逐样本生效行），DEFAULT 游戏种子规则把 evaluable/needsStreaming/notCovered 三状态全 exercise 到，截图双张核对无误。
 
 ---
 
