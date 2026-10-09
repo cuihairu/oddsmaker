@@ -71,6 +71,77 @@ async function runReplay() {
   }
 }
 
+// 样本集（V0.4）：命名留档当前样本 JSON，改规则后载入重放对比
+const sampleSets = ref([])
+const setsLoading = ref(false)
+const setName = ref('')
+const setDesc = ref('')
+const setBusy = ref(false)
+const setError = ref('')
+
+async function loadSampleSets() {
+  if (!currentGameId.value) return
+  setsLoading.value = true
+  try {
+    const res = await api.get(`/api/games/${currentGameId.value}/risk-lab/sample-sets`)
+    sampleSets.value = res.data
+  } catch (e) {
+    sampleSets.value = []
+    console.error('Failed to load sample sets:', e)
+  } finally {
+    setsLoading.value = false
+  }
+}
+
+async function saveSampleSet() {
+  if (!currentGameId.value || !replayText.value.trim() || !setName.value.trim()) return
+  setError.value = ''
+  let samples
+  try {
+    samples = JSON.parse(replayText.value)
+  } catch (e) {
+    setError.value = '样本不是合法 JSON：' + e.message
+    return
+  }
+  setBusy.value = true
+  try {
+    await api.post(`/api/games/${currentGameId.value}/risk-lab/sample-sets`, {
+      name: setName.value, description: setDesc.value || null, samples
+    })
+    setName.value = ''
+    setDesc.value = ''
+    await loadSampleSets()
+  } catch (e) {
+    setError.value = e.response?.data?.message || '留档失败'
+    console.error('Failed to save sample set:', e)
+  } finally {
+    setBusy.value = false
+  }
+}
+
+async function loadSetIntoReplay(set) {
+  setError.value = ''
+  try {
+    const res = await api.get(`/api/games/${currentGameId.value}/risk-lab/sample-sets/${set.id}`)
+    replayText.value = JSON.stringify(res.data.samples, null, 2)
+  } catch (e) {
+    setError.value = e.response?.data?.message || '载入失败'
+    console.error('Failed to load sample set:', e)
+  }
+}
+
+async function removeSampleSet(set) {
+  if (!confirm(`确认删除样本集「${set.name}」？`)) return
+  setError.value = ''
+  try {
+    await api.delete(`/api/games/${currentGameId.value}/risk-lab/sample-sets/${set.id}`)
+    await loadSampleSets()
+  } catch (e) {
+    setError.value = e.response?.data?.message || '删除失败'
+    console.error('Failed to delete sample set:', e)
+  }
+}
+
 const levelLabels = { LOW: '低', MEDIUM: '中', HIGH: '高', CRITICAL: '严重' }
 const levelColors = {
   LOW: 'bg-gray-100 text-gray-700',
@@ -110,6 +181,7 @@ async function load() {
   } finally {
     loading.value = false
   }
+  loadSampleSets()
 }
 
 async function selectRule(rule) {
@@ -149,6 +221,7 @@ watch(currentGameId, () => {
   selectedRule.value = null
   replayResult.value = null
   replayError.value = ''
+  setError.value = ''
   load()
 })
 onMounted(load)
@@ -327,6 +400,56 @@ onMounted(load)
         <button @click="runReplay" class="btn btn-primary" :disabled="replaying || !replayText.trim()">
           {{ replaying ? '试算中...' : '试算' }}
         </button>
+      </div>
+
+      <!-- 样本集（V0.4）：命名留档当前样本，改规则后载入重放对比 -->
+      <div class="mt-6 pt-4 border-t border-gray-100">
+        <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+          <h4 class="text-sm font-medium text-gray-900">样本集</h4>
+          <div class="flex items-center gap-2 flex-wrap">
+            <input
+              v-model="setName"
+              class="text-sm border border-gray-200 rounded-md px-3 py-1.5 w-44 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="样本集名称（必填）"
+            />
+            <input
+              v-model="setDesc"
+              class="text-sm border border-gray-200 rounded-md px-3 py-1.5 w-52 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="描述（可选）"
+            />
+            <button @click="saveSampleSet" class="btn btn-secondary text-xs"
+              :disabled="setBusy || !replayText.trim() || !setName.trim()">
+              {{ setBusy ? '留档中...' : '存为样本集' }}
+            </button>
+          </div>
+        </div>
+        <div v-if="setError" class="text-sm text-red-600 mb-2">{{ setError }}</div>
+        <table v-if="sampleSets.length" class="min-w-full divide-y divide-gray-200 text-sm">
+          <thead>
+            <tr class="text-left text-xs text-gray-500 uppercase">
+              <th class="py-2 pr-4">名称</th>
+              <th class="py-2 pr-4">样本数</th>
+              <th class="py-2 pr-4">描述</th>
+              <th class="py-2 pr-4">创建时间</th>
+              <th class="py-2">操作</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            <tr v-for="s in sampleSets" :key="s.id">
+              <td class="py-2 pr-4 font-medium text-gray-900">{{ s.name }}</td>
+              <td class="py-2 pr-4 text-gray-500">{{ s.sampleCount }}</td>
+              <td class="py-2 pr-4 text-gray-500 text-xs">{{ s.description || '—' }}</td>
+              <td class="py-2 pr-4 text-gray-500 text-xs whitespace-nowrap">{{ fmtTime(s.createdAt) }}</td>
+              <td class="py-2">
+                <button @click="loadSetIntoReplay(s)" class="btn btn-secondary text-xs mr-2">载入</button>
+                <button @click="removeSampleSet(s)" class="text-xs text-red-500 hover:text-red-700">删除</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <p v-else class="text-xs text-gray-400 py-2">
+          {{ setsLoading ? '加载中...' : '暂无样本集：把上方样本 JSON 填好名称后点「存为样本集」留档，改规则后可载入重放对比' }}
+        </p>
       </div>
 
       <div v-if="replayError" class="mt-4 text-sm text-red-600">{{ replayError }}</div>

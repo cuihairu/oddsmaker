@@ -1,6 +1,7 @@
 # Changelog
 
 ## v0.2.0 (unreleased)
+- 策略实验室 V0.4 样本集持久化（2026-10-10）：命名留档样本批次，改规则后重放对比——`risk_sample_sets` 表（V0.9.24，game+name 唯一）+ `RiskSampleSetService` create/list/get/delete（写入校验与 dry-run 同款 `validateSamples` 抽公共，保证留档样本任何一次重放都能算；留档不可改、删除重建；create/delete 12 参审计）+ `GET/POST /api/games/{gameId}/risk-lab/sample-sets`、`GET/DELETE .../{id}`（读 `game:read`、写删 `risk:manage`）+ 控制台 `/risk-lab` 页「样本集」区（存为样本集/载入回填试算 JSON/删除）
 - 策略实验室 V0.3 试算回放 dry-run（2026-10-10）：`RiskLabReplayService.dryRun` 批量样本按游戏活跃规则逐事件试算命中——THRESHOLD 严格大于阈值、FEATURE 条件全 AND（缺值 fail-closed），语义对齐线上纯函数（`RiskJob.overThreshold`/`FeatureCalc.matches`/`RuleFetcher.parseFeatureConditions`）；诚实边界：FREQUENCY/VELOCITY/RATIO/DUPLICATE_RECEIPT/AD_REWARD/PATTERN 标 `needsStreaming` 跳过、ANOMALY/MACHINE_LEARNING 标 `notCovered`、条件非法标 `invalid`，均明示不造假命中；同 ruleType 线上只生效 riskScore 最高者（`effectiveHits` 收敛，`matchedRuleIds` 保留逐规则原始命中）。`POST /api/games/{gameId}/risk-lab/replay`（`game:read`，samples 1~500 条即传即算不落库，ruleIds 可选过滤），控制台 `/risk-lab` 页「试算回放」面板（JSON 编辑 + 示例载入 + 规则过滤 + 命中汇总/规则表/逐样本生效徽章）
 - 策略实验室 V0.2 复盘聚合（2026-10-09）：`RiskLabService.ruleStats` 按规则聚合案例（误杀/确认违规/证据不足/未复盘分桶、误杀率分母=已处置、平均复盘时长、零案例规则与孤儿规则行），`GET /api/games/{gameId}/risk-lab/rule-stats`；案例列表 `ruleId`/`disposition` 内存后过滤（最近 2000 条窗口）供样本下钻；控制台 `/risk-lab` 页（汇总卡 + 规则聚合表 + 点行下钻 + 处置 chips）
 - Webhook 按配置超时（8f318cd）：`WebhookRestTemplateProvider` 按 webhook 配置的超时秒数派生 RestTemplate（null 回落默认、钳制 1~300s、按 readMs 缓存），替代此前全配置共用默认超时

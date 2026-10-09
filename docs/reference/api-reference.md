@@ -148,6 +148,10 @@ The risk-job picks up enabled rules from `GET /api/risk-dashboard/rules/{gameId}
 | POST | `/api/games/{gameId}/risk-cases/{caseId}/unblock` | Manual unblock for false positives (cascades to linked block-list entries) |
 | GET | `/api/games/{gameId}/risk-lab/rule-stats` | Per-rule review aggregation (case counts, false-positive rate over disposed, avg review hours, zero-case and orphan rule rows) |
 | POST | `/api/games/{gameId}/risk-lab/replay` | Strategy-lab replay dry-run: score up to 500 sample events against active rules (THRESHOLD/FEATURE evaluated per event; streaming-window types reported as `needsStreaming` and skipped; same-type rules converge to the highest riskScore in `effectiveHits`). Stateless — samples are not persisted |
+| GET | `/api/games/{gameId}/risk-lab/sample-sets` | Named sample-set list (metadata only: name, sampleCount, createdAt) |
+| POST | `/api/games/{gameId}/risk-lab/sample-sets` | Create a named sample set (`risk:manage`): body `{name, description?, samples}`; name unique per game, samples validated with the same rules as replay (1–500), immutable once stored |
+| GET | `/api/games/{gameId}/risk-lab/sample-sets/{id}` | Sample-set detail including parsed samples for replay loading |
+| DELETE | `/api/games/{gameId}/risk-lab/sample-sets/{id}` | Delete a sample set (`risk:manage`, audited); re-create to replace |
 
 ### Block Lists
 

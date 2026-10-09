@@ -67,12 +67,7 @@ public class RiskLabReplayService {
      * 返回 {gameId, summary{...}, ruleResults[], sampleResults[]}。
      */
     public Map<String, Object> dryRun(String gameId, List<Map<String, Object>> rawSamples, List<String> ruleIds) {
-        if (rawSamples == null || rawSamples.isEmpty()) {
-            throw new IllegalArgumentException("samples 不能为空");
-        }
-        if (rawSamples.size() > MAX_SAMPLES) {
-            throw new IllegalArgumentException("samples 超过单次上限 " + MAX_SAMPLES + " 条，请分批试算");
-        }
+        validateSamples(rawSamples);
 
         List<ReplaySample> samples = new ArrayList<>(rawSamples.size());
         for (int i = 0; i < rawSamples.size(); i++) {
@@ -188,7 +183,30 @@ public class RiskLabReplayService {
         return report;
     }
 
-    // ===== 私有辅助 =====
+    // ===== 辅助 =====
+
+    /**
+     * 样本结构校验（dry-run 与样本集存储共用口径）：非空、不超上限、
+     * 逐条须为对象且 amount/features 可数值化——留档样本保证之后任何一次重放都能算
+     */
+    static void validateSamples(List<Map<String, Object>> rawSamples) {
+        if (rawSamples == null || rawSamples.isEmpty()) {
+            throw new IllegalArgumentException("samples 不能为空");
+        }
+        if (rawSamples.size() > MAX_SAMPLES) {
+            throw new IllegalArgumentException("samples 超过单次上限 " + MAX_SAMPLES + " 条，请分批试算");
+        }
+        for (int i = 0; i < rawSamples.size(); i++) {
+            Object o = rawSamples.get(i);
+            if (!(o instanceof Map)) {
+                throw new IllegalArgumentException("samples 第 " + (i + 1) + " 条必须是对象");
+            }
+            @SuppressWarnings("unchecked")
+            Map<String, Object> raw = (Map<String, Object>) o;
+            toAmount(raw.get("amount"), i + 1);
+            toFeatures(raw.get("features"), i + 1);
+        }
+    }
 
     private record ReplaySample(String eventId, BigDecimal amount, Map<String, Double> features) {}
 

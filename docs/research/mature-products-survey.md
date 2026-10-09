@@ -151,7 +151,7 @@
 ## 6. 与本仓现状的对应
 
 - 告警：本仓已有阈值告警，缺的是"配置入口贴图表"与 webhook/邮件之外的通道收敛方式，§2.2 可作交互依据。
-- 风控控制台：规则链路形状与四家一致；误杀漏杀案例回看已落地（`/risk-cases` 风控案例页），策略实验室复盘聚合已落地（`/risk-lab`）；「样本集上传+批量回放」2026-10-10 复核改判：试算回放（dry-run）落地为 V0.3（THRESHOLD/FEATURE 逐事件试算，流式窗口类规则明示跳过），样本集持久化仍留待拍板。
+- 风控控制台：规则链路形状与四家一致；误杀漏杀案例回看已落地（`/risk-cases` 风控案例页），策略实验室复盘聚合已落地（`/risk-lab`）；「样本集上传+批量回放」2026-10-10 复核改判：试算回放（dry-run）落地为 V0.3（THRESHOLD/FEATURE 逐事件试算，流式窗口类规则明示跳过），样本集持久化落地为 V0.4（命名留档/载入重放对比）。
 - SDK：本仓 5 端 SDK 走 JSON + HMAC，与 GameAnalytics Collection API、Amplitude HTTP V2 同一形态；这两份公开协议可作为对照基准。
 - 分发：本仓 SDK 随仓库与包管理走，不采用风控厂商的后台下载制，理由见 §5。
 
@@ -166,7 +166,7 @@
 | 可参考 | 通知通道三件套收敛（webhook/邮件/站内 IM，§2.2） | 各家一致，且通道配置集中一处管理、规则里只选通道类型 | 邮件通道已落地：每游戏一条收件配置（`alert_email_configs`，告警触发时尽力投递、SMTP 未配置跳过），配置与测试发送在业务告警页；现有 webhook（`notifyWebhook` → webhook_logs，按配置超时）+ 邮件两通道；站内 IM 维持远期（2026-10-09 拍板：消息中心/未读已读是全新产品面，webhook+邮件已覆盖离线触达，属产品级新方向留待拍板） |
 | 可参考 | 风控控制台「事件→字段→策略」分层（§2.3） | 四家同构，本仓 Gateway 前置 + Flink 实时已同型，分层是现成共识 | 已落地：`RiskRulesView` + B5「事件→特征→规则」三段解耦（规则条件从特征取值） |
 | 可参考 | 公开上报协议作对照基准（GA Collection API、Amplitude HTTP V2，§3） | 有可对照的公开接口文档，能校验自家协议设计是否走形 | 已同型：sdks/ 五端 JSON+HMAC 与 Server SDK（B3）；协议文档以这两份公开 API 为对照基准 |
-| 可借鉴 | 样本管理 + 策略实验室（阿里云）、误杀漏杀案例回看（数美，§2.3） | 规则上线后的第一诉求是复盘，这块最容易缺 | 回看已落地：案例 API（`/api/games/{gameId}/risk-cases` 列表/详情/解除）+ 控制台风控案例页（`/risk-cases`：过滤、证据/上下文回看、误杀解除封禁联动释放黑名单）；策略实验室 V0.2 已落地（2026-10-09 拍板）：`GET /api/games/{gameId}/risk-lab/rule-stats` 规则复盘聚合（误杀率分母=已处置、平均复盘时长、零案例/孤儿规则行）+ 案例列表 `ruleId`/`disposition` 样本下钻 + 控制台 `/risk-lab` 页；「样本集上传+批量回放打分」2026-10-10 复核改判为做：V0.3 试算回放 dry-run（`POST /api/games/{gameId}/risk-lab/replay`，THRESHOLD/FEATURE 逐事件试算、语义对齐线上纯函数；FREQUENCY 等流式窗口类标 `needsStreaming` 明示跳过不造假命中；同 ruleType 按 riskScore 收敛；samples 即传即算不落库），样本集持久化（命名/留档/多次对比）仍留待拍板 |
+| 可借鉴 | 样本管理 + 策略实验室（阿里云）、误杀漏杀案例回看（数美，§2.3） | 规则上线后的第一诉求是复盘，这块最容易缺 | 回看已落地：案例 API（`/api/games/{gameId}/risk-cases` 列表/详情/解除）+ 控制台风控案例页（`/risk-cases`：过滤、证据/上下文回看、误杀解除封禁联动释放黑名单）；策略实验室 V0.2 已落地（2026-10-09 拍板）：`GET /api/games/{gameId}/risk-lab/rule-stats` 规则复盘聚合（误杀率分母=已处置、平均复盘时长、零案例/孤儿规则行）+ 案例列表 `ruleId`/`disposition` 样本下钻 + 控制台 `/risk-lab` 页；「样本集上传+批量回放打分」2026-10-10 复核改判为做：V0.3 试算回放 dry-run（`POST /api/games/{gameId}/risk-lab/replay`，THRESHOLD/FEATURE 逐事件试算、语义对齐线上纯函数；FREQUENCY 等流式窗口类标 `needsStreaming` 明示跳过不造假命中；同 ruleType 按 riskScore 收敛；samples 即传即算不落库），样本集持久化已落地 V0.4（`GET/POST /api/games/{gameId}/risk-lab/sample-sets` + `GET/DELETE .../{id}` + 控制台「样本集」区：命名留档 1~500 条、写入校验与 dry-run 同款、载入回填改规则重放对比、删除重建） |
 | 可借鉴 | 异常检测默认档 + 阈值档分层（GA4/神策/Amplitude，§4.2） | 「系统先判异常、阈值档进阶」能同时压漏报与吵闹 | `MetricAlertService` 已有阈值 + 基线对比；Prophet/ML 区间检测排后（与 §5 第三行口径一致） |
 | 可借鉴 | 客户端 SDK 与服务端 API 同一套接口（GA Collection API，§3.1） | 服务端直传与客户端上报共用 API，接入面减半、验证口径唯一 | 本仓 5 端 SDK + Server SDK（B3）已同形态，保持并在 SDK 文档中标注 |
 | 不适用 | 下载式/后台式 SDK 分发（易盾/数美/TalkingData，§5） | 与 sdks/ 目录的包管理分发方式冲突 | 只作外部集成项，不进主仓（§5 第一行） |

@@ -10,12 +10,13 @@ import { settle } from '../helpers/settle.js'
  * - 处置筛选：chips 带 disposition 重拉；再点同一规则行收起样本区
  * - 试算回放：载入示例 → POST /risk-lab/replay（samples 必带、ruleIds 过滤可选）、
  *   渲染命中汇总/规则表/逐样本生效徽章；非法 JSON 本地报错不发请求；服务端 400 透出
+ * - 样本集：存为样本集（POST name+samples 后重拉列表）、载入回填 textarea、删除带确认
  * - 空态：无规则出「暂无风控规则」
  *
  * useGameList 模块单例——每用例 resetModules + 先设 localStorage 再动态 import 视图；
  * GameSelector 打桩隔离（与 SegmentsView.spec 同口径）。
  */
-vi.mock('@/services/api', () => ({ default: { get: vi.fn(), post: vi.fn() } }))
+vi.mock('@/services/api', () => ({ default: { get: vi.fn(), post: vi.fn(), delete: vi.fn() } }))
 
 const STORAGE_KEY = 'oddsmaker.selectedGameId'
 
@@ -84,7 +85,16 @@ const REPLAY = {
   ]
 }
 
-async function fresh({ stats = STATS, samples = SAMPLES, replay = REPLAY } = {}) {
+const SETS = [
+  { id: 'rss_1', name: '大额基线', description: '改阈值前留档', sampleCount: 2, createdBy: 'op1', createdAt: '2026-10-09T10:00:00' }
+]
+
+const SET_DETAIL = {
+  id: 'rss_1', name: '大额基线', sampleCount: 2,
+  samples: [{ eventId: 'evt-1', amount: 150000 }, { eventId: 'evt-2', amount: 50 }]
+}
+
+async function fresh({ stats = STATS, samples = SAMPLES, replay = REPLAY, sets = SETS, setDetail = SET_DETAIL } = {}) {
   vi.resetModules()
   localStorage.clear()
   localStorage.setItem(STORAGE_KEY, 'g1')
@@ -94,9 +104,12 @@ async function fresh({ stats = STATS, samples = SAMPLES, replay = REPLAY } = {})
     if (url === '/api/games') return ok({ content: [{ id: 'g1' }] })
     if (url === '/api/games/g1/risk-lab/rule-stats') return ok(stats)
     if (url === '/api/games/g1/risk-cases') return ok(samples)
+    if (url === '/api/games/g1/risk-lab/sample-sets') return ok(sets)
+    if (url === '/api/games/g1/risk-lab/sample-sets/rss_1') return ok(setDetail)
     return ok({})
   })
   api.post.mockResolvedValue(ok(replay))
+  api.delete.mockResolvedValue(ok({ deleted: true }))
 
   const RiskLabView = (await import('@/views/RiskLabView.vue')).default
   const wrapper = mount(RiskLabView, { global: { stubs: { GameSelector: true } } })
@@ -108,6 +121,8 @@ const ruleRows = (w) => w.findAll('tbody')[0].findAll('tr')
 const sampleRows = (w) => w.findAll('tbody')[1]?.findAll('tr') ?? []
 const caseCalls = (api) => api.get.mock.calls.filter((c) => c[0].endsWith('/risk-cases'))
 const replayCalls = (api) => api.post.mock.calls.filter((c) => c[0].endsWith('/risk-lab/replay'))
+const setCalls = (api) => api.post.mock.calls.filter((c) => c[0].endsWith('/risk-lab/sample-sets'))
+const setRow = (w) => w.findAll('tbody').find((t) => t.text().includes('大额基线'))?.findAll('tr') ?? []
 const runReplay = async (w) => {
   const btn = w.findAll('button').find((b) => b.text() === '试算')
   await btn.trigger('click')
@@ -210,5 +225,54 @@ describe('RiskLabView', () => {
     await runReplay(wrapper)
     expect(replayCalls(api)[0][1].ruleIds).toEqual(['rr_1', 'rr_2'])
     expect(wrapper.text()).toContain('samples 不能为空')
+  })
+
+  it('样本集：存为样本集 POST name+samples 后重拉列表并渲染行', async () => {
+    const { wrapper, api } = await fresh()
+
+    await wrapper.find('textarea').setValue('[{"eventId":"evt-1","amount":150000}]')
+    await wrapper.find('input[placeholder="样本集名称（必填）"]').setValue('大额基线')
+    const saveBtn = wrapper.findAll('button').find((b) => b.text() === '存为样本集')
+    await saveBtn.trigger('click')
+    await settle()
+
+    expect(setCalls(api)).toHaveLength(1)
+    expect(setCalls(api)[0][0]).toBe('/api/games/g1/risk-lab/sample-sets')
+    expect(setCalls(api)[0][1]).toEqual({ name: '大额基线', description: null, samples: [{ eventId: 'evt-1', amount: 150000 }] })
+    // 留档成功后重拉列表
+    const setGets = api.get.mock.calls.filter((c) => c[0].endsWith('/risk-lab/sample-sets'))
+    expect(setGets.length).toBeGreaterThanOrEqual(2)
+    expect(wrapper.text()).toContain('大额基线')
+    expect(wrapper.text()).toContain('改阈值前留档')
+    expect(setRow(wrapper)).toHaveLength(1)
+  })
+
+  it('样本集：载入回填 textarea 后可直接试算', async () => {
+    const { wrapper, api } = await fresh()
+
+    const loadBtn = setRow(wrapper)[0].findAll('button').find((b) => b.text() === '载入')
+    await loadBtn.trigger('click')
+    await settle()
+
+    expect(wrapper.find('textarea').element.value).toContain('evt-1')
+    expect(wrapper.find('textarea').element.value).toContain('150000')
+
+    await runReplay(wrapper)
+    expect(replayCalls(api)).toHaveLength(1)
+    expect(replayCalls(api)[0][1].samples).toHaveLength(2)
+  })
+
+  it('样本集：删除带确认，确认后 DELETE 并重拉列表', async () => {
+    const { wrapper, api } = await fresh()
+    vi.stubGlobal('confirm', vi.fn(() => true))
+
+    const delBtn = setRow(wrapper)[0].findAll('button').find((b) => b.text() === '删除')
+    await delBtn.trigger('click')
+    await settle()
+
+    expect(api.delete).toHaveBeenCalledWith('/api/games/g1/risk-lab/sample-sets/rss_1')
+    const setGets = api.get.mock.calls.filter((c) => c[0].endsWith('/risk-lab/sample-sets'))
+    expect(setGets.length).toBeGreaterThanOrEqual(2)
+    vi.unstubAllGlobals()
   })
 })
