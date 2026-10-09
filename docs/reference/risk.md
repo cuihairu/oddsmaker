@@ -27,6 +27,7 @@
 | POST | `/api/games/{gameId}/risk-lab/sample-sets` | 新建样本集：body `{name,description?,samples}`，name 同游戏唯一，samples 1~500 条走试算回放同款校验（留档即不可改，删除重建），create/delete 审计；鉴权 `risk:manage` |
 | GET | `/api/games/{gameId}/risk-lab/sample-sets/{id}` | 样本集详情（含解析后的 `samples`，供载入回放） |
 | DELETE | `/api/games/{gameId}/risk-lab/sample-sets/{id}` | 删除样本集（审计）；需替换时删除重建；鉴权 `risk:manage` |
+| GET | `/api/games/{gameId}/risk-scores?subjectType=&subjectId=` | 主体累计风险分最新快照（B6 边界闭合）：读 CH `risk_scores`（`ORDER BY updated_at DESC LIMIT 1`，ReplacingMergeTree 合并前后都正确），`reasons` 解析为 `[{ruleId,contribution}]`；未落过分返回 `found:false`；CH 未配置抛 `CH_UNAVAILABLE`；鉴权 `game:read` |
 | GET | `/api/risk-dashboard/recent-cases/{gameId}` | 最近案例列表 |
 | GET/POST | `/api/review-queue/...` | 人工审核流（分配、认领、完成、升级） |
 | POST | `/api/block-lists/{blockId}/unblock` | 按封禁记录解除（案例触发的封禁也在黑名单表里） |

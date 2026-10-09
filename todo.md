@@ -128,6 +128,14 @@
 **验收：** ✅ 全量 gradle 239 suite / 2612 用例绿（failures=0 errors=0，基线 237/2599 + 样本集 service 9 例 + API 4 例）+ web 171/171（基线 168 + 样本集区 3 例）+ web/docs build 双绿。边界：留档不可改（删除重建）、校验与 dry-run 同款口径、读 `game:read`/写删 `risk:manage`。
 **实机走查（2026-10-10）：** ✅ postgres:16 一次性容器 + bootRun 全量 Flyway 迁移直连——API 层九步全过：create（rss_ 前缀、字符串金额收编、createdBy=admin、createdAt 预置非空——`@CreationTimestamp` 落库正确但不回填内存值，响应需显式预置，仓内惯例同 `TrackingPlanService`）→ 同名 400 → 坏金额 400 文案与 dry-run 同款 → 列表元信息 → 详情解析 samples → 用留档样本 replay 命中 evaluable 规则 → 删除 → 列表空 → 重复删 `deleted:false`；UI 层 playwright 实操 `/risk-lab`（登录→存为样本集→列表渲染→载入回填 textarea→试算出命中→删除），截图四张核对无误。
 
+## 主体累计风险分读取（B6 边界闭合，2026-10-10 增量）
+
+- [x] `RiskScoreService.latest`：读 CH `risk_scores` 主体最新快照（`ORDER BY updated_at DESC LIMIT 1`，ReplacingMergeTree 合并前后都正确）；`reasons` JSON 数组解析为 `[{ruleId,contribution}]`（坏条目跳过、`java.sql.Array`/`List` 两形态兼容）；未落过分 `found:false`；CH 未配置抛 `CH_UNAVAILABLE`（BusinessException，与导出同款）
+- [x] `GET /api/games/{gameId}/risk-scores?subjectType=&subjectId=`（`game:read`，subject 空白 400）
+- [x] 文档对账：risk.md 端点行、api-reference Risk Cases & Strategy Lab 节、CHANGELOG 与本节（B6 验收行的「暂无读取端点」边界自此闭合，历史行不改写）
+
+**验收：** ✅ 单测 7 例（快照解析/空行/CH 不可用/空白 subject/SQL Array 形态/坏条目跳过/鉴权委托）随全量门禁绿。
+
 ---
 
 ## 边界（不跟进，评审转审查项）

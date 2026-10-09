@@ -152,6 +152,7 @@ The risk-job picks up enabled rules from `GET /api/risk-dashboard/rules/{gameId}
 | POST | `/api/games/{gameId}/risk-lab/sample-sets` | Create a named sample set (`risk:manage`): body `{name, description?, samples}`; name unique per game, samples validated with the same rules as replay (1–500), immutable once stored |
 | GET | `/api/games/{gameId}/risk-lab/sample-sets/{id}` | Sample-set detail including parsed samples for replay loading |
 | DELETE | `/api/games/{gameId}/risk-lab/sample-sets/{id}` | Delete a sample set (`risk:manage`, audited); re-create to replace |
+| GET | `/api/games/{gameId}/risk-scores?subjectType=&subjectId=` | Subject cumulative risk score, latest snapshot from ClickHouse `risk_scores` (`reasons` parsed to `[{ruleId,contribution}]`; `found:false` when never scored; `CH_UNAVAILABLE` error when ClickHouse is not configured) |
 
 ### Block Lists
 
