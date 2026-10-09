@@ -67,6 +67,8 @@ class RiskSampleSetServiceTest {
 
         assertEquals("基线样本", created.get("name"));
         assertEquals(2, created.get("sampleCount"));
+        // 预置时间戳保证响应 createdAt 非空（@CreationTimestamp 不回填内存值）
+        assertNotNull(created.get("createdAt"));
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> samples = (List<Map<String, Object>>) created.get("samples");
         assertEquals(2, samples.size());

@@ -9,6 +9,7 @@ import io.oddsmaker.control.jpa.RiskSampleSetRepo;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -83,6 +84,10 @@ public class RiskSampleSetService {
         entity.samples = samplesJson;
         entity.sampleCount = samples.size();
         entity.createdBy = operator;
+        // 预置时间戳：@CreationTimestamp 落库正确但不回填实体内存值，响应需要非空 createdAt（仓内惯例同 TrackingPlanService）
+        LocalDateTime now = LocalDateTime.now();
+        entity.createdAt = now;
+        entity.updatedAt = now;
         repo.save(entity);
 
         auditLog.log(

@@ -126,6 +126,7 @@
 - [x] 文档对账：risk.md 端点行与控制台页行、api-reference Risk Cases & Strategy Lab 节、调研 §7 样本管理行与小结行、CHANGELOG、挂起项拍板复核与本节
 
 **验收：** ✅ 全量 gradle 239 suite / 2612 用例绿（failures=0 errors=0，基线 237/2599 + 样本集 service 9 例 + API 4 例）+ web 171/171（基线 168 + 样本集区 3 例）+ web/docs build 双绿。边界：留档不可改（删除重建）、校验与 dry-run 同款口径、读 `game:read`/写删 `risk:manage`。
+**实机走查（2026-10-10）：** ✅ postgres:16 一次性容器 + bootRun 全量 Flyway 迁移直连——API 层九步全过：create（rss_ 前缀、字符串金额收编、createdBy=admin、createdAt 预置非空——`@CreationTimestamp` 落库正确但不回填内存值，响应需显式预置，仓内惯例同 `TrackingPlanService`）→ 同名 400 → 坏金额 400 文案与 dry-run 同款 → 列表元信息 → 详情解析 samples → 用留档样本 replay 命中 evaluable 规则 → 删除 → 列表空 → 重复删 `deleted:false`；UI 层 playwright 实操 `/risk-lab`（登录→存为样本集→列表渲染→载入回填 textarea→试算出命中→删除），截图四张核对无误。
 
 ---
 
