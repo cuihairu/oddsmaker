@@ -9,6 +9,7 @@ import io.oddsmaker.control.security.AccessGuard;
 import io.oddsmaker.control.service.AuditLogService;
 import io.oddsmaker.control.service.BlockListService;
 import io.oddsmaker.control.service.RiskCaseService;
+import io.oddsmaker.control.service.RiskScoreService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -19,6 +20,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -64,6 +66,9 @@ class RiskCaseApiTest {
     @Mock
     private AuditLogService auditLogService;
 
+    @Mock
+    private RiskScoreService riskScoreService;
+
     private RiskCaseController controller;
     private RiskCaseService service;
 
@@ -71,7 +76,7 @@ class RiskCaseApiTest {
     void setUp() {
         controller = new RiskCaseController(riskCaseService, accessGuard);
         service = new RiskCaseService(riskCaseRepo, blockListRepo, blockListService, auditLogService,
-            new com.fasterxml.jackson.databind.ObjectMapper());
+            riskScoreService, new com.fasterxml.jackson.databind.ObjectMapper());
     }
 
     // ===== Controller =====
@@ -203,6 +208,29 @@ class RiskCaseApiTest {
         when(riskCaseRepo.findById("missing")).thenReturn(Optional.empty());
         assertNull(service.detail(GAME, "missing"));
         assertNull(service.detail(GAME, null));
+    }
+
+    @Test
+    @DisplayName("详情：主体累计分快照注入——found=true 回传，未落分/CH 不可用/查询异常降级 null 不阻断回看")
+    void detailSubjectRiskScore() {
+        RiskCaseEntity rc = blockedCase();
+        when(riskCaseRepo.findById(CASE_ID)).thenReturn(Optional.of(rc));
+
+        Map<String, Object> snapshot = new LinkedHashMap<>();
+        snapshot.put("found", true);
+        snapshot.put("score", 85);
+        snapshot.put("reasons", List.of(Map.of("ruleId", "rr_1", "contribution", 40)));
+        snapshot.put("updatedAt", "2026-10-10 12:00:00");
+        when(riskScoreService.latest(GAME, "player_id", "p_100")).thenReturn(snapshot);
+        assertEquals(snapshot, service.detail(GAME, CASE_ID).get("subjectRiskScore"));
+
+        when(riskScoreService.latest(GAME, "player_id", "p_100")).thenReturn(Map.of("found", false));
+        assertNull(service.detail(GAME, CASE_ID).get("subjectRiskScore"));
+
+        when(riskScoreService.latest(GAME, "player_id", "p_100"))
+            .thenThrow(new IllegalStateException("ch down"));
+        assertNull(service.detail(GAME, CASE_ID).get("subjectRiskScore"));
+        assertEquals(CASE_ID, service.detail(GAME, CASE_ID).get("id"));
     }
 
     // ===== Service: unblock =====

@@ -136,6 +136,15 @@
 
 **验收：** ✅ 单测 7 例（快照解析/空行/CH 不可用/空白 subject/SQL Array 形态/坏条目跳过/鉴权委托）随全量门禁绿。
 
+## 案例详情主体累计分行（B6 闭合的回看侧表面，2026-10-10 增量）
+
+- [x] `RiskCaseService.detail` 注入 `subjectRiskScore`：复用 `RiskScoreService.latest` 按案例目标（targetType/targetId）读 CH 最新累计分；未落分（found=false）、CH 未配置或查询失败一律降级 null——案例回看不因评分面降级（try/catch RuntimeException + debug 日志）
+- [x] 控制台 `/risk-cases` 详情弹层「主体累计分」行：分数 + 规则贡献条数 + 快照时间（fmtTime），`subjectRiskScore` 缺失整行不渲染
+- [x] 测试：`RiskCaseApiTest` 详情注入 3 分支（found=true 回传 / found=false 降级 / 查询异常降级且详情仍完整）；新增 `RiskCasesView.spec.js`（列表渲染 + 累计分行显隐两态，RiskLabView.spec 同口径 harness）
+- [x] 文档对账：risk.md 案例详情行与控制台页行、api-reference case detail 行、CHANGELOG 与本节
+
+**验收：** ✅ RiskCaseApiTest 9/9 + web 全量 174/174（基线 171 + 案例页 3 例）随全量门禁绿。
+
 ---
 
 ## 边界（不跟进，评审转审查项）

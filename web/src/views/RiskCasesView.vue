@@ -233,6 +233,7 @@ onMounted(load)
 
         <dl class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm mb-4">
           <div><dt class="text-gray-500 inline">目标：</dt><span class="font-medium">{{ detail.targetType }} {{ detail.targetId }}</span><span v-if="detail.targetName" class="text-gray-500">（{{ detail.targetName }}）</span></div>
+          <div v-if="detail.subjectRiskScore"><dt class="text-gray-500 inline">主体累计分：</dt><span class="font-medium">{{ detail.subjectRiskScore.score }}</span><span v-if="detail.subjectRiskScore.reasons && detail.subjectRiskScore.reasons.length" class="text-gray-500"> · {{ detail.subjectRiskScore.reasons.length }} 条规则贡献</span><span v-if="detail.subjectRiskScore.updatedAt" class="text-gray-500"> · {{ fmtTime(detail.subjectRiskScore.updatedAt) }}</span></div>
           <div><dt class="text-gray-500 inline">环境：</dt>{{ detail.environmentId || '—' }}</div>
           <div><dt class="text-gray-500 inline">触发事件：</dt>{{ detail.triggerEventType || '—' }}<template v-if="detail.triggerEventName"> / {{ detail.triggerEventName }}</template></div>
           <div><dt class="text-gray-500 inline">规则：</dt>{{ detail.riskRuleId || '—' }}</div>

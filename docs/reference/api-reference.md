@@ -144,7 +144,7 @@ The risk-job picks up enabled rules from `GET /api/risk-dashboard/rules/{gameId}
 | Method | Endpoint | Description |
 |---|---|---|
 | GET | `/api/games/{gameId}/risk-cases?status=&riskLevel=&ruleId=&disposition=` | List risk cases (newest first; `ruleId`/`disposition` are strategy-lab sample filters, memory-filtered within the latest 2000 cases) |
-| GET | `/api/games/{gameId}/risk-cases/{caseId}` | Case detail (evidence/context JSON parsed to objects) |
+| GET | `/api/games/{gameId}/risk-cases/{caseId}` | Case detail (evidence/context JSON parsed to objects; `subjectRiskScore` snapshot for the case target when present in ClickHouse, null when not scored or CH unavailable) |
 | POST | `/api/games/{gameId}/risk-cases/{caseId}/unblock` | Manual unblock for false positives (cascades to linked block-list entries) |
 | GET | `/api/games/{gameId}/risk-lab/rule-stats` | Per-rule review aggregation (case counts, false-positive rate over disposed, avg review hours, zero-case and orphan rule rows) |
 | POST | `/api/games/{gameId}/risk-lab/replay` | Strategy-lab replay dry-run: score up to 500 sample events against active rules (THRESHOLD/FEATURE evaluated per event; streaming-window types reported as `needsStreaming` and skipped; same-type rules converge to the highest riskScore in `effectiveHits`). Stateless — samples are not persisted |

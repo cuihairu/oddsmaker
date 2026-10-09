@@ -40,15 +40,17 @@ public class RiskCaseService {
     private final BlockListRepo blockListRepo;
     private final BlockListService blockListService;
     private final AuditLogService auditLogService;
+    private final RiskScoreService riskScoreService;
     private final ObjectMapper objectMapper;
 
     public RiskCaseService(RiskCaseRepo riskCaseRepo, BlockListRepo blockListRepo,
                            BlockListService blockListService, AuditLogService auditLogService,
-                           ObjectMapper objectMapper) {
+                           RiskScoreService riskScoreService, ObjectMapper objectMapper) {
         this.riskCaseRepo = riskCaseRepo;
         this.blockListRepo = blockListRepo;
         this.blockListService = blockListService;
         this.auditLogService = auditLogService;
+        this.riskScoreService = riskScoreService;
         this.objectMapper = objectMapper;
     }
 
@@ -129,7 +131,22 @@ public class RiskCaseService {
         detail.put("unblockReason", rc.unblockReason);
         detail.put("evidence", parseJsonOrRaw(rc.evidenceData));
         detail.put("context", parseJsonOrRaw(rc.contextData));
+        detail.put("subjectRiskScore", subjectRiskScore(rc));
         return detail;
+    }
+
+    /**
+     * 主体累计风险分快照（B6 闭合的回看侧表面）：按案例目标读 ClickHouse risk_scores 最新一条；
+     * 未落过分（found=false）或 CH 不可用/查询失败一律降级为 null，不阻断案例回看。
+     */
+    private Map<String, Object> subjectRiskScore(RiskCaseEntity rc) {
+        try {
+            Map<String, Object> snapshot = riskScoreService.latest(rc.gameId, rc.targetType, rc.targetId);
+            return snapshot != null && Boolean.TRUE.equals(snapshot.get("found")) ? snapshot : null;
+        } catch (RuntimeException e) {
+            logger.debug("subject risk score unavailable for case {}: {}", rc.id, e.getMessage());
+            return null;
+        }
     }
 
     /**
