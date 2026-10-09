@@ -48,7 +48,7 @@ async function fresh({ flags = [FLAG] } = {}) {
   const { default: FeatureFlagsView } = await import('@/views/FeatureFlagsView.vue')
   const wrapper = mount(FeatureFlagsView)
   await flushPromises()
-  await settle(wrapper)
+  await settle()
   return { wrapper, api }
 }
 
@@ -69,18 +69,18 @@ describe('FeatureFlagsView', () => {
     api.get.mockResolvedValue(ok([{ ...FLAG, flagKey: 'k1', flagName: 'K1' }]))
 
     await wrapper.find('button.btn-primary').trigger('click')  // 新建开关
-    await settle(wrapper)
+    await settle()
 
     const saveBtn = wrapper.findAll('button').find(b => b.text() === '创建')
     await saveBtn.trigger('click')
-    await settle(wrapper)
+    await settle()
     expect(wrapper.text()).toContain('请填写开关名称')
     expect(api.post).not.toHaveBeenCalled()
 
     const inputs = wrapper.findAll('input.input')
     await inputs[1].setValue('K1')          // flagName（先过名称校验）
     await saveBtn.trigger('click')
-    await settle(wrapper)
+    await settle()
     expect(wrapper.text()).toContain('请填写开关键（flagKey）')
     expect(api.post).not.toHaveBeenCalled()
 
@@ -89,7 +89,7 @@ describe('FeatureFlagsView', () => {
     await textareas[0].setValue('u1, u10 ,')  // 白名单（含空段）
     await saveBtn.trigger('click')
     await flushPromises()
-    await settle(wrapper)
+    await settle()
 
     expect(api.post).toHaveBeenCalledWith('/api/system/features', expect.objectContaining({
       flagKey: 'k1',
@@ -108,7 +108,7 @@ describe('FeatureFlagsView', () => {
 
     const editBtn = wrapper.findAll('button').find(b => b.text() === '编辑')
     await editBtn.trigger('click')
-    await settle(wrapper)
+    await settle()
 
     expect(wrapper.text()).toContain('编辑：new_flag')
     const textareas = wrapper.findAll('textarea')
@@ -117,7 +117,7 @@ describe('FeatureFlagsView', () => {
     const saveBtn = wrapper.findAll('button').find(b => b.text() === '保存')
     await saveBtn.trigger('click')
     await flushPromises()
-    await settle(wrapper)
+    await settle()
 
     expect(api.put).toHaveBeenCalledWith('/api/system/features/new_flag', expect.objectContaining({
       flagName: '新开关',
@@ -137,7 +137,7 @@ describe('FeatureFlagsView', () => {
     const enableBtn = wrapper.findAll('button').find(b => b.text() === '启用')
     await enableBtn.trigger('click')
     await flushPromises()
-    await settle(wrapper)
+    await settle()
 
     expect(api.post).toHaveBeenCalledWith('/api/system/features/new_flag/enable', { modifiedBy: 'tester' })
     expect(wrapper.text()).toContain('已启用')
