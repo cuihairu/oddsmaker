@@ -33,6 +33,9 @@ public class RiskCaseService {
     /** 单页上限：防止全表量级拉取 */
     private static final int MAX_LIMIT = 500;
 
+    /** 规则/处置后过滤的取数窗口：先取最近 N 条再内存过滤（策略实验室样本下钻量级） */
+    private static final int POST_FILTER_SCAN = 2000;
+
     private final RiskCaseRepo riskCaseRepo;
     private final BlockListRepo blockListRepo;
     private final BlockListService blockListService;
@@ -50,13 +53,18 @@ public class RiskCaseService {
     }
 
     /**
-     * 按游戏列案例，最新在前；status/riskLevel 可选过滤，limit 默认 100、上限 500
+     * 按游戏列案例，最新在前；status/riskLevel/ruleId/disposition 可选过滤，limit 默认 100、上限 500。
+     * ruleId/disposition（策略实验室样本下钻）为内存后过滤：先按状态组合取最近 {@value #POST_FILTER_SCAN} 条，
+     * 过滤后截断到 limit——不在该窗口内的更深历史不参与下钻（复盘按最新优先）。
      */
     @Transactional(readOnly = true)
-    public List<Map<String, Object>> list(String gameId, String status, String riskLevel, int limit) {
+    public List<Map<String, Object>> list(String gameId, String status, String riskLevel,
+                                          String ruleId, String disposition, int limit) {
         RiskCaseEntity.DecisionStatus st = parseEnum(RiskCaseEntity.DecisionStatus.class, status, "status");
         RiskCaseEntity.RiskLevel lv = parseEnum(RiskCaseEntity.RiskLevel.class, riskLevel, "riskLevel");
-        Pageable page = PageRequest.of(0, Math.min(Math.max(limit, 1), MAX_LIMIT));
+        boolean hasPostFilter = notBlank(ruleId) || notBlank(disposition);
+        int clamped = Math.min(Math.max(limit, 1), MAX_LIMIT);
+        Pageable page = PageRequest.of(0, hasPostFilter ? POST_FILTER_SCAN : clamped);
 
         List<RiskCaseEntity> cases;
         if (st != null && lv != null) {
@@ -69,11 +77,32 @@ public class RiskCaseService {
             cases = riskCaseRepo.findByGameIdOrderByCreatedAtDesc(gameId, page);
         }
 
-        List<Map<String, Object>> result = new ArrayList<>(cases.size());
-        for (RiskCaseEntity rc : cases) {
+        List<RiskCaseEntity> matched = cases;
+        if (hasPostFilter) {
+            matched = new ArrayList<>();
+            for (RiskCaseEntity rc : cases) {
+                if (matched.size() >= clamped) {
+                    break;
+                }
+                if (notBlank(ruleId) && !ruleId.equals(rc.riskRuleId)) {
+                    continue;
+                }
+                if (notBlank(disposition) && !disposition.equals(rc.disposition)) {
+                    continue;
+                }
+                matched.add(rc);
+            }
+        }
+
+        List<Map<String, Object>> result = new ArrayList<>(matched.size());
+        for (RiskCaseEntity rc : matched) {
             result.add(toListItem(rc));
         }
         return result;
+    }
+
+    private static boolean notBlank(String s) {
+        return s != null && !s.isBlank();
     }
 
     /**

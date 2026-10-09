@@ -18,14 +18,15 @@
 
 | 方法 | 端点 | 说明 |
 |------|------|------|
-| GET | `/api/games/{gameId}/risk-cases` | 案例列表（`status`/`riskLevel` 过滤，`limit` 默认 100、上限 500，最新在前） |
+| GET | `/api/games/{gameId}/risk-cases` | 案例列表（`status`/`riskLevel` 过滤；`ruleId`/`disposition` 为策略实验室样本下钻过滤——在最近 2000 条案例窗口内内存过滤后截断，`limit` 默认 100、上限 500，最新在前） |
 | GET | `/api/games/{gameId}/risk-cases/{caseId}` | 案例详情（证据/上下文 JSON 解析为对象，解析失败回传原文） |
 | POST | `/api/games/{gameId}/risk-cases/{caseId}/unblock` | 人工解除封禁（误杀处置；须 `BLOCK` 已执行且未解除，联动释放由本案例创建的黑名单记录） |
+| GET | `/api/games/{gameId}/risk-lab/rule-stats` | 策略实验室规则复盘聚合：每规则一行（案例数、误杀/确认违规/证据不足/未复盘分桶、误杀率分母=已处置、平均复盘时长、最近案例），零案例规则也出行；聚合在最近 5000 条案例内进行 |
 | GET | `/api/risk-dashboard/recent-cases/{gameId}` | 最近案例列表 |
 | GET/POST | `/api/review-queue/...` | 人工审核流（分配、认领、完成、升级） |
 | POST | `/api/block-lists/{blockId}/unblock` | 按封禁记录解除（案例触发的封禁也在黑名单表里） |
 
-案例回看控制台页为 `/risk-cases`（列表过滤 + 详情弹层 + 误杀解除），列表/详情鉴权 `game:read`，解除封禁鉴权 `risk:manage`。
+案例回看控制台页为 `/risk-cases`（列表过滤 + 详情弹层 + 误杀解除），列表/详情鉴权 `game:read`，解除封禁鉴权 `risk:manage`。策略实验室控制台页为 `/risk-lab`（规则复盘聚合 + 点规则行下钻案例样本，处置 chips 过滤），鉴权 `game:read`。
 
 ## 规则类别（category）
 

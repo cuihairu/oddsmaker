@@ -14,6 +14,7 @@ const navigation = [
   { name: '实验管理', href: '/experiments', icon: 'flask' },
   { name: '风控规则', href: '/risk-rules', icon: 'shield' },
   { name: '风控案例', href: '/risk-cases', icon: 'document' },
+  { name: '策略实验室', href: '/risk-lab', icon: 'chart' },
   { name: '事件 Schema', href: '/schemas', icon: 'schema' },
   { name: 'Flink 作业', href: '/flink-jobs', icon: 'cpu' },
   { name: '维度同步', href: '/dimensions', icon: 'sync' },

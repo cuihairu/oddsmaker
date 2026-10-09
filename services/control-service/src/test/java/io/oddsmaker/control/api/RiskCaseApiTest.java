@@ -77,12 +77,12 @@ class RiskCaseApiTest {
     // ===== Controller =====
 
     @Test
-    @DisplayName("列表：game:read 鉴权并透传过滤参数")
+    @DisplayName("列表：game:read 鉴权并透传过滤参数（含策略实验室下钻的 ruleId/disposition）")
     void listPassthrough() {
-        when(riskCaseService.list(eq(GAME), eq("BLOCK"), eq("HIGH"), eq(50)))
+        when(riskCaseService.list(eq(GAME), eq("BLOCK"), eq("HIGH"), eq("rr_1"), eq("confirmed_benign"), eq(50)))
             .thenReturn(List.of(Map.of("id", CASE_ID)));
 
-        var resp = controller.list(GAME, "BLOCK", "HIGH", 50);
+        var resp = controller.list(GAME, "BLOCK", "HIGH", "rr_1", "confirmed_benign", 50);
 
         assertEquals(200, resp.getStatusCode().value());
         assertEquals(CASE_ID, resp.getBody().get(0).get("id"));
@@ -126,23 +126,62 @@ class RiskCaseApiTest {
         Pageable defaultPage = PageRequest.of(0, 100);
         Pageable clamped = PageRequest.of(0, 500);
 
-        service.list(GAME, null, null, 100);
+        service.list(GAME, null, null, null, null, 100);
         verify(riskCaseRepo).findByGameIdOrderByCreatedAtDesc(GAME, defaultPage);
 
-        service.list(GAME, "OPEN", null, 10);
+        service.list(GAME, "OPEN", null, null, null, 10);
         verify(riskCaseRepo).findByGameIdAndStatusOrderByCreatedAtDesc(
             eq(GAME), eq(RiskCaseEntity.DecisionStatus.OPEN), eq(PageRequest.of(0, 10)));
 
-        service.list(GAME, null, "CRITICAL", 10);
+        service.list(GAME, null, "CRITICAL", null, null, 10);
         verify(riskCaseRepo).findByGameIdAndRiskLevelOrderByCreatedAtDesc(
             eq(GAME), eq(RiskCaseEntity.RiskLevel.CRITICAL), eq(PageRequest.of(0, 10)));
 
-        service.list(GAME, "BLOCK", "HIGH", 99999);
+        service.list(GAME, "BLOCK", "HIGH", null, null, 99999);
         verify(riskCaseRepo).findByGameIdAndStatusAndRiskLevelOrderByCreatedAtDesc(
             eq(GAME), eq(RiskCaseEntity.DecisionStatus.BLOCK), eq(RiskCaseEntity.RiskLevel.HIGH), eq(clamped));
 
-        assertThrows(IllegalArgumentException.class, () -> service.list(GAME, "NOPE", null, 10));
-        assertThrows(IllegalArgumentException.class, () -> service.list(GAME, null, "NOPE", 10));
+        assertThrows(IllegalArgumentException.class, () -> service.list(GAME, "NOPE", null, null, null, 10));
+        assertThrows(IllegalArgumentException.class, () -> service.list(GAME, null, "NOPE", null, null, 10));
+    }
+
+    @Test
+    @DisplayName("ruleId/disposition 后过滤：先取最近 2000 条，内存过滤后截断到 limit")
+    void listPostFilterForLab() {
+        RiskCaseEntity benign = reviewedCase("rc_b", "rr_1", "confirmed_benign");
+        RiskCaseEntity fraud = reviewedCase("rc_f", "rr_1", "confirmed_fraud");
+        RiskCaseEntity otherRule = reviewedCase("rc_o", "rr_2", "confirmed_benign");
+        RiskCaseEntity open = reviewedCase("rc_n", "rr_1", null);
+        when(riskCaseRepo.findByGameIdOrderByCreatedAtDesc(eq(GAME), eq(PageRequest.of(0, 2000))))
+            .thenReturn(List.of(benign, fraud, otherRule, open));
+
+        List<Map<String, Object>> rows = service.list(GAME, null, null, "rr_1", "confirmed_benign", 100);
+
+        assertEquals(List.of("rc_b"), rows.stream().map(r -> r.get("id")).toList());
+
+        // 只带 ruleId（不过滤处置）：rr_1 的三条按序返回
+        List<Map<String, Object>> byRule = service.list(GAME, null, null, "rr_1", null, 100);
+        assertEquals(List.of("rc_b", "rc_f", "rc_n"), byRule.stream().map(r -> r.get("id")).toList());
+
+        // limit 截断发生在过滤之后
+        List<Map<String, Object>> capped = service.list(GAME, null, null, "rr_1", null, 2);
+        assertEquals(List.of("rc_b", "rc_f"), capped.stream().map(r -> r.get("id")).toList());
+    }
+
+    private RiskCaseEntity reviewedCase(String id, String ruleId, String disposition) {
+        RiskCaseEntity rc = new RiskCaseEntity();
+        rc.id = id;
+        rc.gameId = GAME;
+        rc.caseNumber = "CASE_" + id.toUpperCase();
+        rc.riskRuleId = ruleId;
+        rc.targetType = "player_id";
+        rc.targetId = "p_" + id;
+        rc.riskLevel = RiskCaseEntity.RiskLevel.HIGH;
+        rc.status = RiskCaseEntity.DecisionStatus.RESOLVED;
+        rc.actionTaken = RiskCaseEntity.ActionType.ALERT;
+        rc.executionStatus = RiskCaseEntity.ExecutionStatus.EXECUTED;
+        rc.disposition = disposition;
+        return rc;
     }
 
     // ===== Service: detail =====

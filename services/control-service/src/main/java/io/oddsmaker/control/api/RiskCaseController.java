@@ -29,9 +29,11 @@ public class RiskCaseController {
     public ResponseEntity<List<Map<String, Object>>> list(@PathVariable String gameId,
                                                           @RequestParam(required = false) String status,
                                                           @RequestParam(required = false) String riskLevel,
+                                                          @RequestParam(required = false) String ruleId,
+                                                          @RequestParam(required = false) String disposition,
                                                           @RequestParam(defaultValue = "100") int limit) {
         accessGuard.requireGamePermission(gameId, "game:read");
-        return ResponseEntity.ok(riskCaseService.list(gameId, status, riskLevel, limit));
+        return ResponseEntity.ok(riskCaseService.list(gameId, status, riskLevel, ruleId, disposition, limit));
     }
 
     @GetMapping("/api/games/{gameId}/risk-cases/{caseId}")

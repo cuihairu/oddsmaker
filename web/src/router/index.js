@@ -53,6 +53,12 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: '/risk-lab',
+      name: 'risk-lab',
+      component: () => import('@/views/RiskLabView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
       path: '/schemas',
       name: 'schemas',
       component: () => import('@/views/SchemasView.vue'),
