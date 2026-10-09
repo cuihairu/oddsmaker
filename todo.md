@@ -87,15 +87,16 @@
 
 ---
 
-## 挂起项拍板（2026-10-09，依据 = 成熟产品调研 §5/§6/§7 与既有批次边界）
+## 挂起项拍板（2026-10-09 首拍，2026-10-10 巡检复核，依据 = 成熟产品调研 §5/§6/§7 与既有批次边界）
 
-> B1~B10 清零后的四项挂起，按已有决策记录自行逐项定夺；仅「样本集上传+批量回放」「站内 IM」两处属产品级新方向留待用户，其余均已定并落记录。
+> B1~B10 清零后的四项挂起逐项定夺；2026-10-10 巡检复核：「样本集上传+批量回放」改为做（V0.3 试算回放），其余维持原判。
 
-- [x] **策略实验室：做（V0.2 复盘聚合，本批开工）**——依据调研 §7「可借鉴」行（规则上线后第一诉求是复盘，误杀回看已落地、实验室仍为增量）。增量：`GET /api/games/{gameId}/risk-lab/rule-stats` 规则复盘聚合（误杀率分母=已处置、平均复盘时长、零案例/孤儿规则行）+ 案例列表 `ruleId`/`disposition` 样本下钻 + 控制台 `/risk-lab` 页。
-- [x] **样本管理：拆开判**——「案例即样本」的按规则/处置筛误杀样本随实验室 V0.2 落地（上条）；阿里云形态的「样本集上传 + 批量回放打分」依赖回放执行器语义，属产品级新方向，**留待用户拍板**，不排期（落点见调研 §7 行）。
-- [x] **站内 IM：不做（维持远期）**——依据调研 §7 结论「通道收敛落了 webhook+邮件双通道，站内 IM 为远期」；webhook（含按配置超时）+ 邮件已覆盖离线触达，IM 消息中心/未读已读是全新产品面，属产品级新方向**留待用户**，不排期。
-- [x] **ML 异常检测：排期（条件触发，不进近期批次）**——依据调研 §5「需要每指标历史基线训练与回填，成本前置」；`MetricAlertService` 阈值+基线对比已覆盖告警面，待指标历史可稳定算 7d/28d 分位基线时再评估，不立即开工。
+- [x] **策略实验室：做（V0.2 复盘聚合已落地）**——依据调研 §7「可借鉴」行（规则上线后第一诉求是复盘，误杀回看已落地、实验室仍为增量）。增量：`GET /api/games/{gameId}/risk-lab/rule-stats` 规则复盘聚合（误杀率分母=已处置、平均复盘时长、零案例/孤儿规则行）+ 案例列表 `ruleId`/`disposition` 样本下钻 + 控制台 `/risk-lab` 页。
+- [x] **样本集上传+批量回放打分：做（2026-10-10 复核改判，V0.3 试算回放，本批开工）**——原判「回放执行器级新方向留待拍板」复核后收窄边界改为做：THRESHOLD（amount 严格大于阈值，`RiskJob.overThreshold` 纯函数）与 FEATURE（条件 op 对比全 AND，`RuleFetcher.parseFeatureConditions` 校验语义）均为逐事件纯函数，control-service 可同步试算，**不需要 Flink 执行器**；边界：FREQUENCY/VELOCITY/RATIO/DUPLICATE_RECEIPT/AD_REWARD/PATTERN 依赖流式窗口/序列聚合，dry-run 不模拟（标 `needsStreaming` 明示跳过，不造假命中），ANOMALY/MACHINE_LEARNING 生产链路本就不评估（标 `notCovered`）；同 ruleType 只生效 riskScore 最高者（与 RuleFetcher 收敛一致），ruleResults 保留逐规则原始命中便于同型对比；样本集持久化（命名/留档/多次对比）不做，samples 走请求体即传即算不落库。落点见本文件「策略实验室 V0.3」。
+- [x] **站内 IM：不做（维持远期，复核无变化）**——依据调研 §7 结论「通道收敛落了 webhook+邮件双通道，站内 IM 为远期」；webhook（含按配置超时）+ 邮件已覆盖离线触达，IM 消息中心/未读已读是全新产品面，属产品级新方向**留待用户**，不排期。
+- [x] **ML 异常检测：排期（条件触发，2026-10-10 复核把触发条件量化）**——满足任一即进评估批次，否则维持不排期：(a) 指标历史可稳定回看 ≥ 7 天且 7d/28d 分位基线可计算（`MetricAlertService` 基线对比已就绪，等数据积累）；(b) 单游戏阈值告警规则月均调整 ≥ 3 次（审计日志可查证，说明人工阈值维护成本高到需要自适应基线）；(c) 告警噪音率（复盘结论为误杀的占比）> 30% 持续 2 周。依据调研 §5「需要每指标历史基线训练与回填，成本前置」。
 - [x] **unmerge/身份拆分：不做（维持 merge 批次边界）**——依据：merge 落地行边界即「无反向拆分」；修正路径已齐（tombstone `identity_id` 反查 + GDPR erasure + 再 merge 纠错），真 unmerge 需合并日志（计数已归并不可逆拆），产品语义级新方向不做。
+- [x] **CF DNS 域名切换：用户侧不动（复核确认）**——属用户侧操作，本仓无动作。
 
 ## 策略实验室 V0.2（复盘聚合，2026-10-09 增量）
 
@@ -104,7 +105,16 @@
 - [x] 控制台 `/risk-lab` 页（汇总卡 + 规则聚合表 + 点行下钻案例样本 + 处置 chips），路由契约 31→32
 - [x] 文档对账：risk.md 端点表、调研 §5/§6/§7 落点行与本节
 
-**验收：** ✅ 全量 gradle 236 suite / 2591 用例绿（failures=0 errors=0）+ web 165/165 + web/docs build 双绿。边界：聚合在每游戏最近 5000 条案例内进行；样本下钻过滤在最近 2000 条窗口内截断；不提供回放打分（样本集上传+批量回放留待拍板）。
+**验收：** ✅ 全量 gradle 236 suite / 2591 用例绿（failures=0 errors=0）+ web 165/165 + web/docs build 双绿。边界：聚合在每游戏最近 5000 条案例内进行；样本下钻过滤在最近 2000 条窗口内截断；不提供回放打分（2026-10-10 复核改判，见下节）。
+
+## 策略实验室 V0.3（试算回放 dry-run，2026-10-10 增量）
+
+- [x] `RiskLabReplayService.dryRun`：批量样本试算（THRESHOLD/FEATURE 逐事件评估，语义对齐 `RiskJob.overThreshold`/`FeatureCalc.matches`/`RuleFetcher.parseFeatureConditions`；FREQUENCY 等 6 类标 `needsStreaming`、ANOMALY/MACHINE_LEARNING 标 `notCovered`、条件非法标 `invalid` 均明示跳过；同 ruleType 生效规则按 riskScore 收敛，ruleResults 保留逐规则命中）
+- [x] `POST /api/games/{gameId}/risk-lab/replay`（`game:read`；samples 1~500 条即传即算不落库，ruleIds 可选过滤）
+- [x] 控制台 `/risk-lab` 页「试算回放」面板（JSON 编辑区 + 示例载入 + 试算按钮 + 规则命中表/样本结果表）
+- [x] 文档对账：risk.md 端点行、调研 §7 样本管理行、挂起项拍板复核与本节
+
+**验收：** ✅ 全量 gradle 237 suite / 2599 用例绿（failures=0 errors=0）+ web 168/168 + web/docs build 双绿。边界：THRESHOLD/FEATURE 逐事件纯函数试算，流式窗口类规则不模拟；样本不落库；样本集持久化（命名/留档/多次对比）仍留待拍板。
 
 ---
 

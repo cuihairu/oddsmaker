@@ -5,6 +5,7 @@ import io.oddsmaker.control.jpa.RiskCaseRepo;
 import io.oddsmaker.control.jpa.RiskRuleEntity;
 import io.oddsmaker.control.jpa.RiskRuleRepo;
 import io.oddsmaker.control.security.AccessGuard;
+import io.oddsmaker.control.service.RiskLabReplayService;
 import io.oddsmaker.control.service.RiskLabService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -47,13 +48,16 @@ class RiskLabApiTest {
     @Mock
     private RiskLabService riskLabService;
 
+    @Mock
+    private RiskLabReplayService riskLabReplayService;
+
     private RiskLabController controller;
     private RiskLabService service;
 
     @BeforeEach
     void setUp() {
         service = new RiskLabService(riskRuleRepo, riskCaseRepo);
-        controller = new RiskLabController(riskLabService, accessGuard);
+        controller = new RiskLabController(riskLabService, riskLabReplayService, accessGuard);
     }
 
     // ===== Controller =====
@@ -67,6 +71,23 @@ class RiskLabApiTest {
 
         assertEquals(GAME, body.get("gameId"));
         verify(accessGuard).requireGamePermission(GAME, "game:read");
+    }
+
+    @Test
+    @DisplayName("replay：game:read 鉴权并透传 samples/ruleIds 给试算服务")
+    void replayGuardsAndDelegates() {
+        List<Map<String, Object>> samples = List.of(Map.of("eventId", "s1", "amount", 100));
+        List<String> ruleIds = List.of("rr_1");
+        when(riskLabReplayService.dryRun(GAME, samples, ruleIds)).thenReturn(Map.of("gameId", GAME));
+
+        RiskLabController.ReplayRequest req = new RiskLabController.ReplayRequest();
+        req.samples = samples;
+        req.ruleIds = ruleIds;
+        Map<String, Object> body = controller.replay(GAME, req);
+
+        assertEquals(GAME, body.get("gameId"));
+        verify(accessGuard).requireGamePermission(GAME, "game:read");
+        verify(riskLabReplayService).dryRun(GAME, samples, ruleIds);
     }
 
     // ===== Service：聚合口径 =====
