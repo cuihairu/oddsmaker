@@ -77,6 +77,9 @@ class InfraServicesDeepTest2 {
     @Mock
     private RestTemplate restTemplate;
 
+    @Mock
+    private WebhookRestTemplateProvider restTemplateProvider;
+
     @Spy
     private ObjectMapper objectMapper = new ObjectMapper();
 
@@ -143,6 +146,8 @@ class InfraServicesDeepTest2 {
         lenient().when(integrationLogRepo.save(any(IntegrationLogEntity.class))).thenAnswer(i -> i.getArgument(0));
         lenient().when(webhookConfigRepo.save(any(WebhookConfigEntity.class))).thenAnswer(i -> i.getArgument(0));
         lenient().when(webhookLogRepo.save(any(WebhookLogEntity.class))).thenAnswer(i -> i.getArgument(0));
+        // Webhook 投递走按配置超时的 provider（统一回返回同一 restTemplate mock）
+        lenient().when(restTemplateProvider.forConfig(any(WebhookConfigEntity.class))).thenReturn(restTemplate);
 
         // IntegrationService 的 restTemplate 是 private final new 出来的，通过反射替换为 mock
         Field restTemplateField = IntegrationService.class.getDeclaredField("restTemplate");

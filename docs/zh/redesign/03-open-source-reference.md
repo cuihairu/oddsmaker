@@ -70,7 +70,7 @@ Oddsmaker 不应该吸收：
 
 ## 5. 可参考分析（逐条判定与落点）
 
-> **结论：**六家参考的可借鉴项大半已落地（事件分类、Schema 治理、实验统计、Flag/实验、Crash/Remote Config），Identity Merge 部分落地、Session Replay 经竞品分析改判不适用；不适用项全部集中于 SaaS 多租户形态。
+> **结论：**六家参考的可借鉴项大半已落地（事件分类、Schema 治理、实验统计、Flag/实验、Crash/Remote Config、显式 Identity Merge），Session Replay 经竞品分析改判不适用；不适用项全部集中于 SaaS 多租户形态。
 
 | 判定 | 参考项 | 为什么 | 本仓落点 |
 |------|--------|--------|----------|
@@ -79,7 +79,7 @@ Oddsmaker 不应该吸收：
 | 可参考 | Countly：Crash / Remote Config / 插件化边界 | 移动与游戏向的成品能力组合 | 已落地：`CrashView`（指纹规范化 + 版本崩溃率）、`FeatureFlagsView`（配置下发）；插件化仅作模块边界参考 |
 | 可参考 | GameAnalytics：游戏事件 Taxonomy | 游戏原生分类是行业通用语言 | 已落地：P3 九类事件（§3 表）+ B7 EventSchema/Tracking Plan 强约束 |
 | 可参考 | Snowplow：Schema Registry / Tracking Plan / 事件治理 | 治理是分析可信的前提 | 已落地：EventSchema 一等资源化（B7：compatibility / PII policy / retention / sampling / owner + 版本发布与兼容检查） |
-| 可借鉴 | Mixpanel：Identity Merge / 画像 / 漏斗 | 主体口径统一是多端归因的前提 | 部分落地：subject 回退口径（player_id → user_id → device_id）贯穿报表与风控；显式 Identity Merge（跨端身份合并）列后续候选 |
+| 可借鉴 | Mixpanel：Identity Merge / 画像 / 漏斗 | 主体口径统一是多端归因的前提 | 已落地：subject 回退口径（player_id → user_id → device_id）贯穿报表与风控；显式 Identity Merge（`POST /api/identities/{gameId}/merge`，secondary 并入 primary：link 重挂/冲突吊销、identity_id 反查链路、标量回填与计数归并、墓碑化 + 审计，`privacy:manage` 门禁；IdentityConsumer 对合并墓碑跳过重建保留人工决定） |
 | 可参考 | Statsig/GrowthBook：分桶 / SRM / 显著性 | 实验统计的正确性底线 | 已落地：SHA-256 确定性分桶 + z/t 检验 + 卡方 SRM（B8），Audience/Guardrail/Decision 已字段化 |
 | 不适用 | 六家共同的 SaaS 多租户形态（Org/Project/Team、套餐与升级、跨公司 Row Policy、租户配额、组织销售层级） | 单公司部署是产品边界，隔离只围绕 `game_id + environment` | 不做（本章 §2 负面清单 + 06 计划书领域模型） |
 | 可参考 | §4 风控通用模式（Gateway 硬拦截 / Flink 状态化 / ClickHouse 回溯 / Redis 计数 / Control 规则审计） | 分层拦截 + 状态化检测 + 可审计处置是风控链路的成熟分法 | 已同构落地：Gateway 前置校验、risk-job（B5 特征层）、ClickHouse risk_events、Redis 计数器/黑名单、RiskRule/RiskCase（B6） |

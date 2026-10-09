@@ -106,7 +106,7 @@ class PlatformControllersTest {
     private SystemController systemController;
 
     @Test
-    @DisplayName("系统：18 个端点委托")
+    @DisplayName("系统：20 个端点委托")
     void systemEndpoints() {
         assertEquals(200, systemController.createMaintenance(new SystemController.MaintenanceRequest()).getStatusCode().value());
         assertEquals(200, systemController.getActiveMaintenances().getStatusCode().value());
@@ -122,19 +122,21 @@ class PlatformControllersTest {
         assertEquals(200, systemController.getAllFeatureFlags().getStatusCode().value());
         assertEquals(200, systemController.getEnabledFeatureFlags().getStatusCode().value());
         assertEquals(200, systemController.checkFeature("flag", null, null).getStatusCode().value());
+        assertEquals(200, systemController.createFeature(new MaintenanceService.FeatureFlagCreate()).getStatusCode().value());
+        assertEquals(200, systemController.updateFeature("flag", new MaintenanceService.FeatureFlagUpdate()).getStatusCode().value());
         assertEquals(200, systemController.enableFeature("flag", new SystemController.ModifyRequest()).getStatusCode().value());
         assertEquals(200, systemController.disableFeature("flag", new SystemController.ModifyRequest()).getStatusCode().value());
         assertEquals(200, systemController.setFeaturePercentage("flag", new SystemController.PercentageRequest()).getStatusCode().value());
         assertEquals(200, systemController.advanceFeatureRollout("flag", new SystemController.ModifyRequest()).getStatusCode().value());
         assertEquals(200, systemController.getSystemStatus().getStatusCode().value());
         verify(maintenanceService).getActiveMaintenances();
-        // maintenance manage 4/read 2；system read 3/manage 1；featureflag read 2/manage 4；check/public/checkFeature 无 guard
+        // maintenance manage 4/read 2；system read 3/manage 1；featureflag read 2/manage 6（+create/update）；check/public/checkFeature 无 guard
         verify(accessGuard, org.mockito.Mockito.times(4)).requirePermission("maintenance:manage");
         verify(accessGuard, org.mockito.Mockito.times(2)).requirePermission("maintenance:read");
         verify(accessGuard, org.mockito.Mockito.times(3)).requirePermission("system:read");
         verify(accessGuard, org.mockito.Mockito.times(1)).requirePermission("system:manage");
         verify(accessGuard, org.mockito.Mockito.times(2)).requirePermission("featureflag:read");
-        verify(accessGuard, org.mockito.Mockito.times(4)).requirePermission("featureflag:manage");
+        verify(accessGuard, org.mockito.Mockito.times(6)).requirePermission("featureflag:manage");
     }
 
     // ===== 安全（MFA/SSO/会话/策略） =====

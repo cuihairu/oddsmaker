@@ -1,5 +1,7 @@
 package io.oddsmaker.control.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.oddsmaker.control.jpa.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,6 +23,8 @@ import java.util.stream.Collectors;
 public class MaintenanceService {
 
     private static final Logger logger = LoggerFactory.getLogger(MaintenanceService.class);
+
+    private static final ObjectMapper JSON = new ObjectMapper();
 
     @Autowired
     private MaintenanceWindowRepo maintenanceWindowRepo;
@@ -299,6 +303,171 @@ public class MaintenanceService {
 
         logger.info("Advanced feature flag rollout: {} -> step {}, {}%", flagKey, flag.currentStep, flag.percentageValue);
         return flag;
+    }
+
+    /**
+     * 创建功能开关（全字段创建，补齐此前仅 enable/disable/percentage/advance 的面）。
+     * 新建恒 DISABLED——启停与灰度走既有端点（enable/disable/percentage/advance），
+     * 避免未配置 rolloutSteps 就带状态上线的半成品态。名单列以 JSON 数组落库
+     * （成员判断而非子串匹配，见 FeatureFlagEntity.listContains）。
+     */
+    public FeatureFlagEntity createFeatureFlag(FeatureFlagCreate req) {
+        if (req.flagKey == null || req.flagKey.isBlank()) {
+            throw new IllegalArgumentException("flagKey is required");
+        }
+        if (req.flagName == null || req.flagName.isBlank()) {
+            throw new IllegalArgumentException("flagName is required");
+        }
+        String key = req.flagKey.trim();
+        if (featureFlagRepo.findByKey(key).isPresent()) {
+            throw new IllegalStateException("Feature flag already exists: " + key);
+        }
+
+        FeatureFlagEntity flag = new FeatureFlagEntity();
+        flag.flagKey = key;
+        flag.flagName = req.flagName.trim();
+        flag.description = req.description;
+        flag.category = req.category;
+        flag.owner = req.owner;
+        flag.tags = req.tags;
+        flag.flagStatus = FeatureFlagEntity.FlagStatus.DISABLED;
+        flag.flagType = req.flagType != null ? req.flagType : FeatureFlagEntity.FlagType.BOOLEAN;
+        flag.defaultValue = req.defaultValue != null ? req.defaultValue : false;
+        flag.percentageValue = req.percentageValue != null
+                ? Math.max(0, Math.min(100, req.percentageValue)) : 0;
+        flag.whitelistUsers = toJsonList("whitelistUsers", req.whitelistUsers);
+        flag.blacklistUsers = toJsonList("blacklistUsers", req.blacklistUsers);
+        flag.whitelistGames = toJsonList("whitelistGames", req.whitelistGames);
+        flag.blacklistGames = toJsonList("blacklistGames", req.blacklistGames);
+        flag.conditions = validateJson("conditions", req.conditions);
+        flag.rolloutSteps = validateJson("rolloutSteps", req.rolloutSteps);
+        flag.createdBy = req.createdBy;
+        flag = featureFlagRepo.save(flag);
+
+        auditLogService.log(AuditLogEntity.AuditAction.CREATE, "feature_flag", flag.flagKey, flag.flagName,
+                "create feature flag", AuditLogEntity.AuditResult.SUCCESS, req.createdBy,
+                null, null, null, null,
+                Map.of("flagType", flag.flagType.name(), "defaultValue", flag.defaultValue));
+
+        logger.info("Created feature flag: {} ({})", flag.flagKey, flag.flagType);
+        return flag;
+    }
+
+    /**
+     * 更新功能开关（全字段、提供才写；名单空数组=清空，conditions/rolloutSteps 空串=清空）。
+     * 不含启停与灰度——状态与百分比由 enable/disable/percentage/advance 端点独占，
+     * 避免绕过 setPercentage 的状态联动。
+     */
+    public FeatureFlagEntity updateFeatureFlag(String flagKey, FeatureFlagUpdate req) {
+        FeatureFlagEntity flag = featureFlagRepo.findByKey(flagKey)
+                .orElseThrow(() -> new IllegalArgumentException("Feature flag not found: " + flagKey));
+
+        List<String> changed = new ArrayList<>();
+        if (req.flagName != null) {
+            if (req.flagName.isBlank()) throw new IllegalArgumentException("flagName cannot be blank");
+            flag.flagName = req.flagName.trim();
+            changed.add("flagName");
+        }
+        if (req.description != null) { flag.description = req.description; changed.add("description"); }
+        if (req.category != null) { flag.category = req.category; changed.add("category"); }
+        if (req.owner != null) { flag.owner = req.owner; changed.add("owner"); }
+        if (req.tags != null) { flag.tags = req.tags; changed.add("tags"); }
+        if (req.flagType != null) { flag.flagType = req.flagType; changed.add("flagType"); }
+        if (req.defaultValue != null) { flag.defaultValue = req.defaultValue; changed.add("defaultValue"); }
+        if (req.whitelistUsers != null) { flag.whitelistUsers = toJsonList("whitelistUsers", req.whitelistUsers); changed.add("whitelistUsers"); }
+        if (req.blacklistUsers != null) { flag.blacklistUsers = toJsonList("blacklistUsers", req.blacklistUsers); changed.add("blacklistUsers"); }
+        if (req.whitelistGames != null) { flag.whitelistGames = toJsonList("whitelistGames", req.whitelistGames); changed.add("whitelistGames"); }
+        if (req.blacklistGames != null) { flag.blacklistGames = toJsonList("blacklistGames", req.blacklistGames); changed.add("blacklistGames"); }
+        if (req.conditions != null) {
+            flag.conditions = req.conditions.isBlank() ? null : validateJson("conditions", req.conditions);
+            changed.add("conditions");
+        }
+        if (req.rolloutSteps != null) {
+            flag.rolloutSteps = req.rolloutSteps.isBlank() ? null : validateJson("rolloutSteps", req.rolloutSteps);
+            changed.add("rolloutSteps");
+        }
+        if (req.scheduledEnableAt != null) { flag.scheduledEnableAt = req.scheduledEnableAt; changed.add("scheduledEnableAt"); }
+        if (req.scheduledDisableAt != null) { flag.scheduledDisableAt = req.scheduledDisableAt; changed.add("scheduledDisableAt"); }
+        if (req.expiryDate != null) { flag.expiryDate = req.expiryDate; changed.add("expiryDate"); }
+
+        if (changed.isEmpty()) {
+            throw new IllegalArgumentException("No updatable fields provided for: " + flagKey);
+        }
+        flag.lastModifiedBy = req.modifiedBy;
+        flag = featureFlagRepo.save(flag);
+
+        auditLogService.log(AuditLogEntity.AuditAction.UPDATE, "feature_flag", flag.flagKey, flag.flagName,
+                "update feature flag: " + String.join(",", changed), AuditLogEntity.AuditResult.SUCCESS,
+                req.modifiedBy, null, null, null, null, Map.of("changed", String.join(",", changed)));
+
+        logger.info("Updated feature flag: {} fields={}", flagKey, changed);
+        return flag;
+    }
+
+    /** 名单序列化为 JSON 数组文本（null 原样保留=不设置，空列表=[] 显式清空）。 */
+    private String toJsonList(String field, List<String> list) {
+        if (list == null) {
+            return null;
+        }
+        try {
+            return JSON.writeValueAsString(list);
+        } catch (JsonProcessingException e) {
+            throw new IllegalArgumentException("Failed to serialize " + field, e);
+        }
+    }
+
+    /** JSON 字段写前校验：null 原样、空白原样（清空语义在调用方），非空须为合法 JSON。 */
+    private String validateJson(String field, String value) {
+        if (value == null || value.isBlank()) {
+            return value;
+        }
+        try {
+            JSON.readTree(value);
+            return value;
+        } catch (JsonProcessingException e) {
+            throw new IllegalArgumentException(field + " is not valid JSON: " + e.getMessage());
+        }
+    }
+
+    /** 创建请求体（controller 直接绑定；新建恒 DISABLED）。 */
+    public static class FeatureFlagCreate {
+        public String flagKey;
+        public String flagName;
+        public String description;
+        public String category;
+        public String owner;
+        public String tags;
+        public FeatureFlagEntity.FlagType flagType;
+        public Boolean defaultValue;
+        public Integer percentageValue;
+        public List<String> whitelistUsers;
+        public List<String> blacklistUsers;
+        public List<String> whitelistGames;
+        public List<String> blacklistGames;
+        public String conditions;
+        public String rolloutSteps;
+        public String createdBy;
+    }
+
+    /** 更新请求体（提供才写；不含启停/灰度）。 */
+    public static class FeatureFlagUpdate {
+        public String flagName;
+        public String description;
+        public String category;
+        public String owner;
+        public String tags;
+        public FeatureFlagEntity.FlagType flagType;
+        public Boolean defaultValue;
+        public List<String> whitelistUsers;
+        public List<String> blacklistUsers;
+        public List<String> whitelistGames;
+        public List<String> blacklistGames;
+        public String conditions;
+        public String rolloutSteps;
+        public java.time.LocalDateTime scheduledEnableAt;
+        public java.time.LocalDateTime scheduledDisableAt;
+        public java.time.LocalDateTime expiryDate;
+        public String modifiedBy;
     }
 
     /**

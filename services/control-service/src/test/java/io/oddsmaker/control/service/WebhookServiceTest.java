@@ -59,6 +59,9 @@ class WebhookServiceTest {
     private RestTemplate restTemplate;
 
     @Mock
+    private WebhookRestTemplateProvider restTemplateProvider;
+
+    @Mock
     private AuditLogService auditLogService;
 
     @Spy
@@ -82,6 +85,7 @@ class WebhookServiceTest {
     void sendTestWebhookSuccess() {
         WebhookConfigEntity config = config("g1");
         when(webhookConfigRepo.findById("wc_test")).thenReturn(Optional.of(config));
+        when(restTemplateProvider.forConfig(config)).thenReturn(restTemplate);
         when(restTemplate.exchange(eq("https://hooks.example.com/t1"), eq(HttpMethod.POST),
                 any(HttpEntity.class), eq(String.class)))
             .thenReturn(ResponseEntity.ok("pong"));
@@ -117,6 +121,7 @@ class WebhookServiceTest {
     void sendTestWebhookHttpFailure() {
         WebhookConfigEntity config = config("g1");
         when(webhookConfigRepo.findById("wc_test")).thenReturn(Optional.of(config));
+        when(restTemplateProvider.forConfig(config)).thenReturn(restTemplate);
         when(restTemplate.exchange(eq("https://hooks.example.com/t1"), eq(HttpMethod.POST),
                 any(HttpEntity.class), eq(String.class)))
             .thenThrow(new ResourceAccessException("Connection refused"));
@@ -386,6 +391,7 @@ class WebhookServiceTest {
         config.authType = "api_key";
         config.authConfig = "{\"key\":123,\"value\":\"v\"}"; // key 非字符串 → 反序列化后 CCE → buildHeaders 吞掉
         when(webhookConfigRepo.findById("wc_test")).thenReturn(Optional.of(config));
+        when(restTemplateProvider.forConfig(config)).thenReturn(restTemplate);
         when(restTemplate.exchange(eq("https://hooks.example.com/t1"), eq(HttpMethod.POST),
                 any(HttpEntity.class), eq(String.class)))
             .thenReturn(ResponseEntity.ok("pong"));

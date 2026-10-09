@@ -164,6 +164,22 @@ class IdentityConsumerTest {
         verifyNoInteractions(identityRepo, identityLinkRepo);
     }
 
+    @Test
+    @DisplayName("合并墓碑（status=MERGED）：主表与 links 均不重建（显式合并决定不被重放复活）")
+    void mergedTombstone_skipped() {
+        String id = identityId();
+        IdentityEntity tombstone = new IdentityEntity();
+        tombstone.id = id;
+        tombstone.gameId = "game_demo";
+        tombstone.status = IdentityEntity.IdentityStatus.MERGED;
+        when(identityRepo.findById(id)).thenReturn(Optional.of(tombstone));
+
+        consumer.onIdentityEvent(identityEventJson());
+
+        verify(identityRepo, never()).save(any(IdentityEntity.class));
+        verify(identityLinkRepo, never()).save(any(IdentityLinkEntity.class));
+    }
+
     // ===== 分支对侧补充（BRANCH 收口）=====
 
     @Test

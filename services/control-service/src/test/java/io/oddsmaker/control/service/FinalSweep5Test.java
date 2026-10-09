@@ -169,7 +169,7 @@ class FinalSweep5Test {
         WebhookService service = new WebhookService();
         ReflectionTestUtils.setField(service, "webhookConfigRepo", webhookConfigRepo);
         ReflectionTestUtils.setField(service, "webhookLogRepo", webhookLogRepo);
-        ReflectionTestUtils.setField(service, "restTemplate", (RestTemplate) null);
+        ReflectionTestUtils.setField(service, "restTemplateProvider", null);
 
         WebhookConfigEntity config = new WebhookConfigEntity();
         config.id = "wc_1";

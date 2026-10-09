@@ -70,7 +70,10 @@ public class IdentityConsumer {
         }
 
         try {
-            upsertIdentity(dto);
+            boolean mergedTombstone = upsertIdentity(dto);
+            if (mergedTombstone) {
+                return;  // 合并墓碑：主表与 links 均不重建
+            }
             upsertLinks(dto);
             logger.info("Identity upserted: id={} game={} devices={} players={}",
                     dto.identityId, dto.gameId,
@@ -83,12 +86,21 @@ public class IdentityConsumer {
 
     // ========== 主表 upsert ==========
 
-    private void upsertIdentity(IdentityEventDto dto) {
+    /** @return true 表示该身份是合并墓碑（已跳过重建，links 也应跳过） */
+    private boolean upsertIdentity(IdentityEventDto dto) {
         String primaryDevice = firstNonEmpty(dto.deviceIds);
         String primaryId = primaryDevice != null ? primaryDevice
                 : (nonEmpty(dto.userId) ? dto.userId : dto.identityId);
 
         IdentityEntity entity = identityRepo.findById(dto.identityId).orElse(null);
+
+        // 人工合并墓碑（status=MERGED）：保留合并决定，不被 Flink 重放复活为 ACTIVE。
+        // links 亦不重建——合并时已把活跃链重挂到幸存身份。
+        if (entity != null && entity.status == IdentityEntity.IdentityStatus.MERGED) {
+            logger.debug("Identity {} is merged, skipping auto upsert", dto.identityId);
+            return true;
+        }
+
         LocalDateTime firstSeen = toDateTime(dto.firstSeen);
         LocalDateTime lastSeen = toDateTime(dto.lastSeen);
 
@@ -117,6 +129,7 @@ public class IdentityConsumer {
             entity.eventCount = (entity.eventCount != null ? entity.eventCount : 0L) + 1;
         }
         identityRepo.save(entity);
+        return false;
     }
 
     // ========== links 扇出 upsert ==========

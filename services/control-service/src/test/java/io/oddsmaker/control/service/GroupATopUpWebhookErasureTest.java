@@ -87,6 +87,9 @@ class GroupATopUpWebhookErasureTest {
     private RestTemplate restTemplate;
 
     @Mock
+    private WebhookRestTemplateProvider restTemplateProvider;
+
+    @Mock
     private AuditLogService auditLogService;
 
     @Spy
@@ -258,6 +261,7 @@ class GroupATopUpWebhookErasureTest {
     void sendTestWebhookNullGameIdAndBodySides() {
         WebhookConfigEntity noGame = config(null);
         when(webhookConfigRepo.findById("wc_test")).thenReturn(Optional.of(noGame));
+        when(restTemplateProvider.forConfig(noGame)).thenReturn(restTemplate);
         // body 为 null（responseBody != null 的 false 侧）
         when(restTemplate.exchange(eq("https://hooks.example.com/t1"), eq(HttpMethod.POST),
                 any(HttpEntity.class), eq(String.class)))
@@ -281,6 +285,7 @@ class GroupATopUpWebhookErasureTest {
         anyEnv.environmentId = "";          // 空串 → !isEmpty 为 false → 不排除
         anyEnv.eventTypes = "risk_case";
         when(webhookConfigRepo.findActiveByGameId("g1")).thenReturn(List.of(anyEnv));
+        when(restTemplateProvider.forConfig(anyEnv)).thenReturn(restTemplate);
         when(restTemplate.exchange(anyString(), any(HttpMethod.class), any(HttpEntity.class), eq(String.class)))
             .thenReturn(ResponseEntity.ok("ok"));
 

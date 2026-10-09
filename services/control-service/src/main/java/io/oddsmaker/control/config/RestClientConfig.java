@@ -17,9 +17,9 @@ public class RestClientConfig {
     @Value("${oddsmaker.webhook.read-timeout-ms:5000}")
     private int readTimeoutMs;
 
+    /** 全局默认模板（connect/read 两档 @Value）；webhook_configs.timeout_seconds 的按配置超时由 WebhookRestTemplateProvider 在其上派生。 */
     @Bean
     public RestTemplate restTemplate(RestTemplateBuilder builder) {
-        // TODO: webhook_configs.timeout_seconds 按配置超时需 per-request requestFactory，暂用全局默认
         return builder.setConnectTimeout(Duration.ofMillis(connectTimeoutMs))
                 .setReadTimeout(Duration.ofMillis(readTimeoutMs))
                 .build();

@@ -216,6 +216,8 @@ The risk-job picks up enabled rules from `GET /api/risk-dashboard/rules/{gameId}
 
 **Webhook authentication types**: `none`, `basic`, `bearer`, `api_key` (values outside this set are rejected at config time)
 
+**Per-config timeout**: `timeoutSeconds` (1–300, default 30) drives the read timeout of the delivery HTTP client; out-of-range values are clamped, omitted → global default (`oddsmaker.webhook.read-timeout-ms`). The connect timeout is always global.
+
 **Webhook statuses**: `ACTIVE`, `INACTIVE`, `PAUSED`, `FAILED`
 
 **Event types**: `risk_case`, `block`, `alert`, `review`
@@ -411,6 +413,8 @@ The risk-job picks up enabled rules from `GET /api/risk-dashboard/rules/{gameId}
 | PUT | `/api/system/configs/{configKey}` | Set config value |
 | GET | `/api/system/features` | Get all feature flags |
 | GET | `/api/system/features/enabled` | Get enabled feature flags |
+| POST | `/api/system/features` | Create a feature flag (always starts DISABLED; `featureflag:manage`) |
+| PUT | `/api/system/features/{flagKey}` | Full-field update (provided-only semantics; status/percentage excluded — use enable/disable/percentage) |
 | GET | `/api/system/features/{flagKey}/check` | Check if feature is enabled |
 | POST | `/api/system/features/{flagKey}/enable` | Enable a feature |
 | POST | `/api/system/features/{flagKey}/disable` | Disable a feature |
@@ -636,7 +640,7 @@ All of the following are implemented and exposed through the same auth model; se
 | Dimension sync | `/api/dimensions` | `/sync-status` heartbeat from the dimension-sync agent |
 | Event export | `/api/games/{gameId}/events-export` | Raw event export jobs (daily JSONL + manifest) |
 | Funnels | `/api/funnels` | Funnel definitions and results |
-| Identities | `/api/identities` | Identity merge state |
+| Identities | `/api/identities` | Identity lookup (by device/player/user/identifier) + explicit merge (`POST /{gameId}/merge`, `privacy:manage`; secondary absorbed into primary, tombstoned, audited) |
 | Event inspector | `/api/inspector` (control) and gateway `/v1/inspector/recent` | Recent raw events for debugging |
 | Integrations | `/api/integrations` | Slack/Discord/email/payment/webhook integrations |
 | LTV metrics | `/api/ltv-metrics` | LTV forecast queries |

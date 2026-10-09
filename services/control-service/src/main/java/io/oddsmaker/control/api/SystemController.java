@@ -168,6 +168,25 @@ public class SystemController {
     }
 
     /**
+     * 创建功能开关（新建恒 DISABLED；启停/灰度走既有端点）
+     */
+    @PostMapping("/features")
+    public ResponseEntity<FeatureFlagEntity> createFeature(@RequestBody MaintenanceService.FeatureFlagCreate request) {
+        accessGuard.requirePermission("featureflag:manage");
+        return ResponseEntity.ok(maintenanceService.createFeatureFlag(request));
+    }
+
+    /**
+     * 更新功能开关（提供才写；不含启停/灰度——走 enable/disable/percentage/advance）
+     */
+    @PutMapping("/features/{flagKey}")
+    public ResponseEntity<FeatureFlagEntity> updateFeature(@PathVariable String flagKey,
+                                                           @RequestBody MaintenanceService.FeatureFlagUpdate request) {
+        accessGuard.requirePermission("featureflag:manage");
+        return ResponseEntity.ok(maintenanceService.updateFeatureFlag(flagKey, request));
+    }
+
+    /**
      * 获取启用的功能开关
      */
     @GetMapping("/features/enabled")

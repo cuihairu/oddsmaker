@@ -1192,7 +1192,9 @@ class FinalSweep6Test {
         ReflectionTestUtils.setField(service, "webhookConfigRepo", webhookConfigRepo);
         ReflectionTestUtils.setField(service, "webhookLogRepo", webhookLogRepo);
         ReflectionTestUtils.setField(service, "objectMapper", new ObjectMapper());
-        ReflectionTestUtils.setField(service, "restTemplate", new RestTemplate());
+        // 按配置超时改造后字段为 provider；此处注入真实 provider 包真实 RestTemplate（连接拒绝语义不变）
+        ReflectionTestUtils.setField(service, "restTemplateProvider",
+            new WebhookRestTemplateProvider(new RestTemplate(), 3000));
         return service;
     }
 

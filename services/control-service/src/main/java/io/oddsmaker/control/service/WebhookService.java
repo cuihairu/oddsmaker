@@ -11,7 +11,6 @@ import org.springframework.http.*;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.client.RestTemplate;
 
 import java.time.LocalDateTime;
 import java.util.*;
@@ -50,7 +49,7 @@ public class WebhookService {
     private WebhookLogRepo webhookLogRepo;
 
     @Autowired
-    private RestTemplate restTemplate;
+    private WebhookRestTemplateProvider restTemplateProvider;
 
     @Autowired
     private ObjectMapper objectMapper;
@@ -432,7 +431,7 @@ public class WebhookService {
             HttpEntity<String> entity = new HttpEntity<>(serializePayload(payload), headers);
 
             LocalDateTime startTime = LocalDateTime.now();
-            ResponseEntity<String> response = restTemplate.exchange(
+            ResponseEntity<String> response = restTemplateProvider.forConfig(config).exchange(
                 config.webhookUrl,
                 HttpMethod.valueOf(config.httpMethod),
                 entity,
@@ -496,7 +495,7 @@ public class WebhookService {
 
             // 发送请求
             LocalDateTime startTime = LocalDateTime.now();
-            ResponseEntity<String> response = restTemplate.exchange(
+            ResponseEntity<String> response = restTemplateProvider.forConfig(config).exchange(
                 config.webhookUrl,
                 HttpMethod.valueOf(config.httpMethod),
                 entity,
