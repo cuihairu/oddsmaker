@@ -13,7 +13,7 @@ import { settle, waitFor } from '../helpers/settle.js'
  * import 视图（与 SegmentsView.spec.js 同口径）；GameSelector 真实挂载（api 已 mock，
  * 游戏切换流经真实 select 直测）。
  */
-vi.mock('@/services/api', () => ({ default: { get: vi.fn(), post: vi.fn(), delete: vi.fn() } }))
+vi.mock('@/services/api', () => ({ default: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() } }))
 
 const STORAGE_KEY = 'oddsmaker.selectedGameId'
 
@@ -30,6 +30,7 @@ const SCHEMA_ACTIVE = {
   environmentId: 'env_prod',
   compatibility: 'BACKWARD',
   rejectUnknownEvents: true,
+  piiPolicy: '{"email":"drop","denyKeys":["k1","k2"]}',
   totalEvents: 3,
   activeEvents: 2,
   activatedAt: '2026-09-01T00:00:00Z'
@@ -42,6 +43,7 @@ const SCHEMA_DRAFT = {
   environmentId: null,
   compatibility: 'FULL',
   rejectUnknownEvents: false,
+  piiPolicy: '{"ip":"coarse","maskKeys":["contact"]}',
   totalEvents: 4,
   activeEvents: 4,
   activatedAt: null
@@ -254,5 +256,95 @@ describe('SchemasView', () => {
     const w = await mountView(SchemasView)
     expect(errSpy).toHaveBeenCalled()
     expect(w.text()).not.toContain('v1.0')
+  })
+
+  it('PII 策略列：有策略渲染模式/名单 chips，无策略渲染未设徽标', async () => {
+    const { SchemasView } = await fresh()
+    const w = await mountView(SchemasView)
+    const text = w.text()
+    expect(text).toContain('邮箱:剔除')
+    expect(text).toContain('拦截×2')
+    expect(text).toContain('IP:粗化')
+    expect(text).toContain('脱敏键×1')
+    expect(text).not.toContain('未设')
+  })
+
+  it('PII 策略列：piiPolicy 为坏 JSON 或缺失时渲染未设徽标', async () => {
+    const broken = [
+      { ...SCHEMA_ACTIVE, piiPolicy: '{not-json' },
+      { ...SCHEMA_DRAFT, piiPolicy: null }
+    ]
+    const { SchemasView } = await fresh({ schemas: broken })
+    const w = await mountView(SchemasView)
+    expect(w.text()).toContain('未设')
+    expect(w.text()).not.toContain('邮箱:')
+  })
+
+  it('PII 策略编辑：仅 DRAFT 行有入口，弹层回填存量策略', async () => {
+    const { api, SchemasView } = await fresh()
+    const w = await mountView(SchemasView)
+    const piiBtns = w.findAll('button').filter((b) => b.text() === 'PII 策略')
+    expect(piiBtns).toHaveLength(1) // 仅 DRAFT 行
+    await piiBtns[0].trigger('click')
+    await settle()
+    const modalText = w.find('.fixed.inset-0').text()
+    expect(modalText).toContain('v1.1-draft')
+    // 回填：ip=coarse、maskKeys=contact，email/phone 未指定
+    const modalSelects = w.findAll('.fixed.inset-0 select')
+    expect(modalSelects[0].element.value).toBe('')       // email 不指定
+    expect(modalSelects[2].element.value).toBe('coarse') // ip 回填
+    const inputs = w.findAll('.fixed.inset-0 input')
+    expect(inputs[0].element.value).toBe('')
+    expect(inputs[1].element.value).toBe('contact')
+  })
+
+  it('PII 策略保存：PUT 携带 name + 序列化策略，成功后重载并关弹层', async () => {
+    const { api, SchemasView } = await fresh()
+    api.put.mockResolvedValue({ data: { data: {} } })
+    const w = await mountView(SchemasView)
+    await findBtn(w, 'PII 策略').trigger('click')
+    await settle()
+    const modalSelects = () => w.findAll('.fixed.inset-0 select')
+    await modalSelects()[2].setValue('drop') // ip: coarse → drop
+    await w.find('.fixed.inset-0 input').setValue('')
+    await w.findAll('.fixed.inset-0 input')[1].setValue('contact, nick')
+    await findBtn(w, '保存').trigger('click')
+    await settle()
+    expect(api.put).toHaveBeenCalledWith('/api/games/g1/schemas/sch_d', {
+      name: 'v1.1-draft',
+      piiPolicy: '{"ip":"drop","maskKeys":["contact","nick"]}'
+    })
+    expect(w.find('.fixed.inset-0').exists()).toBe(false)
+    expect(callsOf(api, '/games/g1/schemas').length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('PII 策略保存：全部留空 → piiPolicy 空串（清除策略）', async () => {
+    const { api, SchemasView } = await fresh()
+    api.put.mockResolvedValue({ data: { data: {} } })
+    const w = await mountView(SchemasView)
+    await findBtn(w, 'PII 策略').trigger('click')
+    await settle()
+    await w.findAll('.fixed.inset-0 select')[2].setValue('')
+    await w.findAll('.fixed.inset-0 input')[1].setValue('')
+    await findBtn(w, '保存').trigger('click')
+    await settle()
+    expect(api.put).toHaveBeenCalledWith('/api/games/g1/schemas/sch_d', {
+      name: 'v1.1-draft',
+      piiPolicy: ''
+    })
+  })
+
+  it('PII 策略保存失败：弹层内透出错误并保留输入', async () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { api, SchemasView } = await fresh()
+    api.put.mockRejectedValue({ response: { data: { message: '只有草稿可编辑' } } })
+    const w = await mountView(SchemasView)
+    await findBtn(w, 'PII 策略').trigger('click')
+    await settle()
+    await findBtn(w, '保存').trigger('click')
+    await settle()
+    expect(errSpy).toHaveBeenCalled()
+    expect(w.find('.fixed.inset-0').text()).toContain('只有草稿可编辑')
+    expect(w.find('.fixed.inset-0').exists()).toBe(true)
   })
 })

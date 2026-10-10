@@ -12,6 +12,83 @@ const selectedSchema = ref(null)
 const selectedEvents = ref([])
 const compatResult = ref(null)
 
+// PII 策略列（环境级 Schema > ApiKey > 网关默认链的设置入口）：DRAFT 版可编辑
+const piiModal = ref(null)
+const piiSaving = ref(false)
+const piiError = ref('')
+
+const PII_MODES = ['allow', 'mask', 'drop']
+const PII_IP_MODES = ['allow', 'coarse', 'drop']
+
+function parsePiiPolicy(raw) {
+  if (!raw) return null
+  try {
+    const obj = JSON.parse(raw)
+    return obj && typeof obj === 'object' && !Array.isArray(obj) ? obj : null
+  } catch (e) {
+    return null
+  }
+}
+
+function piiChips(schema) {
+  const p = parsePiiPolicy(schema.piiPolicy)
+  if (!p) return []
+  const chips = []
+  const modeLabel = { allow: '放行', mask: '脱敏', drop: '剔除', coarse: '粗化' }
+  for (const [key, label] of [['email', '邮箱'], ['phone', '手机'], ['ip', 'IP']]) {
+    if (typeof p[key] === 'string' && p[key]) chips.push(`${label}:${modeLabel[p[key]] || p[key]}`)
+  }
+  if (Array.isArray(p.denyKeys) && p.denyKeys.length) chips.push(`拦截×${p.denyKeys.length}`)
+  if (Array.isArray(p.maskKeys) && p.maskKeys.length) chips.push(`脱敏键×${p.maskKeys.length}`)
+  return chips
+}
+
+function openPiiModal(schema) {
+  const p = parsePiiPolicy(schema.piiPolicy) || {}
+  piiModal.value = {
+    schema,
+    email: PII_MODES.includes(p.email) ? p.email : '',
+    phone: PII_MODES.includes(p.phone) ? p.phone : '',
+    ip: PII_IP_MODES.includes(p.ip) ? p.ip : '',
+    denyKeys: Array.isArray(p.denyKeys) ? p.denyKeys.join(',') : '',
+    maskKeys: Array.isArray(p.maskKeys) ? p.maskKeys.join(',') : ''
+  }
+  piiError.value = ''
+}
+
+function toKeyList(text) {
+  return (text || '').split(',').map((s) => s.trim()).filter((s) => s.length > 0)
+}
+
+async function savePiiModal() {
+  const m = piiModal.value
+  const policy = {}
+  if (m.email) policy.email = m.email
+  if (m.phone) policy.phone = m.phone
+  if (m.ip) policy.ip = m.ip
+  const denyKeys = toKeyList(m.denyKeys)
+  const maskKeys = toKeyList(m.maskKeys)
+  if (denyKeys.length) policy.denyKeys = denyKeys
+  if (maskKeys.length) policy.maskKeys = maskKeys
+  // 全空 = 清除策略（后端 updateEntity 对非 null 值直接覆盖，空串即清）
+  const piiPolicy = Object.keys(policy).length ? JSON.stringify(policy) : ''
+  piiSaving.value = true
+  piiError.value = ''
+  try {
+    await api.put(`/api/games/${currentGameId.value}/schemas/${m.schema.id}`, {
+      name: m.schema.name,
+      piiPolicy
+    })
+    piiModal.value = null
+    await loadSchemas()
+  } catch (error) {
+    console.error('Failed to save pii policy:', error)
+    piiError.value = error.response?.data?.message || '保存失败'
+  } finally {
+    piiSaving.value = false
+  }
+}
+
 onMounted(async () => {
   await loadGames()
   if (currentGameId.value) {
@@ -169,6 +246,7 @@ function getCompatLabel(mode) {
                 <th>状态</th>
                 <th>兼容策略</th>
                 <th>未知事件拒收</th>
+                <th>PII 策略</th>
                 <th>事件数</th>
                 <th>发布时间</th>
                 <th>操作</th>
@@ -192,6 +270,16 @@ function getCompatLabel(mode) {
                     {{ schema.rejectUnknownEvents ? '拒收' : '放行' }}
                   </span>
                 </td>
+                <td>
+                  <template v-if="piiChips(schema).length">
+                    <span
+                      v-for="chip in piiChips(schema)"
+                      :key="chip"
+                      class="badge bg-blue-100 text-blue-800 mr-1"
+                    >{{ chip }}</span>
+                  </template>
+                  <span v-else class="badge bg-gray-100 text-gray-500">未设</span>
+                </td>
                 <td>{{ schema.activeEvents }}/{{ schema.totalEvents }}</td>
                 <td>{{ schema.activatedAt ? new Date(schema.activatedAt).toLocaleDateString('zh-CN') : '-' }}</td>
                 <td>
@@ -202,6 +290,13 @@ function getCompatLabel(mode) {
                       class="text-primary-600 hover:text-primary-700"
                     >
                       发布
+                    </button>
+                    <button
+                      v-if="schema.status === 'DRAFT'"
+                      @click="openPiiModal(schema)"
+                      class="text-purple-600 hover:text-purple-700"
+                    >
+                      PII 策略
                     </button>
                     <button
                       @click="checkCompatibility(schema)"
@@ -293,5 +388,63 @@ function getCompatLabel(mode) {
         </div>
       </div>
     </template>
+
+    <!-- PII 策略编辑：仅 DRAFT 可改（生效链路 环境级 Schema > ApiKey > 网关默认） -->
+    <div
+      v-if="piiModal"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+      @click.self="piiModal = null"
+    >
+      <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-base font-medium text-gray-900">PII 策略：{{ piiModal.schema.name }}</h3>
+          <button @click="piiModal = null" class="text-gray-400 hover:text-gray-600 text-sm">关闭</button>
+        </div>
+        <p class="text-xs text-gray-500 mb-4">
+          环境级 Schema 策略压在 ApiKey 级与网关默认之上；留空（不指定）的字段回落下一层。
+          名单为逗号分隔的属性键。改动随版本发布生效。
+        </p>
+        <div v-if="piiError" class="mb-4 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          {{ piiError }}
+        </div>
+        <div class="grid grid-cols-3 gap-4 mb-4">
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">邮箱</label>
+            <select v-model="piiModal.email" class="input w-full">
+              <option value="">不指定</option>
+              <option v-for="mode in PII_MODES" :key="mode" :value="mode">{{ mode }}</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">手机号</label>
+            <select v-model="piiModal.phone" class="input w-full">
+              <option value="">不指定</option>
+              <option v-for="mode in PII_MODES" :key="mode" :value="mode">{{ mode }}</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">IP</label>
+            <select v-model="piiModal.ip" class="input w-full">
+              <option value="">不指定</option>
+              <option v-for="mode in PII_IP_MODES" :key="mode" :value="mode">{{ mode }}</option>
+            </select>
+          </div>
+        </div>
+        <div class="mb-4">
+          <label class="block text-xs text-gray-500 mb-1">拦截名单（denyKeys，逗号分隔，命中即拒收 pii_blocked）</label>
+          <input v-model="piiModal.denyKeys" class="input w-full" placeholder="raw_email, id_card" />
+        </div>
+        <div class="mb-6">
+          <label class="block text-xs text-gray-500 mb-1">脱敏名单（maskKeys，逗号分隔，命中即打码）</label>
+          <input v-model="piiModal.maskKeys" class="input w-full" placeholder="contact, nickname" />
+        </div>
+        <div class="flex justify-end space-x-3">
+          <button @click="piiModal = null" class="btn btn-secondary">取消</button>
+          <button :disabled="piiSaving" @click="savePiiModal" class="btn btn-primary">
+            {{ piiSaving ? '保存中...' : '保存' }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
