@@ -167,6 +167,15 @@
 
 **验收：** ✅ 全量 gradle 241 suites / 2627 用例绿（failures=0 errors=0，基线 241/2623 + 4 例）+ web build 绿 + docs build 绿。边界：web 控制台无 piiPolicy 编辑入口（经 API `PUT /api/games/{gameId}/schemas/{id}` 设置）；retentionDays/samplingRate/ownerId 维持仅落库与展示。
 
+## PII 策略控制台入口（PII 链表面闭合，2026-10-10 增量）
+
+- [x] SchemasView 表格「PII 策略」列：存量策略渲染 chips（邮箱/手机/IP 模式 + 拦截/脱敏名单计数），未设与坏 JSON 渲染「未设」徽标
+- [x] DRAFT 行「PII 策略」编辑弹层：三模式下拉（不指定=回落下一层）+ 拦截/脱敏名单逗号文本，回填存量策略；保存 PUT `/api/games/{gameId}/schemas/{id}`（name + piiPolicy JSON，全空=空串清除）；失败弹层内透出后端 message 不重载
+- [x] 测试：SchemasView.spec +6（chips 两态/仅 DRAFT 有入口/回填/保存序列化/全空清除/失败保留）
+- [x] 文档对账：control.md PII 链段落补控制台入口句、CHANGELOG 与本节
+
+**验收：** ✅ web 全量 180/180（基线 174 + 6 例）+ web build 绿 + docs build 绿（本批无后端改动，gradle 全量沿用上批门禁）。边界：仅 DRAFT 可编辑（ACTIVE 走新版本发布流程，与资源生命周期一致）；存量坏 JSON 策略在弹层打开时按空回填、保存即覆盖。
+
 ---
 
 ## 边界（不跟进，评审转审查项）
