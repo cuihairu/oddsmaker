@@ -560,7 +560,8 @@ public class DimensionPullService {
         statusRepo.save(status);
     }
 
-    private void requireGame(String gameId) {
+    /** 包内共享（DimensionPullYamlService 导入/导出同样要先验游戏存在）。 */
+    void requireGame(String gameId) {
         gameRepo.findById(gameId)
                 .filter(game -> game.deletedAt == null)
                 .orElseThrow(() -> new IllegalArgumentException("Game not found: " + gameId));

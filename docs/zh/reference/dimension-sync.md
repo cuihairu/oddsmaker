@@ -1,6 +1,6 @@
 # 维度数据同步设计
 
-> **实现状态（2026-10）**：已落地的是 Sync Agent（`agents/dimension-sync-agent/`，mysql/postgres/csv/excel/kafka 五类 source）、**HTTP Pull 链路**（Control 侧 scheduler + Bearer 凭证 AES-GCM 加密托管 + `next_cursor` 断点续传，配置见 `dimension-pulls` API）、`/v1/batch` 维度事件通道和 `dimension-sync-job`（消费 `oddsmaker.events_raw` 写 `item_dim`/`level_dim`）。仅剩 Debezium CDC（外部依赖最重，待游戏方 Kafka 基建）与配置驱动的 Control 侧 YAML 文件形态两条未实现——本文对未落地部分逐处标注。
+> **实现状态（2026-10）**：已落地的是 Sync Agent（`agents/dimension-sync-agent/`，mysql/postgres/csv/excel/kafka 五类 source）、**HTTP Pull 链路**（Control 侧 scheduler + Bearer 凭证 AES-GCM 加密托管 + `next_cursor` 断点续传，配置见 `dimension-pulls` API）、**Pull 配置 YAML 面**（`dimension-pulls/export` + `/import`，凭证永不落盘）、`/v1/batch` 维度事件通道和 `dimension-sync-job`（消费 `oddsmaker.events_raw` 写 `item_dim`/`level_dim`）。仅剩 Debezium CDC（外部依赖最重，待游戏方 Kafka 基建）与 Agent 侧 `agent.properties` 的 Control 下发迁移两条未实现——本文对未落地部分逐处标注。
 
 ## 结论
 
@@ -332,15 +332,40 @@ ORDER BY (game_id, environment, resource_id, valid_from);
 
 SCD2 逻辑放在转换层，**所有 Provider 共享**，不要散落到各 Provider 实现。
 
-## 配置驱动（部分实现）
+## 配置驱动（Control 面已实现，Agent 属性迁移后置）
 
-每个游戏的维度同步在 Control Service 配置，接入新游戏只填表，不改代码——这是目标形态。
+每个游戏的维度同步在 Control Service 配置，接入新游戏只填表，不改代码。
 
 - **已实现（2026-10，HTTP Pull）**：pull 源的游戏侧配置进 Control 面——`dimension_pull_config` 表按 (game, environment, sourceKey) 存 endpoint/凭证密文/间隔/分页/断点，经 `dimension-pulls` REST API 填表即接入，scheduler 无需改代码。
+- **已实现（2026-10，Control YAML 配置面）**：`dimension-pulls` 增两个端点做声明式配置——`GET /export` 导出全部配置为 YAML（凭证永不落盘），`POST /import` 按 (environment, sourceKey) 定位逐条建档/更新，`credential` 缺省=保留既有凭证，方法级事务保证任一条失败整体回滚。接入新游戏可先起一份 YAML 一次性导入，之后导出即得可版本化清单。
 - **已实现（Agent / Flink 作业）**：Agent 本地 `agent.properties`（五类 source）与 Flink 作业 System properties（`kafka.topic`、`clickhouse.*` 等），配置在 Control 侧不落表。
-- **未实现**：Control 侧 YAML 文件配置面（下述形态）与 Agent 侧 `agent.properties` 的 Control 下发迁移——YAML 落地排期在 HTTP Pull 之后（见 todo.md 挂起项拍板）。
+- **未实现**：Agent 侧 `agent.properties` 的 Control 下发迁移（Agent 属性面仍是游戏方本地文件）；下述目标形态里的 `provider:` 多态与 `auth.token_ref` 密钥引用表——当前 Pull 凭证为 inline 明文入参 + AES-GCM 加密托管，不做密钥名间接引用。
 
-下述 YAML 形态为**目标形态**（当前未实现，仅描述期望形态）：
+### Pull 配置 YAML（已实现形态）
+
+```yaml
+# oddsmaker 维度同步 Pull 配置导出（凭证不回显；导入时 credential 缺省=保留既有）
+dimensions:
+  items:
+    environment: prod                          # 必填，须属于该游戏
+    dimType: item                              # 可缺省，缺省 item
+    endpoint: https://api.game-c.com/v1/items  # 必填，须 http/https
+    credential: bearer-token                   # 仅首建必填；更新缺省=保留既有
+    intervalSeconds: 300                       # 可缺省，缺省 300（10..86400 秒）
+    pageLimit: 1000                            # 可缺省，缺省 1000（1..5000）
+    enabled: true                              # 可缺省，缺省 true
+```
+
+`dimensions` 映射键即 `sourceKey`，与表唯一约束 (game, environment, sourceKey) 同口径——改 `environment` 即另一环境的新档。字段白名单校验：未知字段精确报错（防 `endpont` 类手误静默失效）。导出物不含凭证密文；导出→导入可原样写回非凭证字段，但导入到从未配置过该 (env, sourceKey) 的新档时必须补 `credential`（凭证永不离开 Control 明文托管边界）。
+
+| 端点 | 说明 | 权限 |
+| --- | --- | --- |
+| `GET /api/games/{gameId}/dimension-pulls/export` | 导出该游戏全部 Pull 配置为 YAML（`application/x-yaml`，凭证永不落盘） | `dimension:read` |
+| `POST /api/games/{gameId}/dimension-pulls/import` | 请求体为 YAML 文本，按 (environment, sourceKey) 定位逐条建档/更新，返回 `{created, updated, total}`，任一条失败整体回滚 | `dimension:manage` |
+
+### 目标形态（未实现：provider 多态 + 密钥引用）
+
+下述「一份 YAML 描述该游戏全部维度源」的形态当前未实现，仅 Pull 落地：
 
 ```yaml
 # 游戏 A：大厂、走 CDC

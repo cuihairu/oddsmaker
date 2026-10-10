@@ -4,6 +4,7 @@ import io.oddsmaker.control.security.AccessGuard;
 import io.oddsmaker.control.service.DimensionPullService;
 import io.oddsmaker.control.service.DimensionPullService.PullConfigUpsert;
 import io.oddsmaker.control.service.DimensionPullService.PullRunResult;
+import io.oddsmaker.control.service.DimensionPullYamlService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -18,6 +19,10 @@ import java.util.Map;
  * PUT    /api/games/{gameId}/dimension-pulls/{id}     更新（credential 缺省=保留既有凭证）（dimension:manage）
  * DELETE /api/games/{gameId}/dimension-pulls/{id}     删除（dimension:manage）
  * POST   /api/games/{gameId}/dimension-pulls/{id}/run 手动触发一轮拉取（dimension:manage）
+ * GET    /api/games/{gameId}/dimension-pulls/export   导出全部配置为 YAML（凭证永不落盘）（dimension:read）
+ * POST   /api/games/{gameId}/dimension-pulls/import   导入 YAML 批量建档/更新：按 (environment, sourceKey)
+ *                                                     定位，credential 缺省=保留既有，任一条失败整体
+ *                                                     回滚（dimension:manage）
  * 拉取进度同步落 dimension_sync_status（source_type=pull），经既有 /api/dimensions/sync-status 可观测。
  */
 @RestController
@@ -25,10 +30,14 @@ import java.util.Map;
 public class DimensionPullController {
 
     private final DimensionPullService pullService;
+    private final DimensionPullYamlService yamlService;
     private final AccessGuard accessGuard;
 
-    public DimensionPullController(DimensionPullService pullService, AccessGuard accessGuard) {
+    public DimensionPullController(DimensionPullService pullService,
+                                   DimensionPullYamlService yamlService,
+                                   AccessGuard accessGuard) {
         this.pullService = pullService;
+        this.yamlService = yamlService;
         this.accessGuard = accessGuard;
     }
 
@@ -66,5 +75,19 @@ public class DimensionPullController {
                                              @PathVariable String pullId) {
         accessGuard.requireGamePermission(gameId, "dimension:manage");
         return ResponseEntity.ok(pullService.runNow(gameId, pullId));
+    }
+
+    @GetMapping(value = "/export", produces = "application/x-yaml")
+    public ResponseEntity<String> export(@PathVariable String gameId) {
+        accessGuard.requireGamePermission(gameId, "dimension:read");
+        return ResponseEntity.ok(yamlService.export(gameId));
+    }
+
+    /** 请求体即 YAML 文本（不限 Content-Type），按 (environment, sourceKey) 定位逐条建档/更新。 */
+    @PostMapping("/import")
+    public ResponseEntity<Map<String, Object>> importConfigs(@PathVariable String gameId,
+                                                             @RequestBody String yaml) {
+        accessGuard.requireGamePermission(gameId, "dimension:manage");
+        return ResponseEntity.ok(yamlService.importConfigs(gameId, yaml));
     }
 }

@@ -192,6 +192,18 @@
 
 ---
 
+## 维度同步 Control YAML 配置面（拍板第二链，2026-10-11 增量）
+
+- [x] YAML 形态：`dimensions` 根键 + 映射键即 sourceKey（与表唯一约束 (game, environment, sourceKey) 同口径）；字段白名单（environment/dimType/endpoint/credential/intervalSeconds/pageLimit/enabled），未知字段精确报错；SafeConstructor 加载（不实例化任意对象）
+- [x] 导出：`GET /api/games/{gameId}/dimension-pulls/export`（`application/x-yaml`）——凭证永不落盘（密文也不导出），注释头说明 import 语义
+- [x] 导入：`POST /api/games/{gameId}/dimension-pulls/import`（请求体即 YAML 文本）——按 (environment, sourceKey) 定位：已存在走 update（credential 缺省=保留既有凭证），不存在走 create（credential 必填）；方法级事务，任一条失败整体回滚；返回 `{created, updated, total}`
+- [x] 测试：纯函数 9（导出形状/往返/credential 首建解析/未知字段拒/坏根拒/缺必填拒/类型不符拒/坏条目拒/空 dimensions）+ 编排 13（create 默认落库+凭证加密、update 保留既有、credential 轮换、新建无 credential 拒、未知环境拒、空导入拒、部分失败上抛、同键不同环境两档、导出形状、导出未知游戏拒、往返保真、导出→导入既有档只改 endpoint、captor 验密文）
+- [x] 文档对账：dimension-sync.md 实现状态头/配置驱动节（已实现形态 + 端点表 + 目标形态保留 provider 多态与 token_ref 未实现标注），CHANGELOG 与本节
+
+**验收：** ✅ control-service 22 例新测试绿（YAML 纯函数 9 + 编排 13）。边界：Agent 侧 `agent.properties` 的 Control 下发迁移独立后续批次（拍板明记）；`provider:` 多态与 `auth.token_ref` 密钥引用表未实现（当前 inline credential + AES-GCM 加密托管）；控制台 web 入口未做（API 先行，与 Agent 同期状态）。
+
+---
+
 ## 边界（不跟进，评审转审查项）
 
 - 不做多租户/SaaS（Organization/Workspace/Project/Tenant 概念不入新代码）
