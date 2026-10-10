@@ -1,6 +1,6 @@
 # 维度数据同步设计
 
-> **实现状态（2026-10）**：已落地的是 Sync Agent（`agents/dimension-sync-agent/`，mysql/postgres/csv/excel/kafka 五类 source）、`/v1/batch` 维度事件通道和 `dimension-sync-job`（消费 `oddsmaker.events_raw` 写 `item_dim`/`level_dim`）。HTTP Pull 与 Debezium CDC 两条链路未实现，配置驱动的 Control 侧 YAML 也未实现——本文对未落地部分逐处标注。
+> **实现状态（2026-10）**：已落地的是 Sync Agent（`agents/dimension-sync-agent/`，mysql/postgres/csv/excel/kafka 五类 source）、**HTTP Pull 链路**（Control 侧 scheduler + Bearer 凭证 AES-GCM 加密托管 + `next_cursor` 断点续传，配置见 `dimension-pulls` API）、`/v1/batch` 维度事件通道和 `dimension-sync-job`（消费 `oddsmaker.events_raw` 写 `item_dim`/`level_dim`）。仅剩 Debezium CDC（外部依赖最重，待游戏方 Kafka 基建）与配置驱动的 Control 侧 YAML 文件形态两条未实现——本文对未落地部分逐处标注。
 
 ## 结论
 
@@ -215,9 +215,9 @@ status.source-key=agent-mysql-main
 
 这也是 **FileImport 方案的归宿**——文件导入本质是 Agent 的一个 source 类型，不用单独立项。
 
-### HTTP Pull（未实现）
+### HTTP Pull（已实现）
 
-Oddsmaker 主动拉取游戏方暴露的查询接口。本方案当前没有对应实现（无 scheduler、无凭证托管），属规划。
+Oddsmaker 主动拉取游戏方暴露的查询接口。Control 侧按 (game, environment, sourceKey) 配置定期拉取，**已实现**：仓库 `services/control-service/` 的 `DimensionPullService`（scheduler + 凭证 AES-GCM 加密托管 + 断点续传），翻译成 `RawDimensionChange(source_type=pull)` 走既有 `/v1/batch` 事件入口。
 
 ```
 GET https://api.game-x.com/v1/items?updated_after=1760000000000&limit=1000
@@ -226,10 +226,45 @@ Authorization: Bearer ***
   {"items": [...], "next_cursor": "..."}
 ```
 
-- 奇数 maker 侧跑一个 scheduler，按游戏配置定期拉取。
-- 游戏方接口必须支持 `updated_after` 增量参数，否则每次全量拉太重。
-- 适合**游戏方有 API 能力、不愿部署 Agent、不愿开 binlog**的场景。
-- Oddsmaker 侧需要维护游戏方的 API 凭证（在 Control Service 加密存储）。
+游戏方接口契约：
+
+- 支持 `updated_after` 增量参数（首次拉取不携带；后续传服务端上次下发的 `next_cursor`，或本页最大 `updated_at` 的毫秒值）。
+- 响应为 JSON 对象，条目数组键按 `items` / `resources` / `levels` / `data` 顺序探测，可选 `next_cursor` 字符串（空串视为窗口结束）。
+- 行内控制列对齐 Agent 语义：`resource_id`/`item_code`/`level_id`/`id`/`code` 之一为资源标识，`op`（缺省 upsert），`updated_at`/`version_ts`/`updated_ts` 之一为版本时间（epoch millis 数字或 ISO-8601 文本），其余列进 `attributes`。
+
+Control 侧行为（均已实现）：
+
+- **凭证加密托管**：`credential` 建档时 AES-GCM 加密落库（密钥 `ODDSMAKER_CREDENTIAL_KEY`，缺省走内置 dev 密钥并 WARN，生产必须更换），任何 API 响应不回显密文。
+- **调度**：15s tick，按配置 `intervalSeconds`（缺省 300s）判到期；单页有界延迟，`next_cursor` 续页下一 tick 继续。
+- **断点续传**：cursor = 服务端 `next_cursor`，缺省回落本页最大 `version_ts`；推送全部成功才前进，失败下一轮以旧断点重放同窗口——下游 `ReplacingMergeTree(version_ts)` 重放幂等。
+- **同表可观测**：拉取进度直接写 `dimension_sync_status`（`source_type=pull`），经既有 `GET /api/dimensions/sync-status` 与 Agent 上报源同口径展示延迟。
+
+配置 API（`dimension:read` 读 / `dimension:manage` 写）：
+
+```http
+GET    /api/games/{gameId}/dimension-pulls           列出该游戏全部 Pull 配置
+POST   /api/games/{gameId}/dimension-pulls           建档（environment/sourceKey/endpoint/credential 必填）
+PUT    /api/games/{gameId}/dimension-pulls/{id}      更新（credential 缺省=保留既有凭证）
+DELETE /api/games/{gameId}/dimension-pulls/{id}      删除
+POST   /api/games/{gameId}/dimension-pulls/{id}/run  手动触发一轮拉取
+```
+
+建档请求体示例：
+
+```json
+{
+  "environment": "prod",
+  "sourceKey": "items",
+  "dimType": "item",
+  "endpoint": "https://api.game-x.com/v1/items",
+  "credential": "bearer-token-plaintext",
+  "intervalSeconds": 300,
+  "pageLimit": 1000,
+  "enabled": true
+}
+```
+
+- 适合**游戏方有 API 能力、不愿部署 Agent、不愿开 binlog**的场景（与 Agent 相比，游戏方零部署、只暴露一个只读查询接口）。
 
 ### Debezium CDC（未实现）
 
@@ -297,9 +332,15 @@ ORDER BY (game_id, environment, resource_id, valid_from);
 
 SCD2 逻辑放在转换层，**所有 Provider 共享**，不要散落到各 Provider 实现。
 
-## 配置驱动（未实现）
+## 配置驱动（部分实现）
 
-每个游戏的维度同步在 Control Service 配置，接入新游戏只填表，不改代码——这是目标形态。当前配置走 Agent 本地 `agent.properties` 与 Flink 作业的 System properties（`kafka.topic`、`clickhouse.*` 等），Control 侧没有维度同步的 YAML 配置面。
+每个游戏的维度同步在 Control Service 配置，接入新游戏只填表，不改代码——这是目标形态。
+
+- **已实现（2026-10，HTTP Pull）**：pull 源的游戏侧配置进 Control 面——`dimension_pull_config` 表按 (game, environment, sourceKey) 存 endpoint/凭证密文/间隔/分页/断点，经 `dimension-pulls` REST API 填表即接入，scheduler 无需改代码。
+- **已实现（Agent / Flink 作业）**：Agent 本地 `agent.properties`（五类 source）与 Flink 作业 System properties（`kafka.topic`、`clickhouse.*` 等），配置在 Control 侧不落表。
+- **未实现**：Control 侧 YAML 文件配置面（下述形态）与 Agent 侧 `agent.properties` 的 Control 下发迁移——YAML 落地排期在 HTTP Pull 之后（见 todo.md 挂起项拍板）。
+
+下述 YAML 形态为**目标形态**（当前未实现，仅描述期望形态）：
 
 ```yaml
 # 游戏 A：大厂、走 CDC
@@ -341,7 +382,7 @@ Control Service 暴露每个游戏的维度同步状态：
 - 最后成功同步时间
 - 同步延迟（源头变更 → 落 ClickHouse 的端到端时间）
 - 错误计数和最近错误信息
-- Checkpoint 位点（Agent 模式）
+- Checkpoint 位点（Agent 模式本地 checkpoint；HTTP Pull 模式 `next_cursor` 断点，同表同口径）
 - 维度记录总数变化（异常波动告警，可能是源头出问题）
 
 接入出问题时，游戏方和 Oddsmaker 运营都能快速定位是哪个环节。
@@ -352,7 +393,7 @@ Control Service 暴露每个游戏的维度同步状态：
 
 1. **Webhook Push**：已可用（`/v1/batch` + `event_type=dimension`，零新增组件）。
 2. **Sync Agent（MySQL/PostgreSQL source）**：已实现。
-3. **HTTP Pull**：未实现。
+3. **HTTP Pull**：已实现（2026-10，Control scheduler + 凭证加密托管 + 断点续传，mock 游戏 API 端到端实测）。
 4. **Sync Agent（CSV/Excel source）**：已实现。
 5. **Debezium CDC**：未实现。
 

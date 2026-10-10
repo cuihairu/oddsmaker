@@ -97,6 +97,7 @@
 - [x] **ML 异常检测：排期（条件触发，2026-10-10 复核把触发条件量化）**——满足任一即进评估批次，否则维持不排期：(a) 指标历史可稳定回看 ≥ 7 天且 7d/28d 分位基线可计算（`MetricAlertService` 基线对比已就绪，等数据积累）；(b) 单游戏阈值告警规则月均调整 ≥ 3 次（审计日志可查证，说明人工阈值维护成本高到需要自适应基线）；(c) 告警噪音率（复盘结论为误杀的占比）> 30% 持续 2 周。依据调研 §5「需要每指标历史基线训练与回填，成本前置」。
 - [x] **unmerge/身份拆分：不做（维持 merge 批次边界）**——依据：merge 落地行边界即「无反向拆分」；修正路径已齐（tombstone `identity_id` 反查 + GDPR erasure + 再 merge 纠错），真 unmerge 需合并日志（计数已归并不可逆拆），产品语义级新方向不做。
 - [x] **CF DNS 域名切换：用户侧不动（复核确认）**——属用户侧操作，本仓无动作。
+- [x] **dimension-sync 三链路选型：HTTP Pull 先做，Control YAML 随后，Debezium CDC 后置（2026-10-10 巡检拍板）**——依据 dimension-sync.md 三节的依赖面：HTTP Pull 全在 Oddsmaker 侧（Control scheduler + `updated_after` 增量分页 + 游戏方 API 凭证 Control 加密托管），不需游戏方部署任何组件、mock 游戏 API 即可端到端自测，最短路径补上第二条 provider；配置驱动 Control YAML 为文档明记的「目标形态」，排 HTTP Pull 之后做（pull 的游戏侧配置即进 Control 面，接入新游戏只填表；Agent 侧 `agent.properties` 迁移独立后续批次）；Debezium CDC 要求游戏方开 binlog + 部署 Kafka Connect，外部依赖最重，等真实游戏方具备 Kafka 基建再排（消费端届时复用 dimension-sync-job 事件入口，设计不改）。落点见本文件新批次节。
 
 ## 策略实验室 V0.2（复盘聚合，2026-10-09 增量）
 
@@ -175,6 +176,19 @@
 - [x] 文档对账：control.md PII 链段落补控制台入口句、CHANGELOG 与本节
 
 **验收：** ✅ web 全量 180/180（基线 174 + 6 例）+ web build 绿 + docs build 绿（本批无后端改动，gradle 全量沿用上批门禁）。边界：仅 DRAFT 可编辑（ACTIVE 走新版本发布流程，与资源生命周期一致）；存量坏 JSON 策略在弹层打开时按空回填、保存即覆盖。
+
+---
+
+## 维度同步 HTTP Pull 链路（拍板第一链，2026-10-10 增量）
+
+- [x] 配置面：`dimension_pull_config` 表（V0.9.20，(game, environment, sourceKey) 唯一）+ `dimension-pulls` REST API（GET 列表 / POST 建档 / PUT 更新（credential 缺省=保留）/ DELETE / POST run 手动触发；`dimension:read`/`dimension:manage` 门控）
+- [x] 凭证加密托管：`DimensionCredentialCipher` AES-GCM（随机 IV，base64(iv+ciphertext)，SHA-256 派生密钥取 `ODDSMAKER_CREDENTIAL_KEY`，缺省 dev 密钥 WARN）；密文不回显任何 API 响应
+- [x] 拉取调度：15s tick + 配置 `intervalSeconds`（缺省 300）判到期；单页 GET `{endpoint}?updated_after={cursor}&limit=`（Bearer），`next_cursor` 断点续传，缺省回落本页最大 version_ts；推送成功才前进 cursor，失败记 error_count/last_error 旧断点重放（下游 ReplacingMergeTree 幂等）
+- [x] 翻译与推送：行→`RawDimensionChange(source_type=pull)` 形状 dimension_define NDJSON（items/resources/levels/data 数组键探测；控制列 resource_id 五候选/op/version_ts 三键，其余进 attributes）→ POST 既有 Gateway `/v1/batch`（x-api-key 作用域 server/admin key，与 Agent 同契约）；进度落 `dimension_sync_status`（source_type=pull）同表可观测
+- [x] 测试：cipher 6（往返/随机 IV/dev 密钥/换钥拒/篡改拒/坏输入）+ 纯函数 15（URL 拼装/响应解析/行翻译/version_ts 三态/NDJSON/归一）+ 端到端 4（mock 游戏 API 两页真 HTTP：首拉无 updated_after→next_cursor 续传→到头回落 max ts、进度与状态行断言；游戏 API 5xx 失败臂；缺作用域 key 拒推臂；调度到期门控）
+- [x] 文档对账：dimension-sync.md 实现状态头/HTTP Pull 节（契约+行为+API 逐处回写）/配置驱动节（pull 配置已进 Control REST 面）/监控运维/落地优先级，CHANGELOG 与本节
+
+**验收：** ✅ control-service 24 例新测试绿（241→242 suite 口径见全量门禁）。边界：Debezium CDC 待游戏方 Kafka 基建（拍板后置）；Control YAML 文件配置面后续批（pull 配置已先行进 REST 面）；控制台 web 入口未做（API 先行，与 Agent 同期状态）。
 
 ---
 
