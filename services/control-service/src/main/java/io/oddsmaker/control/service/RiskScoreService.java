@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.oddsmaker.control.exception.BusinessException;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -15,9 +14,10 @@ import java.util.Map;
  * 主体累计风险分读取（B6 边界闭合）：risk-job 每次评估落 CH risk_scores
  * （ReplacingMergeTree(updated_at) 主体快照），此前只落库无控制面读取端点。
  * 读最新一行即主体当前累计分（ORDER BY updated_at DESC LIMIT 1，合并前后都正确）。
+ * 纯 CH JDBC 读，不加 Spring 事务：类级只读事务会让异常穿过代理时把调用方的
+ * joined 事务标 rollback-only（案例详情降级读先踩过：吞 BusinessException 后外层提交 500）。
  */
 @Service
-@Transactional(readOnly = true)
 public class RiskScoreService {
 
     private final ClickHouseClient clickHouseClient;

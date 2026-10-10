@@ -3,7 +3,10 @@ package io.oddsmaker.control.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.oddsmaker.control.exception.BusinessException;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.core.annotation.AnnotatedElementUtils;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.sql.Array;
 import java.util.LinkedHashMap;
@@ -121,5 +124,13 @@ class RiskScoreServiceTest {
         List<Map<String, Object>> reasons = (List<Map<String, Object>>) res.get("reasons");
         assertEquals(1, reasons.size());
         assertEquals("rr_d", reasons.get(0).get("ruleId"));
+    }
+
+    @Test
+    @DisplayName("不加 Spring 事务：CH 读抛异常不得把调用方 joined 事务标 rollback-only（案例详情降级 500 防回归）")
+    void noSpringTransactionBoundary() throws NoSuchMethodException {
+        assertFalse(AnnotatedElementUtils.hasAnnotation(RiskScoreService.class, Transactional.class));
+        var latest = RiskScoreService.class.getMethod("latest", String.class, String.class, String.class);
+        assertFalse(AnnotatedElementUtils.hasAnnotation(latest, Transactional.class));
     }
 }

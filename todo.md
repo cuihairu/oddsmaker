@@ -139,11 +139,13 @@
 ## 案例详情主体累计分行（B6 闭合的回看侧表面，2026-10-10 增量）
 
 - [x] `RiskCaseService.detail` 注入 `subjectRiskScore`：复用 `RiskScoreService.latest` 按案例目标（targetType/targetId）读 CH 最新累计分；未落分（found=false）、CH 未配置或查询失败一律降级 null——案例回看不因评分面降级（try/catch RuntimeException + debug 日志）
+- [x] 修复实机走查揪出的 joined 事务陷阱：`RiskScoreService` 原类级 `@Transactional(readOnly=true)` 令异常穿过代理把调用方 joined 事务标 rollback-only（降级 catch 后外层提交 500）——纯 CH JDBC 读去除 Spring 事务，加 `noSpringTransactionBoundary` 注解防回归锁
 - [x] 控制台 `/risk-cases` 详情弹层「主体累计分」行：分数 + 规则贡献条数 + 快照时间（fmtTime），`subjectRiskScore` 缺失整行不渲染
 - [x] 测试：`RiskCaseApiTest` 详情注入 3 分支（found=true 回传 / found=false 降级 / 查询异常降级且详情仍完整）；新增 `RiskCasesView.spec.js`（列表渲染 + 累计分行显隐两态，RiskLabView.spec 同口径 harness）
 - [x] 文档对账：risk.md 案例详情行与控制台页行、api-reference case detail 行、CHANGELOG 与本节
 
-**验收：** ✅ RiskCaseApiTest 9/9 + web 全量 174/174（基线 171 + 案例页 3 例）随全量门禁绿。
+**验收：** ✅ RiskCaseApiTest 9/9 + RiskScoreServiceTest 7/7（含事务防回归锁）+ web 全量 174/174（基线 171 + 案例页 3 例）随全量门禁绿。
+**实机走查（2026-10-10）：** ✅ postgres:16 容器 + bootRun 直连——首次 GET 详情 500（UnexpectedRollbackException）暴露 joined 事务陷阱，修复后复验：CH 未配置时 `GET /api/games/g_live/risk-cases/rc_live` 200 且 `subjectRiskScore:null`、列表 200、独立 `risk-scores` 端点契约不变（CH_UNAVAILABLE 400）。
 
 ---
 
