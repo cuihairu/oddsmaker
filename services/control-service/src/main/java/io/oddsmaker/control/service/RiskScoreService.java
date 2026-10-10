@@ -72,6 +72,9 @@ public class RiskScoreService {
             }
         } else if (raw instanceof List<?> list) {
             for (Object v : list) items.add(String.valueOf(v));
+        } else if (raw instanceof String[] arr) {
+            // clickhouse-jdbc 0.6.x 对 Array(String) 列 getObject 直接返回裸 String[]（实机走查验证）
+            items.addAll(List.of(arr));
         }
         List<Map<String, Object>> out = new ArrayList<>();
         for (String item : items) {

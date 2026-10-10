@@ -127,6 +127,21 @@ class RiskScoreServiceTest {
     }
 
     @Test
+    @DisplayName("reasons 以裸 String[] 形态返回（clickhouse-jdbc 0.6.x 对 Array(String) 列 getObject 的实机形态）亦逐条解析")
+    void latestParsesStringArrayReasons() {
+        when(clickHouseClient.isAvailable()).thenReturn(true);
+        stubRow(60, new String[]{"{\"rule_id\":\"rr_c\",\"contribution\":30}"}, "2026-10-10 04:00:00");
+
+        Map<String, Object> res = service.latest("g1", "player_id", "p_100");
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> reasons = (List<Map<String, Object>>) res.get("reasons");
+        assertEquals(1, reasons.size());
+        assertEquals("rr_c", reasons.get(0).get("ruleId"));
+        assertEquals(30, reasons.get(0).get("contribution"));
+    }
+
+    @Test
     @DisplayName("不加 Spring 事务：CH 读抛异常不得把调用方 joined 事务标 rollback-only（案例详情降级 500 防回归）")
     void noSpringTransactionBoundary() throws NoSuchMethodException {
         assertFalse(AnnotatedElementUtils.hasAnnotation(RiskScoreService.class, Transactional.class));
