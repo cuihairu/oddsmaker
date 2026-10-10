@@ -173,6 +173,8 @@ DELETE /api/games/{gameId}/schemas/{schemaId}
 
 B7 起新增字段：`compatibility`（默认 NONE）、`piiPolicy`（事件级 PII 策略 JSON）、`retentionDays`、`samplingRate`、`ownerId`；`rejectUnknownEvents` 默认值收口为 `true`——ACTIVE Schema 的事件名清单随 internal feed（`/internal/api-keys/{key}`）下发网关（环境绑定版优先、回退全局版），网关对未定义事件按 `unknown_event` 拒收，dev 环境豁免。web 控制台入口：`/schemas`（事件 Schema 页）。
 
+**PII 优先级链（环境级 Schema > ApiKey > 网关默认）**：ACTIVE Schema 的 `piiPolicy` 随同一 internal feed 下发网关（环境绑定版优先、回退全局版，无 Schema 不下发），网关在 ApiKey 级策略之上按字段收敛——`email`/`phone`（`allow|mask|drop`）与 `ip`（`allow|coarse|drop`）取更高一层的合法值，`denyKeys`/`maskKeys` 名单与 ApiKey 级取并集（任一层收紧即生效）；JSON 非法或单字段值非法时该字段回落 ApiKey 级/网关默认（与 Schema 事件面 fail-open 同口径）。`piiPolicy` 契约：`{"email":"allow|mask|drop","phone":"allow|mask|drop","ip":"allow|coarse|drop","denyKeys":["..."],"maskKeys":["..."]}`，字段均可缺省。
+
 ### Experiments
 
 ```http

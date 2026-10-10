@@ -316,6 +316,8 @@ public class ControlService {
                 .distinct()
                 .sorted()
                 .collect(Collectors.toList());
+            // PII 优先级链：同一 Schema 一并发 piiPolicy，Gateway 侧按 Schema>ApiKey>网关默认 收敛
+            out.schemaPiiPolicy = schema.piiPolicy;
         }
         return out;
     }

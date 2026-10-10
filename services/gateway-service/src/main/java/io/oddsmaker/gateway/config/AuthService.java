@@ -61,6 +61,8 @@ public class AuthService {
         // B7 §4.4 Schema 事件面：rejectUnknownEvents=null/缺省=不启用；eventNames=ACTIVE Schema 事件名清单
         public Boolean rejectUnknownEvents;
         public List<String> eventNames;
+        // PII 优先级链（B7 边界闭合）：环境级 ACTIVE EventSchema 的 piiPolicy JSON；null/缺省=不启用，回落 ApiKey 级
+        public String schemaPiiPolicy;
 
         public boolean isScoped() {
             return gameId != null && !gameId.isBlank() && environment != null && !environment.isBlank();

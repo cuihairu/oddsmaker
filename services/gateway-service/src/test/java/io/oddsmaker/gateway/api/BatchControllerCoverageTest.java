@@ -18,6 +18,8 @@ import reactor.core.publisher.Mono;
 import java.util.List;
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -524,6 +526,50 @@ class BatchControllerCoverageTest {
             .expectStatus().is2xxSuccessful()
             .expectBody()
             .jsonPath("$.accepted[0]").isEqualTo("01JPOLICY0003");
+    }
+
+    @Test
+    @DisplayName("PII 优先级链：Schema 级 drop 压 ApiKey mask（邮箱剔除非打码）+ 名单并集拦截")
+    void schemaPiiOverridesKeyLevel() {
+        // 臂 1：Schema email=drop 压 ApiKey mask——mail 整值剔除；ApiKey 级 maskKeys（Schema 未设）仍打码
+        AuthService.ApiKeyContext ctx = unscopedKey();
+        ctx.piiEmail = "mask";
+        ctx.maskKeys = List.of("contact");
+        ctx.schemaPiiPolicy = "{\"email\":\"drop\"}";
+        when(authService.getContext("pk_schemapii")).thenReturn(ctx);
+        client.post().uri("/v1/batch")
+            .contentType(MediaType.APPLICATION_JSON)
+            .header("x-api-key", "pk_schemapii")
+            .header("x-forwarded-for", "9.9.9.9")
+            .bodyValue("[" + "{\"event_id\":\"01JSPPII00001\",\"event_name\":\"level_start\","
+                + "\"game_id\":\"game_demo\",\"environment\":\"prod\",\"device_id\":\"d1\","
+                + "\"ts_client\":" + now() + ",\"props\":{\"mail\":\"a@b.com\",\"contact\":\"c@d.com\"}}" + "]")
+            .exchange()
+            .expectStatus().is2xxSuccessful()
+            .expectBody()
+            .jsonPath("$.accepted[0]").isEqualTo("01JSPPII00001");
+        org.mockito.ArgumentCaptor<io.oddsmaker.common.model.Event> captor =
+            org.mockito.ArgumentCaptor.forClass(io.oddsmaker.common.model.Event.class);
+        verify(avroPublisher).publish(captor.capture());
+        assertNull(captor.getValue().props.get("mail"));                 // Schema drop：整值剔除
+        assertEquals("***@d.com", captor.getValue().props.get("contact")); // ApiKey 级 mask 保留
+
+        // 臂 2：denyKeys 并集——schema_deny 只出现在 Schema 级名单，命中即 pii_blocked
+        AuthService.ApiKeyContext ctx2 = unscopedKey();
+        ctx2.denyKeys = List.of("forbid");
+        ctx2.schemaPiiPolicy = "{\"denyKeys\":[\"schema_deny\"]}";
+        when(authService.getContext("pk_schemapii")).thenReturn(ctx2);
+        client.post().uri("/v1/batch")
+            .contentType(MediaType.APPLICATION_JSON)
+            .header("x-api-key", "pk_schemapii")
+            .bodyValue("[" + "{\"event_id\":\"01JSPPII00002\",\"event_name\":\"level_start\","
+                + "\"game_id\":\"game_demo\",\"environment\":\"prod\",\"device_id\":\"d1\","
+                + "\"ts_client\":" + now() + ",\"props\":{\"ok\":\"keep\",\"schema_deny\":\"v\"}}" + "]")
+            .exchange()
+            .expectStatus().is2xxSuccessful()
+            .expectBody()
+            .jsonPath("$.rejected[0].reason").isEqualTo("pii_blocked")
+            .jsonPath("$.accepted.length()").isEqualTo(0);
     }
 
     @Test

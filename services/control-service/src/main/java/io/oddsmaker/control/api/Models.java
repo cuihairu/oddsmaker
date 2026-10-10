@@ -70,6 +70,9 @@ public class Models {
         // B7 §4.4 Schema 事件面收敛：key 作用域内 ACTIVE EventSchema 的未知事件拒收开关与事件名清单
         public Boolean rejectUnknownEvents;
         public List<String> eventNames;
+        // PII 优先级链（B7 边界闭合）：环境级 ACTIVE EventSchema 的 piiPolicy JSON（{email,phone,ip,denyKeys,maskKeys}），
+        // 无 Schema 或 Schema 未设该字段时不下发（Gateway 侧 null=不启用，回落 ApiKey 级与网关默认）
+        public String schemaPiiPolicy;
     }
 
     public static class StorageProfileResp {

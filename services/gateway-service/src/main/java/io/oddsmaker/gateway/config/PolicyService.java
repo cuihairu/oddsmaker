@@ -21,6 +21,7 @@ public class PolicyService {
         public String piiIp;
         public List<String> denyKeys;
         public List<String> maskKeys;
+        public String schemaPiiPolicy;
     }
 
     public PolicyService(AuthService authService) {
@@ -41,6 +42,7 @@ public class PolicyService {
         policy.piiIp = context.piiIp;
         policy.denyKeys = context.denyKeys;
         policy.maskKeys = context.maskKeys;
+        policy.schemaPiiPolicy = context.schemaPiiPolicy;
         return policy;
     }
 }

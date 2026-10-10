@@ -170,4 +170,42 @@ class EventSchemaGatewayFeedTest {
         assertNull(resp.rejectUnknownEvents);
         assertTrue(resp.eventNames == null);
     }
+
+    @Test
+    @DisplayName("PII 优先级链：Schema piiPolicy 随事件面下发，环境级优先于全局")
+    void schemaPiiPolicyEnvBoundPreferred() {
+        TrackingPlanEntity envPlan = activePlan("sch_env", "env_prod", true,
+                LocalDateTime.now().minusHours(1));
+        envPlan.piiPolicy = "{\"email\":\"drop\"}";
+        TrackingPlanEntity globalPlan = activePlan("sch_global", null, false,
+                LocalDateTime.now().minusDays(1));
+        globalPlan.piiPolicy = "{\"ip\":\"drop\"}";
+        when(trackingPlanRepo.findActiveByGameId("g")).thenReturn(List.of(envPlan, globalPlan));
+        when(eventDefinitionRepo.findActiveByTrackingPlanId("sch_env")).thenReturn(List.of());
+
+        Models.InternalApiKeyResp resp = service.getActiveKeyForGateway("ak_feed");
+
+        assertEquals("{\"email\":\"drop\"}", resp.schemaPiiPolicy);
+    }
+
+    @Test
+    @DisplayName("PII 优先级链：无环境级 Schema 回退全局版 piiPolicy；Schema 未设该字段不下发（null=回落 ApiKey 级）")
+    void schemaPiiPolicyFallbackAndNull() {
+        TrackingPlanEntity globalPlan = activePlan("sch_global", null, true,
+                LocalDateTime.now().minusDays(1));
+        globalPlan.piiPolicy = "{\"ip\":\"coarse\"}";
+        when(trackingPlanRepo.findActiveByGameId("g")).thenReturn(List.of(globalPlan));
+        when(eventDefinitionRepo.findActiveByTrackingPlanId("sch_global")).thenReturn(List.of());
+
+        Models.InternalApiKeyResp resp = service.getActiveKeyForGateway("ak_feed");
+        assertEquals("{\"ip\":\"coarse\"}", resp.schemaPiiPolicy);
+
+        TrackingPlanEntity barePlan = activePlan("sch_bare", null, true,
+                LocalDateTime.now().minusHours(2));
+        when(trackingPlanRepo.findActiveByGameId("g")).thenReturn(List.of(barePlan));
+        when(eventDefinitionRepo.findActiveByTrackingPlanId("sch_bare")).thenReturn(List.of());
+
+        Models.InternalApiKeyResp resp2 = service.getActiveKeyForGateway("ak_feed");
+        assertNull(resp2.schemaPiiPolicy);
+    }
 }

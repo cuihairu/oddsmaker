@@ -637,7 +637,90 @@ public class BatchController {
         if (policy.maskKeys != null && !policy.maskKeys.isEmpty()) {
             overrides.maskKeys = new java.util.HashSet<>(policy.maskKeys.stream().map(s -> s.toLowerCase(Locale.ROOT)).toList());
         }
+        applySchemaPiiPolicy(overrides, policy.schemaPiiPolicy);
         return overrides;
+    }
+
+    /**
+     * PII 优先级链（B7 边界闭合）：环境级 ACTIVE EventSchema 的 piiPolicy 压在 ApiKey 级策略之上——
+     * email/phone/ip 模式字段取更高一层的合法值，denyKeys/maskKeys 与 ApiKey 级名单取并集（任一层收紧即生效）；
+     * JSON 非法或单个字段值非法时该字段回落 ApiKey 级/网关默认（与 Schema 事件面 fail-open 同口径）。
+     * 契约：{"email":"allow|mask|drop","phone":"allow|mask|drop","ip":"allow|coarse|drop","denyKeys":[...],"maskKeys":[...]}
+     */
+    private void applySchemaPiiPolicy(PiiPolicy.Overrides overrides, String schemaPiiPolicy) {
+        if (schemaPiiPolicy == null || schemaPiiPolicy.isBlank()) {
+            return;
+        }
+        JsonNode json;
+        try {
+            json = om.readTree(schemaPiiPolicy);
+        } catch (Exception e) {
+            return;
+        }
+        if (json == null || !json.isObject()) {
+            return;
+        }
+        PiiPolicy.Mode mode = strictMode(json.get("email"));
+        if (mode != null) {
+            overrides.emailMode = mode;
+        }
+        mode = strictMode(json.get("phone"));
+        if (mode != null) {
+            overrides.phoneMode = mode;
+        }
+        PiiPolicy.IpMode ipMode = strictIpMode(json.get("ip"));
+        if (ipMode != null) {
+            overrides.ipMode = ipMode;
+        }
+        unionKeys(overrides, json.get("denyKeys"), true);
+        unionKeys(overrides, json.get("maskKeys"), false);
+    }
+
+    /** Schema 级模式值严格解析：仅接受白名单三值，缺失/非字符串/非法值一律 null（回落下一层）。 */
+    private PiiPolicy.Mode strictMode(JsonNode node) {
+        if (node == null || !node.isTextual()) {
+            return null;
+        }
+        return switch (node.asText().toLowerCase(Locale.ROOT)) {
+            case "allow" -> PiiPolicy.Mode.ALLOW;
+            case "mask" -> PiiPolicy.Mode.MASK;
+            case "drop" -> PiiPolicy.Mode.DROP;
+            default -> null;
+        };
+    }
+
+    private PiiPolicy.IpMode strictIpMode(JsonNode node) {
+        if (node == null || !node.isTextual()) {
+            return null;
+        }
+        return switch (node.asText().toLowerCase(Locale.ROOT)) {
+            case "allow" -> PiiPolicy.IpMode.ALLOW;
+            case "coarse" -> PiiPolicy.IpMode.COARSE;
+            case "drop" -> PiiPolicy.IpMode.DROP;
+            default -> null;
+        };
+    }
+
+    /** Schema 级名单与 ApiKey 级并集（小写归一同 ApiKey 路径）；空数组/非数组不动。 */
+    private void unionKeys(PiiPolicy.Overrides overrides, JsonNode listNode, boolean deny) {
+        if (listNode == null || !listNode.isArray() || listNode.isEmpty()) {
+            return;
+        }
+        Set<String> merged = new java.util.HashSet<>();
+        Set<String> existing = deny ? overrides.denyKeys : overrides.maskKeys;
+        if (existing != null) {
+            merged.addAll(existing);
+        }
+        for (JsonNode item : listNode) {
+            if (item.isTextual() && !item.asText().isBlank()) {
+                merged.add(item.asText().toLowerCase(Locale.ROOT));
+            }
+        }
+        if (deny) {
+            overrides.denyKeys = merged;
+        } else {
+            overrides.maskKeys = merged;
+        }
     }
 
     private void reject(BatchResponse resp, Event event, AuthService.ApiKeyContext keyContext, String reason) {

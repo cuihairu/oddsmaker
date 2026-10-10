@@ -158,6 +158,15 @@
 **验收：** ✅ RiskCaseApiTest 9/9 + RiskScoreServiceTest 7/7（含事务防回归锁）+ web 全量 174/174（基线 171 + 案例页 3 例）随全量门禁绿。
 **实机走查（2026-10-10）：** ✅ postgres:16 容器 + bootRun 直连——首次 GET 详情 500（UnexpectedRollbackException）暴露 joined 事务陷阱，修复后复验：CH 未配置时 `GET /api/games/g_live/risk-cases/rc_live` 200 且 `subjectRiskScore:null`、列表 200、独立 `risk-scores` 端点契约不变（CH_UNAVAILABLE 400）。再起 clickhouse:24 容器造 risk_scores 行走正路径——found:true + score + updatedAt 正常回传，但 reasons 空：JDBC 驱动直探证实 `getObject` 对 Array(String) 返回裸 `String[]`，补形态分支后复验 reasons 解析出 `[rr_x:40, rr_y:25]` 全链路（详情注入 + 独立端点同源）。
 
+## PII 优先级链生效（B7 边界闭合，2026-10-10 增量）
+
+- [x] 环境级 ACTIVE EventSchema `piiPolicy` 随 internal feed 下发网关（复用 B7 Schema 选择：环境绑定版优先、回退全局版，无 Schema 不下发）
+- [x] 网关解析收敛：email/phone（allow|mask|drop）与 ip（allow|coarse|drop）模式字段取更高一层合法值、denyKeys/maskKeys 与 ApiKey 级名单并集（任一层收紧即生效）；JSON 非法/字段值非法/整体缺失该字段回落 ApiKey 级与网关默认（fail-open 同 Schema 事件面口径）
+- [x] 测试：control feed +2（环境级优先/全局回退携带、未设不下发 null）+ 网关纯函数矩阵 +1（模式覆盖/名单并集小写归一/非法值与非法 JSON 四态/null 直通）+ 端到端两臂 +1（Schema drop 压 ApiKey mask 邮箱整值剔除非打码、ApiKey maskKeys 保留；Schema 名单并集 pii_blocked）
+- [x] 文档对账：control.md PII 优先级链条目、CHANGELOG 与本节
+
+**验收：** ✅ 全量 gradle 241 suites / 2627 用例绿（failures=0 errors=0，基线 241/2623 + 4 例）+ web build 绿 + docs build 绿。边界：web 控制台无 piiPolicy 编辑入口（经 API `PUT /api/games/{gameId}/schemas/{id}` 设置）；retentionDays/samplingRate/ownerId 维持仅落库与展示。
+
 ---
 
 ## 边界（不跟进，评审转审查项）

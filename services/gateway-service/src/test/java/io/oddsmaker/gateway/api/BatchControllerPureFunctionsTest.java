@@ -148,6 +148,60 @@ class BatchControllerPureFunctionsTest {
     }
 
     @Test
+    @DisplayName("PII 优先级链：Schema 级压 ApiKey 级——模式覆盖/名单并集/非法值与非法 JSON 回落")
+    void schemaPiiPolicyPrecedenceChain() {
+        // Schema email=drop 压 ApiKey allow；ApiKey phone 与 Schema 未设的 ip 保留；denyKeys 并集 + 小写归一
+        PolicyService.Policy p = new PolicyService.Policy();
+        p.piiEmail = "allow";
+        p.piiPhone = "drop";
+        p.piiIp = "coarse";
+        p.denyKeys = List.of("K1");
+        p.schemaPiiPolicy = "{\"email\":\"drop\",\"ip\":\"drop\",\"denyKeys\":[\"k2\"]}";
+        Object overrides = ReflectionTestUtils.invokeMethod(controller, "policyToOverrides", p);
+        assertEquals(io.oddsmaker.gateway.config.PiiPolicy.Mode.DROP,
+                ReflectionTestUtils.getField(overrides, "emailMode"));
+        assertEquals(io.oddsmaker.gateway.config.PiiPolicy.Mode.DROP,
+                ReflectionTestUtils.getField(overrides, "phoneMode"));
+        assertEquals(io.oddsmaker.gateway.config.PiiPolicy.IpMode.DROP,
+                ReflectionTestUtils.getField(overrides, "ipMode"));
+        assertEquals(java.util.Set.of("k1", "k2"), ReflectionTestUtils.getField(overrides, "denyKeys"));
+
+        // 非法模式值/非字符串/空名单不动 ApiKey 级；maskKeys 并集
+        PolicyService.Policy p2 = new PolicyService.Policy();
+        p2.piiEmail = "allow";
+        p2.piiIp = "coarse";
+        p2.maskKeys = List.of("K1");
+        p2.schemaPiiPolicy = "{\"email\":\"bogus\",\"ip\":42,\"maskKeys\":[\"contact\",\"  \"]}";
+        Object o2 = ReflectionTestUtils.invokeMethod(controller, "policyToOverrides", p2);
+        assertEquals(io.oddsmaker.gateway.config.PiiPolicy.Mode.ALLOW,
+                ReflectionTestUtils.getField(o2, "emailMode"));
+        assertEquals(io.oddsmaker.gateway.config.PiiPolicy.IpMode.COARSE,
+                ReflectionTestUtils.getField(o2, "ipMode"));
+        assertEquals(java.util.Set.of("k1", "contact"), ReflectionTestUtils.getField(o2, "maskKeys"));
+
+        // 非法 JSON / 非对象 / 空白串：整体视为未设置，ApiKey 级原样
+        for (String bad : List.of("{not-json", "[1,2]", "null", "   ")) {
+            PolicyService.Policy pb = new PolicyService.Policy();
+            pb.piiEmail = "drop";
+            pb.denyKeys = List.of("k1");
+            pb.schemaPiiPolicy = bad;
+            Object ob = ReflectionTestUtils.invokeMethod(controller, "policyToOverrides", pb);
+            assertEquals(io.oddsmaker.gateway.config.PiiPolicy.Mode.DROP,
+                    ReflectionTestUtils.getField(ob, "emailMode"));
+            assertEquals(java.util.Set.of("k1"), ReflectionTestUtils.getField(ob, "denyKeys"));
+            assertNull(ReflectionTestUtils.getField(ob, "maskKeys"));
+        }
+
+        // schemaPiiPolicy null（无 Schema/静态 key）：不触碰任何字段
+        PolicyService.Policy pn = new PolicyService.Policy();
+        pn.piiEmail = "mask";
+        Object on = ReflectionTestUtils.invokeMethod(controller, "policyToOverrides", pn);
+        assertEquals(io.oddsmaker.gateway.config.PiiPolicy.Mode.MASK,
+                ReflectionTestUtils.getField(on, "emailMode"));
+        assertNull(ReflectionTestUtils.getField(on, "denyKeys"));
+    }
+
+    @Test
     @DisplayName("readCompatEvent：ts_client/ts_server 字符串数字与 ISO 时间戳两侧")
     void readCompatEventTimestampSides() throws Exception {
         ObjectMapper om = new ObjectMapper().setPropertyNamingStrategy(
