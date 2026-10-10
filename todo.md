@@ -136,6 +136,16 @@
 
 **验收：** ✅ 单测 7 例（快照解析/空行/CH 不可用/空白 subject/SQL Array 形态/坏条目跳过/鉴权委托）随全量门禁绿。
 
+## Webhook 派发事务陷阱全仓扫（同族陷阱回归扫，2026-10-10 增量）
+
+- [x] 全仓扫「@Transactional 类里 try/catch 吞异常调内层事务协作方」毒模式（内层类级事务异常穿代理标 rollback-only → 外层 catch 形同虚设 → 提交炸）：命中 21 处/13 文件——RiskCaseService 1 处已随主体累计分批修复（RiskScoreService 去事务）；FlinkJobService 2 处 catch 原样 rethrow 非缺口；其余 19 处全部是 `sendCustomWebhook` best-effort 派发（审核队列 SLA/升级、封禁、导出完成、健康告警、ML 告警、维护窗口×4、注销擦除、限流、SDK 下线）
+- [x] 根修：`sendCustomWebhook` 标 `@Transactional(REQUIRES_NEW)`——派发失败只回滚派发自身新事务，调用方主流程照常提交，catch 语义如实生效；全部调用方均吞异常（无未捕获调用方），零语义回归；方法级 javadoc 记录陷阱与处置理由
+- [x] 驱动形态面复查：CH `Array(String)` 列消费仅 `risk_scores.reasons`（上批已补裸 `String[]` 形态）与 `identities.character_ids/device_ids`（只走服务端 `hasAny` 无客户端读取），无新缺口；`FlinkJobService` 审计 catch 均原样 rethrow，audit `log` 保持 fail-together 语义不动
+- [x] 测试：`WebhookServiceTest.sendCustomWebhookRequiresNew` 注解防回归锁（REQUIRES_NEW 传播断言，13/13 绿随全量门禁）
+- [x] 文档对账：CHANGELOG 与本节（陷阱为内部事务语义，无端点行为变化，API 文档不受影响）
+
+**验收：** ✅ WebhookServiceTest 13/13 随全量 gradle 241 suites / 2623 用例绿 + web 174/174 复用本批门禁。
+
 ## 案例详情主体累计分行（B6 闭合的回看侧表面，2026-10-10 增量）
 
 - [x] `RiskCaseService.detail` 注入 `subjectRiskScore`：复用 `RiskScoreService.latest` 按案例目标（targetType/targetId）读 CH 最新累计分；未落分（found=false）、CH 未配置或查询失败一律降级 null——案例回看不因评分面降级（try/catch RuntimeException + debug 日志）

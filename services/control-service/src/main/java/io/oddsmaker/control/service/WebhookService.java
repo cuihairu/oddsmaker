@@ -10,6 +10,7 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.*;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
@@ -80,8 +81,13 @@ public class WebhookService {
     }
 
     /**
-     * 发送自定义Webhook
+     * 发送自定义Webhook。
+     * REQUIRES_NEW：全部调用方（审核队列 SLA/升级、封禁、导出完成、告警升级等 19 处）都是
+     * try/catch 吞异常的 best-effort 派发——若 join 调用方事务，派发异常（含 findActiveByGameId
+     * 读失败）会穿过本代理把 joined 事务标 rollback-only，catch 形同虚设、外层提交 500
+     * （同 RiskScoreService 事务陷阱）。独立新事务：派发失败只回滚自己，调用方主流程照常提交。
      */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void sendCustomWebhook(String gameId, String eventType, Map<String, Object> payload) {
         List<WebhookConfigEntity> configs = webhookConfigRepo.findActiveByGameId(gameId);
 

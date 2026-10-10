@@ -15,10 +15,13 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.client.ResourceAccessException;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
 
 import java.time.LocalDateTime;
@@ -400,5 +403,14 @@ class WebhookServiceTest {
 
         assertEquals("success", result.get("status"));
         assertEquals(200, result.get("httpStatus"));
+    }
+
+    @Test
+    @DisplayName("sendCustomWebhook 用 REQUIRES_NEW：19 处吞异常调用方的 catch 不得被 rollback-only 投毒（防回归）")
+    void sendCustomWebhookRequiresNew() throws NoSuchMethodException {
+        var m = WebhookService.class.getMethod("sendCustomWebhook", String.class, String.class, Map.class);
+        Transactional tx = AnnotatedElementUtils.findMergedAnnotation(m, Transactional.class);
+        assertNotNull(tx, "sendCustomWebhook 必须自带事务注解");
+        assertEquals(Propagation.REQUIRES_NEW, tx.propagation());
     }
 }
