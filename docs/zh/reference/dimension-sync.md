@@ -1,6 +1,6 @@
 # 维度数据同步设计
 
-> **实现状态（2026-10）**：已落地的是 Sync Agent（`agents/dimension-sync-agent/`，mysql/postgres/csv/excel/kafka 五类 source）、**HTTP Pull 链路**（Control 侧 scheduler + Bearer 凭证 AES-GCM 加密托管 + `next_cursor` 断点续传，配置见 `dimension-pulls` API）、**Pull 配置 YAML 面**（`dimension-pulls/export` + `/import`，凭证永不落盘）、**Agent 属性面 Control 托管**（`agent-configs` API + `/api/dimensions/agent-configs/resolved` 下发口，密钥 AES-GCM 密文托管；Agent 端 `control.config-url` 开关启动拉取 + 本地文件兜底，优先级 本地 < Control < System property）、`/v1/batch` 维度事件通道和 `dimension-sync-job`（消费 `oddsmaker.events_raw` 写 `item_dim`/`level_dim`）。仅剩 Debezium CDC（外部依赖最重，待游戏方 Kafka 基建）与托管配置轮询热更新（当前仅启动拉取一次）两条未落地——本文对未落地部分逐处标注。
+> **实现状态（2026-10）**：已落地的是 Sync Agent（`agents/dimension-sync-agent/`，mysql/postgres/csv/excel/kafka 五类 source）、**HTTP Pull 链路**（Control 侧 scheduler + Bearer 凭证 AES-GCM 加密托管 + `next_cursor` 断点续传，配置见 `dimension-pulls` API）、**Pull 配置 YAML 面**（`dimension-pulls/export` + `/import`，凭证永不落盘）、**Agent 属性面 Control 托管**（`agent-configs` API + 控制台「Agent 托管配置」面 + `/api/dimensions/agent-configs/resolved` 下发口，密钥 AES-GCM 密文托管；Agent 端 `control.config-url` 开关启动拉取 + 本地文件兜底，优先级 本地 < Control < System property）、`/v1/batch` 维度事件通道和 `dimension-sync-job`（消费 `oddsmaker.events_raw` 写 `item_dim`/`level_dim`）。仅剩 Debezium CDC（外部依赖最重，待游戏方 Kafka 基建）与托管配置轮询热更新（当前仅启动拉取一次）两条未落地——本文对未落地部分逐处标注。
 
 ## 结论
 
@@ -384,6 +384,8 @@ dimensions:
 | `GET /api/dimensions/agent-configs/resolved?gameId=&environment=&agentKey=` | Agent 取配置：响应体即可 `Properties.load` 的完整文本（注入三键 + props + 解密后的 secrets），停用档拒绝下发（任何非 200 端回落本地文件） | `dimension:read` |
 
 跨字段组合校验（如 SASL_* 协议必带机制与凭证）仍由 Agent 启动 fail-fast 兜底，Control 侧只管键白名单与值形状。
+
+控制台入口：`/dimensions` 页「Agent 托管配置」区——建档/编辑/删除，props 与 secrets 分两个文本框（secrets 每行 `key=value`，服务端只回显键名清单）；编辑留空 secrets = 保留既有密钥，填写即整体轮换；停用档 Agent 拉取即回落本地文件。API 亦可直用，两者同权门控。
 
 ### 目标形态（未实现：provider 多态 + 密钥引用）
 

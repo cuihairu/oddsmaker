@@ -216,6 +216,16 @@
 
 ---
 
+## 维度同步 Agent 托管配置控制台入口（拍板第三链，2026-10-11 增量 3/3）
+
+- [x] `/dimensions` 页「Agent 托管配置」区：配置表（agentKey/环境/启用徽章/密钥键名清单/更新时间）+ 新建/编辑弹层（props 预填 mysql 最小模板、secrets 每行 `key=value` 本地解析，注释行跳过；建档缺 `gateway.api-key` 或行格式非法本地拦截）+ 删除（confirm 明示删除后 Agent 回落本地文件）；编辑留空 secrets=保留既有，填写即整体轮换；注入键防呆脚注（game.id/game.environment/status.source-key 勿写入，后端键白名单双保险）
+- [x] 测试：web +7 例（初载行渲染含键名清单/空态/403 透出/创建校验链与 POST payload/编辑预填与 secrets 缺省不提交/整体轮换与 enabled/删除 confirm 拦截）
+- [x] 文档对账：dimension-sync.md 实现状态头补控制台面 + 配置驱动节新增控制台入口行，CHANGELOG 与本节
+
+**验收：** ✅ web 198/198 绿。三链全闭合：Pull / 配置驱动 YAML / Agent 托管面（API + 下发口 + Agent 拉取 + 控制台）均已落地。剩余边界（不另行排期，等真实需求）：托管配置轮询热更新（当前仅启动拉取一次）；`provider:` 多态与 `auth.token_ref` 密钥引用表；Debezium CDC（外部依赖最重，待游戏方 Kafka 基建）。
+
+---
+
 ## 维度同步 Agent 端取配置链路（拍板第三链，2026-10-11 增量 2/3）
 
 - [x] `ControlConfigFetcher`：GET `{control.config-url}?gameId=&environment=&agentKey=`（`x-admin-token` 复用 `status.token`，查询值 URL 编码，非 2xx/空体/异常抛 IOException，缺查询身份不发请求）

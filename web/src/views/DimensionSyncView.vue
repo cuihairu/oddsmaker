@@ -287,9 +287,138 @@ async function doImport() {
   }
 }
 
+// ===== Agent 托管配置（Control 下发源配置；密钥只回显键名，值永不下发页面） =====
+const agentConfigs = ref([])
+const agentLoading = ref(false)
+const agentError = ref('')
+const agentSuccess = ref('')
+
+const acFormOpen = ref(false)
+const acFormMode = ref('create')
+const acFormSaving = ref(false)
+const acFormError = ref('')
+const acForm = ref({})
+
+const AGENT_PROPS_TEMPLATE = `# 非密钥属性（每行一键；# 开头为注释）
+gateway.endpoint=https://ingest.oddsmaker.local
+source.type=mysql
+source.jdbc.url=jdbc:mysql://replica.internal:3306/game
+source.jdbc.user=oddsmaker_ro
+source.jdbc.query=SELECT code AS resource_id, name, updated_at FROM items WHERE updated_at > ? ORDER BY updated_at
+source.jdbc.cursor-column=updated_at`
+
+async function loadAgentConfigs() {
+  if (!currentGameId.value) {
+    agentConfigs.value = []
+    return
+  }
+  agentLoading.value = true
+  agentError.value = ''
+  try {
+    const res = await api.get(`/api/games/${currentGameId.value}/agent-configs`)
+    agentConfigs.value = res.data || []
+  } catch (e) {
+    agentError.value = e.response?.data?.message || 'Agent 配置加载失败'
+  } finally {
+    agentLoading.value = false
+  }
+}
+
+function openAgentConfigCreate() {
+  acFormMode.value = 'create'
+  acFormError.value = ''
+  acForm.value = {
+    environment: envNames.value[0] || '',
+    agentKey: '',
+    props: AGENT_PROPS_TEMPLATE,
+    secrets: '',
+    enabled: true,
+  }
+  acFormOpen.value = true
+}
+
+function openAgentConfigEdit(cfg) {
+  acFormMode.value = 'edit'
+  acFormError.value = ''
+  acForm.value = {
+    id: cfg.id,
+    environment: cfg.environment,
+    agentKey: cfg.agentKey,
+    props: cfg.props,
+    secrets: '',
+    enabled: cfg.enabled !== false,
+  }
+  acFormOpen.value = true
+}
+
+function parseSecrets(text) {
+  // 每行 key=value；空行与 # 注释跳过
+  const secrets = {}
+  for (const raw of (text || '').split('\n')) {
+    const line = raw.trim()
+    if (!line || line.startsWith('#')) continue
+    const i = line.indexOf('=')
+    if (i <= 0) return { error: `secrets 每行须为 key=value（「${raw}」不是）` }
+    const k = line.slice(0, i).trim()
+    if (!k) return { error: 'secrets 存在空键名' }
+    secrets[k] = line.slice(i + 1).trim()
+  }
+  return { secrets }
+}
+
+async function submitAgentConfigForm() {
+  const environment = (acForm.value.environment || '').trim()
+  const agentKey = (acForm.value.agentKey || '').trim()
+  const props = (acForm.value.props || '').trim()
+  acFormError.value = ''
+  if (!environment) acFormError.value = '环境不能为空'
+  else if (!agentKey) acFormError.value = 'agentKey 不能为空'
+  else if (!props) acFormError.value = 'props 不能为空'
+  if (acFormError.value) return
+  const parsed = parseSecrets(acForm.value.secrets)
+  if (parsed.error) {
+    acFormError.value = parsed.error
+    return
+  }
+  if (acFormMode.value === 'create' && !('gateway.api-key' in parsed.secrets)) {
+    acFormError.value = 'secrets 至少需要 gateway.api-key'
+    return
+  }
+  const payload = { environment, agentKey, props, enabled: acForm.value.enabled !== false }
+  if (Object.keys(parsed.secrets).length) payload.secrets = parsed.secrets
+  acFormSaving.value = true
+  try {
+    const base = `/api/games/${currentGameId.value}/agent-configs`
+    if (acFormMode.value === 'create') await api.post(base, payload)
+    else await api.put(`${base}/${acForm.value.id}`, payload)
+    acFormOpen.value = false
+    agentSuccess.value = acFormMode.value === 'create'
+      ? `已建托管配置「${agentKey}」（${environment}）`
+      : `已更新「${agentKey}」`
+    await loadAgentConfigs()
+  } catch (e) {
+    acFormError.value = e.response?.data?.message || '保存失败'
+  } finally {
+    acFormSaving.value = false
+  }
+}
+
+async function removeAgentConfig(cfg) {
+  if (!confirm(`确认删除 Agent 托管配置「${cfg.agentKey}」（${cfg.environment}）？删除后该 Agent 回落本地 agent.properties。`)) return
+  agentError.value = ''
+  try {
+    await api.delete(`/api/games/${currentGameId.value}/agent-configs/${cfg.id}`)
+    agentSuccess.value = `已删除「${cfg.agentKey}」`
+    await loadAgentConfigs()
+  } catch (e) {
+    agentError.value = e.response?.data?.message || '删除失败'
+  }
+}
+
 onMounted(() => {
   load()
   loadPulls()
+  loadAgentConfigs()
   loadEnvironments()
   setupTimer()
 })
@@ -297,6 +426,7 @@ onUnmounted(() => clearInterval(timer))
 watch([currentGameId, environment], () => {
   load()
   loadPulls()
+  loadAgentConfigs()
   loadEnvironments()
 })
 watch(autoRefresh, setupTimer)
@@ -464,6 +594,109 @@ watch(autoRefresh, setupTimer)
       <p v-else class="text-sm text-gray-400 py-6 text-center">
         {{ pullLoading ? '加载中...' : '暂无 HTTP Pull 配置（点右上「新建 Pull 源」或「导入 YAML」接入）' }}
       </p>
+    </div>
+
+    <!-- ===== Agent 托管配置（dimension:read / dimension:manage；密钥只回显键名） ===== -->
+    <div class="sm:flex sm:items-center mt-10 mb-4 gap-4">
+      <div class="sm:flex-auto">
+        <h2 class="text-lg font-bold text-gray-900">Agent 托管配置（{{ agentConfigs.length }}）</h2>
+        <p class="mt-1 text-sm text-gray-500">
+          下发 Agent 的源配置（props / secrets 分离托管；Agent 启动拉取一次，失败回落本地 agent.properties）
+        </p>
+      </div>
+      <div class="mt-4 sm:mt-0 sm:ml-16 flex items-center gap-3 flex-wrap">
+        <button @click="openAgentConfigCreate" class="btn btn-primary">新建托管配置</button>
+        <button @click="loadAgentConfigs" class="btn btn-secondary" :disabled="agentLoading">刷新</button>
+      </div>
+    </div>
+
+    <div v-if="agentSuccess" class="card mb-4 text-sm text-green-700">{{ agentSuccess }}</div>
+    <div v-if="agentError" class="card mb-4 text-sm text-red-600">{{ agentError }}</div>
+
+    <div v-if="!currentGameId" class="card text-center py-8">
+      <p class="text-gray-500">请先选择游戏</p>
+    </div>
+
+    <div v-else class="card overflow-x-auto">
+      <table v-if="agentConfigs.length" class="min-w-full text-sm">
+        <thead>
+          <tr class="text-left text-xs text-gray-500 uppercase border-b border-gray-200">
+            <th class="py-2 pr-4">agentKey</th>
+            <th class="py-2 pr-4">环境</th>
+            <th class="py-2 pr-4">状态</th>
+            <th class="py-2 pr-4">密钥键（仅名）</th>
+            <th class="py-2 pr-4">更新时间</th>
+            <th class="py-2">操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="c in agentConfigs" :key="c.id" class="border-b border-gray-100 last:border-0 align-top">
+            <td class="py-2 pr-4 font-mono text-xs font-medium text-gray-900">{{ c.agentKey }}</td>
+            <td class="py-2 pr-4 text-xs text-gray-600">{{ c.environment }}</td>
+            <td class="py-2 pr-4">
+              <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
+                :class="c.enabled !== false ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'">
+                {{ c.enabled !== false ? '启用' : '停用' }}
+              </span>
+            </td>
+            <td class="py-2 pr-4 font-mono text-xs text-gray-600 max-w-[18rem] break-all">{{ (c.secretKeys || []).join('、') || '—' }}</td>
+            <td class="py-2 pr-4 font-mono text-xs text-gray-500">{{ fmtTime(c.updatedAt) }}</td>
+            <td class="py-2 flex items-center gap-3 whitespace-nowrap">
+              <button @click="openAgentConfigEdit(c)" class="text-xs text-gray-600 hover:underline">编辑</button>
+              <button @click="removeAgentConfig(c)" class="text-xs text-red-600 hover:underline">删除</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <p v-else class="text-sm text-gray-400 py-6 text-center">
+        {{ agentLoading ? '加载中...' : '暂无托管配置（点右上「新建托管配置」让 Agent 启动时拉取下发配置）' }}
+      </p>
+    </div>
+
+    <!-- 创建/编辑 Agent 托管配置弹层（secrets 仅键名回显；编辑留空=保留既有，填写即整体轮换） -->
+    <div v-if="acFormOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40" @click.self="acFormOpen = false">
+      <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-base font-medium text-gray-900">
+            {{ acFormMode === 'create' ? '新建 Agent 托管配置' : `编辑：${acForm.agentKey}（${acForm.environment}）` }}
+          </h3>
+          <button @click="acFormOpen = false" class="text-gray-400 hover:text-gray-600 text-sm">关闭</button>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">环境（environment，须属于该游戏）</label>
+            <input v-model="acForm.environment" class="input w-full" list="pull-env-names" :disabled="acFormSaving" />
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">agentKey（须与 Agent status.source-key 一致）</label>
+            <input v-model="acForm.agentKey" class="input w-full font-mono" :disabled="acFormSaving" />
+          </div>
+          <div class="col-span-2">
+            <label class="block text-xs text-gray-500 mb-1">props（非密钥属性，每行一键）</label>
+            <textarea v-model="acForm.props" rows="10" class="input w-full font-mono text-xs" placeholder="gateway.endpoint=...&#10;source.type=mysql" :disabled="acFormSaving"></textarea>
+          </div>
+          <div class="col-span-2">
+            <label class="block text-xs text-gray-500 mb-1">
+              secrets（密钥，每行 key=value{{ acFormMode === 'create' ? '（至少含 gateway.api-key）' : '（留空 = 保留既有；填写即整体轮换）' }}）
+            </label>
+            <textarea v-model="acForm.secrets" rows="4" class="input w-full font-mono text-xs" :placeholder="acFormMode === 'create' ? 'gateway.api-key=pk_...' : 'gateway.api-key=（留空 = 保留既有）'" :disabled="acFormSaving"></textarea>
+          </div>
+          <div class="flex items-center mt-5">
+            <input v-model="acForm.enabled" type="checkbox" class="mr-2" :disabled="acFormSaving" />
+            <label class="text-xs text-gray-500">启用（停用后 Agent 拉取回落本地文件）</label>
+          </div>
+        </div>
+        <p class="text-xs text-gray-400 mt-3">
+          密钥值以 AES-GCM 加密托管，任何接口只回显键名；game.id / game.environment / status.source-key 由 Control 按行注入，勿写入
+        </p>
+        <p v-if="acFormError" class="text-xs text-red-600 mt-2">{{ acFormError }}</p>
+        <div class="flex justify-end gap-3 mt-5">
+          <button @click="acFormOpen = false" class="btn btn-secondary" :disabled="acFormSaving">取消</button>
+          <button @click="submitAgentConfigForm" class="btn btn-primary" :disabled="acFormSaving">
+            {{ acFormSaving ? '保存中...' : acFormMode === 'create' ? '创建' : '保存' }}
+          </button>
+        </div>
+      </div>
     </div>
 
     <!-- 创建/编辑 Pull 源弹层（credential 建档必填；编辑留空=保留既有凭证） -->
