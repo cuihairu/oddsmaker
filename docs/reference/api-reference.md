@@ -512,6 +512,23 @@ The risk-job picks up enabled rules from `GET /api/risk-dashboard/rules/{gameId}
 
 **Quality severities**: `INFO`, `WARNING`, `ERROR`, `CRITICAL`
 
+### Dimension Sync
+
+Dimension sync status and HTTP Pull source configuration. Pull rows translate game-API pages into `dimension_define` events pushed to `/v1/batch`; progress is recorded in `dimension_sync_status` (`sourceType: agent|pull`). See [dimension-sync.md](/reference/dimension-sync) for the full link design.
+
+| Method | Endpoint | Description |
+|---|---|---|
+| GET | `/api/dimensions/sync-status?gameId=&environment=` | Per-source sync status (cursor/checkpoint, last push time, pushed/error counts, last error) across Agent and Pull sources |
+| GET | `/api/games/{gameId}/dimension-pulls` | List Pull configs for a game (`dimension:read`); credentials are never echoed |
+| POST | `/api/games/{gameId}/dimension-pulls` | Create a Pull config: `{environment, sourceKey, dimType?, endpoint, credential, intervalSeconds?, pageLimit?, enabled?}` (`dimension:manage`); the Bearer credential is stored AES-GCM encrypted |
+| PUT | `/api/games/{gameId}/dimension-pulls/{pullId}` | Update a config; omitting `credential` keeps the existing one (`dimension:manage`) |
+| DELETE | `/api/games/{gameId}/dimension-pulls/{pullId}` | Delete a config (`dimension:manage`) |
+| POST | `/api/games/{gameId}/dimension-pulls/{pullId}/run` | Trigger one pull round manually; returns `{success, pushed, cursor, error}` (`dimension:manage`) |
+| GET | `/api/games/{gameId}/dimension-pulls/export` | Export all Pull configs as YAML (`application/x-yaml`, `dimension:read`); credentials are never exported |
+| POST | `/api/games/{gameId}/dimension-pulls/import` | Import YAML config text: locate by `(environment, sourceKey)`, create-or-update per entry, missing `credential` keeps the existing one, whole batch rolls back on any failure; returns `{created, updated, total}` (`dimension:manage`) |
+
+Import/export YAML shape: a `dimensions` root mapping keyed by `sourceKey`; allowed fields are `environment`, `dimType`, `endpoint`, `credential`, `intervalSeconds`, `pageLimit`, `enabled` — unknown fields are rejected with a precise error. See the config-driven section in [dimension-sync.md](/reference/dimension-sync) for examples.
+
 ### Machine Learning Models
 
 | Method | Endpoint | Description |
