@@ -84,12 +84,221 @@ function setupTimer() {
   }
 }
 
+// ===== HTTP Pull 源配置（Control scheduler 定期拉游戏方 API，凭证加密托管） =====
+const pulls = ref([])
+const pullLoading = ref(false)
+const pullError = ref('')
+const pullSuccess = ref('')
+const pullBusyId = ref(null)
+const envNames = ref([])
+
+// 创建/编辑弹层（edit 共用表单：credential 留空=保留既有凭证）
+const formOpen = ref(false)
+const formMode = ref('create')
+const formSaving = ref(false)
+const formError = ref('')
+const form = ref({})
+
+// YAML 导入/导出弹层（export 导出即取文本，import 粘贴 YAML 文本提交）
+const yamlOpen = ref(false)
+const yamlMode = ref('export')
+const yamlText = ref('')
+const yamlBusy = ref(false)
+const yamlError = ref('')
+
+const DIM_TYPES = [
+  { value: 'item', label: 'item（道具/资源）' },
+  { value: 'level', label: 'level（关卡）' }
+]
+
+async function loadPulls() {
+  if (!currentGameId.value) return
+  pullLoading.value = true
+  pullError.value = ''
+  try {
+    const res = await api.get(`/api/games/${currentGameId.value}/dimension-pulls`)
+    pulls.value = res.data || []
+  } catch (e) {
+    if (e.response?.status === 403) {
+      pullError.value = '没有 dimension:read 权限，无法查看 HTTP Pull 配置'
+    } else {
+      pullError.value = e.response?.data?.message || '加载 HTTP Pull 配置失败'
+    }
+    console.error('Failed to load dimension pulls:', e)
+  } finally {
+    pullLoading.value = false
+  }
+}
+
+// 环境候选：配置里的 environment 必须属于该游戏（后端校验），下拉仅为提示
+async function loadEnvironments() {
+  if (!currentGameId.value) return
+  try {
+    const res = await api.get(`/api/games/${currentGameId.value}/environments`)
+    envNames.value = (res.data || []).map(e => e.name).filter(Boolean)
+  } catch {
+    envNames.value = []
+  }
+}
+
+function openCreate() {
+  formMode.value = 'create'
+  form.value = {
+    environment: envNames.value[0] || '',
+    sourceKey: '',
+    dimType: 'item',
+    endpoint: '',
+    credential: '',
+    intervalSeconds: 300,
+    pageLimit: 1000,
+    enabled: true
+  }
+  formError.value = ''
+  formOpen.value = true
+}
+
+function openEdit(pull) {
+  formMode.value = 'edit'
+  form.value = {
+    id: pull.id,
+    environment: pull.environment,
+    sourceKey: pull.sourceKey,
+    dimType: pull.dimType || 'item',
+    endpoint: pull.endpoint,
+    credential: '',   // 留空=保留既有凭证
+    intervalSeconds: pull.intervalSeconds ?? 300,
+    pageLimit: pull.pageLimit ?? 1000,
+    enabled: pull.enabled !== false
+  }
+  formError.value = ''
+  formOpen.value = true
+}
+
+async function submitPullForm() {
+  formError.value = ''
+  const environment = (form.value.environment || '').trim()
+  const sourceKey = (form.value.sourceKey || '').trim()
+  const endpoint = (form.value.endpoint || '').trim()
+  if (!environment) return void (formError.value = '请填写环境（environment）')
+  if (!sourceKey) return void (formError.value = '请填写源标识（sourceKey）')
+  if (!endpoint) return void (formError.value = '请填写游戏方 API 地址（endpoint）')
+  if (formMode.value === 'create' && !(form.value.credential || '').trim()) {
+    return void (formError.value = '请填写 Bearer 凭证（credential）')
+  }
+  const payload = {
+    environment,
+    sourceKey,
+    dimType: form.value.dimType || 'item',
+    endpoint,
+    intervalSeconds: Number(form.value.intervalSeconds) || 300,
+    pageLimit: Number(form.value.pageLimit) || 1000,
+    enabled: form.value.enabled !== false
+  }
+  const credential = (form.value.credential || '').trim()
+  if (credential) payload.credential = credential   // 更新留空=保留既有，不提交该字段
+  formSaving.value = true
+  try {
+    const base = `/api/games/${currentGameId.value}/dimension-pulls`
+    if (formMode.value === 'create') {
+      await api.post(base, payload)
+    } else {
+      await api.put(`${base}/${form.value.id}`, payload)
+    }
+    formOpen.value = false
+    pullSuccess.value = formMode.value === 'create' ? `已建档「${sourceKey}」（${environment}）` : `已更新「${sourceKey}」`
+    await Promise.all([loadPulls(), load()])
+  } catch (e) {
+    formError.value = e.response?.data?.message || '保存失败'
+  } finally {
+    formSaving.value = false
+  }
+}
+
+async function runPull(pull) {
+  pullBusyId.value = pull.id
+  pullSuccess.value = ''
+  try {
+    const res = await api.post(`/api/games/${currentGameId.value}/dimension-pulls/${pull.id}/run`)
+    const r = res.data || {}
+    pullSuccess.value = r.success
+      ? `「${pull.sourceKey}」本轮已推 ${r.pushed ?? 0} 条，游标 ${r.cursor || '—'}`
+      : `「${pull.sourceKey}」本轮失败：${r.error || '未知错误'}`
+    await Promise.all([loadPulls(), load()])
+  } catch (e) {
+    pullError.value = e.response?.data?.message || '手动拉取失败'
+  } finally {
+    pullBusyId.value = null
+  }
+}
+
+async function removePull(pull) {
+  if (!confirm(`确认删除 HTTP Pull 配置「${pull.sourceKey}」（${pull.environment}）？删除后该源停止拉取，且无法恢复。`)) return
+  pullBusyId.value = pull.id
+  pullSuccess.value = ''
+  try {
+    await api.delete(`/api/games/${currentGameId.value}/dimension-pulls/${pull.id}`)
+    pullSuccess.value = `已删除「${pull.sourceKey}」`
+    await Promise.all([loadPulls(), load()])
+  } catch (e) {
+    pullError.value = e.response?.data?.message || '删除失败'
+  } finally {
+    pullBusyId.value = null
+  }
+}
+
+function openYaml(mode) {
+  yamlMode.value = mode
+  yamlText.value = ''
+  yamlError.value = ''
+  yamlOpen.value = true
+  if (mode === 'export') doExport()
+}
+
+async function doExport() {
+  yamlBusy.value = true
+  yamlError.value = ''
+  try {
+    const res = await api.get(`/api/games/${currentGameId.value}/dimension-pulls/export`)
+    yamlText.value = typeof res.data === 'string' ? res.data : JSON.stringify(res.data, null, 2)
+  } catch (e) {
+    yamlError.value = e.response?.data?.message || '导出失败'
+  } finally {
+    yamlBusy.value = false
+  }
+}
+
+async function doImport() {
+  const text = (yamlText.value || '').trim()
+  if (!text) return void (yamlError.value = '请粘贴 YAML 内容')
+  yamlBusy.value = true
+  yamlError.value = ''
+  try {
+    const res = await api.post(`/api/games/${currentGameId.value}/dimension-pulls/import`, text)
+    const r = res.data || {}
+    yamlError.value = ''
+    yamlText.value = ''
+    yamlOpen.value = false
+    pullSuccess.value = `已导入 ${r.total ?? 0} 条：新建 ${r.created ?? 0}、更新 ${r.updated ?? 0}`
+    await Promise.all([loadPulls(), load()])
+  } catch (e) {
+    yamlError.value = e.response?.data?.message || '导入失败'
+  } finally {
+    yamlBusy.value = false
+  }
+}
+
 onMounted(() => {
   load()
+  loadPulls()
+  loadEnvironments()
   setupTimer()
 })
 onUnmounted(() => clearInterval(timer))
-watch([currentGameId, environment], load)
+watch([currentGameId, environment], () => {
+  load()
+  loadPulls()
+  loadEnvironments()
+})
 watch(autoRefresh, setupTimer)
 </script>
 
@@ -99,8 +308,8 @@ watch(autoRefresh, setupTimer)
       <div class="sm:flex-auto">
         <h1 class="text-2xl font-bold text-gray-900">维度同步</h1>
         <p class="mt-1 text-sm text-gray-500">
-          游戏方内网维度同步 Agent 的心跳、水位与延迟（两口径：距上次推送 / 距源头最新变更）。
-          Agent 每次轮询上报心跳；本页为只读观测面，上报走 Agent 侧 dimension:manage 通道。
+          上半区：游戏方内网维度同步 Agent 的心跳、水位与延迟（只读观测面，上报走 Agent 侧 dimension:manage 通道）。
+          下半区：HTTP Pull 源配置——Control scheduler 定期拉游戏方查询 API（Bearer 凭证加密托管，凭证不回显）。
         </p>
       </div>
       <div class="mt-4 sm:mt-0 sm:ml-16 flex items-center gap-3 flex-wrap">
@@ -184,6 +393,165 @@ watch(autoRefresh, setupTimer)
           </tr>
         </tbody>
       </table>
+    </div>
+
+    <!-- ===== HTTP Pull 源配置（dimension:read / dimension:manage） ===== -->
+    <div class="sm:flex sm:items-center mt-10 mb-4 gap-4">
+      <div class="sm:flex-auto">
+        <h2 class="text-lg font-bold text-gray-900">HTTP Pull 源配置（{{ pulls.length }}）</h2>
+        <p class="mt-1 text-sm text-gray-500">
+          按 (环境, 源标识) 建档，Control 每 15s 巡检、按间隔拉取游戏方 API；支持 YAML 批量导入/导出
+        </p>
+      </div>
+      <div class="mt-4 sm:mt-0 sm:ml-16 flex items-center gap-3 flex-wrap">
+        <button @click="openCreate" class="btn btn-primary">新建 Pull 源</button>
+        <button @click="openYaml('import')" class="btn btn-secondary">导入 YAML</button>
+        <button @click="openYaml('export')" class="btn btn-secondary">导出 YAML</button>
+        <button @click="loadPulls" class="btn btn-secondary" :disabled="pullLoading">刷新</button>
+      </div>
+    </div>
+
+    <div v-if="pullSuccess" class="card mb-4 text-sm text-green-700">{{ pullSuccess }}</div>
+    <div v-if="pullError" class="card mb-4 text-sm text-red-600">{{ pullError }}</div>
+
+    <div v-if="!currentGameId" class="card text-center py-8">
+      <p class="text-gray-500">请先选择游戏</p>
+    </div>
+
+    <div v-else class="card overflow-x-auto">
+      <table v-if="pulls.length" class="min-w-full text-sm">
+        <thead>
+          <tr class="text-left text-xs text-gray-500 uppercase border-b border-gray-200">
+            <th class="py-2 pr-4">源标识</th>
+            <th class="py-2 pr-4">环境</th>
+            <th class="py-2 pr-4">维度</th>
+            <th class="py-2 pr-4">endpoint</th>
+            <th class="py-2 pr-4">间隔 / 分页</th>
+            <th class="py-2 pr-4">状态</th>
+            <th class="py-2 pr-4">游标</th>
+            <th class="py-2 pr-4">上次拉取</th>
+            <th class="py-2 pr-4">累计推送</th>
+            <th class="py-2">操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="p in pulls" :key="p.id" class="border-b border-gray-100 last:border-0 align-top">
+            <td class="py-2 pr-4 font-mono text-xs font-medium text-gray-900">{{ p.sourceKey }}</td>
+            <td class="py-2 pr-4 text-xs text-gray-600">{{ p.environment }}</td>
+            <td class="py-2 pr-4">
+              <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">{{ p.dimType }}</span>
+            </td>
+            <td class="py-2 pr-4 font-mono text-xs text-gray-600 max-w-[18rem] break-all">{{ p.endpoint }}</td>
+            <td class="py-2 pr-4 text-xs text-gray-600 whitespace-nowrap">{{ p.intervalSeconds }}s / {{ p.pageLimit }}</td>
+            <td class="py-2 pr-4">
+              <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
+                :class="p.enabled ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'">
+                {{ p.enabled ? '启用' : '停用' }}
+              </span>
+              <div v-if="p.lastError" class="text-xs text-red-500 mt-1 max-w-[14rem] break-all">失败 {{ p.errorCount }}：{{ p.lastError }}</div>
+            </td>
+            <td class="py-2 pr-4 font-mono text-xs text-gray-600 max-w-[12rem] break-all">{{ p.lastCursor || '—' }}</td>
+            <td class="py-2 pr-4 font-mono text-xs text-gray-500">{{ fmtTime(p.lastPullAt) }}</td>
+            <td class="py-2 pr-4 text-gray-700">{{ p.pushedCount ?? 0 }}</td>
+            <td class="py-2 flex items-center gap-3 whitespace-nowrap">
+              <button @click="runPull(p)" class="text-xs text-blue-600 hover:underline" :disabled="pullBusyId === p.id">立即拉取</button>
+              <button @click="openEdit(p)" class="text-xs text-gray-600 hover:underline">编辑</button>
+              <button @click="removePull(p)" class="text-xs text-red-600 hover:underline" :disabled="pullBusyId === p.id">删除</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <p v-else class="text-sm text-gray-400 py-6 text-center">
+        {{ pullLoading ? '加载中...' : '暂无 HTTP Pull 配置（点右上「新建 Pull 源」或「导入 YAML」接入）' }}
+      </p>
+    </div>
+
+    <!-- 创建/编辑 Pull 源弹层（credential 建档必填；编辑留空=保留既有凭证） -->
+    <div v-if="formOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40" @click.self="formOpen = false">
+      <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-base font-medium text-gray-900">
+            {{ formMode === 'create' ? '新建 HTTP Pull 源' : `编辑：${form.sourceKey}（${form.environment}）` }}
+          </h3>
+          <button @click="formOpen = false" class="text-gray-400 hover:text-gray-600 text-sm">关闭</button>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">环境（environment，须属于该游戏）</label>
+            <input v-model="form.environment" class="input w-full" list="pull-env-names" :disabled="formSaving" />
+            <datalist id="pull-env-names">
+              <option v-for="n in envNames" :key="n" :value="n" />
+            </datalist>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">源标识（sourceKey，同环境内唯一）</label>
+            <input v-model="form.sourceKey" class="input w-full font-mono" :disabled="formSaving" />
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">维度类型</label>
+            <select v-model="form.dimType" class="input w-full" :disabled="formSaving">
+              <option v-for="t in DIM_TYPES" :key="t.value" :value="t.value">{{ t.label }}</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">拉取间隔（秒，10~86400）</label>
+            <input v-model.number="form.intervalSeconds" type="number" min="10" max="86400" class="input w-full" :disabled="formSaving" />
+          </div>
+          <div class="col-span-2">
+            <label class="block text-xs text-gray-500 mb-1">游戏方 API 地址（endpoint，http/https）</label>
+            <input v-model="form.endpoint" class="input w-full font-mono" placeholder="https://api.example.com/v1/items" :disabled="formSaving" />
+          </div>
+          <div class="col-span-2">
+            <label class="block text-xs text-gray-500 mb-1">
+              Bearer 凭证{{ formMode === 'create' ? '（必填，加密托管）' : '（留空 = 保留既有凭证）' }}
+            </label>
+            <input v-model="form.credential" class="input w-full font-mono" type="password" autocomplete="new-password" :disabled="formSaving" />
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">单页条数上限（1~5000）</label>
+            <input v-model.number="form.pageLimit" type="number" min="1" max="5000" class="input w-full" :disabled="formSaving" />
+          </div>
+          <div class="flex items-center mt-5">
+            <input v-model="form.enabled" type="checkbox" class="mr-2" :disabled="formSaving" />
+            <label class="text-xs text-gray-500">启用（停用后不再调度拉取）</label>
+          </div>
+        </div>
+        <p class="text-xs text-gray-400 mt-3">
+          凭证仅入库时可见（AES-GCM 加密托管，任何接口不回显）；断点游标推送成功才前进，失败自动按旧断点重放
+        </p>
+        <p v-if="formError" class="text-xs text-red-600 mt-2">{{ formError }}</p>
+        <div class="flex justify-end gap-3 mt-5">
+          <button @click="formOpen = false" class="btn btn-secondary" :disabled="formSaving">取消</button>
+          <button @click="submitPullForm" class="btn btn-primary" :disabled="formSaving">
+            {{ formSaving ? '保存中...' : formMode === 'create' ? '创建' : '保存' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- YAML 导入/导出弹层（导出凭证永不落盘；导入按 (环境, 源标识) 定位，credential 缺省=保留既有） -->
+    <div v-if="yamlOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40" @click.self="yamlOpen = false">
+      <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-base font-medium text-gray-900">
+            {{ yamlMode === 'export' ? '导出 Pull 配置 YAML' : '导入 Pull 配置 YAML' }}
+          </h3>
+          <button @click="yamlOpen = false" class="text-gray-400 hover:text-gray-600 text-sm">关闭</button>
+        </div>
+        <template v-if="yamlMode === 'export'">
+          <p class="text-xs text-gray-400 mb-2">凭证不导出（导入时 credential 缺省=保留既有）；可编辑后整份粘回「导入 YAML」批量更新</p>
+          <textarea v-model="yamlText" rows="16" readonly class="input w-full font-mono text-xs" :disabled="yamlBusy"></textarea>
+        </template>
+        <template v-else>
+          <p class="text-xs text-gray-400 mb-2">dimensions 映射键即 sourceKey；任一条非法整体不生效（事务回滚）</p>
+          <textarea v-model="yamlText" rows="16" class="input w-full font-mono text-xs" placeholder="dimensions:&#10;  items:&#10;    environment: prod&#10;    endpoint: https://api.example.com/v1/items&#10;    credential: bearer-token" :disabled="yamlBusy"></textarea>
+        </template>
+        <p v-if="yamlError" class="text-xs text-red-600 mt-2">{{ yamlError }}</p>
+        <div class="flex justify-end gap-3 mt-5" v-if="yamlMode === 'import'">
+          <button @click="yamlOpen = false" class="btn btn-secondary" :disabled="yamlBusy">取消</button>
+          <button @click="doImport" class="btn btn-primary" :disabled="yamlBusy">{{ yamlBusy ? '导入中...' : '导入' }}</button>
+        </div>
+      </div>
     </div>
   </div>
 </template>

@@ -249,6 +249,8 @@ DELETE /api/games/{gameId}/dimension-pulls/{id}      删除
 POST   /api/games/{gameId}/dimension-pulls/{id}/run  手动触发一轮拉取
 ```
 
+控制台入口：`/dimensions` 页下半区「HTTP Pull 源配置」——建档/编辑（凭证留空=保留既有）/删除/立即拉取（成功与失败口径都出结果文案），以及 YAML 批量导入/导出（导出凭证不落盘，可编辑后整份粘回导入批量更新）。API 亦可直用，两者同权门控。
+
 建档请求体示例：
 
 ```json

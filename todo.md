@@ -204,6 +204,18 @@
 
 ---
 
+## 维度同步控制台 HTTP Pull 管理面（2026-10-11 增量）
+
+- [x] `/dimensions` 页下半区「HTTP Pull 源配置」：配置表（源标识/环境/维度/endpoint/间隔分页/启用徽章/游标/上次拉取/累计推送/最近失败）+ 头注区分上半区 Agent 心跳观测面
+- [x] 建档/编辑弹层：必填校验（环境/源标识/endpoint/建档 credential），环境 datalist 提示该游戏环境名（`/api/games/{id}/environments`），数值字段本地转数字；编辑 credential 留空=保留既有（不提交该字段），填写即轮换
+- [x] 行操作：立即拉取（成功推条数+游标 / 失败透出后端 error 文案）、删除（confirm 门控）；操作后状态区与配置表同步重载
+- [x] YAML 导入/导出弹层：导出取 `application/x-yaml` 文本展示（凭证不落盘）；导入空内容本地拦截、POST 文本体、回显「新建 X、更新 Y」，服务端 400 精确透出
+- [x] 文档对账：dimension-sync.md HTTP Pull 节控制台入口行，CHANGELOG 与本节
+
+**验收：** ✅ web 11 例新测试绿（视图全链路，191/191）。边界：Agent 心跳面维持只读（上报走 Agent 侧 dimension:manage 通道）；同页环境筛选仍为静态三档（dev/staging/prod，仅作用于状态区）。
+
+---
+
 ## 边界（不跟进，评审转审查项）
 
 - 不做多租户/SaaS（Organization/Workspace/Project/Tenant 概念不入新代码）
