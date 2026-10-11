@@ -514,7 +514,7 @@ The risk-job picks up enabled rules from `GET /api/risk-dashboard/rules/{gameId}
 
 ### Dimension Sync
 
-Dimension sync status and HTTP Pull source configuration. Pull rows translate game-API pages into `dimension_define` events pushed to `/v1/batch`; progress is recorded in `dimension_sync_status` (`sourceType: agent|pull`). See [dimension-sync.md](/reference/dimension-sync) for the full link design.
+Dimension sync status, HTTP Pull source configuration, and Control-hosted Agent deployment properties. Pull rows translate game-API pages into `dimension_define` events pushed to `/v1/batch`; progress is recorded in `dimension_sync_status` (`sourceType: agent|pull`). See [dimension-sync.md](/reference/dimension-sync) for the full link design.
 
 | Method | Endpoint | Description |
 |---|---|---|
@@ -526,6 +526,13 @@ Dimension sync status and HTTP Pull source configuration. Pull rows translate ga
 | POST | `/api/games/{gameId}/dimension-pulls/{pullId}/run` | Trigger one pull round manually; returns `{success, pushed, cursor, error}` (`dimension:manage`) |
 | GET | `/api/games/{gameId}/dimension-pulls/export` | Export all Pull configs as YAML (`application/x-yaml`, `dimension:read`); credentials are never exported |
 | POST | `/api/games/{gameId}/dimension-pulls/import` | Import YAML config text: locate by `(environment, sourceKey)`, create-or-update per entry, missing `credential` keeps the existing one, whole batch rolls back on any failure; returns `{created, updated, total}` (`dimension:manage`) |
+| GET | `/api/games/{gameId}/agent-configs` | List Agent deployment configs (one per `(game, environment, agentKey)`); non-secret props text is visible, secret keys only echo their names (`dimension:read`) |
+| POST | `/api/games/{gameId}/agent-configs` | Create an Agent config: `{environment, agentKey, props, secrets, enabled?}` — `props` is a properties-format text with a key whitelist, `secrets` (AES-GCM hosted) must contain `gateway.api-key` (`dimension:manage`) |
+| PUT | `/api/games/{gameId}/agent-configs/{id}` | Update: `props` is replaced wholesale; omitting `secrets` keeps the existing secrets, an explicit map rotates them (`dimension:manage`) |
+| DELETE | `/api/games/{gameId}/agent-configs/{id}` | Delete an Agent config (`dimension:manage`) |
+| GET | `/api/dimensions/agent-configs/resolved?gameId=&environment=&agentKey=` | Agent config fetch: response body is one `Properties.load`-able text with injected `game.id`/`game.environment`/`status.source-key`, props, and decrypted secrets; disabled configs are refused (`dimension:read`) |
+
+Import/export YAML shape: a `dimensions` root mapping keyed by `sourceKey`; allowed fields are `environment`, `dimType`, `endpoint`, `credential`, `intervalSeconds`, `pageLimit`, `enabled` — unknown fields are rejected with a precise error. Agent config keys reuse the `agent.properties` dot-key names split by visibility: non-secret keys go in `props`, six secret keys (`gateway.api-key`, `status.token`, DB/Kafka/keystore passwords) go in `secrets`. See the config-driven section in [dimension-sync.md](/reference/dimension-sync) for examples.
 
 Import/export YAML shape: a `dimensions` root mapping keyed by `sourceKey`; allowed fields are `environment`, `dimType`, `endpoint`, `credential`, `intervalSeconds`, `pageLimit`, `enabled` — unknown fields are rejected with a precise error. See the config-driven section in [dimension-sync.md](/reference/dimension-sync) for examples.
 

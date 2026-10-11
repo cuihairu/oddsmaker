@@ -216,6 +216,18 @@
 
 ---
 
+## 维度同步 Agent 属性面 Control 托管（拍板第三链，2026-10-11 增量 1/3）
+
+- [x] 存储与规范：`dimension_agent_config` 表（V0.9.26，(game, environment, agentKey) 唯一）——props 非密钥文本（Properties 格式，dot-key 沿用 agent.properties 命名，键白名单未知键/密钥键/注入键精确报错）+ secrets 6 密钥键整体 AES-GCM 密文（只回显键名）；`AgentConfigSpec` 纯函数层（parse/validate/validateProps/validateSecrets/renderResolved/renderValue 转义往返）
+- [x] CRUD API：`GET/POST /api/games/{gameId}/agent-configs` + `PUT/DELETE .../{id}`（environment 须属该游戏、agentKey 唯一冲突拒、secrets 缺省=保留既有/显式 map 整体轮换/空 map 缺 gateway.api-key 拒、props 全量替换、软删游戏视同不存在）
+- [x] 下发口：`GET /api/dimensions/agent-configs/resolved?gameId=&environment=&agentKey=`（与 sync-status 同 Agent 面、x-admin-token 同一鉴权）——注入 game.id/game.environment/status.source-key + props + 解密 secrets 合并为一份 Properties 文本，停用档拒绝下发
+- [x] 测试：纯函数 11（拆分规则/必填与形状/注入键拒/下发文本 load 往返含转义值）+ 编排 14（建档规范化与密文托管/密钥缺省保留/轮换/重名与软删游戏拒/跨游戏 findOwned 拒/resolve 注入解密合并/停用档拒发）
+- [x] 文档对账：dimension-sync.md 实现状态头/配置驱动节新增「Agent 属性面托管（Control 侧）」子节（键拆分口径与端点表），CHANGELOG 与本节
+
+**验收：** ✅ 25 例新测试绿。边界：Agent 端取配置链路未实现（启动/轮询拉 resolved + Control 不可达本地 agent.properties 兜底合并）——增量 2；控制台 web 入口未做（API 先行，同 pull 链节奏）——增量 3；`provider:` 多态与 `auth.token_ref` 密钥引用表仍未实现。
+
+---
+
 ## 边界（不跟进，评审转审查项）
 
 - 不做多租户/SaaS（Organization/Workspace/Project/Tenant 概念不入新代码）
