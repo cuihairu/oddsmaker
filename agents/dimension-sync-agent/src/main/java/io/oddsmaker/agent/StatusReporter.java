@@ -15,7 +15,7 @@ import java.util.Map;
  * 心跳语义：每轮循环都报（无论有无变更），Control 侧 last_push_at 即存活心跳；
  * status.url 未配置则整段静默跳过；上报失败只打日志不影响同步主链路。
  */
-public final class StatusReporter {
+public final class StatusReporter implements AutoCloseable {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
@@ -29,6 +29,14 @@ public final class StatusReporter {
     StatusReporter(AgentConfig cfg, HttpClient http) {
         this.cfg = cfg;
         this.http = http;
+    }
+
+    /** 热更新换件时释放 HttpClient（连接池与 selector 线程）。 */
+    @Override
+    public void close() {
+        if (http != null) {
+            http.close();
+        }
     }
 
     public boolean enabled() {

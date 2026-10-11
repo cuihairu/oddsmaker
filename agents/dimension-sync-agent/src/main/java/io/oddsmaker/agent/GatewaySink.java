@@ -19,7 +19,7 @@ import java.util.UUID;
  * device_id=oddsmaker-agent（Gateway 必填字段，维度数据本身不按设备作用域）；
  * props 内嵌 attributes，交由 dimension-sync-job 的 putAttribute 归一化。
  */
-public final class GatewaySink {
+public final class GatewaySink implements AutoCloseable {
 
     public static final String EVENT_NAME = "dimension_define";
     public static final String EVENT_TYPE = "dimension";
@@ -37,6 +37,12 @@ public final class GatewaySink {
     GatewaySink(AgentConfig cfg, HttpClient http) {
         this.cfg = cfg;
         this.http = http;
+    }
+
+    /** 热更新换件时释放 HttpClient（连接池与 selector 线程）。 */
+    @Override
+    public void close() {
+        http.close();
     }
 
     /** 分块推送全部变更；任一块非 2xx 抛异常（上层不落 checkpoint，重放幂等）。返回成功推送条数。 */

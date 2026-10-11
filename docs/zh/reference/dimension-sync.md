@@ -1,6 +1,6 @@
 # 维度数据同步设计
 
-> **实现状态（2026-10）**：已落地的是 Sync Agent（`agents/dimension-sync-agent/`，mysql/postgres/csv/excel/kafka 五类 source）、**HTTP Pull 链路**（Control 侧 scheduler + Bearer 凭证 AES-GCM 加密托管 + `next_cursor` 断点续传，配置见 `dimension-pulls` API）、**Pull 配置 YAML 面**（`dimension-pulls/export` + `/import`，凭证永不落盘）、**Agent 属性面 Control 托管**（`agent-configs` API + 控制台「Agent 托管配置」面 + `/api/dimensions/agent-configs/resolved` 下发口，密钥 AES-GCM 密文托管；Agent 端 `control.config-url` 开关启动拉取 + 本地文件兜底，优先级 本地 < Control < System property）、`/v1/batch` 维度事件通道和 `dimension-sync-job`（消费 `oddsmaker.events_raw` 写 `item_dim`/`level_dim`）。仅剩 Debezium CDC（外部依赖最重，待游戏方 Kafka 基建）与托管配置轮询热更新（当前仅启动拉取一次）两条未落地——本文对未落地部分逐处标注。
+> **实现状态（2026-10）**：已落地的是 Sync Agent（`agents/dimension-sync-agent/`，mysql/postgres/csv/excel/kafka 五类 source）、**HTTP Pull 链路**（Control 侧 scheduler + Bearer 凭证 AES-GCM 加密托管 + `next_cursor` 断点续传，配置见 `dimension-pulls` API）、**Pull 配置 YAML 面**（`dimension-pulls/export` + `/import`，凭证永不落盘）、**Agent 属性面 Control 托管**（`agent-configs` API + 控制台「Agent 托管配置」面 + `/api/dimensions/agent-configs/resolved` 下发口，密钥 AES-GCM 密文托管；Agent 端 `control.config-url` 开关启动拉取 + 本地文件兜底，`control.config-refresh-seconds` 轮询热更新，优先级 本地 < Control < System property）、`/v1/batch` 维度事件通道和 `dimension-sync-job`（消费 `oddsmaker.events_raw` 写 `item_dim`/`level_dim`）。仅剩 Debezium CDC（外部依赖最重，待游戏方 Kafka 基建）一条未落地——本文对未落地部分逐处标注。
 
 ## 结论
 
@@ -139,7 +139,7 @@ Oddsmaker 提供的开源同步 Agent，游戏方在自己网络内部署。Agen
     └─ sink: HTTPS POST /v1/batch（NDJSON，event_name=dimension_define）
 ```
 
-配置示例（`agent.properties`；同名 System property 可逐键覆盖文件值，便于密钥不落盘 `-Dgateway.api-key=...`）。配 `control.config-url` 即启用 Control 托管（见下方「Agent 属性面托管」），下发键逐键覆盖本地值：
+配置示例（`agent.properties`；同名 System property 可逐键覆盖文件值，便于密钥不落盘 `-Dgateway.api-key=...`）。配 `control.config-url` 即启用 Control 托管（见下方「Agent 属性面托管」），下发键逐键覆盖本地值，配 `control.config-refresh-seconds` 再启轮询热更新：
 
 ```properties
 # 推送目标（Gateway /v1/batch）
@@ -342,8 +342,9 @@ SCD2 逻辑放在转换层，**所有 Provider 共享**，不要散落到各 Pro
 - **已实现（2026-10，Control YAML 配置面）**：`dimension-pulls` 增两个端点做声明式配置——`GET /export` 导出全部配置为 YAML（凭证永不落盘），`POST /import` 按 (environment, sourceKey) 定位逐条建档/更新，`credential` 缺省=保留既有凭证，方法级事务保证任一条失败整体回滚。接入新游戏可先起一份 YAML 一次性导入，之后导出即得可版本化清单。
 - **已实现（2026-10，Agent 属性面 Control 托管）**：Agent 部署属性进 Control 面——`dimension_agent_config` 表按 (game, environment, agentKey) 存非密钥 props 文本 + 密钥键整体 AES-GCM 密文，经 `agent-configs` REST API 填表；`/api/dimensions/agent-configs/resolved` 是 Agent 取配置口（注入 game.id/game.environment/status.source-key，解密合并为一份 Properties 文本）。
 - **已实现（2026-10，Agent 端取配置）**：Agent 本地 `agent.properties` 配 `control.config-url` 即启用托管——启动拉一次 `resolved`，下发键逐键覆盖本地值；拉取失败整段回落本地文件（Control 不可达不阻断启动）；优先级 本地 < Control 下发 < System property。托管开关/本地路径类键（`control.config-url`、`agent.checkpoint-path`）永在本地。
+- **已实现（2026-10，托管配置热更新）**：本地加配 `control.config-refresh-seconds`（>0）即启轮询热更新——每 N 秒重拉 `resolved`，下发原文与当前应用一致零动作；有变以新配置重建 source/sink/status（全部新件构造成功才释放旧件，checkpoint 不动断点跨换源续传），变更即时生效不等当前轮询间隔走完；拉取失败或新配置校验不过沿用当前配置（Control 不可达不阻断轮询）。边界：source.type 跨类切换（如 mysql→kafka）时游标语义随新源解释（水位与位点不互通），需清断点或确认起点。
 - **已实现（Agent / Flink 作业）**：Agent 本地 `agent.properties`（五类 source）与 Flink 作业 System properties（`kafka.topic`、`clickhouse.*` 等）仍是未启用托管时的运行配置面。
-- **未实现**：托管配置的轮询热更新（当前仅启动拉取一次，远端改配置需重启 Agent）；下述目标形态里的 `provider:` 多态与 `auth.token_ref` 密钥引用表——当前 Pull/Agent 凭证为 inline 明文入参 + AES-GCM 加密托管，不做密钥名间接引用。
+- **未实现**：下述目标形态里的 `provider:` 多态与 `auth.token_ref` 密钥引用表——当前 Pull/Agent 凭证为 inline 明文入参 + AES-GCM 加密托管，不做密钥名间接引用。
 
 ### Pull 配置 YAML（已实现形态）
 
@@ -367,7 +368,7 @@ dimensions:
 | `GET /api/games/{gameId}/dimension-pulls/export` | 导出该游戏全部 Pull 配置为 YAML（`application/x-yaml`，凭证永不落盘） | `dimension:read` |
 | `POST /api/games/{gameId}/dimension-pulls/import` | 请求体为 YAML 文本，按 (environment, sourceKey) 定位逐条建档/更新，返回 `{created, updated, total}`，任一条失败整体回滚 | `dimension:manage` |
 
-### Agent 属性面托管（已实现；Agent 端仅启动拉取一次）
+### Agent 属性面托管（已实现；启动拉取 + 可选轮询热更新）
 
 每个 Agent 部署一档，唯一约束 (game, environment, agentKey)。键名沿用 `agent.properties` 的 dot-key 命名，按可见性拆两半：
 
@@ -383,7 +384,7 @@ dimensions:
 | `DELETE /api/games/{gameId}/agent-configs/{id}` | 删除 | `dimension:manage` |
 | `GET /api/dimensions/agent-configs/resolved?gameId=&environment=&agentKey=` | Agent 取配置：响应体即可 `Properties.load` 的完整文本（注入三键 + props + 解密后的 secrets），停用档拒绝下发（任何非 200 端回落本地文件） | `dimension:read` |
 
-跨字段组合校验（如 SASL_* 协议必带机制与凭证）仍由 Agent 启动 fail-fast 兜底，Control 侧只管键白名单与值形状。
+跨字段组合校验（如 SASL_* 协议必带机制与凭证）仍由 Agent 启动 fail-fast 兜底，Control 侧只管键白名单与值形状。Agent 端本地配 `control.config-refresh-seconds`（>0，须配 `control.config-url`）即启热更新：每 N 秒重拉 `resolved`，原文有变即换源/换通道（checkpoint 不动），失败沿用当前配置。
 
 控制台入口：`/dimensions` 页「Agent 托管配置」区——建档/编辑/删除，props 与 secrets 分两个文本框（secrets 每行 `key=value`，服务端只回显键名清单）；编辑留空 secrets = 保留既有密钥，填写即整体轮换；停用档 Agent 拉取即回落本地文件。API 亦可直用，两者同权门控。
 

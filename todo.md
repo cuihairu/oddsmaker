@@ -216,6 +216,17 @@
 
 ---
 
+## 托管配置轮询热更新（链 3 收尾补全，2026-10-11）
+
+- [x] Agent 端：`control.config-refresh-seconds`（本地键，>0 须配 `control.config-url`，缺省 0=关闭零回归）；`AgentConfig.load` 三参重载（remoteOverride 模拟已拉取文本）+ `appliedRemoteText` 变更基线；`AgentMain.tickRefresh` 门槛轮询（轮询等待间隙每 500ms 醒一次，门槛在 tickRefresh 内：refresh 关/未到间隔零开销返回）——原文有变换 source/sink/status（新件构造成功才释放旧件；checkpoint 不动断点续传），失败沿用当前配置
+- [x] 关闭资源链：`DimensionSource` 升 AutoCloseable（缺省空实现）+ `KafkaSource.close` 释放 consumer + `GatewaySink`/`StatusReporter` 关闭 HttpClient
+- [x] 测试：`AgentMainHotReloadTest` 5 例（HttpServer 真实拉取 + AtomicLong 注入时钟确定性驱动门槛；门槛/未变零动作/变更换源释放旧源断点不动/非 2xx 兜底/坏配置不换件/关闭态零请求）+ AgentConfig 键解析与校验 2 例
+- [x] 文档对账：dimension-sync.md 实现状态头仅剩 Debezium CDC 一条未落地 + 热更新 bullet + 托管子节标题与尾注，agent README 与 agent.properties.example 增热更新说明，CHANGELOG 与本节
+
+**验收：** ✅ agent 模块 211 例绿（HotReload 5 + AgentConfig 33）。维度同步未落地仅剩 Debezium CDC（外部依赖，待游戏方 Kafka 基建）与 `provider:` 多态/`auth.token_ref`（目标形态，不另行排期）。
+
+---
+
 ## 维度同步 Agent 托管配置控制台入口（拍板第三链，2026-10-11 增量 3/3）
 
 - [x] `/dimensions` 页「Agent 托管配置」区：配置表（agentKey/环境/启用徽章/密钥键名清单/更新时间）+ 新建/编辑弹层（props 预填 mysql 最小模板、secrets 每行 `key=value` 本地解析，注释行跳过；建档缺 `gateway.api-key` 或行格式非法本地拦截）+ 删除（confirm 明示删除后 Agent 回落本地文件）；编辑留空 secrets=保留既有，填写即整体轮换；注入键防呆脚注（game.id/game.environment/status.source-key 勿写入，后端键白名单双保险）

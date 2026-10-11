@@ -961,4 +961,85 @@ class AgentConfigTest {
             server.stop(0);
         }
     }
+
+    @Test
+    @DisplayName("热更新键：control.config-refresh-seconds 解析（缺省 0）；appliedRemoteText 记录下发原文")
+    void parsesRefreshSecondsAndAppliedRemoteText() throws Exception {
+        // 未配托管：refresh 0、configUrl null、appliedRemoteText null
+        Path p = write(
+                "gateway.endpoint=http://gw:8080",
+                "gateway.api-key=k1",
+                "game.id=g1",
+                "game.environment=prod",
+                "source.type=mysql",
+                "source.jdbc.url=jdbc:mysql://db:3306/game",
+                "source.jdbc.user=ro",
+                "source.jdbc.query=SELECT 1 WHERE x > ? ORDER BY x",
+                "source.jdbc.cursor-column=x");
+        AgentConfig c = AgentConfig.load(new String[]{"--config=" + p});
+        assertEquals(0, c.configRefreshSeconds);
+        assertNull(c.configUrl);
+        assertNull(c.appliedRemoteText);
+        c.validate();
+
+        // 配了 refresh + url：解析生效；override 直填模拟已拉取文本（不触网）
+        Path h = write(
+                "control.config-url=http://127.0.0.1:1/resolved",
+                "control.config-refresh-seconds=120",
+                "gateway.endpoint=http://gw-local:8080",
+                "gateway.api-key=k1",
+                "game.id=g1",
+                "game.environment=prod",
+                "source.type=mysql",
+                "source.jdbc.url=jdbc:mysql://db:3306/game",
+                "source.jdbc.user=ro",
+                "source.jdbc.query=SELECT 1 WHERE x > ? ORDER BY x",
+                "source.jdbc.cursor-column=x");
+        String override = "gateway.endpoint=http://gw-remote:8080\nagent.poll-seconds=5\n";
+        AgentConfig hc = AgentConfig.load(new String[]{"--config=" + h},
+                new ControlConfigFetcher(), override);
+        assertEquals(120, hc.configRefreshSeconds);
+        assertEquals("http://127.0.0.1:1/resolved", hc.configUrl);
+        assertEquals(override, hc.appliedRemoteText);
+        // override 文本覆盖本地同名值（127.0.0.1:1 若真发起请求必然失败走回落，断言即证未拉取）
+        assertEquals("http://gw-remote:8080", hc.gatewayEndpoint);
+        assertEquals(5, hc.pollSeconds);
+        hc.validate();
+    }
+
+    @Test
+    @DisplayName("热更新校验：负数拒；refresh>0 而 config-url 缺失拒；启用且有 url 通过")
+    void refreshSecondsValidation() throws Exception {
+        String[] base = {
+                "gateway.endpoint=http://gw:8080",
+                "gateway.api-key=k1",
+                "game.id=g1",
+                "game.environment=prod",
+                "source.type=mysql",
+                "source.jdbc.url=jdbc:mysql://db:3306/game",
+                "source.jdbc.user=ro",
+                "source.jdbc.query=SELECT 1 WHERE x > ? ORDER BY x",
+                "source.jdbc.cursor-column=x"};
+
+        Path neg = write(concat(base, "control.config-refresh-seconds=-1"));
+        IllegalArgumentException e1 = assertThrows(IllegalArgumentException.class,
+                () -> AgentConfig.load(new String[]{"--config=" + neg}).validate());
+        assertTrue(e1.getMessage().contains("不能为负数"));
+
+        Path noUrl = write(concat(base, "control.config-refresh-seconds=60"));
+        IllegalArgumentException e2 = assertThrows(IllegalArgumentException.class,
+                () -> AgentConfig.load(new String[]{"--config=" + noUrl}).validate());
+        assertTrue(e2.getMessage().contains("需配合 control.config-url"));
+
+        Path ok = write(concat(base, "control.config-refresh-seconds=60",
+                "control.config-url=http://control:8080/api/dimensions/agent-configs/resolved"));
+        AgentConfig.load(new String[]{"--config=" + ok}).validate();
+    }
+
+    private static String[] concat(String[] base, String... extra) {
+        String[] all = new String[base.length + extra.length];
+        System.arraycopy(base, 0, all, 0, base.length);
+        System.arraycopy(extra, 0, all, base.length, extra.length);
+        return all;
+    }
 }

@@ -50,3 +50,5 @@ build/install/dimension-sync-agent/bin/dimension-sync-agent \
 ## Control 托管配置（可选）
 
 本地 `agent.properties` 配 `control.config-url`（Control `GET /api/dimensions/agent-configs/resolved` 的完整 URL）即启用托管：启动时拉取一次，下发的键逐键覆盖本地文件值（`game.id`/`game.environment`/`status.source-key` 由 Control 按行注入），鉴权复用 `status.token`。拉取失败（网络/非 2xx/停用档）整段回落本地文件，Control 不可达不阻断启动。配置源优先级（低→高）：本地文件 < Control 下发 < System property（`-D` 逐键覆盖）。托管面不托管的键：`control.config-url` 自身（本地开关）、`agent.checkpoint-path`（本地路径）。
+
+**热更新（可选）**：再加配 `control.config-refresh-seconds`（>0）即启用轮询热更新——每 N 秒重拉一次托管配置，下发原文与当前应用的一致则零动作；有变则以新配置重建 source/sink/status（全部新件构造成功才释放旧件；`agent.checkpoint-path` 不动，断点跨换源续传；source.type 换类时游标语义随新源解释——mysql 水位与 kafka 位点不互通，跨类切换请清断点或确认起点）。配置有变立即生效（不等当前轮询间隔走完）；拉取失败或新配置校验不过沿用当前配置，Control 不可达不阻断轮询。

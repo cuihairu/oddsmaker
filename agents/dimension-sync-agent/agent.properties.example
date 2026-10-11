@@ -72,3 +72,7 @@ status.source-key=agent-mysql-main
 # 托管面不托管的键：control.config-url 自身（本地开关）、agent.checkpoint-path（本地路径）、
 # game.id/game.environment/status.source-key（Control 下发时按行注入）。
 # control.config-url=https://control.oddsmaker.local/api/dimensions/agent-configs/resolved
+# 热更新（可选）：每 N 秒重拉一次托管配置，下发原文有变即换源/换通道（不等当前轮询间隔走完；
+# checkpoint 不动，断点跨换源续传）。0/缺省=关闭（仅启动拉取一次）；须配合 control.config-url。
+# 拉取失败或新配置校验不过沿用当前配置，Control 不可达不阻断轮询。
+# control.config-refresh-seconds=300

@@ -39,6 +39,16 @@ public final class KafkaSource implements DimensionSource {
         return "kafka";
     }
 
+    /** 热更新换源时释放 consumer（5s 宽限）；断点自管，重建后按 checkpoint 位点续传。 */
+    @Override
+    public void close() {
+        try {
+            port.close();
+        } catch (Exception e) {
+            System.err.println("[agent] kafka consumer 释放失败（忽略）: " + e.getMessage());
+        }
+    }
+
     @Override
     public PollResult poll(Checkpoint current) throws Exception {
         SortedMap<Integer, Long> start = KafkaOffsets.decode(current.cursor);

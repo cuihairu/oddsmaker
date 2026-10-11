@@ -13,7 +13,8 @@ import java.util.Properties;
  * 同名 System property 可逐键覆盖（便于密钥不落盘：-Dgateway.api-key=...）。
  * 配置源优先级（低→高）：本地文件 &lt; Control 托管下发 &lt; System property。
  * Control 托管开关是本地键 control.config-url（托管面不托管该键，自指循环）；拉取失败
- * 整段回落本地文件，Control 不可达不阻断启动。
+ * 整段回落本地文件，Control 不可达不阻断启动。配 control.config-refresh-seconds（&gt;0）
+ * 后 AgentMain 每 N 秒重拉一次托管配置，原文有变即换源/换通道（checkpoint 不动，断点续传）。
  */
 public final class AgentConfig {
 
@@ -70,6 +71,12 @@ public final class AgentConfig {
     public String statusUrl;
     public String statusToken;
     public String sourceKey;
+    // Control 托管配置开关（本地键，永不下发托管面）：启动拉取地址 + 热更新轮询间隔秒数
+    // （0/缺省=关闭，仅启动拉取一次；>0 须配合 control.config-url 使用，启动即校验）
+    public String configUrl;
+    public int configRefreshSeconds = 0;
+    /** 启动/热更新实际应用的 Control 下发原文（未启用托管或拉取失败为 null）；热更新以它为变更基线。 */
+    String appliedRemoteText;
 
     public static AgentConfig load(String[] args) throws IOException {
         return load(args, new ControlConfigFetcher());
@@ -77,6 +84,14 @@ public final class AgentConfig {
 
     /** 测试用重载：注入 fetcher 以便以本地 mock HTTP 服务验控制面合并臂。 */
     static AgentConfig load(String[] args, ControlConfigFetcher fetcher) throws IOException {
+        return load(args, fetcher, null);
+    }
+
+    /**
+     * 测试用重载：remoteOverride 非空时跳过 Control 拉取直接以该文本模拟已拉取内容
+     * （热更新路径同样走此形态——AgentMain 用新拉出的文本重建配置）。
+     */
+    static AgentConfig load(String[] args, ControlConfigFetcher fetcher, String remoteOverride) throws IOException {
         String path = "./agent.properties";
         for (String a : args) {
             if (a.startsWith("--config=")) {
@@ -87,7 +102,7 @@ public final class AgentConfig {
         try (Reader r = Files.newBufferedReader(Path.of(path), StandardCharsets.UTF_8)) {
             p.load(r);
         }
-        mergeControlConfig(p, fetcher);
+        String appliedRemote = mergeControlConfig(p, fetcher, remoteOverride);
         // System property 逐键覆盖文件与 Control 下发值（本地显式覆盖最优先）
         for (String key : p.stringPropertyNames()) {
             String override = System.getProperty(key);
@@ -96,6 +111,7 @@ public final class AgentConfig {
             }
         }
         AgentConfig c = new AgentConfig();
+        c.appliedRemoteText = appliedRemote;
         c.gatewayEndpoint = trim(p.getProperty("gateway.endpoint"));
         c.gatewayApiKey = trim(p.getProperty("gateway.api-key"));
         c.gameId = trim(p.getProperty("game.id"));
@@ -131,6 +147,8 @@ public final class AgentConfig {
         c.statusUrl = trim(p.getProperty("status.url"));
         c.statusToken = trim(p.getProperty("status.token"));
         c.sourceKey = trim(p.getProperty("status.source-key"));
+        c.configUrl = trim(p.getProperty("control.config-url"));
+        c.configRefreshSeconds = intOf(p.getProperty("control.config-refresh-seconds"), 0);
         return c;
     }
 
@@ -138,14 +156,17 @@ public final class AgentConfig {
      * Control 托管合并：control.config-url 配了才拉（查询身份取本地 game.id / game.environment /
      * status.source-key，鉴权复用 status.token）；下发的键逐键覆盖本地文件值，任何失败（网络/
      * 非 2xx/空下发）只打日志整段回落本地文件——Control 不可达不阻断启动。
+     * remoteOverride 非空时跳过拉取直接以该文本模拟已拉取内容（热更新路径）。
+     *
+     * @return 实际应用的 Control 下发原文（未启用/拉取失败/空下发为 null）
      */
-    private static void mergeControlConfig(Properties p, ControlConfigFetcher fetcher) {
+    private static String mergeControlConfig(Properties p, ControlConfigFetcher fetcher, String remoteOverride) {
         String configUrl = p.getProperty("control.config-url");
         if (configUrl == null || configUrl.isBlank()) {
-            return;
+            return null;
         }
         try {
-            String text = fetcher.fetch(configUrl,
+            String text = remoteOverride != null ? remoteOverride : fetcher.fetch(configUrl,
                     trim(p.getProperty("game.id")),
                     trim(p.getProperty("game.environment")),
                     trim(p.getProperty("status.source-key")),
@@ -154,14 +175,16 @@ public final class AgentConfig {
             remote.load(new StringReader(text));
             if (remote.isEmpty()) {
                 System.err.println("[config] Control 下发配置为空，回落本地 agent.properties");
-                return;
+                return null;
             }
             for (String key : remote.stringPropertyNames()) {
                 p.setProperty(key, remote.getProperty(key));
             }
             System.out.println("[config] 已从 Control 拉取 " + remote.size() + " 键并覆盖本地同名值");
+            return text;
         } catch (Exception e) {
             System.err.println("[config] Control 托管配置拉取失败，回落本地 agent.properties: " + e.getMessage());
+            return null;
         }
     }
 
@@ -176,6 +199,12 @@ public final class AgentConfig {
         }
         if (pollSeconds <= 0) {
             throw new IllegalArgumentException("agent.poll-seconds 必须为正数");
+        }
+        if (configRefreshSeconds < 0) {
+            throw new IllegalArgumentException("control.config-refresh-seconds 不能为负数");
+        }
+        if (configRefreshSeconds > 0 && (configUrl == null || configUrl.isBlank())) {
+            throw new IllegalArgumentException("control.config-refresh-seconds 需配合 control.config-url 使用（未启用托管则无热更新对象）");
         }
         switch (sourceType) {
             case "mysql", "postgres" -> {
