@@ -87,9 +87,9 @@
 
 ---
 
-## 挂起项拍板（2026-10-09 首拍，2026-10-10 巡检复核，依据 = 成熟产品调研 §5/§6/§7 与既有批次边界）
+## 挂起项拍板（2026-10-09 首拍，2026-10-10 巡检复核，2026-10-11 巡检拍板，依据 = 成熟产品调研 §5/§6/§7 与既有批次边界）
 
-> B1~B10 清零后的四项挂起逐项定夺；2026-10-10 巡检复核：「样本集上传+批量回放」改为做（V0.3 试算回放），其余维持原判；同日巡检点火令续判：样本集持久化落地为 V0.4。
+> B1~B10 清零后的四项挂起逐项定夺；2026-10-10 巡检复核：「样本集上传+批量回放」改为做（V0.3 试算回放），其余维持原判；同日巡检点火令续判：样本集持久化落地为 V0.4；2026-10-11 巡检拍板：维度同步三链全闭合后剩余三项——Debezium CDC 等真实游戏方就绪、`provider:` 多态+`auth.token_ref` 不另行排期、HarmonyOS SDK 维持低优先级不开工，均维持不动。
 
 - [x] **策略实验室：做（V0.2 复盘聚合已落地）**——依据调研 §7「可借鉴」行（规则上线后第一诉求是复盘，误杀回看已落地、实验室仍为增量）。增量：`GET /api/games/{gameId}/risk-lab/rule-stats` 规则复盘聚合（误杀率分母=已处置、平均复盘时长、零案例/孤儿规则行）+ 案例列表 `ruleId`/`disposition` 样本下钻 + 控制台 `/risk-lab` 页。
 - [x] **样本集上传+批量回放打分：做（2026-10-10 复核改判，V0.3 试算回放，本批开工）**——原判「回放执行器级新方向留待拍板」复核后收窄边界改为做：THRESHOLD（amount 严格大于阈值，`RiskJob.overThreshold` 纯函数）与 FEATURE（条件 op 对比全 AND，`RuleFetcher.parseFeatureConditions` 校验语义）均为逐事件纯函数，control-service 可同步试算，**不需要 Flink 执行器**；边界：FREQUENCY/VELOCITY/RATIO/DUPLICATE_RECEIPT/AD_REWARD/PATTERN 依赖流式窗口/序列聚合，dry-run 不模拟（标 `needsStreaming` 明示跳过，不造假命中），ANOMALY/MACHINE_LEARNING 生产链路本就不评估（标 `notCovered`）；同 ruleType 只生效 riskScore 最高者（与 RuleFetcher 收敛一致），ruleResults 保留逐规则原始命中便于同型对比；samples 走请求体即传即算；样本集持久化（命名/留档/多次对比）同日巡检点火令再改判为做（V0.4，落点见本文件「策略实验室 V0.4」）。落点见本文件「策略实验室 V0.3」。
@@ -98,6 +98,9 @@
 - [x] **unmerge/身份拆分：不做（维持 merge 批次边界）**——依据：merge 落地行边界即「无反向拆分」；修正路径已齐（tombstone `identity_id` 反查 + GDPR erasure + 再 merge 纠错），真 unmerge 需合并日志（计数已归并不可逆拆），产品语义级新方向不做。
 - [x] **CF DNS 域名切换：用户侧不动（复核确认）**——属用户侧操作，本仓无动作。
 - [x] **dimension-sync 三链路选型：HTTP Pull 先做，Control YAML 随后，Debezium CDC 后置（2026-10-10 巡检拍板）**——依据 dimension-sync.md 三节的依赖面：HTTP Pull 全在 Oddsmaker 侧（Control scheduler + `updated_after` 增量分页 + 游戏方 API 凭证 Control 加密托管），不需游戏方部署任何组件、mock 游戏 API 即可端到端自测，最短路径补上第二条 provider；配置驱动 Control YAML 为文档明记的「目标形态」，排 HTTP Pull 之后做（pull 的游戏侧配置即进 Control 面，接入新游戏只填表；Agent 侧 `agent.properties` 迁移独立后续批次）；Debezium CDC 要求游戏方开 binlog + 部署 Kafka Connect，外部依赖最重，等真实游戏方具备 Kafka 基建再排（消费端届时复用 dimension-sync-job 事件入口，设计不改）。落点见本文件新批次节。
+- [x] **Debezium CDC：维持不动（2026-10-11 巡检拍板，重申 2026-10-10 后置判）**——维度同步三链（Pull / Control YAML / Agent 托管面）全闭合后仅剩此一条未实现；要求游戏方开 binlog + 部署 Kafka Connect，外部依赖最重，**等真实游戏方 Kafka 基建就绪再排**，届时消费端复用 dimension-sync-job 事件入口、设计不改。
+- [x] **`provider:` 多态 + `auth.token_ref` 密钥引用表：不另行排期（2026-10-11 巡检拍板）**——配置驱动文档目标形态；现有 inline credential + AES-GCM 加密托管已覆盖全部已落地 provider 面（本地文件 / HTTP Pull / Control 托管 YAML / Agent 托管配置），多态抽象无真实需求驱动，等真实需求再议。
+- [x] **HarmonyOS SDK：维持低优先级不开工（2026-10-11 巡检拍板）**——`sdks/` 现有 android/ios/unity/web/server 五端，鸿蒙为绿地新建 SDK 而非存量补缺；按既有拍板属低优先级填空，需真实需求或用户点头再动。
 
 ## 策略实验室 V0.2（复盘聚合，2026-10-09 增量）
 
@@ -233,7 +236,7 @@
 - [x] 测试：web +7 例（初载行渲染含键名清单/空态/403 透出/创建校验链与 POST payload/编辑预填与 secrets 缺省不提交/整体轮换与 enabled/删除 confirm 拦截）
 - [x] 文档对账：dimension-sync.md 实现状态头补控制台面 + 配置驱动节新增控制台入口行，CHANGELOG 与本节
 
-**验收：** ✅ web 198/198 绿。三链全闭合：Pull / 配置驱动 YAML / Agent 托管面（API + 下发口 + Agent 拉取 + 控制台）均已落地。剩余边界（不另行排期，等真实需求）：托管配置轮询热更新（当前仅启动拉取一次）；`provider:` 多态与 `auth.token_ref` 密钥引用表；Debezium CDC（外部依赖最重，待游戏方 Kafka 基建）。
+**验收：** ✅ web 198/198 绿。三链全闭合：Pull / 配置驱动 YAML / Agent 托管面（API + 下发口 + Agent 拉取 + 控制台）均已落地。剩余边界：托管配置轮询热更新（本节时点未做，后续批已补全，见上文「托管配置轮询热更新」节）；`provider:` 多态与 `auth.token_ref` 密钥引用表（2026-10-11 拍板不另行排期）；Debezium CDC（外部依赖最重，待游戏方 Kafka 基建，2026-10-11 拍板维持不动）。
 
 ---
 
