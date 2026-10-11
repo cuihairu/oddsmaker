@@ -835,4 +835,130 @@ class AgentConfigTest {
         // 实际上 require 会拦截空串，所以这是验证当前行为
         assertThrows(IllegalArgumentException.class, c::validate);
     }
+
+    // ===== Control 托管合并（control.config-url 开关；真 HttpServer + 真 fetcher）=====
+
+    @Test
+    @DisplayName("Control 合并：下发键覆盖本地文件值，注入键（game.id 等）同路径生效")
+    void controlMergeOverridesFileValues() throws Exception {
+        com.sun.net.httpserver.HttpServer server = com.sun.net.httpserver.HttpServer.create(
+                new java.net.InetSocketAddress("127.0.0.1", 0), 0);
+        String body = String.join("\n",
+                "game.id=g1",
+                "game.environment=prod",
+                "status.source-key=items-mysql",
+                "gateway.endpoint=http://gw-from-control:8080",
+                "source.jdbc.password=from-control",
+                "agent.poll-seconds=60");
+        server.createContext("/api/dimensions/agent-configs/resolved", exchange -> {
+            byte[] resp = body.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200, resp.length);
+            try (java.io.OutputStream os = exchange.getResponseBody()) {
+                os.write(resp);
+            }
+        });
+        server.start();
+        try {
+            Path p = write(
+                    "control.config-url=http://127.0.0.1:" + server.getAddress().getPort()
+                            + "/api/dimensions/agent-configs/resolved",
+                    "gateway.endpoint=http://gw-local:8080",
+                    "gateway.api-key=k1",
+                    "game.id=g1",
+                    "game.environment=prod",
+                    "status.source-key=local-key",
+                    "source.type=mysql",
+                    "source.jdbc.url=jdbc:mysql://db:3306/game",
+                    "source.jdbc.user=ro",
+                    "source.jdbc.password=local-pw",
+                    "source.jdbc.query=SELECT 1 WHERE x > ? ORDER BY x",
+                    "source.jdbc.cursor-column=x",
+                    "agent.poll-seconds=300");
+            AgentConfig c = AgentConfig.load(new String[]{"--config=" + p});
+            // 下发覆盖文件值
+            assertEquals("http://gw-from-control:8080", c.gatewayEndpoint);
+            assertEquals("from-control", c.jdbcPassword);
+            assertEquals(60, c.pollSeconds);
+            // 注入键同路径覆盖（下发文本里就是行值）
+            assertEquals("items-mysql", c.sourceKey);
+            // 本地独有键保留
+            assertEquals("k1", c.gatewayApiKey);
+            assertEquals("jdbc:mysql://db:3306/game", c.jdbcUrl);
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
+    @DisplayName("Control 合并：拉取失败整段回落本地文件（不阻断启动）")
+    void controlMergeFallsBackOnFailure() throws Exception {
+        com.sun.net.httpserver.HttpServer server = com.sun.net.httpserver.HttpServer.create(
+                new java.net.InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/api/dimensions/agent-configs/resolved",
+                exchange -> exchange.sendResponseHeaders(500, -1));
+        server.start();
+        try {
+            Path p = write(
+                    "control.config-url=http://127.0.0.1:" + server.getAddress().getPort()
+                            + "/api/dimensions/agent-configs/resolved",
+                    "gateway.endpoint=http://gw-local:8080",
+                    "gateway.api-key=k1",
+                    "game.id=g1",
+                    "game.environment=prod",
+                    "source.type=mysql",
+                    "source.jdbc.url=jdbc:mysql://db:3306/game",
+                    "source.jdbc.user=ro",
+                    "source.jdbc.password=local-pw",
+                    "source.jdbc.query=SELECT 1 WHERE x > ? ORDER BY x",
+                    "source.jdbc.cursor-column=x");
+            AgentConfig c = AgentConfig.load(new String[]{"--config=" + p});
+            assertEquals("http://gw-local:8080", c.gatewayEndpoint);
+            assertEquals("local-pw", c.jdbcPassword);
+            assertEquals(300, c.pollSeconds);
+            c.validate(); // 本地值完整可用
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
+    @DisplayName("配置源优先级：System property > Control 下发 > 本地文件")
+    void systemPropertyWinsOverControlMerge() throws Exception {
+        com.sun.net.httpserver.HttpServer server = com.sun.net.httpserver.HttpServer.create(
+                new java.net.InetSocketAddress("127.0.0.1", 0), 0);
+        String body = "gateway.api-key=from-control\n";
+        server.createContext("/api/dimensions/agent-configs/resolved", exchange -> {
+            byte[] resp = body.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200, resp.length);
+            try (java.io.OutputStream os = exchange.getResponseBody()) {
+                os.write(resp);
+            }
+        });
+        server.start();
+        String previous = System.getProperty("gateway.api-key");
+        System.setProperty("gateway.api-key", "from-sysprop");
+        try {
+            Path p = write(
+                    "control.config-url=http://127.0.0.1:" + server.getAddress().getPort()
+                            + "/api/dimensions/agent-configs/resolved",
+                    "gateway.endpoint=http://gw-local:8080",
+                    "gateway.api-key=from-file",
+                    "game.id=g1",
+                    "game.environment=prod",
+                    "source.type=mysql",
+                    "source.jdbc.url=jdbc:mysql://db:3306/game",
+                    "source.jdbc.user=ro",
+                    "source.jdbc.query=SELECT 1 WHERE x > ? ORDER BY x",
+                    "source.jdbc.cursor-column=x");
+            AgentConfig c = AgentConfig.load(new String[]{"--config=" + p});
+            assertEquals("from-sysprop", c.gatewayApiKey);
+        } finally {
+            if (previous == null) {
+                System.clearProperty("gateway.api-key");
+            } else {
+                System.setProperty("gateway.api-key", previous);
+            }
+            server.stop(0);
+        }
+    }
 }

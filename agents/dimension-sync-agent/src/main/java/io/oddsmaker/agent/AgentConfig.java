@@ -2,6 +2,7 @@ package io.oddsmaker.agent;
 
 import java.io.IOException;
 import java.io.Reader;
+import java.io.StringReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -10,6 +11,9 @@ import java.util.Properties;
 /**
  * Agent 配置：properties 文件（--config= 指定，默认 ./agent.properties），
  * 同名 System property 可逐键覆盖（便于密钥不落盘：-Dgateway.api-key=...）。
+ * 配置源优先级（低→高）：本地文件 &lt; Control 托管下发 &lt; System property。
+ * Control 托管开关是本地键 control.config-url（托管面不托管该键，自指循环）；拉取失败
+ * 整段回落本地文件，Control 不可达不阻断启动。
  */
 public final class AgentConfig {
 
@@ -68,6 +72,11 @@ public final class AgentConfig {
     public String sourceKey;
 
     public static AgentConfig load(String[] args) throws IOException {
+        return load(args, new ControlConfigFetcher());
+    }
+
+    /** 测试用重载：注入 fetcher 以便以本地 mock HTTP 服务验控制面合并臂。 */
+    static AgentConfig load(String[] args, ControlConfigFetcher fetcher) throws IOException {
         String path = "./agent.properties";
         for (String a : args) {
             if (a.startsWith("--config=")) {
@@ -78,7 +87,8 @@ public final class AgentConfig {
         try (Reader r = Files.newBufferedReader(Path.of(path), StandardCharsets.UTF_8)) {
             p.load(r);
         }
-        // System property 逐键覆盖文件值
+        mergeControlConfig(p, fetcher);
+        // System property 逐键覆盖文件与 Control 下发值（本地显式覆盖最优先）
         for (String key : p.stringPropertyNames()) {
             String override = System.getProperty(key);
             if (override != null) {
@@ -124,6 +134,37 @@ public final class AgentConfig {
         return c;
     }
 
+    /**
+     * Control 托管合并：control.config-url 配了才拉（查询身份取本地 game.id / game.environment /
+     * status.source-key，鉴权复用 status.token）；下发的键逐键覆盖本地文件值，任何失败（网络/
+     * 非 2xx/空下发）只打日志整段回落本地文件——Control 不可达不阻断启动。
+     */
+    private static void mergeControlConfig(Properties p, ControlConfigFetcher fetcher) {
+        String configUrl = p.getProperty("control.config-url");
+        if (configUrl == null || configUrl.isBlank()) {
+            return;
+        }
+        try {
+            String text = fetcher.fetch(configUrl,
+                    trim(p.getProperty("game.id")),
+                    trim(p.getProperty("game.environment")),
+                    trim(p.getProperty("status.source-key")),
+                    p.getProperty("status.token"));
+            Properties remote = new Properties();
+            remote.load(new StringReader(text));
+            if (remote.isEmpty()) {
+                System.err.println("[config] Control 下发配置为空，回落本地 agent.properties");
+                return;
+            }
+            for (String key : remote.stringPropertyNames()) {
+                p.setProperty(key, remote.getProperty(key));
+            }
+            System.out.println("[config] 已从 Control 拉取 " + remote.size() + " 键并覆盖本地同名值");
+        } catch (Exception e) {
+            System.err.println("[config] Control 托管配置拉取失败，回落本地 agent.properties: " + e.getMessage());
+        }
+    }
+
     /** 按 source 类型校验，配置错误 fail-fast（启动即抛，不进轮询循环）。 */
     public void validate() {
         require(gatewayEndpoint, "gateway.endpoint");
@@ -131,8 +172,7 @@ public final class AgentConfig {
         require(gameId, "game.id");
         require(environment, "game.environment");
         require(sourceType, "source.type");
-        if (batchSize <= 0) {
-            throw new IllegalArgumentException("agent.batch-size 必须为正数");
+        if (batchSize <= 0) {            throw new IllegalArgumentException("agent.batch-size 必须为正数");
         }
         if (pollSeconds <= 0) {
             throw new IllegalArgumentException("agent.poll-seconds 必须为正数");

@@ -46,3 +46,7 @@ build/install/dimension-sync-agent/bin/dimension-sync-agent \
 ## 同步状态上报
 
 每轮循环向 `status.url`（Control `POST /api/dimensions/sync-status`，`x-admin-token`）上报位点与计数，无变更也报（心跳）；Control 侧 `GET /api/dimensions/sync-status?gameId=` 返回 `sinceLastPushSeconds`（Agent 存活）与 `sinceLastEventSeconds`（源头新鲜度）。
+
+## Control 托管配置（可选）
+
+本地 `agent.properties` 配 `control.config-url`（Control `GET /api/dimensions/agent-configs/resolved` 的完整 URL）即启用托管：启动时拉取一次，下发的键逐键覆盖本地文件值（`game.id`/`game.environment`/`status.source-key` 由 Control 按行注入），鉴权复用 `status.token`。拉取失败（网络/非 2xx/停用档）整段回落本地文件，Control 不可达不阻断启动。配置源优先级（低→高）：本地文件 < Control 下发 < System property（`-D` 逐键覆盖）。托管面不托管的键：`control.config-url` 自身（本地开关）、`agent.checkpoint-path`（本地路径）。

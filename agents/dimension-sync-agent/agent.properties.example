@@ -64,3 +64,11 @@ agent.checkpoint-path=/var/lib/oddsmaker-agent/checkpoint.json
 status.url=https://control.oddsmaker.local/api/dimensions/sync-status
 status.token=change-me
 status.source-key=agent-mysql-main
+
+# ── Control 托管配置（可选；配了 control.config-url 即启用）────────
+# 启动时拉 GET {control.config-url}?gameId=&environment=&agentKey=（x-admin-token 复用 status.token），
+# 下发的键逐键覆盖本地文件值；拉取失败（网络/非 2xx/停用档）整段回落本地文件，不阻断启动。
+# 配置源优先级（低→高）：本地文件 < Control 下发 < System property（-D 逐键覆盖）。
+# 托管面不托管的键：control.config-url 自身（本地开关）、agent.checkpoint-path（本地路径）、
+# game.id/game.environment/status.source-key（Control 下发时按行注入）。
+# control.config-url=https://control.oddsmaker.local/api/dimensions/agent-configs/resolved

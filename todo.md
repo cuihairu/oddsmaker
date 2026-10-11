@@ -216,6 +216,17 @@
 
 ---
 
+## 维度同步 Agent 端取配置链路（拍板第三链，2026-10-11 增量 2/3）
+
+- [x] `ControlConfigFetcher`：GET `{control.config-url}?gameId=&environment=&agentKey=`（`x-admin-token` 复用 `status.token`，查询值 URL 编码，非 2xx/空体/异常抛 IOException，缺查询身份不发请求）
+- [x] `AgentConfig.load` 合并语义：本地文件 → Control 下发逐键覆盖 → System property 逐键覆盖（顺序在类注释与 example 里写明）；`control.config-url` 空白=不启用（存量部署零回归）；拉取失败整段回落本地文件只打日志
+- [x] 测试：Fetcher 5（查询编码/token 头/非 2xx/空体/缺身份不发请求）+ AgentConfig 合并臂 3（下发覆盖本地值含注入键/500 回落本地/`-D` 压过下发）
+- [x] 文档对账：dimension-sync.md Agent 节配置示例引入托管开关 +「凭证不出游戏网络」标注托管模式不再成立（源端凭证进 Control AES-GCM 托管，与 Pull 同密钥面）、配置驱动节与实现状态头更新，agent.properties.example 与 Agent README 增托管开关说明，CHANGELOG 与本节
+
+**验收：** ✅ agent 模块新测试 8 例绿（Fetcher 5 + AgentConfig 3，模块内 AgentConfigTest 31 例全绿）。边界：仅启动拉取一次（远端改配置需重启 Agent），轮询热更新不做；控制台 web 入口未做（API 先行）——增量 3；`provider:` 多态与 `auth.token_ref` 密钥引用表仍未实现。
+
+---
+
 ## 维度同步 Agent 属性面 Control 托管（拍板第三链，2026-10-11 增量 1/3）
 
 - [x] 存储与规范：`dimension_agent_config` 表（V0.9.26，(game, environment, agentKey) 唯一）——props 非密钥文本（Properties 格式，dot-key 沿用 agent.properties 命名，键白名单未知键/密钥键/注入键精确报错）+ secrets 6 密钥键整体 AES-GCM 密文（只回显键名）；`AgentConfigSpec` 纯函数层（parse/validate/validateProps/validateSecrets/renderResolved/renderValue 转义往返）
@@ -224,7 +235,7 @@
 - [x] 测试：纯函数 11（拆分规则/必填与形状/注入键拒/下发文本 load 往返含转义值）+ 编排 14（建档规范化与密文托管/密钥缺省保留/轮换/重名与软删游戏拒/跨游戏 findOwned 拒/resolve 注入解密合并/停用档拒发）
 - [x] 文档对账：dimension-sync.md 实现状态头/配置驱动节新增「Agent 属性面托管（Control 侧）」子节（键拆分口径与端点表），CHANGELOG 与本节
 
-**验收：** ✅ 25 例新测试绿。边界：Agent 端取配置链路未实现（启动/轮询拉 resolved + Control 不可达本地 agent.properties 兜底合并）——增量 2；控制台 web 入口未做（API 先行，同 pull 链节奏）——增量 3；`provider:` 多态与 `auth.token_ref` 密钥引用表仍未实现。
+**验收：** ✅ 25 例新测试绿。边界：Agent 端取配置链路见上一节（增量 2/3，已完成）；控制台 web 入口未做（API 先行，同 pull 链节奏）——增量 3；`provider:` 多态与 `auth.token_ref` 密钥引用表仍未实现。
 
 ---
 
