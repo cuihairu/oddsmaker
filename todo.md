@@ -181,7 +181,7 @@
 
 ## 维度同步 HTTP Pull 链路（拍板第一链，2026-10-10 增量）
 
-- [x] 配置面：`dimension_pull_config` 表（V0.9.20，(game, environment, sourceKey) 唯一）+ `dimension-pulls` REST API（GET 列表 / POST 建档 / PUT 更新（credential 缺省=保留）/ DELETE / POST run 手动触发；`dimension:read`/`dimension:manage` 门控）
+- [x] 配置面：`dimension_pull_config` 表（V0.9.25，(game, environment, sourceKey) 唯一）+ `dimension-pulls` REST API（GET 列表 / POST 建档 / PUT 更新（credential 缺省=保留）/ DELETE / POST run 手动触发；`dimension:read`/`dimension:manage` 门控）
 - [x] 凭证加密托管：`DimensionCredentialCipher` AES-GCM（随机 IV，base64(iv+ciphertext)，SHA-256 派生密钥取 `ODDSMAKER_CREDENTIAL_KEY`，缺省 dev 密钥 WARN）；密文不回显任何 API 响应
 - [x] 拉取调度：15s tick + 配置 `intervalSeconds`（缺省 300）判到期；单页 GET `{endpoint}?updated_after={cursor}&limit=`（Bearer），`next_cursor` 断点续传，缺省回落本页最大 version_ts；推送成功才前进 cursor，失败记 error_count/last_error 旧断点重放（下游 ReplacingMergeTree 幂等）
 - [x] 翻译与推送：行→`RawDimensionChange(source_type=pull)` 形状 dimension_define NDJSON（items/resources/levels/data 数组键探测；控制列 resource_id 五候选/op/version_ts 三键，其余进 attributes）→ POST 既有 Gateway `/v1/batch`（x-api-key 作用域 server/admin key，与 Agent 同契约）；进度落 `dimension_sync_status`（source_type=pull）同表可观测
