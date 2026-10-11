@@ -263,6 +263,15 @@
 
 ---
 
+## ml 训练管线测试纳入 CI（2026-10-11 增量）
+
+- [x] `ci.yaml` 新增 `ml-tests` job（push/PR 即验）：setup-python 3.12 + pip 缓存（键 ml/pyproject.toml）+ `pip install -e '.[dev]'`（依赖以 pyproject 为单一真源）+ `python -m pytest`（cwd ml/，离线合成数据不联网）
+- [x] CI 同款新环境实证：全新 venv editable 安装含 dev extras → 68 例绿（18.6s）；流水线尾注「只做校验」补 ML 项；CHANGELOG 与本节
+
+**验收：** ✅ ml pytest 68 例双环境绿（既有 .venv 30.4s / CI 同款新装 18.6s）；此前 `ml/` 在 CI/CD 与 Nightly 两条流水线均无人执行，自此 push 即验。边界：Nightly 不重复挂 ml（CI 已 push 即验）；模型产物质量门（如 AUC 阈值）不做——训练管线以可复现与形状正确为验收。
+
+---
+
 ## 边界（不跟进，评审转审查项）
 
 - 不做多租户/SaaS（Organization/Workspace/Project/Tenant 概念不入新代码）
