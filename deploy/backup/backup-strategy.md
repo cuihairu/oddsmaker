@@ -76,6 +76,9 @@ redis-cli BGSAVE
 cp /var/lib/redis/dump.rdb /backup/redis/dump_$(date +%Y%m%d%H%M%S).rdb
 ```
 
+k8s 编排（`deploy/k8s/backup-cronjob.yaml`）经 `redis-cli --rdb <file>` 网络流式导出，
+不挂载数据 PVC（RWO 卷只归 Redis 本体），7 天留存就地清理。
+
 ### ClickHouse
 
 **Backup Type**: Incremental Backups
