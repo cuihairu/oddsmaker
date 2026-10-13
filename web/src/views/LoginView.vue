@@ -8,6 +8,7 @@ const authStore = useAuthStore()
 
 const username = ref('')
 const password = ref('')
+const mfaCode = ref('')
 const loading = ref(false)
 const error = ref(null)
 
@@ -16,18 +17,25 @@ async function handleLogin() {
     error.value = '请输入用户名和密码'
     return
   }
+  if (authStore.mfaRequired && !mfaCode.value) {
+    error.value = '请输入 MFA 验证码'
+    return
+  }
 
   loading.value = true
   error.value = null
 
-  const success = await authStore.login(username.value, password.value)
-  
+  const success = await authStore.login(username.value, password.value, mfaCode.value || null)
+
   if (success) {
     router.push('/')
+  } else if (authStore.mfaRequired) {
+    // 挑战不是错误：提示语由模板里的 mfaRequired 提示行展示
+    error.value = null
   } else {
     error.value = authStore.error || '登录失败'
   }
-  
+
   loading.value = false
 }
 </script>
@@ -69,11 +77,29 @@ async function handleLogin() {
               type="password"
               autocomplete="current-password"
               required
-              class="input rounded-t-none rounded-b-lg"
+              :class="authStore.mfaRequired ? 'input rounded-none' : 'input rounded-t-none rounded-b-lg'"
               placeholder="密码"
             />
           </div>
+          <div v-if="authStore.mfaRequired">
+            <label for="mfaCode" class="sr-only">MFA 验证码</label>
+            <input
+              id="mfaCode"
+              v-model="mfaCode"
+              name="mfaCode"
+              type="text"
+              autocomplete="one-time-code"
+              inputmode="numeric"
+              required
+              class="input rounded-t-none rounded-b-lg"
+              placeholder="MFA 验证码"
+            />
+          </div>
         </div>
+
+        <p v-if="authStore.mfaRequired" class="text-sm text-center text-primary-600">
+          密码已验证，请输入 MFA 验证码
+        </p>
 
         <div v-if="error" class="text-red-600 text-sm text-center">
           {{ error }}

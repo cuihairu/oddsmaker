@@ -22,6 +22,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -54,11 +55,14 @@ class AuthControllerTest {
     @Mock
     AuditLogService auditLogService;
 
+    @Mock
+    io.oddsmaker.control.service.SecurityService securityService;
+
     AuthController controller;
 
     @BeforeEach
     void setUp() {
-        controller = new AuthController(userService, passwordEncoder, jwtService, auditLogService);
+        controller = new AuthController(userService, passwordEncoder, jwtService, auditLogService, securityService);
     }
 
     private final MockHttpServletRequest request = new MockHttpServletRequest();
@@ -135,6 +139,7 @@ class AuthControllerTest {
         UserEntity user = activeUser();
         when(userService.findByUsername("alice")).thenReturn(Optional.of(user));
         when(passwordEncoder.matches("p", "$2a$hash")).thenReturn(true);
+        when(securityService.isUserMFAEnabled("u_1")).thenReturn(false);
         when(jwtService.issue(anyString(), anyList())).thenReturn("jwt-token");
         var resp = controller.login(Map.of("username", "alice", "password", "p"), request);
         assertEquals(HttpStatus.OK, resp.getStatusCode());
@@ -148,6 +153,7 @@ class AuthControllerTest {
         noRoles.username = "carol";
         noRoles.roles = null;
         when(userService.findByUsername("carol")).thenReturn(Optional.of(noRoles));
+        when(securityService.isUserMFAEnabled("u_1")).thenReturn(false);
         var resp2 = controller.login(Map.of("username", "carol", "password", "p"), request);
         assertEquals(HttpStatus.OK, resp2.getStatusCode());
         verify(jwtService).issue("carol", List.of());
@@ -170,6 +176,7 @@ class AuthControllerTest {
         UserEntity user = activeUser();
         when(userService.findByUsername("alice")).thenReturn(Optional.of(user));
         when(passwordEncoder.matches("p", "$2a$hash")).thenReturn(true);
+        when(securityService.isUserMFAEnabled("u_1")).thenReturn(false);
         when(jwtService.issue(anyString(), anyList())).thenReturn("jwt-token");
         doThrow(new RuntimeException("audit db down")).when(auditLogService)
             .logLogin(any(), any(), any(), any());
@@ -234,6 +241,74 @@ class AuthControllerTest {
         when(userService.findByUsername("nobody")).thenReturn(Optional.empty());
         controller.login(java.util.Map.of("username", "nobody", "password", "p"), request);
         verify(auditLogService).logLoginFailed(eq("nobody"), eq("172.16.0.5"), any(), anyString());
+    }
+
+    // ===== MFA 登录接入 =====
+
+    @Test
+    @DisplayName("MFA 已启用未带验证码：200 返回 mfaRequired 挑战，不签发 token 不记 LOGIN")
+    void mfaRequiredReturnsChallenge() {
+        UserEntity user = activeUser();
+        when(userService.findByUsername("alice")).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("p", "$2a$hash")).thenReturn(true);
+        when(securityService.isUserMFAEnabled("u_1")).thenReturn(true);
+
+        var resp = controller.login(Map.of("username", "alice", "password", "p"), request);
+        assertEquals(HttpStatus.OK, resp.getStatusCode());
+        assertEquals(Boolean.TRUE, resp.getBody().get("mfaRequired"));
+        assertNull(resp.getBody().get("token"));
+        verify(jwtService, never()).issue(anyString(), anyList());
+        verify(userService, never()).recordLogin(any());
+        verify(auditLogService, never()).logLogin(any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("MFA 已启用验证码正确：签发 JWT + LOGIN 审计（与普通登录同路）")
+    void mfaValidCodeIssuesToken() {
+        UserEntity user = activeUser();
+        when(userService.findByUsername("alice")).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("p", "$2a$hash")).thenReturn(true);
+        when(securityService.isUserMFAEnabled("u_1")).thenReturn(true);
+        when(securityService.verifyMFA("u_1", "123456")).thenReturn(true);
+        when(jwtService.issue(anyString(), anyList())).thenReturn("jwt-token");
+
+        var resp = controller.login(
+            Map.of("username", "alice", "password", "p", "mfaCode", "123456"), request);
+        assertEquals(HttpStatus.OK, resp.getStatusCode());
+        assertEquals("jwt-token", resp.getBody().get("token"));
+        verify(userService).recordLogin(user);
+    }
+
+    @Test
+    @DisplayName("MFA 已启用验证码错误：401 + LOGIN_FAILED（原因 mfa code invalid）")
+    void mfaInvalidCodeRejected() {
+        UserEntity user = activeUser();
+        when(userService.findByUsername("alice")).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("p", "$2a$hash")).thenReturn(true);
+        when(securityService.isUserMFAEnabled("u_1")).thenReturn(true);
+        when(securityService.verifyMFA("u_1", "000000")).thenReturn(false);
+
+        var resp = controller.login(
+            Map.of("username", "alice", "password", "p", "mfaCode", "000000"), request);
+        assertEquals(HttpStatus.UNAUTHORIZED, resp.getStatusCode());
+        verify(jwtService, never()).issue(anyString(), anyList());
+        verify(userService, never()).recordLogin(any());
+        verify(auditLogService).logLoginFailed(eq("alice"), any(), any(), eq("mfa code invalid"));
+    }
+
+    @Test
+    @DisplayName("MFA 已启用验证码空白：等同未携带，返回 mfaRequired 挑战")
+    void mfaBlankCodeTreatedAsMissing() {
+        UserEntity user = activeUser();
+        when(userService.findByUsername("alice")).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("p", "$2a$hash")).thenReturn(true);
+        when(securityService.isUserMFAEnabled("u_1")).thenReturn(true);
+
+        var resp = controller.login(
+            Map.of("username", "alice", "password", "p", "mfaCode", "  "), request);
+        assertEquals(HttpStatus.OK, resp.getStatusCode());
+        assertEquals(Boolean.TRUE, resp.getBody().get("mfaRequired"));
+        verify(securityService, never()).verifyMFA(anyString(), anyString());
     }
 
 }

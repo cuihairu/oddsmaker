@@ -98,7 +98,7 @@ Analyze experiment results with conversion rates, statistical significance testi
 - **Payment Propensity** - Score likelihood of a player making a purchase
 
 ### Enterprise Security
-MFA policy fields exist but login integration is not yet wired (see the [operations security checklist](/operations/#security-checklist)); RBAC with 8 roles and global/game/environment scopes, and full audit logging.
+MFA is enforced at login (challenge/verify flow; see the [operations security checklist](/operations/#security-checklist)); RBAC with 8 roles and global/game/environment scopes, and full audit logging.
 
 ## Documentation
 

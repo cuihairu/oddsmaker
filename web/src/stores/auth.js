@@ -7,17 +7,26 @@ export const useAuthStore = defineStore('auth', () => {
   const token = ref(localStorage.getItem('token') || null)
   const loading = ref(false)
   const error = ref(null)
+  const mfaRequired = ref(false)
 
   const isAuthenticated = computed(() => !!token.value)
   const isAdmin = computed(() => user.value?.roles?.includes('ADMIN') || false)
   const userName = computed(() => user.value?.displayName || user.value?.username || '')
 
-  async function login(username, password) {
+  async function login(username, password, mfaCode = null) {
     loading.value = true
     error.value = null
-    
+    mfaRequired.value = false
+
     try {
-      const response = await api.post('/api/auth/login', { username, password })
+      const body = { username, password }
+      if (mfaCode) body.mfaCode = mfaCode
+      const response = await api.post('/api/auth/login', body)
+      // MFA 挑战：密码已验过只差验证码，视图凭 mfaRequired 弹码输入后带 mfaCode 重发
+      if (response.data.mfaRequired) {
+        mfaRequired.value = true
+        return false
+      }
       token.value = response.data.token
       user.value = response.data.user
       localStorage.setItem('token', token.value)
@@ -71,6 +80,7 @@ export const useAuthStore = defineStore('auth', () => {
     token,
     loading,
     error,
+    mfaRequired,
     isAuthenticated,
     isAdmin,
     userName,

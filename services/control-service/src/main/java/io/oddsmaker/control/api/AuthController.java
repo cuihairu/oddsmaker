@@ -3,6 +3,7 @@ package io.oddsmaker.control.api;
 import io.oddsmaker.control.jpa.UserEntity;
 import io.oddsmaker.control.service.AuditLogService;
 import io.oddsmaker.control.service.JwtService;
+import io.oddsmaker.control.service.SecurityService;
 import io.oddsmaker.control.service.UserService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
@@ -26,6 +27,10 @@ import java.util.Map;
  * GET /api/users/me 401 时前端自动清除会话跳登录页。
  * Keycloak 不在部署里，此端点补上后控制面才可用。
  *
+ * <p>MFA：用户在 SecurityService 侧有启用的 MFA 配置时，未带 mfaCode 的登录
+ * 返回 200 {mfaRequired:true}（密码已验过，只差验证码），前端补 {mfaCode} 重发；
+ * 验证码错误 401 + LOGIN_FAILED（原因 mfa code invalid）。
+ *
  * <p>登录/登出全程写审计（LOGIN/LOGIN_FAILED/LOGOUT）——
  * /api/audit-logs/auth 查询端点依赖这些 action，此前无写入方永远空页。
  */
@@ -39,13 +44,16 @@ public class AuthController {
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final AuditLogService auditLogService;
+    private final SecurityService securityService;
 
     public AuthController(UserService userService, PasswordEncoder passwordEncoder,
-                          JwtService jwtService, AuditLogService auditLogService) {
+                          JwtService jwtService, AuditLogService auditLogService,
+                          SecurityService securityService) {
         this.userService = userService;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.auditLogService = auditLogService;
+        this.securityService = securityService;
     }
 
     @PostMapping("/login")
@@ -71,6 +79,20 @@ public class AuthController {
         if (user.status != UserEntity.UserStatus.ACTIVE) {
             auditQuietly(() -> auditLogService.logLoginFailed(username, ip, userAgent, "account not active"));
             return ResponseEntity.status(403).body(Map.of("message", "账号已被禁用或锁定"));
+        }
+
+        // MFA 校验：用户启用 MFA 时必须携带有效验证码（mfaCode）才发 token；
+        // 未携带 → 200 {mfaRequired:true} 挑战（前端凭此弹验证码输入重发），错误 → 401 + LOGIN_FAILED
+        if (securityService.isUserMFAEnabled(user.id)) {
+            String mfaCode = body.get("mfaCode");
+            if (mfaCode == null || mfaCode.isBlank()) {
+                return ResponseEntity.ok(Map.of("mfaRequired", true, "message", "需要 MFA 验证码"));
+            }
+            if (!securityService.verifyMFA(user.id, mfaCode)) {
+                logger.warn("Login failed for username={} reason=mfa code invalid", username);
+                auditQuietly(() -> auditLogService.logLoginFailed(username, ip, userAgent, "mfa code invalid"));
+                return ResponseEntity.status(401).body(Map.of("message", "MFA 验证码错误"));
+            }
         }
 
         List<String> roles = user.roles == null ? List.of() : user.roles.stream().map(Enum::name).toList();

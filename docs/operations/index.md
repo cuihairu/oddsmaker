@@ -149,7 +149,7 @@ Critical alerts include:
 - [ ] Set up firewall rules — 部署环境执行项（仓库无对应配置面，如实保留）
 - [x] Enable audit logging — 已交付：`audit_log` 落库 + `GET /api/audit-logs` 查询（策略/密钥/权限/风控动作全记录）
 - [ ] Configure rate limiting — 部分：control ingress `rate-limit 100/min` 注解已随仓；网关（公网事件入口）侧未覆盖——待部署环境生效
-- [ ] Set up MFA for admin users — 未交付：`MFAConfigEntity` / `SecurityPolicyEntity.mfaRequired` 字段已建，登录链路未接入校验
+- [x] Set up MFA for admin users — 已交付：登录链路接入 MFA 校验（`AuthController` 密码验证后查 `isUserMFAEnabled`，未带码返回 `{mfaRequired:true}` 挑战、带码经 `verifyMFA` 校验，失败 401 + LOGIN_FAILED 审计；前端 `LoginView` 弹验证码输入重发）。`/api/security/mfa/*` 配置端点与 `SecurityPolicyEntity.mfaRequired` 策略字段均已建
 - [ ] Rotate secrets regularly — 部分：API Key 创建/轮换/禁用已支持；周期轮换节奏属运维执行动作
 - [x] Monitor security events — 已交付：风控大屏 `/api/risk-metrics`（风险趋势/命中/处置状态）+ 审计日志查询；告警规则接入属监控栈（见 Monitoring Stack）
 

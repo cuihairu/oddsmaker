@@ -80,6 +80,60 @@ describe('login', () => {
     expect(ok).toBe(false)
     expect(auth.error).toBe('登录失败')
   })
+
+  it('MFA 挑战（后端 {mfaRequired:true}）：返回 false、mfaRequired 置位、不碰 token/持久化/error', async () => {
+    localStorage.setItem('token', 'old-tok')
+    const auth = useAuthStore()
+    api.post.mockResolvedValueOnce({ data: { mfaRequired: true, message: '需要 MFA 验证码' } })
+    const ok = await auth.login('alice', 'pw')
+    expect(ok).toBe(false)
+    expect(auth.mfaRequired).toBe(true)
+    // 挑战不是错误：error 保持空，既有登录态不动
+    expect(auth.error).toBeNull()
+    expect(auth.token).toBe('old-tok')
+    expect(localStorage.getItem('token')).toBe('old-tok')
+  })
+
+  it('MFA 验证码透传：login 第三参 mfaCode 进请求体，无 mfaCode 时请求体不携带该键', async () => {
+    const auth = useAuthStore()
+    api.post.mockResolvedValueOnce({ data: { token: 'tok-1', user: { username: 'alice' } } })
+    await auth.login('alice', 'pw', '123456')
+    expect(api.post).toHaveBeenCalledWith('/api/auth/login',
+      { username: 'alice', password: 'pw', mfaCode: '123456' })
+
+    api.post.mockResolvedValueOnce({ data: { token: 'tok-2', user: { username: 'alice' } } })
+    await auth.login('alice', 'pw')
+    expect(api.post).toHaveBeenLastCalledWith('/api/auth/login',
+      { username: 'alice', password: 'pw' })
+  })
+
+  it('MFA 两步流：先挑战后带码成功——mfaRequired 置位再复位，token 只在第二步落盘', async () => {
+    const auth = useAuthStore()
+    api.post.mockResolvedValueOnce({ data: { mfaRequired: true } })
+    const step1 = await auth.login('alice', 'pw')
+    expect(step1).toBe(false)
+    expect(auth.mfaRequired).toBe(true)
+    expect(auth.token).toBeNull()
+
+    api.post.mockResolvedValueOnce({ data: { token: 'tok-mfa', user: { username: 'alice', roles: ['ADMIN'] } } })
+    const step2 = await auth.login('alice', 'pw', '654321')
+    expect(step2).toBe(true)
+    expect(auth.mfaRequired).toBe(false)
+    expect(auth.token).toBe('tok-mfa')
+    expect(localStorage.getItem('token')).toBe('tok-mfa')
+  })
+
+  it('mfaRequired 每次登录先复位：上一次挑战的残位不污染新请求的响应分支', async () => {
+    const auth = useAuthStore()
+    api.post.mockResolvedValueOnce({ data: { mfaRequired: true } })
+    await auth.login('alice', 'pw')
+    expect(auth.mfaRequired).toBe(true)
+
+    // 新登录（如换了用户）直接成功：mfaRequired 应在请求前被复位为 false
+    api.post.mockResolvedValueOnce({ data: { token: 'tok-x', user: { username: 'bob' } } })
+    await auth.login('bob', 'pw')
+    expect(auth.mfaRequired).toBe(false)
+  })
 })
 
 describe('logout', () => {
