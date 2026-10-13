@@ -32,7 +32,7 @@ otel-collector/Prometheus/Grafana，端口 29xxx/18088/13000 段），两者注�
 | Superset | ❌ | ✅ 3.1.0（38088） | ✅ 根 3.1.0（8088）；infra 3.0.2（18088） |
 | otel-collector + Prometheus + Grafana | ❌ | ❌ | ✅ infra（4317/4318/9464、9090、13000；配置在 `infra/prometheus.yml`、`infra/grafana/`、`deploy/monitoring/`） |
 | 对象存储归档 | ❌ | ❌ | 不在任何 compose：`deploy/backup/postgres-backup.sh`（`aws s3 cp` → S3）+ `deploy/k8s/backup-cronjob.yaml` |
-| K8s 形态 | — | — | `deploy/k8s/`（namespace/postgres/redis/control/backup-cronjob）+ `infra/helm/` |
+| K8s 形态 | — | — | `deploy/k8s/`（namespace/postgres/redis/control/gateway/backup-cronjob）+ `infra/helm/` |
 
 ## 各档说明
 

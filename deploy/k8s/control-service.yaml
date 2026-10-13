@@ -12,6 +12,7 @@ metadata:
     app: oddsmaker-control
     component: control-service
 data:
+  SERVICE: "control"
   SPRING_PROFILES_ACTIVE: "prod"
   SERVER_PORT: "8085"
   MANAGEMENT_SERVER_PORT: "8086"
@@ -83,7 +84,7 @@ spec:
         fsGroup: 1000
       containers:
         - name: control-service
-          image: oddsmaker/control-service:latest
+          image: ghcr.io/cuihairu/oddsmaker:nightly
           imagePullPolicy: Always
           ports:
             - name: http
