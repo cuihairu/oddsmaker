@@ -34,6 +34,11 @@ public interface ApiKeyRepo extends JpaRepository<ApiKeyEntity, String> {
     List<ApiKeyEntity> findByStatus(ApiKeyEntity.ApiKeyStatus status);
 
     /**
+     * 自动轮换扫描面：只取活跃且开启 auto_rotate 的 key（其余状态与未启用配置不进入扫描）。
+     */
+    List<ApiKeyEntity> findByStatusAndAutoRotate(ApiKeyEntity.ApiKeyStatus status, Boolean autoRotate);
+
+    /**
      * 按游戏和环境搜索 API 密钥。
      */
     @Query("SELECT ak FROM ApiKeyEntity ak WHERE " +

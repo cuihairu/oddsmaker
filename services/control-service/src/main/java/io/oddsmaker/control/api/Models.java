@@ -42,6 +42,9 @@ public class Models {
         public String piiIp;     // allow|coarse|drop
         public List<String> denyKeys;
         public List<String> maskKeys;
+        public Boolean autoRotate;   // 是否开启自动轮换（PUT 未带则不变）
+        public Integer rotationDays; // 轮换周期（天），为空或 ≤0 回落 90
+        public String lastRotatedAt; // ISO-8601，null = 从未轮换
     }
 
     /**

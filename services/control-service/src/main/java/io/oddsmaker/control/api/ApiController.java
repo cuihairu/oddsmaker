@@ -99,6 +99,7 @@ public class ApiController {
         public Integer rpm; public Integer ipRpm; public List<String> propsAllowlist;
         public String piiEmail; public String piiPhone; public String piiIp;
         public List<String> denyKeys; public List<String> maskKeys;
+        public Boolean autoRotate; public Integer rotationDays;
     }
 
     public static class BatchDeleteReq { public List<String> apiKeys; }
@@ -107,6 +108,7 @@ public class ApiController {
     public ResponseEntity<Models.KeyDetailResp> updatePolicy(@PathVariable String apiKey, @RequestBody UpdatePolicyReq req) {
         var r = new Models.KeyDetailResp();
         r.rpm = req.rpm; r.ipRpm = req.ipRpm; r.propsAllowlist = req.propsAllowlist; r.piiEmail = req.piiEmail; r.piiPhone = req.piiPhone; r.piiIp = req.piiIp; r.denyKeys = req.denyKeys; r.maskKeys = req.maskKeys;
+        r.autoRotate = req.autoRotate; r.rotationDays = req.rotationDays;
         var out = svc.updatePolicy(apiKey, r);
         if (out == null) return ResponseEntity.notFound().build();
         return ResponseEntity.ok(out);

@@ -1,10 +1,14 @@
 package io.oddsmaker.control.api;
 
 import io.oddsmaker.control.jpa.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.security.SecureRandom;
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -15,6 +19,15 @@ import java.util.stream.Collectors;
 @Service
 @Transactional
 public class ControlService {
+
+    private static final Logger logger = LoggerFactory.getLogger(ControlService.class);
+
+    /** auto_rotate 开启但 rotation_days 缺失/非法时的默认轮换周期（天）。 */
+    static final int DEFAULT_ROTATION_DAYS = 90;
+
+    /** 自动轮换扫描周期（毫秒）：轮换周期以天计，小时级扫描足够且不占扫描面。 */
+    static final long ROTATION_SCAN_FIXED_DELAY_MS = 3_600_000L;
+
     private final ApiKeyRepo keyRepo;
     private final GameRepo gameRepo;
     private final GameEnvironmentRepo envRepo;
@@ -190,13 +203,54 @@ public class ControlService {
             if (req.piiIp != null) e.piiIp = req.piiIp;
             if (req.denyKeys != null) e.denyKeys = String.join(",", req.denyKeys);
             if (req.maskKeys != null) e.maskKeys = String.join(",", req.maskKeys);
+            if (req.autoRotate != null) e.autoRotate = req.autoRotate;
+            if (req.rotationDays != null) e.rotationDays = req.rotationDays;
             keyRepo.save(e);
             auditLog.logUpdate("api_key", e.apiKey, e.name, "api", "api", null,
                 Map.of("gameId", String.valueOf(e.gameId),
                     "rpmBefore", String.valueOf(rpmBefore), "rpmAfter", String.valueOf(e.rpm),
-                    "ipRpmBefore", String.valueOf(ipRpmBefore), "ipRpmAfter", String.valueOf(e.ipRpm)));
+                    "ipRpmBefore", String.valueOf(ipRpmBefore), "ipRpmAfter", String.valueOf(e.ipRpm),
+                    "autoRotate", String.valueOf(e.autoRotate),
+                    "rotationDays", String.valueOf(e.rotationDays)));
             return toDetail(e);
         }).orElse(null);
+    }
+
+    /**
+     * 自动轮换入口：每小时扫描一次。now 由 {@link #rotateDueApiKeys(LocalDateTime)} 承接便于测试。
+     */
+    @Scheduled(fixedDelay = ROTATION_SCAN_FIXED_DELAY_MS)
+    public int rotateDueApiKeys() {
+        return rotateDueApiKeys(LocalDateTime.now());
+    }
+
+    /**
+     * 扫描开启 auto_rotate 的活跃 key，到期即换发签名密钥（只换 sk_，密钥标识 pk_ 保持不动，
+     * 下游凭据按缓存 TTL 平滑切换）。
+     *
+     * 到期判定：last_rotated_at 为空回落 created_at；rotation_days 为空或 ≤0 回落
+     * {@link #DEFAULT_ROTATION_DAYS}。返回本次轮换数量，供调度日志与测试对账。
+     */
+    int rotateDueApiKeys(LocalDateTime now) {
+        int rotated = 0;
+        for (ApiKeyEntity e : keyRepo.findByStatusAndAutoRotate(ApiKeyEntity.ApiKeyStatus.ACTIVE, Boolean.TRUE)) {
+            int days = e.rotationDays == null || e.rotationDays <= 0
+                ? DEFAULT_ROTATION_DAYS : e.rotationDays;
+            LocalDateTime from = e.lastRotatedAt != null ? e.lastRotatedAt : e.createdAt;
+            if (from == null || from.plusDays(days).isAfter(now)) continue;
+            e.secret = gen("sk_");
+            e.lastRotatedAt = now;
+            keyRepo.save(e);
+            auditLog.logUpdate("api_key", e.apiKey, e.name, "api", "api", null,
+                Map.of("action", "auto_rotate",
+                    "gameId", String.valueOf(e.gameId),
+                    "rotationDays", String.valueOf(days)));
+            rotated++;
+        }
+        if (rotated > 0) {
+            logger.info("api key auto rotation: {} key(s) rotated", rotated);
+        }
+        return rotated;
     }
 
     @Transactional(readOnly = true)
@@ -282,6 +336,9 @@ public class ControlService {
         r.propsAllowlist = split(e.propsAllowlist);
         r.piiEmail = e.piiEmail; r.piiPhone = e.piiPhone; r.piiIp = e.piiIp;
         r.denyKeys = split(e.denyKeys); r.maskKeys = split(e.maskKeys);
+        r.autoRotate = e.autoRotate;
+        r.rotationDays = e.rotationDays;
+        r.lastRotatedAt = e.lastRotatedAt == null ? null : e.lastRotatedAt.toString();
         return r;
     }
 

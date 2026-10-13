@@ -122,6 +122,9 @@ public class ApiKeyEntity {
     @Column(name = "rotation_days")
     public Integer rotationDays = 90; // 轮换周期（天）
 
+    @Column(name = "last_rotated_at")
+    public LocalDateTime lastRotatedAt;  // 最近一次自动轮换时间（空 = 从未轮换，到期判定回落 created_at）
+
     // 创建信息
     @Column(name = "created_by", length = 32)
     public String createdBy; // 创建人用户ID
