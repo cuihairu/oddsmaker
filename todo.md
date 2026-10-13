@@ -40,6 +40,7 @@
 - [x] API Key 自动轮换执行端：`auto_rotate`/`rotation_days` 死字段接活（V0.9.27 `last_rotated_at`、每小时扫描换发 sk_、pk_ 不动、策略 null 不覆盖、轮换写审计）（68ce564，10 例绿，模块 1998 例 0 失败）
 - [x] 文档对账勾账：operations 清单「限流」标网关侧未覆盖，实为已实现（`RateLimitFilter` 拦 `/v1/batch`，per-key `rpm` + per-IP `ipRpm` 超限 429 + `Retry-After`）→ 改判 [x]（e9ebbac，网关 237 例 0 失败）
 - [x] DR 缺口入库：postgres WAL 归档（`archive_mode=on`/`wal_level=replica`/`max_wal_senders=3`/`wal_archive_timeout=30s` + 30 天就地留存清理，归档独立卷/PVC）、Redis 快照+AOF（`save 60 10000/300 10/900 1` + `appendfsync everysec`）、ClickHouse 全量/增量备份脚本（90 天留存）（39e2a1c，纯配置，YAML 解析与 `docker compose config` 全过）
+- [x] Redis 备份 CronJob 去 RWO 共挂：`redis-cli --rdb` 网络流式导出替代数据 PVC 挂载（消除同节点调度耦合 + BGSAVE 完成竞态），补 7 天留存就地清理（backup-strategy.md §Redis 对齐）（6e4bf1d，纯配置，YAML 解析与 shell 语法校验过）
 
 ## 边界（决定不做，勿再提）
 
