@@ -10,7 +10,7 @@
 - `Environment`：逻辑发布阶段
 - `StorageProfile`：集群配置和容量规划
 
-**数据库架构**（当前实现）：PostgreSQL 元数据库 + 共享 ClickHouse 表，事件与聚合表按 `(game_id, environment)` 分区。「按游戏分库」是目标形态，由存储 profile 的 `isolationStrategy`（`shared` / `prod_isolated` / `dedicated`）表达，物理分库尚未接线。
+**数据库架构**（当前实现）：PostgreSQL 元数据库 + 共享 ClickHouse 表，事件与聚合表按 `(game_id, environment, 月)` 分区。「按游戏分库」是目标形态，由存储 profile 的 `isolationStrategy`（`shared` / `prod_isolated` / `dedicated`）表达，物理分库尚未接线。
 
 ```
 PostgreSQL（元数据）
@@ -19,8 +19,8 @@ PostgreSQL（元数据）
 ├─ tracking_plans / risk_rules / risk_features / block_lists / audit_logs
 └─ storage_profiles ...
 
-ClickHouse（共享表，按 game_id + environment 分区）
-├─ events / resource_changes
+ClickHouse（共享表，按 game_id + environment + 月 分区）
+├─ events
 ├─ risk_events / risk_scores / risk_actions
 └─ ...
 ```
@@ -31,7 +31,7 @@ ClickHouse（共享表，按 game_id + environment 分区）
 - `game_id` / `environment`：事件协议使用的逻辑名称（如 `prod`、`staging`）
 - API Key 绑定到 `gameId + environmentId`（内部 ID）
 - **事件上报**：`game_id` 和 `environment` 是事件必填字段，也是 ClickHouse 的分区键（不是"表层级就不需要存"）
-- **新增 `server_id`**：MMORPG 游戏必需，用于区分不同服务器/大区
+- **新增 `server_id`**：可选字段，MMORPG 建议携带，用于区分不同服务器/大区
 
 ## 核心资源
 
@@ -74,7 +74,7 @@ DELETE /api/games/{gameId}/environments/{environmentName}
 
 推荐默认环境：`dev`、`staging`、`prod`。
 
-环境级配置：启用状态、采样开关与采样率（网关对非 active 环境回 503）。数据保留时间不是环境字段——由 ClickHouse TTL 与存储 profile 决定。
+环境级配置：启用状态、采样开关与采样率（网关对非 active 环境回 503）。数据保留由环境/游戏的 `dataRetentionDays` 驱动 ClickHouse 表 TTL（`RetentionEnforcementService`，优先级 环境 ?? 游戏 ?? 默认），存储 profile 不参与保留期。
 
 ### Storage Profile
 
@@ -119,7 +119,7 @@ DELETE /api/keys/{keyId}
 ```json
 {
   "gameId": "game_demo",
-  "environmentId": "env_game_demo_prod",
+  "environmentId": "game_demo_prod",
   "name": "android-client",
   "keyType": "client",
   "rateLimit": {
@@ -129,11 +129,11 @@ DELETE /api/keys/{keyId}
 }
 ```
 
-> `environmentId` 是环境的内部标识符（如 `env_game_demo_prod`），不是逻辑名称（如 `prod`）；创建环境时自动生成。
+> `environmentId` 是环境的内部标识符（如 `game_demo_prod`），不是逻辑名称（如 `prod`）；创建环境时自动生成。
 
 Key 类型：
 
-- `client`: 客户端写事件，只返回 public key。
+- `client`: 客户端写事件，不参与 HMAC 签名（secret 不用于服务端调用）；建档响应仍返回 secret 字段，调用方勿下发到客户端。
 - `server`: 服务端写事件和支付校验，返回 secret 一次。
 - `admin`: 控制面或内部服务使用。
 
@@ -294,14 +294,14 @@ DELETE /api/users/{userId}/role-assignments?roleId=&gameId=&environment=
 角色（V0.2.3 种子 8 个，`roles` 表是存储位置，没有 `owner` / `risk_admin`）：
 
 - `operator`（GLOBAL，全权限）
-- `game_admin`（GAME，继承 analyst/marketing/finance/developer/viewer/qa）
-- `analyst`、`marketing`、`finance`、`developer`（GAME）
-- `viewer`、`qa`（ENVIRONMENT）
+- `game_admin`（GAME，继承 operator）
+- `analyst`、`marketing`、`finance`、`developer`（GAME，继承 game_admin）
+- `viewer`（ENVIRONMENT，继承 analyst）、`qa`（ENVIRONMENT，继承 developer）
 
 ### Audit Log
 
 ```http
-GET /api/audit-logs?gameId=&action=&from=&to=
+GET /api/audit-logs?page=&size=&sortBy=&sortDir=
 GET /api/audit-logs/user/{userId}
 GET /api/audit-logs/resource/{resourceType}/{resourceId}
 GET /api/audit-logs/action/{action}
@@ -310,10 +310,10 @@ GET /api/audit-logs/statistics
 GET /api/audit-logs/{logId}
 ```
 
-必须审计：
+必须审计（以代码实际写库为准）：
 
-- API Key 创建、轮换、禁用。
-- Tracking Plan 发布和回滚。
+- API Key 创建、禁用；清单中「API Key 轮换」对应的轮换端点不存在（当前仅 create / update-policy / delete）。
+- Tracking Plan 删除；发布 / 回滚（activate / deactivate）的审计写库未实现，当前仅删除有审计。
 - PII 策略变更。
 - 风控规则发布、禁用、阈值变更。
 - 用户授权变更。

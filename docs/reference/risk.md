@@ -4,15 +4,15 @@
 
 ## 端点列表
 
-| 方法 | 端点 | 说明 |
-|------|------|------|
-| POST | `/api/risk-rules` | 创建风控规则 |
-| GET | `/api/risk-rules` | 获取规则列表（分页，支持 gameId/status 等条件） |
-| GET | `/api/risk-rules/{id}` | 获取规则详情 |
-| PUT | `/api/risk-rules/{id}` | 更新规则 |
-| DELETE | `/api/risk-rules/{id}` | 删除规则 |
-| POST | `/api/risk-rules/{id}/enable` | 启用规则 |
-| POST | `/api/risk-rules/{id}/disable` | 停用规则 |
+| 方法 | 端点 | 说明 | 权限 |
+|------|------|------|------|
+| POST | `/api/risk-rules` | 创建风控规则 | `risk_rule:create` |
+| GET | `/api/risk-rules` | 获取规则列表（分页，支持 gameId/status 等条件） | `risk_rule:read`（带 gameId 时校验） |
+| GET | `/api/risk-rules/{id}` | 获取规则详情 | `risk_rule:read` |
+| PUT | `/api/risk-rules/{id}` | 更新规则 | `risk_rule:update` |
+| DELETE | `/api/risk-rules/{id}` | 删除规则 | `risk_rule:delete` |
+| POST | `/api/risk-rules/{id}/enable` | 启用规则 | `risk_rule:update` |
+| POST | `/api/risk-rules/{id}/disable` | 停用规则 | `risk_rule:update` |
 
 风控案例（RiskCase）没有独立的创建/删除 API——案例由风控链路自动创建。查询与处置入口：
 
@@ -103,7 +103,7 @@ Authorization: Bearer {token}
 ```json
 {
   "id": "rc_abc123",
-  "caseNumber": "CASE_20240101_0001",
+  "caseNumber": "CASE_1730000000000",
   "riskRuleId": "rule_abc123",
   "gameId": "game_abc123",
   "targetType": "user_id",
@@ -118,7 +118,7 @@ Authorization: Bearer {token}
 }
 ```
 
-`targetType` 取值 `user_id` / `device_id` / `player_id` / `ip`；`status` 为判定状态（`OPEN → REVIEW|ALERT|MARK → THROTTLE|BLOCK → RESOLVED` 分层前向，OPEN 不直达 RESOLVED）；`executionStatus` 取值 `PENDING` / `EXECUTED` / `FAILED` / `CANCELLED` / `APPEALED`。
+`targetType` 取值 `user_id` / `device_id` / `player_id` / `ip`；`status` 为判定状态（`OPEN → REVIEW|ALERT|MARK → THROTTLE|BLOCK → RESOLVED` 分层前向，OPEN 不直达 RESOLVED）；`executionStatus` 取值 `PENDING` / `EXECUTED` / `FAILED` / `CANCELLED` / `APPEALED`。`caseNumber` 由风控链路生成，格式为 `CASE_` + 毫秒时间戳（epoch millis，如 `CASE_1730000000000`）。
 
 ## 解除封禁
 

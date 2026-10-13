@@ -143,12 +143,18 @@ event_id     = 单事件唯一 ID
 - `bi/`：Superset 资源
 - `infra/`：Docker Compose、K8s、Helm、Grafana、Prometheus
 - `docs/`：架构、API、运维、重设计、路线图
+- `web/`：Vue 3 运营控制台（源码在 `web/src/`，构建产物随 release 发布）
+- `scripts/`：辅助脚本（quickstart、e2e、superset 导入、性能工具）
+- `tests/`：跨模块测试资源
+- `deploy/`：部署资源（K8s manifests、监控告警/看板、demo）
+- `deploy-rt/`：实时部署 compose 栈
+- 根文件：`Makefile`（开发任务入口）、`Dockerfile`（多阶段服务端镜像）、`docker-compose.yml`（全栈）、`docker-compose.quickstart.yml`（quickstart 栈）、`pnpm-workspace.yaml`（web/docs 工作区）
 
 ## Quick Start
 
 ### 演示站点
 
-演示站点 https://oddsmaker.cuihairu.site/ ｜ 演示账号 `demo` / `EBluYQvTaeN78p`（体验用，数据定期重置）
+演示站点 https://oddsmaker.cuihairu.site/ ｜ 演示账号 `demo`（体验用，数据定期重置）。演示环境的密码在部署时设置（见 `deploy/demo/`），可能轮换，并非随仓库分发的固定凭证。
 
 > 演示站点仅供体验：数据会被定期重置，勿存放真实业务数据；演示账号为只读 VIEWER 角色。
 > 私有部署请走下方 Docker Compose 路径。
@@ -204,7 +210,7 @@ docker run -d --name oddsmaker-gateway \
 docker build -t ghcr.io/cuihairu/oddsmaker:local .
 ```
 
-镜像 tag 口径：CI 每日/每次 main 推送推 `:nightly`（nightly-build.yml），发版时推 `:<version>` 与 `:latest`（release.yaml）。
+镜像 tag 口径：CI 每日/每次 main 推送推 `:nightly`（nightly-build.yml），发版时推 `:<version>`、`:<major.minor>`、`:<major>` 与 `:latest`（release.yaml）。
 
 ### Nightly 构建产物
 

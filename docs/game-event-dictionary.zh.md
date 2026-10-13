@@ -95,7 +95,7 @@ ClickHouse `events` 表对应列：`event_version`（DEFAULT 1）、`source`/`tr
 
 ## 8. 当前仓库落点
 
-- SDK helper：`sdks/web/src/index.ts`（client 端）；服务端结算事件走 `sdks/server`（自动声明 `source=server`、`event_origin=server-java/{VERSION}`）
+- SDK helper：`sdks/web/src/index.ts` 目前仅实验相关 helper（`hash32`/`assignVariant`/`fetchExperiments`/targeting 系列），游戏事件 helper 待补；服务端结算事件走 `sdks/server`（自动声明 `source=server`、`event_origin=server-java/{VERSION}`）
 - 原始事件 schema：`schema/avro/oddsmaker-event.avsc`, `schema/json/oddsmaker-event-schema.json`, `services/gateway-service/src/main/resources/schemas/oddsmaker-event-schema.json`
 - 游戏主题视图：`schema/sql/clickhouse/schema_game_analytics.sql`
 

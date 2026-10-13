@@ -118,7 +118,16 @@ export default withMermaid(defineConfig({
             }
           ],
           // 重设计系列（01~07）挂系列侧边栏，03 参考取舍由此进入导航
-          '/zh/redesign/': redesignSidebar
+          '/zh/redesign/': redesignSidebar,
+          // 审计表（docs 根中文页）
+          '/审计-文档一致性': [
+            {
+              text: '审计',
+              items: [
+                { text: '文档一致性审计', link: '/审计-文档一致性' }
+              ]
+            }
+          ]
         },
         editLink: {
           pattern: 'https://github.com/cuihairu/oddsmaker/edit/main/docs/:path',

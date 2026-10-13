@@ -169,11 +169,8 @@ game_demo_staging
 
 但当前契约仍不完整：
 
-- JSON Schema 只显式支持 `revenue_amount` / `revenue_currency`，缺少资源字段。
-- Avro Schema 缺少资源字段。
 - Web / Android / iOS SDK 只有通用 `track()` 和部分 `revenue()`，缺少资源事件便捷 API。
-- ClickHouse 字段命名仍偏 `virtual_currency` / `virtual_amount`，不能完整覆盖 item、energy、material 等资源。
-- 缺少 `server_id` 字段。
+- ClickHouse 已有 `resource_id` / `resource_amount` 通用列与 `virtual_currency` / `virtual_amount` 并存，view 层 `v_economy_flows` 已 `coalesce(resource_id, virtual_currency, props.currency_code)` 归一；仍缺 `resource_type` / `sequence` / `balance_after`。
 
 建议后续把资源字段升级为通用命名：
 

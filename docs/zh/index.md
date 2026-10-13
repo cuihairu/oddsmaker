@@ -33,7 +33,7 @@ features:
   - icon:
       src: /icons/ml.svg
     title: 预测模型
-    details: 流失预测、作弊检测、LTV 预测
+    details: 流失预测、LTV 预测；作弊风控为实时规则与封禁（非预测模型）
   - icon:
       src: /icons/security.svg
     title: 企业安全

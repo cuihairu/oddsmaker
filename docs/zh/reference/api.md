@@ -13,7 +13,7 @@
 
 - 请求体解压后默认 ≤ 1MB。
 - 单事件序列化后默认 ≤ 64KB。
-- 单次 batch 默认 ≤ 500 条。
+- 无条数上限，受 1MB 请求体与 64KB 单事件字节上限约束。
 - 具体限制由控制面的 API Key 策略下发。
 
 ## 事件字段
@@ -25,7 +25,7 @@
 - `environment`: `dev`、`staging` 或 `prod`。
 - `event_name`: 建议 `category:subject:action`。
 - `device_id`
-- `ts_client`: epoch 毫秒、epoch 微秒或 ISO8601。
+- `ts_client`: epoch 毫秒或 ISO8601。
 
 `event_type` 不是必填：缺省时网关按事件名关键词推断（risk/experiment/ad/progression/session/error/resource/user/design），都匹配不上归为 `business`；显式声明时优先采信。
 
@@ -121,7 +121,7 @@ NDJSON：
 
 - `event_id` 应在 `game_id + environment` 内唯一。
 - Gateway 在 schema 校验通过后占用幂等位：同一 `event_id` 的 SDK 重试静默吸收（计 `duplicates`，仍回 `accepted`，不重复发布、不进 DLQ）。
-- Flink enrich/dedup 按 `game_id + environment + event_id` 去重。
+- Flink enrich/dedup 按 `event_id` 去重（7 天 TTL）。
 
 ## 校验与治理
 

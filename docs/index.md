@@ -37,7 +37,7 @@ features:
   - icon:
       src: /icons/security.svg
     title: Enterprise Security
-    details: MFA, RBAC with 8 roles, and audit logging on control-plane writes
+    details: RBAC with 8 roles, and audit logging on control-plane writes
 ---
 
 ## Quick Start
@@ -83,7 +83,7 @@ graph TB
 Manage multiple games with isolated environments, API keys, and configurations.
 
 ### Real-time Processing
-Event pipeline built on Kafka + Flink + ClickHouse (design target 10k–50k events/s per node, see operations/perf-tuning).
+Event pipeline built on Kafka + Flink + ClickHouse (design target 10k–50k events/s per node, see /zh/operations/perf-tuning).
 
 ### Risk Control
 Detect and prevent cheating, payment fraud, and other suspicious activities.
@@ -98,7 +98,7 @@ Analyze experiment results with conversion rates, statistical significance testi
 - **Payment Propensity** - Score likelihood of a player making a purchase
 
 ### Enterprise Security
-MFA (two-factor), RBAC with 8 roles and global/game/environment scopes, and full audit logging.
+MFA policy fields exist but login integration is not yet wired (see the [operations security checklist](/operations/#security-checklist)); RBAC with 8 roles and global/game/environment scopes, and full audit logging.
 
 ## Documentation
 

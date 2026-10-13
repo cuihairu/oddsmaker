@@ -18,10 +18,19 @@
 | PUT | `/api/ml-models/training/{trainingId}/progress` | 回写训练进度 |
 | POST | `/api/ml-models/training/{trainingId}/complete` | 标记训练完成 |
 | POST | `/api/ml-models/training/{trainingId}/fail` | 标记训练失败 |
+| POST | `/api/ml-models/training/{trainingId}/cancel` | 取消训练任务 |
+| GET | `/api/ml-models/training/{trainingId}` | 获取训练任务详情 |
+| GET | `/api/ml-models/{id}/training` | 模型训练历史 |
 | POST | `/api/ml-models/{id}/deploy` | 部署模型 |
 | POST | `/api/ml-models/predictions` | 记录一条预测 |
+| POST | `/api/ml-models/predictions/{predictionId}/complete` | 标记预测完成 |
+| POST | `/api/ml-models/predictions/{predictionId}/fail` | 标记预测失败 |
+| POST | `/api/ml-models/predictions/{predictionId}/feedback` | 添加预测反馈 |
+| GET | `/api/ml-models/predictions/{predictionId}` | 获取单条预测记录 |
 | GET | `/api/ml-models/{id}/predictions` | 预测历史 |
+| GET | `/api/ml-models/{id}/predictions/range` | 按时间范围查预测 |
 | GET | `/api/ml-models/{id}/stats` | 模型统计 |
+| GET | `/api/ml-models/stats/global` | 全局 ML 统计 |
 | GET | `/api/ml-models/{id}/drift` | 漂移检测报告 |
 
 没有 `GET /api/ml-models`（无全量列表）、`/{id}/train`、`/{id}/predict` 这三个端点——训练任务走 `/training` 子资源，打分走 `/api/prediction-metrics` 批量链路。
@@ -43,7 +52,7 @@ Authorization: Bearer {token}
 
 {
   "gameId": "game_abc123",
-  "name": "Churn Prediction Model",
+  "modelName": "Churn Prediction Model",
   "type": "CLASSIFICATION",
   "framework": "scikit-learn",
   "description": "预测玩家流失概率"
@@ -55,7 +64,7 @@ Authorization: Bearer {token}
 {
   "id": "ml_abc123",
   "gameId": "game_abc123",
-  "name": "Churn Prediction Model",
+  "modelName": "Churn Prediction Model",
   "type": "CLASSIFICATION",
   "status": "DRAFT",
   "version": 1,
@@ -65,7 +74,7 @@ Authorization: Bearer {token}
 
 ## 训练
 
-两条路径：手动（`POST /api/ml-models/{id}/training` 建任务，`POST /api/ml-models/training/{trainingId}/start` 启动）和定时（`MlRetrainScheduler` 每日 04:20 自动重训，开关默认关闭，`oddsmaker.ml.retrain.*` 可配）。数据源优先 ClickHouse 真实数据，不可用时按 `allow-synthetic` 开关回落合成数据。产物（feature_names + coefficients + intercept 的 JSON）经 `POST /api/ml-artifacts` 注册，校验通过后打分链路优先模型分（`path=model`），缺失或不匹配时回落启发式（`path=heuristic`）。
+两条路径：手动（`POST /api/ml-models/{id}/training` 建任务，`POST /api/ml-models/training/{trainingId}/start` 启动）和定时（`MlRetrainScheduler` 每日 04:20 自动重训，开关默认关闭，`oddsmaker.ml.retrain.*` 可配）。数据源优先 ClickHouse 真实数据，不可用时按 `allow-synthetic` 开关回落合成数据。产物（feature_names + coefficients + intercept 的 JSON）经 `POST /api/ml-artifacts` 注册，校验通过后打分链路优先模型分（`path=model`），缺失或不匹配时回落启发式（`path=heuristic`）。已注册产物可查：`GET /api/ml-artifacts/game/{gameId}` 列已注册版本（可选 `modelType` 过滤），`GET /api/ml-artifacts/game/{gameId}/active` 取该类型当前生效版本（未注册返回 404）。
 
 ## 打分与预测
 

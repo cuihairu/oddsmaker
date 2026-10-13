@@ -327,7 +327,7 @@ We apologize for any inconvenience.
 ### Monitoring
 - Grafana: https://grafana.oddsmaker.local
 - Prometheus: https://prometheus.oddsmaker.local
-- Kibana: https://kibana.oddsmaker.local
+- Logs: OTel collector → Grafana (no Elasticsearch/Kibana stack in this repo)
 
 ### Communication
 - Slack: #oddsmaker-incidents
@@ -335,9 +335,9 @@ We apologize for any inconvenience.
 - Status Page: https://status.oddsmaker.local
 
 ### Documentation
-- Architecture: docs/reference/architecture.md
-- API Reference: docs/reference/api-reference.md
-- Runbooks: docs/operations/
+- Architecture: /zh/reference/architecture
+- API Reference: /reference/
+- Runbooks: /operations/
 
 ## Contacts
 

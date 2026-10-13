@@ -10,11 +10,11 @@
 组件建议
 - 网关（Spring Boot WebFlux）
   - CPU：每 4 核可支撑 5–15k/s（取决于 gzip、JSON、HMAC）；内存 2–4 GB
-  - 关键参数：`reactor.netty.http.server.accessLogEnabled`、连接池、请求大小限制（已内置）
-  - 反压策略：队列深度超过阈值返回 429；限速（每 Key、每 IP）按控制面策略动态
+  - 关键参数：连接池、请求大小限制（已内置）；如需访问日志可在启动参数追加 `--reactor.netty.http.server.accessLogEnabled=true`（本仓默认未配置）
+  - 429 仅由 rpm/ipRpm 限流触发（RateLimitFilter，按 API Key 与客户端 IP）；网关无内部队列背压；限速（每 Key、每 IP）按控制面策略动态
   - 监控：P95/P99 响应时延、2xx/4xx/5xx、429 率、入站字节、Kafka 生产失败率
 - Kafka（KRaft 或 ZK）
-  - 分区：`events_raw` ≥ 48；`events_enriched` 同步或更少；`deadletter` 低吞吐
+  - 分区：`oddsmaker.events_raw` ≥ 48；`oddsmaker.risk_events`/`oddsmaker.identity_events` 低吞吐；`oddsmaker.deadletter` 低吞吐（仓内实际创建以上四个 topic，见根 docker-compose.yml；`events_enriched` 未落地，仅出现在 SessionsJob 注释中）
   - 保留：`events_raw` 24–72h；DLQ 7–30 天；目标是可回放与排障
   - 生产者：acks=all、linger.ms=5–20、batch.size 64–256KB、压缩 `lz4`/`zstd`
   - 监控：ISR、UnderReplicated、请求延迟、Broker 磁盘、Topic Lag（按消费者组）
@@ -27,7 +27,7 @@
   - 表：MergeTree；分区（game_id, environment, 月）；OrderBy（game/environment, user/device, ts, name, id）
   - 资源：专用节点，内存 64–128 GB；快速 SSD；后台合并与压缩要监控
   - 写入：批量 1–10K 行；`max_insert_block_size`、`max_partitions_per_insert_block` 合理配置；控制作业对 CH 的并发
-  - TTL：原始 30–90 天；聚合长保留；冷热分层（S3/HDFS）可选
+  - TTL：原始 events 表当前 TTL 365 天；如需更短保留期需改 schema 或经控制面 retention 策略；聚合长保留；冷热分层（S3/HDFS）可选
   - 监控：Insert 失败/重试、Parts 数量、Merge 队列、查询延迟/错误、磁盘空间/IOPS
 - Superset/Metabase
   - 只读连接；权限按游戏与环境隔离；缓存策略与慢查询超时配置
@@ -36,12 +36,12 @@
 
 可观测性与告警
 - 指标来源：OpenTelemetry（网关/作业/控制面）→ OTel Collector → Prometheus（或远程存储）
-- 核心告警（示例阈值）
-  - 网关 `HTTP 5xx` > 1%（5m）
-  - 网关 `429` > 5%（5m）（配合看 Key/IP；可能是限速/流量峰值）
-  - Kafka `Consumer Lag` 持续上升（> 10k 消息/分区）
-  - Flink `Checkpoint Failed` 连续 3 次；或 `Duration` > 2 x Interval
-  - ClickHouse `Insert Error` > 0；`Merge backlog` 超阈值；`Disk Used` > 80%
+- 核心告警（以下为示例阈值，仓内告警规则以 deploy/monitoring/alerts/oddsmaker-alerts.yml 为准，当前覆盖 control-service/database/cache/messaging/stream-processing 五组）
+  - 控制面 `HTTP 5xx` 比例 > 5%（5m 窗口、持续 2m）——即仓内 `HighErrorRate` 规则，仅覆盖 control-service（网关无同类告警）
+  - 网关 `429` > 5%（5m）（配合看 Key/IP；可能是限速/流量峰值）【示例，仓内未配置】
+  - Kafka `Consumer Lag` 持续上升（> 10k 消息/分区）【示例；仓内为 `KafkaHighConsumerLag`（lag > 10000，持续 5m）】
+  - Flink `Checkpoint Failed` 连续 3 次；或 `Duration` > 2 x Interval【示例，仓内未配置】
+  - ClickHouse `Insert Error` > 0；`Merge backlog` 超阈值；`Disk Used` > 80%【示例，仓内未配置】
 
 回放与重算
 - 回放：定位时间窗 → 从 `events_raw` 指定 offsets 重放到专用消费组 → 作业从 Checkpoint/Savepoint 启动
@@ -59,16 +59,15 @@
   - 网关前置 WAF/限速；Kafka/CH 独立硬件或专用节点；Flink 使用 K8s/Nomad 管理资源与故障转移
 
 参数示例（Flink）
-- `execution.checkpointing.interval=120000`
-- `execution.checkpointing.mode=EXACTLY_ONCE`
-- `state.backend=rocksdb`
+- `execution.checkpointing.interval=30000`、`execution.checkpointing.mode=AT_LEAST_ONCE`（当前 events-enrich 作业代码内启用；120s + EXACTLY_ONCE 为生产待改造项）
+- `state.backend`：未配置（当前默认 hashmap state backend），生产化需加依赖并以 `-Dstate.backend=rocksdb` 启用
 - `restart-strategy=fixed-delay`（attempts=3, delay=10s）
 
 参数示例（Kafka Producer）
-- `acks=all`、`enable.idempotence=true`、`linger.ms=5`、`batch.size=131072`、`compression.type=zstd`
+- `acks=all`、`linger.ms=5`、`batch.size=65536`（网关 AvroPublisher 当前实配）；`enable.idempotence`、`compression.type` 未启用，生产化可考虑开启
 
 参数示例（ClickHouse JDBC）
-- 批量提交：1000–5000；重试 3；连接池 10–50；
+- 批量提交：1000–2000；重试 3（Flink JDBC Sink，无连接池配置）；
 
 故障排查速查（Runbook）
 - 入口大量 429：看 Key/IP 流量；动态下调策略或临时豁免；确认下游（Kafka/作业）是否拥塞

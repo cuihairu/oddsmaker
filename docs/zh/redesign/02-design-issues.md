@@ -52,6 +52,8 @@
 
 ## P0-4 风控缺失为一等链路
 
+> **现状更新（2026-10）**：该问题已在后续批次闭合（风控六层链路与状态机已上线：risk_events/risk_scores/risk_actions、Decision-first 状态机、BLOCK 信任门）；保留为当时评估。
+
 当前只有限流、PII 和“异常检测”概念，没有完整的风控处置链路。
 
 必须补齐：
@@ -90,6 +92,8 @@
 - 所有计算按 `game_id + environment` 分组。
 
 ## P1-7 Identity Merge 缺失
+
+> **现状更新（2026-10）**：已交付（V0.3.2 起）——显式 Identity Merge 已上线（secondary 并入 primary，墓碑化 + 审计）；保留为当时评估。
 
 游戏典型身份链路是：设备游客 → 平台账号 → 游戏角色 → 区服角色。
 

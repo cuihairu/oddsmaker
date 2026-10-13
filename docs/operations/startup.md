@@ -35,7 +35,7 @@ podman compose up -d --build          # 首次要构建 control/gateway 镜像�
 ```bash
 for p in 28080 28085; do curl -s http://127.0.0.1:$p/actuator/health; done
 # 双双返回 {"status":"UP"} 即成功
-podman ps --format '{{.Names}}\t{{.Status}}' | grep oddsmaker   # 期望 14 个 Up
+podman ps --format '{{.Names}}\t{{.Status}}' | grep oddsmaker   # 期望 15 个 Up
 ```
 
 ## 3. 访问地址（按本机实测 IP）
@@ -59,19 +59,20 @@ podman compose down                           # 整栈下线（数据卷保留�
 
 ## 已知问题（本次首跑修复记录）
 
-根 compose 这条链**此前从未被完整跑通**，逐层剥了四颗雷，全部已修入 main：
+根 compose 这条链**此前从未被完整跑通**，逐层剥了四颗雷，全部已修入 main
+（上游提交，本仓浅克隆不可校验 hash）：
 
 1. **`V0.9.8` 权限种子非幂等**：`game.read/user.read/audit.read/system.read` 四 code 在
    `V0.2.3` 已落库（`perm_*` 样式 id），裸 INSERT 撞 `permissions_code_key`。
    修复：迁移前置换 id（`session_replication_role` 临时降 FK）并同步 `role_permissions`
-   绑定，INSERT 清单剔除四行，绑定段加 `ON CONFLICT DO NOTHING`。（`b64f0b6`）
+   绑定，INSERT 清单剔除四行，绑定段加 `ON CONFLICT DO NOTHING`。
 2. **`V0.9.11` 改 varchar 撞视图**：`v_user_permissions` 的 `_RETURN` 规则依赖 `users.id`。
-   修复：迁移内 `pg_get_viewdef` 存临时表 → `DROP VIEW` → 12 条 `ALTER` → 重建。（`42ed36e`）
+   修复：迁移内 `pg_get_viewdef` 存临时表 → `DROP VIEW` → 12 条 `ALTER` → 重建。
 3. **`ClickHouseClient` 双构造器**：生产构造器（`@Value` 三参）与测试构造器（`JdbcTemplate`）
-   并存且无 `@Autowired`，Spring 找无参构造失败。修复：标注生产构造器。（`f30db0f`）
+   并存且无 `@Autowired`，Spring 找无参构造失败。修复：标注生产构造器。
 4. **`WebhookService.asyncExecutor` 注入歧义**：Boot 同时注册 `applicationTaskExecutor` 与
    `taskScheduler`，`Executor` 类型二义（`required=false` 只容忍缺失不容忍歧义）。
-   修复：`@Qualifier("applicationTaskExecutor")`。（`1f0970e`）
+   修复：`@Qualifier("applicationTaskExecutor")`。
 
 ### Makefile 分体模式的坑
 

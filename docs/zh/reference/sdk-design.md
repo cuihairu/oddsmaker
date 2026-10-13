@@ -23,11 +23,11 @@
 - 前后台切换与闲置间隔（默认 30 分钟）自动生成 `session_id`。
 
 治理
-- 本地 PII 白名单与掩码；`props` 深度≤3，整体≤64KB。
+- PII 治理在网关执行，SDK 不做本地掩码；`props` 深度≤3（Android/Unity/iOS 强制截断，Web 端未强制）；整体≤64KB 为网关侧单事件上限，SDK 本地不校验。
 - 内部诊断指标与丢弃原因统计，debug 开关。
 
 用户标识与分流键（统一策略）
-- SDK 统一使用 `userKey = user_id ?? device_id` 作为分流/会话/聚合的主键；当 `user_id` 为空时回退到 `device_id`。
+- 分流 key 由接入方显式传入，SDK 内部不做 `user_id`/`device_id` 推导。
 - 实验分流哈希采用 FNV-1a 32-bit，输入为 `"<expId>:<salt>:<userKey>"`，权重为非负整数；跨端（Web/Android/iOS/Unity）保持一致性。
 - 设备标识默认生成策略：Web `localStorage` 持久化随机 ID；Android 使用随机 UUID；iOS 基于 `identifierForVendor` 的派生（如不可用则随机）。
 

@@ -119,7 +119,7 @@ kubectl exec -it <postgres-pod> -n oddsmaker -- psql -U oddsmaker -d oddsmaker \
 # Increase connection limit
 kubectl exec -it <postgres-pod> -n oddsmaker -- psql -U oddsmaker -d oddsmaker \
   -c "ALTER SYSTEM SET max_connections = 200;"
-kubectl rollout restart statefulset/oddsmaker-postgres -n oddsmaker
+kubectl rollout restart deployment/oddsmaker-postgres -n oddsmaker
 ```
 
 ### 3. High Latency
@@ -158,11 +158,11 @@ kubectl exec -it <app-pod> -n oddsmaker -- ping oddsmaker-postgres
 
 **Example Fix:**
 ```sql
--- Add index for slow query
-CREATE INDEX CONCURRENTLY idx_events_game_time ON events(game_id, created_at);
+-- ClickHouse: events has event_date / ts_server (no created_at); add a skip index instead
+ALTER TABLE events ADD INDEX idx_game_eventdate (game_id, event_date) TYPE set(100) GRANULARITY 4;
 
 -- Analyze query
-EXPLAIN ANALYZE SELECT * FROM events WHERE game_id = 'xxx' AND created_at > '2024-01-01';
+EXPLAIN SELECT * FROM events WHERE game_id = 'xxx' AND event_date >= today() - 30;
 ```
 
 ### 4. Memory Issues
@@ -314,9 +314,9 @@ kubectl logs -l app=kafka -n oddsmaker --tail=100
 kubectl exec -it <kafka-pod> -n oddsmaker -- kafka-consumer-groups.sh \
   --bootstrap-server localhost:9092 --describe --group oddsmaker-control
 
-# Check topic status
+# Check topic status (oddsmaker.events_raw / oddsmaker.risk_events / oddsmaker.identity_events / oddsmaker.deadletter)
 kubectl exec -it <kafka-pod> -n oddsmaker -- kafka-topics.sh \
-  --bootstrap-server localhost:9092 --describe --topic oddsmaker.events
+  --bootstrap-server kafka:9092 --describe --topic oddsmaker.events_raw
 ```
 
 **Common Causes and Solutions:**
@@ -335,8 +335,8 @@ kubectl scale deployment oddsmaker-control -n oddsmaker --replicas=5
 
 # Reset consumer offset
 kubectl exec -it <kafka-pod> -n oddsmaker -- kafka-consumer-groups.sh \
-  --bootstrap-server localhost:9092 --group oddsmaker-control \
-  --topic oddsmaker.events --reset-offsets --to-latest --execute
+  --bootstrap-server kafka:9092 --group oddsmaker-control \
+  --topic oddsmaker.events_raw --reset-offsets --to-latest --execute
 ```
 
 ## Performance Tuning

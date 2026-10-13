@@ -76,7 +76,7 @@ Authorization: Bearer {token}
 
 环境级配置有启用状态、采样开关、采样率（经 Control 内部接口下发，网关对非 active 环境返回 503 `environment_unavailable`，采样按 device_id 确定性分桶，同设备事件同进同出）。
 
-Key 级配置挂在 API Key 上，与 Key 所属环境绑定：PII 策略、props 白名单、限流（`rpm`/`ipRpm`）。数据保留由 ClickHouse TTL 与存储 profile 决定，不是环境字段。
+Key 级配置挂在 API Key 上，与 Key 所属环境绑定：PII 策略、props 白名单、限流（`rpm`/`ipRpm`）。数据保留由环境级 `dataRetentionDays` 决定：`RetentionEnforcementService` 按 `env.dataRetentionDays ?? game.dataRetentionDays ?? 默认值` 取值，并落到 ClickHouse TTL。
 
 ## 推荐环境
 

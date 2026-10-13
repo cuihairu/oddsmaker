@@ -4,11 +4,14 @@ Welcome to the Oddsmaker API Reference. This section provides detailed documenta
 
 ## Base URL
 
-```
-http://localhost:8085/api
-```
+Two services expose HTTP APIs:
 
-For production deployments, replace with your actual domain.
+| Service | Base URL |
+|------|----------|
+| Control plane | `http://localhost:8085/api` |
+| Gateway (event ingestion) | `http://localhost:8080/v1` |
+
+For production deployments, replace with your actual domains.
 
 ## Authentication
 
@@ -17,7 +20,7 @@ Three credentials exist, each with its own scope:
 | Credential | Where it goes | Used by |
 |------|------|----------|
 | Session token (from login) | `Authorization: Bearer <token>` | Control API calls from the console |
-| Admin token (`x-admin-token`) | `x-admin-token: <token>` | Bootstrap/admin-only endpoints (e.g. user creation, key issuance) |
+| Admin token (`x-admin-token`) | `x-admin-token: <token>` | Fallback credential for any `/api/*` endpoint when no Bearer token is present (grants `ROLE_ADMIN`; `/api/config/` and `/api/auth/` are exempt) |
 | API key | `x-api-key: <key>` | Event ingest on the gateway (`/v1/batch`); server keys additionally sign the body with HMAC `x-signature` |
 
 See [Authentication](./authentication) for the login flow, role model, and HMAC request signing.
@@ -43,24 +46,32 @@ See [Authentication](./authentication) for the login flow, role model, and HMAC 
 
 ## Response Formats
 
-Control-service responses use one envelope:
+Control-service responses use two shapes:
+
+Envelope endpoints (most control-service routes, via `ApiResponse`) return:
 
 ```json
 {
   "code": 200,
   "message": "success",
   "data": {},
-  "timestamp": "2026-10-04T12:00:00Z",
-  "traceId": "…",
-  "pageInfo": { "total": 100, "page": 0, "size": 20, "totalPages": 5 }
+  "timestamp": "2026-10-04 12:00:00"
 }
+```
+
+`timestamp` is formatted `yyyy-MM-dd HH:mm:ss`; `traceId` is a reserved field that is never currently populated, so it never appears in responses (null fields are excluded from serialization).
+
+List endpoints skip the envelope entirely and return a flat top-level object instead:
+
+```json
+{ "items": [], "total": 100 }
 ```
 
 Error paths fill `code` with the HTTP status (e.g. `403`) and `message` with the reason. Gateway responses are flat instead: auth failures return `{"error": "<reason>"}`, rate limiting returns `{"code": "too_many_requests", "message": "rate limited", "request_id": "…"}` with `Retry-After: 60`, and batch ingest returns `{accepted, rejected, sampled_out, duplicates, next_hint_ms}`.
 
 ## Pagination
 
-List endpoints take `page` / `size` (0-based page) and return the count in `pageInfo`:
+List endpoints take `page` / `size` (0-based page) and return `{items, total}` — the count is the top-level `total`; there is no `pageInfo`:
 
 ```bash
 GET /api/games?page=0&size=20

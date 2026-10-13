@@ -24,6 +24,6 @@ BI 仪表盘
 - Superset UI 导入 zip 包（见 bi/superset/IMPORT.zh.md）
 
 常见问题
-- gradlew 不存在：使用本机 `gradle` 命令或运行 `gradle wrapper` 生成 wrapper
+- gradlew 已随仓库提供，直接 `./gradlew` 即可（无需本机安装 Gradle）
 - Flink CLI 不存在：请安装 Apache Flink 并将 `flink` 加入 PATH
 - ClickHouse 连接失败：在 Linux 环境改用容器名 `clickhouse` 而不是 `host.docker.internal`

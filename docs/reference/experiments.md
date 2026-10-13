@@ -23,9 +23,10 @@ A/B 测试分析 API，用于分析实验数据和转化率。
 
 | 状态 | 说明 |
 |------|------|
-| `draft` | 草稿 |
-| `running` | 运行中 |
-| `paused` | 已暂停 |
+| `DRAFT` | 草稿 |
+| `LIVE` | 运行中 |
+| `PAUSED` | 已暂停 |
+| `ENDED` | 已结束 |
 
 ## 创建实验
 
@@ -63,7 +64,7 @@ Authorization: Bearer {token}
   "gameId": "game_abc123",
   "environment": "prod",
   "name": "Homepage Banner Test",
-  "status": "draft",
+  "status": "DRAFT",
   "salt": "unique_salt",
   "config": {...},
   "createdAt": "2024-01-01T00:00:00Z"
@@ -108,8 +109,9 @@ const experiments = await fetch('/api/config/game_abc123/prod');
 // 分流（hash32 = FNV-1a 32 位变体，四端 SDK 与服务端 ExperimentSplitter 同款算法；
 // 锚定向量：hash32("a")=0xe40c292c、hash32("foobar")=0xbf9cf968）
 function assignVariant(experiment, userId) {
+  const totalWeight = experiment.config.variants.reduce((sum, v) => sum + v.weight, 0);
   const hash = hash32(experiment.id + ':' + experiment.salt + ':' + userId) >>> 0;
-  const bucket = hash % 100;
+  const bucket = hash % totalWeight;
   let acc = 0;
   for (const variant of experiment.config.variants) {
     acc += variant.weight;

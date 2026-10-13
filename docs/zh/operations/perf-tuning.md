@@ -29,7 +29,7 @@ Kafka Producer（Avro）
 - 选择固定到达率模型（k6 constant-arrival-rate）更接近真实流量
 - 组合维度：RATE（200/400/800 it/s） x BATCH（20/50/100）
 - 观察 P95/P99、429 率、Kafka 发送速率/错误、Flink Lag（若联动下游）
-- 通过 `scripts/perf-matrix.sh` 与 `scripts/perf-report.py` 采集与生成 CSV 报表
+- 通过 `scripts/perf-matrix.sh` 与 `scripts/perf-report.py` 采集与生成 CSV 报表（k6 跑在容器里，localhost 指向容器自身：`ENDPOINT=http://host.docker.internal:8080 bash scripts/perf-matrix.sh`）
 
 ClickHouse 查询侧（建议）
 - 导入基础 Schema：`schema/sql/clickhouse/schema.sql`
@@ -48,33 +48,33 @@ ClickHouse 查询侧（建议）
 - fast 视图（基于预聚合 MV 的 `*_fast`）
   - 适用：仪表盘默认数据源；中长时间窗（7–90 天）总体/无维度趋势与转化率查询。
   - 优点：只扫预聚合表，查询更稳定；可承载大体量数据。
-- daily（日级 MV 表，例如 `exp_exposures_by_day`/`exp_conv_24h_by_day`）
+- daily（日级 MV 表，例如 `exp_daily_exposures`/`exp_daily_conv_24h`/`exp_daily_conv_7d`）
   - 适用：需要按日粒度做趋势、同比/环比的分析（不下钻维度）。
   - 用法示例：
     ```sql
     -- 近 30 天曝光与 24h 转化率（无维度）
-    SELECT day, exposures, conv_24h, if(exposures>0, conv_24h/exposures, 0) AS cr_24h
-    FROM exp_conv_24h_by_day
-    WHERE day >= today()-30 AND game_id='game_demo' AND environment='production' AND exp_id='exp_foo'
-    ORDER BY day;
+    SELECT exposure_date, variant, exposed_users, converted_users, cr_24h
+    FROM exp_daily_conv_24h
+    WHERE exposure_date >= today()-30 AND game_id='game_demo' AND environment='production' AND exp='exp_foo'
+    ORDER BY exposure_date;
     ```
-- daily-dim（日级带维度 MV 表，例如 `exp_exposures_by_day_dim`/`exp_conv_24h_by_day_dim`）
+- daily-dim（日级带维度 MV 表，例如 `exp_daily_exposures_dim`/`exp_daily_conv_24h_dim`/`exp_daily_conv_7d_dim`）
   - 适用：需要按平台/国家/版本做分组与 Top-N 下钻的趋势与对比。
   - 用法示例：
     ```sql
     -- 近 14 天按国家 Top 10 的 24h 转化率
-    SELECT day, country, exposures, conv_24h, round(if(exposures>0, conv_24h/exposures, 0), 4) AS cr_24h
-    FROM exp_conv_24h_by_day_dim
-    WHERE day >= today()-14 AND game_id='game_demo' AND environment='production' AND exp_id='exp_foo'
+    SELECT exposure_date, country, exposed_users, converted_users, cr_24h
+    FROM exp_daily_conv_24h_dim
+    WHERE exposure_date >= today()-14 AND game_id='game_demo' AND environment='production' AND exp='exp_foo'
       AND country IN (
         SELECT country FROM (
           SELECT country, sum(exposures) AS exps
-          FROM exp_exposures_by_day_dim
-          WHERE day >= today()-14 AND game_id='game_demo' AND environment='production' AND exp_id='exp_foo'
+          FROM exp_daily_exposures_dim
+          WHERE event_date >= today()-14 AND game_id='game_demo' AND environment='production' AND exp='exp_foo'
           GROUP BY country ORDER BY exps DESC LIMIT 10
         )
       )
-    ORDER BY country, day;
+    ORDER BY country, exposure_date;
     ```
 实践建议
 - 仪表盘优先使用 `*_fast` 或 daily/daily-dim；只在必要时回落到 raw。
@@ -82,7 +82,7 @@ ClickHouse 查询侧（建议）
 
 分区与 TTL 建议（ClickHouse）
 - 分区：
-  - 原始事件与曝光用户表按 `(game_id, environment, toYYYYMM(ts))` 分区；
+  - 原始事件表按 `(game_id, environment, toYYYYMM(event_date))` 分区，曝光用户表按 `(game_id, environment, toYYYYMM(expose_ts))` 分区；
   - 日级表按 `(game_id, environment, toYYYYMM(day))` 分区（如 `event_date` / `exposure_date`）。
 - TTL：可按 400 天或业务需要设置，例如：
   - `TTL event_date + INTERVAL 400 DAY DELETE`（曝光日表）

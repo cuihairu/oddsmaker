@@ -1,6 +1,6 @@
 # B10 设计定稿：数据质量指标与共享 Feature 双写
 
-本文是 B10 批次的设计定稿，契约来自计划书 §5.3 与 B10 行（`06-od2-restructure-plan`）：Data Quality 五指标 + Game Data Health 页方向，共享 Feature 双写 schema，不做 Data Lineage 系统。本批只定口径与 schema，代码与迁移留给实施批。所有信号点均读码核对，文件与行号见各节，核对基于 2026-10-07 工作副本。
+本文是 B10 批次的设计定稿，契约来自计划书 §5.3 与 B10 行（`06-od2-restructure-plan`）：Data Quality 五指标 + Game Data Health 页方向，共享 Feature 双写 schema，不做 Data Lineage 系统。本批已随 B10（8eba96c）落地（V0.9.22 迁移、DataQualityController、DataQualityReporter、DeadLetterConsumer 等）；下文行号为设计稿编号，落地后以源码为准。所有信号点均读码核对，文件与行号见各节，核对基于 2026-10-07 工作副本。
 
 ## 1 范围
 
@@ -17,10 +17,12 @@
 | 服务端时间打点 | `BatchController.java:147-148, 420-422` | `ts_server` 缺省时网关补 `Instant.now()`，SDK 提供则采信 |
 | enrich 二次去重 | `EventsEnrichJob.java:396, 417` | `DedupFunction` 判定 duplicate → deadletter（reason=`duplicate`） |
 | enrich 水位 | `EventsEnrichJob.java:66-67` | `BoundedOutOfOrderness(5min)`，无迟到 side output |
-| deadletter topic | `DlqPublisher`（`oddsmaker.deadletter`） | 全仓 grep 无任何消费者 |
+| deadletter topic | `DlqPublisher`（`oddsmaker.deadletter`） | 消费者已落（control `DeadLetterConsumer`）：duplicate→`duplicates_enrich`，9 网关原因跳过，未知→`dlq_other` |
 | Live Inspector | `EventInspectorBuffer` | 内存环形队列，200 条/作用域、TTL 10 分钟、重启即空 |
 
-指标缺失的根因不是没有信号，是信号全部走单次 HTTP 响应或进程内存，没有任何一处持久化。Inspector 是调试面不是指标源，本设计不复用它。
+指标缺失的根因不是没有信号，是信号全部走单次 HTTP 响应或进程内存，没有任何一处持久化——此缺口已由 B10 闭合：网关计数器快照 + DLQ 消费者落 `data_quality_metrics`。Inspector 仍是调试面不是指标源，本设计不复用它。
+
+> **行号说明**：本节及 §2 表内行号均基于 2026-10-07 工作副本，即 B10 落地前布局；落地后 `BatchController` 行号已漂移，以符号名为准。
 
 ## 3 五指标口径
 
@@ -62,7 +64,7 @@
 
 ## 4 落库方案
 
-### 4.1 指标表（PG control 库，实施批新迁移）
+### 4.1 指标表（PG control 库，V0.9.22 迁移已落）
 
 ```sql
 CREATE TABLE data_quality_metrics (
@@ -166,6 +168,8 @@ CREATE INDEX idx_feature_store_scope
 
 ## 7 验收对照与实施批清单
 
+> **落地注记**：右列「实施批待写代码」各项均已随 B10（8eba96c）落地（迁移、网关计数器与快照上报、`/internal/data-quality` 端点、DLQ 消费者、web 健康页、feature_store 双写）；本节保留设计稿对照关系，落地后以源码为准。
+
 todo B10 验收三条的对应关系：
 
 | 验收 | 设计落点 | 实施批待写代码 |
@@ -176,4 +180,4 @@ todo B10 验收三条的对应关系：
 
 ---
 
-信号点行号核对于 2026-10-07 工作副本（`BatchController.java`、`EventInspectorBuffer.java`、`EventsEnrichJob.java`、`RiskJob.java`、`DlqPublisher.java`）；schema 草案风格对齐 `V0.9.18__risk_features.sql`。本批未改动任何代码与迁移。
+信号点行号核对于 2026-10-07 工作副本（`BatchController.java`、`EventInspectorBuffer.java`、`EventsEnrichJob.java`、`RiskJob.java`、`DlqPublisher.java`）；schema 草案风格对齐 `V0.9.18__risk_features.sql`。本设计稿成文时未改动任何代码与迁移；实施已随 B10（8eba96c）落地，以源码为准。

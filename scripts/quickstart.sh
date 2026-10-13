@@ -4,7 +4,7 @@ ROOT_DIR=$(cd "$(dirname "$0")/.." && pwd)
 cd "$ROOT_DIR"
 
 echo "[1/5] Starting infra (Kafka, ClickHouse, Apicurio, Superset)"
-(cd infra && docker compose up -d zookeeper kafka clickhouse apicurio superset)
+(cd infra && docker compose up -d kafka clickhouse apicurio superset)
 
 echo "[2/5] Starting gateway-service"
 GRADLE_BIN="./gradlew"
@@ -32,7 +32,7 @@ echo "[4/5] Build Flink jobs (enrich, sessions)"
 $GRADLE_BIN :jobs:flink:events-enrich-job:build :jobs:flink:sessions-job:build || true
 
 echo "[5/5] Reminder: Run Flink jobs in another terminal:\n"
-echo "flink run -c io.oddsmaker.jobs.enrich.EventsEnrichJob jobs/flink/events-enrich-job/build/libs/events-enrich-job.jar -Dkafka.bootstrap=localhost:9092 -Dregistry.url=http://localhost:8081/apis/registry/v2 -Dkafka.topic=oddsmaker.events_raw -Dclickhouse.url=jdbc:clickhouse://localhost:8123/default"
-echo "flink run -c io.oddsmaker.jobs.sessions.SessionsJob jobs/flink/sessions-job/build/libs/sessions-job.jar -Dkafka.bootstrap=localhost:9092 -Dregistry.url=http://localhost:8081/apis/registry/v2 -Dkafka.topic=oddsmaker.events_raw -Dclickhouse.url=jdbc:clickhouse://localhost:8123/default\n"
+echo "flink run -c io.oddsmaker.jobs.enrich.EventsEnrichJob jobs/flink/events-enrich-job/build/libs/events-enrich-job.jar -Dkafka.bootstrap=localhost:29192 -Dregistry.url=http://localhost:29081/apis/registry/v2 -Dkafka.topic=oddsmaker.events_raw -Dclickhouse.url=jdbc:clickhouse://localhost:29123/default"
+echo "flink run -c io.oddsmaker.jobs.sessions.SessionsJob jobs/flink/sessions-job/build/libs/sessions-job.jar -Dkafka.bootstrap=localhost:29192 -Dregistry.url=http://localhost:29081/apis/registry/v2 -Dkafka.topic=oddsmaker.events_raw -Dclickhouse.url=jdbc:clickhouse://localhost:29123/default\n"
 echo "Gateway PID: $GW_PID (CTRL-C to stop)"
 wait $GW_PID || true

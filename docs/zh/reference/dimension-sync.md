@@ -121,7 +121,7 @@ Content-Type: application/x-ndjson
 
 没有独立的 `/v1/dimension` 端点——维度事件与普通事件同走 `/v1/batch`，用 `event_type=dimension` 区分，复用现有鉴权、限流、PII 治理。
 
-- `op`：`upsert`（新增/更新）或 `delete`（下架）。
+- `op`：`upsert`（新增/更新）或 `delete`（下架；当前下游忽略该语义，仍写入新行，见下文「版本处理」）。
 - `version_ts`：源头变更时间，用于 SCD2 和幂等。
 - Gateway 复用现有鉴权、限流、PII 治理能力，无需新组件。
 - 适合**愿意改造、变更频率低、要实时**的场景。
@@ -307,32 +307,37 @@ POST   /api/games/{gameId}/dimension-pulls/{id}/run  手动触发一轮拉取
 
 各 Provider 的职责是把源头数据翻译成这个格式，**后续逻辑只写一份**。
 
+> **实现现状**：`source_type` 目前仅 Pull 链路写入（`DimensionPullService` 翻译成 `RawDimensionChange(source_type=pull)`）；Agent / Webhook 通道不带该字段，四值枚举是目标抽象。
+
 ### 输出：`item_dim`（ClickHouse）
 
 ```sql
 CREATE TABLE item_dim (
+  game_id LowCardinality(String),
+  environment LowCardinality(String),
   resource_id String,
-  name String,
-  type String,
-  rarity String,
-  valid_from DateTime,
-  valid_to DateTime,           -- SCD2，null 表示当前版本
-  is_current UInt8,
-  game_id String,              -- 多游戏共享维度表时用
-  environment String
-) ENGINE = ReplacingMergeTree(is_current)
-ORDER BY (game_id, environment, resource_id, valid_from);
+  name String DEFAULT '',
+  type String DEFAULT '',
+  rarity String DEFAULT '',
+  category String DEFAULT '',
+  description String DEFAULT '',
+  version_ts DateTime64(3),
+  is_current UInt8 DEFAULT 1
+)
+ENGINE = ReplacingMergeTree(version_ts)
+PARTITION BY (game_id, environment, toYYYYMM(version_ts))
+ORDER BY (game_id, environment, resource_id);
 ```
 
-### SCD2 处理（公共逻辑）
+> **目标形态（未落地）**：SCD2 的 `valid_from` / `valid_to` 列 + `ReplacingMergeTree(is_current)` + `ORDER BY` 含 `valid_from` 的形状当前未落地——`dimensions.sql` 无 `valid_to` 列，作业恒写 `is_current = 1`。
 
-物品属性变更（如改名、调稀有度）时：
+### 版本处理（公共逻辑）
 
-- 旧版本的 `valid_to` 设为变更时间，`is_current = 0`。
-- 新版本作为新行写入，`valid_from = 变更时间`，`valid_to = null`，`is_current = 1`。
-- 历史事实记录查询时按事件时间 join 对应版本的维度，避免"穿越"。
+物品属性变更（如改名、调稀有度）时，转换层写入新行：`version_ts` 取源头变更时间，`is_current` 恒为 1；`ReplacingMergeTree(version_ts)` 保证同一 `resource_id` 最新版本胜出，旧版本自然被替换。`op=delete` 当前被下游忽略——不区分下架语义，仍按新行写入（无 delete 分支）。
 
-SCD2 逻辑放在转换层，**所有 Provider 共享**，不要散落到各 Provider 实现。
+> **目标形态（未落地）**：SCD2 语义（旧版本 `valid_to` 置变更时间 + `is_current = 0`，新版本 `valid_from` / `valid_to = null`）当前未落地——`dimensions.sql` 无 `valid_to` 列，作业恒写 `is_current = 1`。历史事实按事件时间 join 对应版本维度的"穿越"问题随之未解。
+
+版本处理逻辑放在转换层，**所有 Provider 共享**，不要散落到各 Provider 实现。
 
 ## 配置驱动（Control 面已实现，Agent 属性迁移后置）
 
@@ -454,7 +459,7 @@ Control Service 暴露每个游戏的维度同步状态：
 | | 资源事件（事实） | 维度同步（维度） |
 |---|---|---|
 | 数据来源 | SDK 玩家行为上报 | 游戏业务库 / 配置 |
-| 写入表 | `events` / `resource_changes` | `item_dim` / `level_dim` / ... |
+| 写入表 | `events` | `item_dim` / `level_dim` / ... |
 | 频率 | 高频（每玩家每秒多条） | 低频（每天少量变更） |
 | 查询角色 | 被聚合的事实 | 被 join 的维度 |
 | 同步方式 | SDK → Gateway → Kafka → ClickHouse | 本文四种方案之一 |

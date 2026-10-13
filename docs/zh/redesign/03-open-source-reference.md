@@ -40,15 +40,15 @@ Oddsmaker 不应该吸收：
 
 | 类型 | 用途 | 示例 |
 |---|---|---|
-| `session` | 会话开始、结束、心跳 | `session:start`、`session:end` |
-| `user` | 玩家属性和账号状态 | `user:login`、`user:bind_account` |
-| `business` | 真实货币收入 | `business:purchase:success` |
-| `resource` | 虚拟经济 source/sink | `resource:gold:source`、`resource:gem:sink` |
-| `progression` | 关卡、任务、新手引导 | `progression:level:complete` |
-| `design` | 自定义玩法事件 | `design:gacha:draw` |
-| `error` | 崩溃、异常、客户端错误 | `error:crash:fatal` |
-| `ad` | 广告展示、点击、激励 | `ad:rewarded:complete` |
-| `risk` | 风控信号和处置 | `risk:payment:receipt_reused` |
+| `session` | 会话开始、结束、心跳 | `session_start`、`session_end` |
+| `user` | 玩家属性和账号状态 | `user_login`、`user_bind_account` |
+| `business` | 真实货币收入 | `business_purchase_success` |
+| `resource` | 虚拟经济 source/sink | `resource_gold_source`、`resource_gem_sink` |
+| `progression` | 关卡、任务、新手引导 | `progression_level_complete` |
+| `design` | 自定义玩法事件 | `design_gacha_draw` |
+| `error` | 崩溃、异常、客户端错误 | `error_crash_fatal` |
+| `ad` | 广告展示、点击、激励 | `ad_rewarded_complete` |
+| `risk` | 风控信号和处置 | `risk_payment_receipt_reused` |
 
 ## 4. 风控参考原则
 
@@ -80,9 +80,9 @@ Oddsmaker 不应该吸收：
 | 可参考 | GameAnalytics：游戏事件 Taxonomy | 游戏原生分类是行业通用语言 | 已落地：P3 九类事件（§3 表）+ B7 EventSchema/Tracking Plan 强约束 |
 | 可参考 | Snowplow：Schema Registry / Tracking Plan / 事件治理 | 治理是分析可信的前提 | 已落地：EventSchema 一等资源化（B7：compatibility / PII policy / retention / sampling / owner + 版本发布与兼容检查） |
 | 可借鉴 | Mixpanel：Identity Merge / 画像 / 漏斗 | 主体口径统一是多端归因的前提 | 已落地：subject 回退口径（player_id → user_id → device_id）贯穿报表与风控；显式 Identity Merge（`POST /api/identities/{gameId}/merge`，secondary 并入 primary：link 重挂/冲突吊销、identity_id 反查链路、标量回填与计数归并、墓碑化 + 审计，`privacy:manage` 门禁；IdentityConsumer 对合并墓碑跳过重建保留人工决定） |
-| 可参考 | Statsig/GrowthBook：分桶 / SRM / 显著性 | 实验统计的正确性底线 | 已落地：SHA-256 确定性分桶 + z/t 检验 + 卡方 SRM（B8），Audience/Guardrail/Decision 已字段化 |
+| 可参考 | Statsig/GrowthBook：分桶 / SRM / 显著性 | 实验统计的正确性底线 | 已落地：FNV-1a 32 位确定性分桶（`ExperimentSplitter.hash32`）+ z/t 检验 + 卡方 SRM（B8），Audience/Guardrail/Decision 已字段化 |
 | 不适用 | 六家共同的 SaaS 多租户形态（Org/Project/Team、套餐与升级、跨公司 Row Policy、租户配额、组织销售层级） | 单公司部署是产品边界，隔离只围绕 `game_id + environment` | 不做（本章 §2 负面清单 + 06 计划书领域模型） |
-| 可参考 | §4 风控通用模式（Gateway 硬拦截 / Flink 状态化 / ClickHouse 回溯 / Redis 计数 / Control 规则审计） | 分层拦截 + 状态化检测 + 可审计处置是风控链路的成熟分法 | 已同构落地：Gateway 前置校验、risk-job（B5 特征层）、ClickHouse risk_events、Redis 计数器/黑名单、RiskRule/RiskCase（B6） |
+| 可参考 | §4 风控通用模式（Gateway 硬拦截 / Flink 状态化 / ClickHouse 回溯 / Redis 计数 / Control 规则审计） | 分层拦截 + 状态化检测 + 可审计处置是风控链路的成熟分法 | 已同构落地：Gateway 前置校验、risk-job（B5 特征层）、ClickHouse risk_events、黑名单经 control 内部端点 + 网关本地缓存（`BlockListClient`，TTL 15s，无 Redis 依赖）、计数器为网关进程内实现、RiskRule/RiskCase（B6） |
 
 ## 6. 架构结论
 

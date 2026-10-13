@@ -3,7 +3,8 @@
 目标：提供可配置的实验（variants/权重/目标规则），SDK 侧一致性分流与曝光事件，ClickHouse 侧快速聚合曝光/转化指标。
 
 数据模型（控制面）
-- Experiment: { id, gameId, environmentId, environment, name, status(draft|running|paused), salt, config }
+- Experiment: { id, gameId, environmentId, environment, name, status(draft|live|paused|ended), salt, config }
+- 另有 `audienceSegmentId`、`variants`、`allocationInfo`、`guardrails` 字段（ExperimentDTO.java:41-44）
 - `environmentId`：环境内部 ID（与 `environment` 二选一）
 - `environment`：环境逻辑名称，如 `dev`/`staging`/`prod`（与 `environmentId` 二选一，兼容字段）
 - config 示例：
@@ -41,8 +42,8 @@ SDK 使用示例
 ```ts
 import { fetchExperimentsCached, assignAllWithTargeting, startExperimentsAutoRefresh } from './dist/index.js';
 // 读取本地缓存（默认 5 分钟 TTL），并后台刷新
-const exps = await fetchExperimentsCached('http://localhost:8085', 'p1');
 const environment = 'prod';
+const exps = await fetchExperimentsCached('http://localhost:8085', 'p1', environment);
 const ctx = { platform: 'web', appVersion: '1.2.3', country: 'US' };
 const assignments = await assignAllWithTargeting(oddsmaker, exps, userId || deviceId, ctx);
 // 可选：自动刷新实验配置（默认每 5 分钟），刷新后回调
@@ -80,7 +81,7 @@ ClickHouse 聚合（示例）
 
 配置校验
 - 推荐参考 JSON Schema：`schema/json/experiment-config.schema.json`
-- 当前控制台与服务端已做基础校验（variants 至少 2 个、权重非负且和>0、名称唯一、targeting/metrics 类型检查）；后续可引入 JSON Schema 校验以提升提示质量。
+- 当前控制台与服务端已做基础校验（variants 至少 2 个、权重为正整数且和>0、名称唯一、targeting/metrics 类型检查）；后续可引入 JSON Schema 校验以提升提示质量。
 
 仪表（Superset）
 - 每日曝光量（按 variant）

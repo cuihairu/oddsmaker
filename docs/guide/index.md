@@ -106,7 +106,7 @@ curl -X POST http://localhost:38085/api/api-keys \
     "gameId": "GAME_ID",
     "environmentId": "ENV_ID",
     "name": "android-client",
-    "keyType": "client"
+    "keyRole": "client"
   }'
 ```
 

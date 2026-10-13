@@ -204,16 +204,18 @@ RiskRule
 
 以下事件按约定事件名上报，走同一信封，不另立 schema：
 
-- `experiment_exposure`：实验曝光。SDK 在分流命中后上报，props 携带 `exp`（实验 id）与 `variant`（变体名）。聚合为 `experiment_metric_snapshots.exposure_users`（SRM 样本量基础），经 `/api/experiments/{id}/results` 曝光列可查；SDK 接入见 `analysis/experiments`。
+- `experiment_exposure`：实验曝光。SDK 在分流命中后上报，props 携带 `exp`（实验 id）与 `variant`（变体名）。以 `metric_name='exposure_users'` 回填 `experiment_metric_snapshots` 快照行（SRM 样本量基础），经 `/api/experiments/{id}/results` 曝光列可查；SDK 接入见 `analysis/experiments`。
 
 ## 5. ClickHouse 核心表
 
-**数据库架构**：每个游戏独立数据库
+**数据库架构**：共享表（SHARED）。（**现状注记**：当前为共享表（SHARED），DEDICATED 独库仅为枚举预留、未实现——`StorageProfileEntity.IsolationStrategy` 仅是枚举，无按游戏建库的代码路径。）
 
 ```sql
--- game_demo_prod.events
+-- events
 CREATE TABLE events
 (
+    game_id LowCardinality(String),
+    environment LowCardinality(String),
     event_date Date DEFAULT toDate(ts_server),
     ts_server DateTime64(3) DEFAULT now64(3),
     ts_client DateTime64(3),
@@ -264,11 +266,11 @@ CREATE TABLE events
     props Map(String, String)
 )
 ENGINE = MergeTree
-PARTITION BY (toYYYYMM(event_date))
-ORDER BY (event_type, event_date, server_id, player_id, user_id, device_id, ts_server, event_id)
+PARTITION BY (game_id, environment, toYYYYMM(event_date))
+ORDER BY (game_id, environment, event_type, event_date, player_id, user_id, device_id, ts_server, event_id)
 TTL event_date + INTERVAL 365 DAY;
 
--- game_demo_prod.risk_events
+-- risk_events
 CREATE TABLE risk_events
 (
     ts DateTime64(3),
@@ -288,7 +290,7 @@ ENGINE = MergeTree
 PARTITION BY (toYYYYMM(ts))
 ORDER BY (risk_type, severity, ts, subject_id);
 
--- game_demo_prod.identities
+-- identities
 CREATE TABLE identities
 (
     identity_id String,
@@ -333,7 +335,7 @@ ORDER BY (identity_id);
 - `block`：Gateway 或业务服拒绝。
 - `review`：进入人工审核队列。
 - `throttle`：降低采样或限速。
-- `shadow_ban`：输出给游戏服执行影子封禁。
+- `shadow_ban`：输出给游戏服执行影子封禁。（**未实现**：`ActionType` 枚举无此值，仅设计意向。）
 
 ### 6.4 风控策略示例
 

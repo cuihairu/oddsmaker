@@ -48,7 +48,7 @@
 
 | 对象 | 标识 | 归属 | 关键不变式 | 现状 | 2.0 动作 |
 |---|---|---|---|---|---|
-| **Game** | `game_id`（小写 `[a-z0-9_]+`，≤64） | 全局唯一、创建后**不可变** | 平台上每个 game_id 恰存在一个 Game（含 SUNSET 态） | `GameEntity`（jpa 包） | 无结构性动作；补 `game_id` 校验单元测试 |
+| **Game** | `game_id`（现状落库 `VARCHAR(32)`；小写 `[a-z0-9_]+` 为设计期望，未落校验） | 全局唯一、创建后**不可变** | 平台上每个 game_id 恰存在一个 Game（含 SUNSET 态） | `GameEntity`（jpa 包） | 无结构性动作；`[a-z0-9_]+` 校验为设计期望（未落校验，V0.2.0 仅长度约束） |
 | **Environment** | `environment`：`dev/qa/staging/prod/loadtest` 五标准值 | `(game_id, environment)` 全局唯一 | 同一 game 内环境名不重复；环境必须挂一个 `storageProfileId` | `GameEnvironmentEntity`（含 `dataNamespace`/`kafkaTopicPrefix`/`databaseName` 直连物理字段） | **物理字段收敛**：`kafkaTopicPrefix`/`clickhouse...` 类直连字段移至 StorageProfile（见 2.2），Environment 只留 `storageProfileId` + 逻辑 `dataNamespace` |
 | **StorageProfile** | `storage_profile_id` | 全局 | 业务/事件层**不持有** profile 内部物理细节；`isolationStrategy ∈ {SHARED, DEDICATED}` | `StorageProfileEntity`（IsolationStrategy.SHARED 已实现） | 成为环境物理路由的**唯一入口**；补“从 profile 解析出 kafka topic/CH 库名/归档桶”的单一解析器 |
 
@@ -74,21 +74,21 @@
 | **RiskRule** | `rule_id`，`environmentId` 可空（全局规则） | `RiskRuleEntity` 已具（THRESHOLD/SEQUENCE、riskScore、actionType、enableAutoBlock） | 收敛 `ruleConditions` 为结构化 JSON schema（引 EventSchema 字段），保持现状字段名 |
 | **RiskScore** | `(game_id, subject, as_of)` 值对象 | ✅（B6 落地：risk-job 评估产出 CH `risk_scores`——主体累计各规则最大贡献分 + 规则触发明细 JSON，ReplacingMergeTree 主体快照） | **从 rule 提出**：一次评估产生一个累计分数记录（B6） |
 | **Decision**（**新增**） | 判定 `(case_id → status)` | ✅（B6 落地：`RiskCaseEntity.status` 分层前向状态机，Decision-first 判定先行、非法流转拒绝执行动作） | B6：判定状态机 `OPEN → REVIEW/ALERT/MARK → THROTTLE/BLOCK → RESOLVED` |
-| **Action** | 处置动作 | `RiskRuleEntity.ActionType`（ALERT/MARK/REVIEW/THROTTLE/BLOCK 语义已实现）+ BlockList/封禁 | 与 Decision 绑定（Decision 决定动作，不反推） |
+| **Action** | 处置动作 | `RiskRuleEntity.ActionType`（IGNORE/ALERT/LOG_ONLY/CHALLENGE/THROTTLE/BLOCK/REVIEW/WEBHOOK 已实现）+ BlockList/封禁 | 与 Decision 绑定（Decision 决定动作，不反推） |
 
 ### 2.5 实验域
 
 | 对象 | 标识 | 现状 | 2.0 动作 |
 |---|---|---|---|
-| **Experiment** | `(game_id, environment_id, name)` | experiment 包已具：`ExperimentEntity`（id/name/status/salt/configJson）+ `ExperimentSplitter`（FNV-1a 分流）+ `ExperimentMetricsAggregator`（ClickHouse 按天归因，幂等回填 `experiment_metric_snapshots`：exposure_users/events_count/revenue）+ `ExperimentStatsService` | B8 补齐真缺件：Audience（Segment 引用）、Guardrail、Decision（status 枚举化）、Variant 显式化、Allocation 从 configJson 提列；**Splitter 与 Aggregator 不动** |
+| **Experiment** | `(game_id, environment_id, name)` | ✅（**B8 已落，V0.9.21**）：`ExperimentEntity` 已字段化（Audience/Guardrail/Decision + status 枚举化），`ExperimentSplitter`（FNV-1a 分流）+ `ExperimentMetricsAggregator`（ClickHouse 按天归因，幂等回填 `experiment_metric_snapshots`：exposure_users/events_count/revenue）+ `ExperimentStatsService` 保留 | B8 补齐真缺件：Audience（Segment 引用）、Guardrail、Decision（status 枚举化）、Variant 显式化、Allocation 从 configJson 提列；**Splitter 与 Aggregator 不动** |
 
 ### 2.6 用户与权限
 
 | 对象 | 标识 | 现状 | 2.0 动作 |
 |---|---|---|---|
-| **User/Permission** | 用户 + 角色 | **双轨**：`UserEntity.roles`（users.roles 列）与 `user_role_assignments` 表并存。创建与更新（`UserService.createUser`、`updateRoles` UserService.java:241）**只写 users.roles**；权限门读 `user_role_assignments`；唯一写手是 `deploy/demo/README.md §5` 的手工 psql | **B2 收敛为单一真源**：`user_role_assignments`；`users.roles` 降级为展示/兼容列（读多写少）；补一次性回填迁移 + `deploy/demo/README.md §5` 删除手工 psql 段 |
+| **User/Permission** | 用户 + 角色 | **B2（V0.9.16）已落**：`user_role_assignments` 为单真源，`UserService` 是唯一写路径（`createUser` UserService.java:94-97、`updateRoles` UserService.java:261，users.roles 降级为展示投影）；`deploy/demo/README.md §5` 手工 psql 段已删 | **B2 收敛为单一真源**：`user_role_assignments`；`users.roles` 降级为展示/兼容列（读多写少）；补一次性回填迁移 + `deploy/demo/README.md §5` 删除手工 psql 段 |
 
-审计：`AuditLogEntity`（V0.2.4）已是唯一留痕通道；2.0 增加事件分类常量（RISK_POLICY_CHANGED / API_KEY_ROTATED / DATA_EXPORTED / PERMISSION_CHANGED / EXPERIMENT_PUBLISHED），不做新表。
+审计：`AuditLogEntity`（V0.2.4）已是唯一留痕通道；2.0 增加事件分类常量（RISK_POLICY_CHANGED / API_KEY_ROTATED / DATA_EXPORTED / PERMISSION_CHANGED / EXPERIMENT_PUBLISHED），不做新表——**未排期**（设计意向，无归属批次，代码零落地）。
 
 ---
 
@@ -118,7 +118,7 @@ data         → Dashboard / Segment / Report / Cohort / Export / Funnel / Reten
 system       → User / Role / AuditLog / Webhook / RateLimit / Security / FlinkJob / ML / Integration
 ```
 
-现状控制器散落（`api/` 包 ~55 个 controller），**2.0 只做分组文档化，不搬文件**——包级重命名属 B10 以外的“可缓行”项，避免一次评审海量 diff。
+现状控制器散落（`api/` 包 66 个 controller），**2.0 只做分组文档化，不搬文件**——包级重命名属 B10 以外的“可缓行”项，避免一次评审海量 diff。
 
 ### 3.3 依赖纪律（穿越即算缺陷）
 
@@ -153,11 +153,11 @@ system       → User / Role / AuditLog / Webhook / RateLimit / Security / Flink
 
 ### 4.4 Schema 三模式（复用 TrackingPlan 雏形）
 
-`ValidationStrictness`（STRICT 已有）外扩两个值：`COMPATIBILITY`（未知字段警告不拒）/ `DEVELOPMENT`（dev 环境允许拒绝降级为跳过）。模式优先级：`环境级别 TrackingPlan > ApiKey.propsAllowlist > 网关默认`。网关与 schema 文件（`schema/json/*.schema.json`）保持同步出品。
+`ValidationStrictness` 三值：`OFF`（关闭验证）/ `WARN`（仅警告不拒）/ `STRICT`（拒绝不符合的事件，默认）。模式优先级：`环境级别 TrackingPlan > ApiKey.propsAllowlist > 网关默认`。网关与 schema 文件（`schema/json/*.schema.json`）保持同步出品。
 
 ### 4.5 Control API 契约
 
-统一 `ApiResponse` 壳 + 全局异常映射（400 IllegalArgument / 401 未认证 / 403 AccessGuard 拒绝 / 404 not found / 409 唯一冲突 / 500 兜底）——现状已成立，v2 增量一律沿用；新增资源组端点命名 `/api/schemas`、`/api/features`、`/api/risk/decisions` 与现 `/api/games|environments|experiments|risk-rules` 同风格。
+统一 `ApiResponse` 壳 + 全局异常映射（400 IllegalArgument / 401 未认证 / 403 AccessGuard 拒绝 / 404 not found / 409 唯一冲突 / 500 兜底）——现状已成立，v2 增量一律沿用；新增资源组端点命名 `/api/schemas`、`/api/features`、`/api/risk/decisions` 与现 `/api/games|environments|experiments|risk-rules` 同风格。（**落地注记**：已落地方沿游戏作用域前缀 `/api/games/{gameId}/...`，如 SchemasController `/api/games/{gameId}/schemas`、feature-store `/api/games/{gameId}/{environment}/feature-store/...`；本句的扁平命名仅为本段早期构想。）
 
 ---
 
@@ -201,7 +201,7 @@ Analytics 的 DAU/留存/ARPU 与风控特征同源（玩家行为特征），B5
 
 ## 6. 实验平台形式化（B8）
 
-现状（已核实，评估低估了这块）：`ExperimentSplitter`（FNV-1a/weighted/salt 分流，`experiments` 配置由 `experiment-config.schema.json` JSON Schema 约束）、`ExperimentMetricsAggregator`（ClickHouse 按天窗口归因、幂等回填 `experiment_metric_snapshots`，已含 exposure_users 去重与 experiments map 归因、SRM 样本量基础）、`ExperimentStatsService` 与 `/api/experiments/{id}/results`；唯一短板是**控制面资源形态**——`ExperimentEntity` 仍是 7 字段裸表（status 为自由字符串），Audience/Guardrail/Decision 全缺。
+现状（已核实，评估低估了这块）：`ExperimentSplitter`（FNV-1a/weighted/salt 分流，`experiments` 配置由 `experiment-config.schema.json` JSON Schema 约束）、`ExperimentMetricsAggregator`（ClickHouse 按天窗口归因、幂等回填 `experiment_metric_snapshots`，已含 exposure_users 去重与 experiments map 归因、SRM 样本量基础）、`ExperimentStatsService` 与 `/api/experiments/{id}/results`；唯一短板是**控制面资源形态**——`ExperimentEntity` 仍是 7 字段裸表（status 为自由字符串），Audience/Guardrail/Decision 全缺。（**状态更新**：B8 已落，V0.9.21——Audience/Guardrail/Decision 已字段化、status 已枚举化，此短板已闭合。）
 
 目标字段化（**不动 Splitter 与 Aggregator 算法**）：
 

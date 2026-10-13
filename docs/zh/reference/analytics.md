@@ -62,6 +62,13 @@ GET /api/analytics/revenue/game_123/overview?startDate=2024-01-01&endDate=2024-0
 
 **端点:** `GET /revenue/{gameId}/arpu`
 
+**参数:**
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `gameId` | string | 是 | 游戏 ID |
+| `startDate` | date | 是 | 开始日期 (YYYY-MM-DD) |
+| `endDate` | date | 是 | 结束日期 (YYYY-MM-DD) |
+
 **响应字段:**
 | 字段 | 类型 | 说明 |
 |------|------|------|
@@ -92,6 +99,13 @@ GET /api/analytics/revenue/game_123/overview?startDate=2024-01-01&endDate=2024-0
 
 **端点:** `GET /ads/{gameId}/overview`
 
+**参数:**
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `gameId` | string | 是 | 游戏 ID |
+| `startDate` | date | 是 | 开始日期 (YYYY-MM-DD) |
+| `endDate` | date | 是 | 结束日期 (YYYY-MM-DD) |
+
 **响应字段:**
 | 字段 | 类型 | 说明 |
 |------|------|------|
@@ -120,6 +134,13 @@ GET /api/analytics/revenue/game_123/overview?startDate=2024-01-01&endDate=2024-0
 
 **端点:** `GET /sessions/{gameId}/overview`
 
+**参数:**
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `gameId` | string | 是 | 游戏 ID |
+| `startDate` | date | 是 | 开始日期 (YYYY-MM-DD) |
+| `endDate` | date | 是 | 结束日期 (YYYY-MM-DD) |
+
 **响应字段:**
 | 字段 | 类型 | 说明 |
 |------|------|------|
@@ -146,6 +167,13 @@ GET /api/analytics/revenue/game_123/overview?startDate=2024-01-01&endDate=2024-0
 ### 4.1 性能概览
 
 **端点:** `GET /performance/{gameId}/overview`
+
+**参数:**
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `gameId` | string | 是 | 游戏 ID |
+| `startDate` | datetime | 是 | 开始时间 (ISO 8601 日期时间，按 datetime 粒度；如 2024-01-01T00:00:00) |
+| `endDate` | datetime | 是 | 结束时间 (ISO 8601 日期时间，按 datetime 粒度；如 2024-01-31T23:59:59) |
 
 **响应字段:**
 | 字段 | 类型 | 说明 |
@@ -184,6 +212,13 @@ POST /api/crash-metrics/{gameId}/symbolicate
 
 **端点:** `GET /social/{gameId}/overview`
 
+**参数:**
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `gameId` | string | 是 | 游戏 ID |
+| `startDate` | date | 是 | 开始日期 (YYYY-MM-DD) |
+| `endDate` | date | 是 | 结束日期 (YYYY-MM-DD) |
+
 **响应字段:**
 | 字段 | 类型 | 说明 |
 |------|------|------|
@@ -198,6 +233,12 @@ POST /api/crash-metrics/{gameId}/symbolicate
 ### 5.2 社交对留存的影响
 
 **端点:** `GET /social/{gameId}/retention-impact`
+
+**参数:**
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `gameId` | string | 是 | 游戏 ID |
+| `date` | date | 是 | 统计日期 (YYYY-MM-DD) |
 
 **响应字段:**
 | 字段 | 类型 | 说明 |

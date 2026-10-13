@@ -2,7 +2,7 @@
 
 本文档记录 Oddsmaker 当前未完成的功能项，按优先级排列，包含设计、实现方案和验收标准。每项推进前先在此登记，避免散落讨论。
 
-> **2026-09 状态同步**：本清单为早期行动项视角，现按各项落地结果标注状态（详见下表与各节状态行）。阶段级进度以仓库根 `todo.md` 为活跃跟踪表——P7 竞品差距收敛已全部完成（发布说明见 [release-notes/v0.2.0.md](../../release-notes/v0.2.0.md)），其后维度同步 Agent（§4）与 Python 训练管线（§6）也已交付。本清单所列事项至此全部完成，唯一在册的是 P8 MMP 归因（有条件立项暂停，未达前置不动）。
+> **2026-09 状态同步**：本清单为早期行动项视角，现按各项落地结果标注状态（详见下表与各节状态行）。阶段级进度以仓库根 `todo.md` 为活跃跟踪表——P7 竞品差距收敛已全部完成（发布说明见 [release-notes/v0.2.0.md](../../release-notes/v0.2.0.md)），其后维度同步 Agent（§4）与 Python 训练管线（§6）也已交付。本清单各项已交付；仓库当前在册：P8 MMP 归因（暂停）与 `todo.md` 开放需求两条（Debezium CDC 维度同步、ML 异常检测进评估批次）。
 
 已完成的功能见各阶段文档：
 - [资源事件设计](../analysis/jobs)（事实数据）
@@ -33,7 +33,7 @@
 ### 背景
 
 - SDK 已提供 `identify(userId)` / `setPlayer(playerId)`（见 [sdk-design.md](./sdk-design)），上报 `$identify` 事件。
-- ClickHouse `identities` 表已建好（schema.sql line 202）：`identity_id, user_id, player_id, character_ids, device_ids, first_seen, last_seen, risk_score`。
+- ClickHouse `identities` 表已建好（schema.sql line 211）：`identity_id, user_id, player_id, character_ids, device_ids, first_seen, last_seen, risk_score`。
 - 缺一个作业把这些事件落到 `identities` 表。
 
 ### 设计
@@ -107,9 +107,10 @@ risk-job 检测逻辑（按规则配置执行）
 ### 涉及文件
 
 - `jobs/flink/risk-job/.../RuleFetcher.java`（新）
-- `jobs/flink/risk-job/.../RuleBroadcaster.java`（新）
 - `jobs/flink/risk-job/.../RiskJob.java`（改：接入广播流）
 - Control Service 暴露只读规则查询 API（如已有则复用）
+
+> **实现修正**：`RuleBroadcaster` 未建——规则集以共享 `AtomicReference` 持有，未用 Broadcast State Pattern（见 §2 状态行）。
 
 ### 验收
 
@@ -142,15 +143,12 @@ risk-job 检测逻辑（按规则配置执行）
 - VELOCITY：在现有 FREQUENCY 的 window 里把 `count()` 换成 `sum(resource_amount)`。
 - RATIO：同一窗口内分 `flow_type='source'` 和 `'sink'` 两个聚合，比值判断。
 - PATTERN：~~用 `org.apache.flink.cep` 库~~ → 实际实现：`inputs.filter(inPatternSequence).keyBy(subjectWindowKey).process(new PatternFunction(rules))`，`PatternFunction` 内 `ValueState`（带 1 天 TTL 兜底回收）维护「下一步索引 + 第一步时间戳」，逐事件增量推进，命中输出 RiskHit 并重置。
-- 每种规则类型实现一个 `RuleDetector` 接口，`RuleBroadcaster` 根据规则类型分发。
+- ~~每种规则类型实现一个 `RuleDetector` 接口，`RuleBroadcaster` 根据规则类型分发~~ → 实际实现：七类规则全部落在 `RiskJob.java` + `RuleFetcher.java`（共享 `AtomicReference` 规则表，未用 Broadcast State，仓库无 `*Detector` 文件）。
 
 ### 涉及文件
 
-- `jobs/flink/risk-job/.../detector/ThresholdDetector.java`
-- `jobs/flink/risk-job/.../detector/FrequencyDetector.java`
-- `jobs/flink/risk-job/.../detector/VelocityDetector.java`（新）
-- `jobs/flink/risk-job/.../detector/RatioDetector.java`（新）
-- ~~`jobs/flink/risk-job/.../detector/PatternDetector.java`（新，依赖 flink-cep）~~ → 实际实现于 `RiskJob.PatternFunction`（与既有六类规则同文件，未另建 detector 包）
+- ~~`jobs/flink/risk-job/.../detector/ThresholdDetector.java` 等 detector 包~~ → **未建**：七类规则实际全部实现于 `RiskJob.java` + `RuleFetcher.java`，仓库 `jobs/flink/risk-job` 下无 `*Detector` 文件
+- ~~`jobs/flink/risk-job/.../detector/PatternDetector.java`（新，依赖 flink-cep）~~ → 实际实现于 `RiskJob.PatternFunction`（与其余规则同文件，未另建 detector 包）
 
 ### 验收
 
@@ -197,7 +195,7 @@ Agent 本体（`agents/dimension-sync-agent/`，零仓库内依赖可拆独立�
 ### 验收
 
 - 通过 Agent 推送一条物品变更，60s 内 ClickHouse `item_dim` 出现对应行。
-- 物品改名后，item_dim 保留旧版本（valid_to 非空）+ 新版本（is_current=1）。
+- 物品改名后，item_dim 出现新版本行（is_current=1，ReplacingMergeTree(version_ts) 最新版本胜出；SCD2 valid_to/is_current=0 未实现）。
 - Control Service 的 `/api/dimensions/sync-status` 返回每个游戏的同步延迟。
 
 ---
@@ -304,6 +302,7 @@ predictions 表（user_id, model_id, score, predicted_at）
 
 ## 推进节奏建议（2026-09 更新）
 
-原清单 1/2/3/4/5/6 已全部交付。当前仅剩一项：
+原清单 1/2/3/4/5/6 已全部交付。仓库当前在册：
 
-1. **P8 MMP 归因**：有条件立项（前置：任一 MMP 原始数据导出权限，Data Locker / CSV uploads 任一），达成前不启动，见 todo.md 暂停项与 `docs/mmp-attribution-evaluation.md`。
+1. **P8 MMP 归因**（暂停）：有条件立项（前置：任一 MMP 原始数据导出权限，Data Locker / CSV uploads 任一），达成前不启动，见 todo.md 暂停项与 `docs/mmp-attribution-evaluation.md`。
+2. **`todo.md` 开放需求两条**：Debezium CDC 维度同步（等真实游戏方开 binlog 并部署 Kafka Connect 后排期）、ML 异常检测进评估批次（触发条件成立即开工）。

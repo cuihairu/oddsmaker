@@ -28,7 +28,7 @@ This guide covers:
 # 一次性前置：podman socket + 镜像加速（详见 Startup Guide）
 systemctl --user start podman.socket
 
-# 全栈（根 compose，14 容器，含 postgres/control/gateway）
+# 全栈（根 compose，16 容器，含 postgres/control/gateway）
 podman compose up -d --build
 
 # 健康检查（双 UP 即成功）
@@ -124,11 +124,15 @@ Critical alerts include:
 
 ### Backup Schedule
 
+> 目标节奏（设计目标，非仓库已交付配置）：仓库 `deploy/backup/` 仅有 `postgres-backup.sh` 与 `backup-strategy.md`；WAL 归档 / Redis 快照 / ClickHouse 增量配置尚未入库。
+
 - **PostgreSQL**: Daily full backup, continuous WAL archiving
 - **Redis**: RDB snapshots every 15 minutes
 - **ClickHouse**: Weekly full, daily incremental
 
 ### Recovery Objectives
+
+> 目标 RPO/RTO（设计目标，待部署环境验证）。
 
 | Component | RPO | RTO |
 |-----------|-----|-----|
@@ -188,14 +192,14 @@ kubectl port-forward svc/oddsmaker-control 8085:80 -n oddsmaker
 ### Database
 
 ```bash
-# Connect to PostgreSQL
-kubectl exec -it postgres-0 -n oddsmaker -- psql -U oddsmaker
+# Connect to PostgreSQL (postgres is a Deployment; kubectl resolves the pod)
+kubectl exec -it deployment/oddsmaker-postgres -n oddsmaker -- psql -U oddsmaker
 
 # Backup database
-kubectl exec -it postgres-0 -n oddsmaker -- pg_dump -U oddsmaker oddsmaker > backup.sql
+kubectl exec -it deployment/oddsmaker-postgres -n oddsmaker -- pg_dump -U oddsmaker oddsmaker > backup.sql
 
 # Restore database
-cat backup.sql | kubectl exec -i postgres-0 -n oddsmaker -- psql -U oddsmaker oddsmaker
+cat backup.sql | kubectl exec -i deployment/oddsmaker-postgres -n oddsmaker -- psql -U oddsmaker oddsmaker
 ```
 
 ### Application

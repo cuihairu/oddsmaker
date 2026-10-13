@@ -18,7 +18,7 @@ wait_http() {
 
 # 1) Start infra
 echo "[1/6] Starting infra (Kafka, ClickHouse, Apicurio, OTel, Superset)"
-(cd infra && docker compose up -d zookeeper kafka clickhouse apicurio otel-collector superset)
+(cd infra && docker compose up -d kafka clickhouse apicurio otel-collector superset)
 
 # 2) Start control-service & gateway
 GBIN=$(gradle_bin)
@@ -57,15 +57,15 @@ echo "Gateway response: $RES"
 # 5) Start Flink jobs if available
 if command -v flink >/dev/null 2>&1; then
   echo "[5/6] Starting Flink jobs (enrich, sessions, retention, funnels)"
-  CLICKHOUSE_URL=${CLICKHOUSE_URL:-jdbc:clickhouse://localhost:8123/default} \
-  KAFKA_BOOTSTRAP=${KAFKA_BOOTSTRAP:-localhost:9092} \
-  REGISTRY_URL=${REGISTRY_URL:-http://localhost:8081/apis/registry/v2} \
+  CLICKHOUSE_URL=${CLICKHOUSE_URL:-jdbc:clickhouse://localhost:29123/default} \
+  KAFKA_BOOTSTRAP=${KAFKA_BOOTSTRAP:-localhost:29192} \
+  REGISTRY_URL=${REGISTRY_URL:-http://localhost:29081/apis/registry/v2} \
   KAFKA_TOPIC=${KAFKA_TOPIC:-oddsmaker.events_raw} \
   bash scripts/run_flink.sh || true
   echo "Wait 10s for sinks to flush"
   sleep 10
   # Verify ClickHouse events count
-  CNT=$(curl -fsS "http://localhost:8123/?query=SELECT%20count()%20FROM%20events%20WHERE%20game_id%3D'p1'%20AND%20environment%3D'dev'") || CNT=0
+  CNT=$(curl -fsS "http://localhost:29123/?query=SELECT%20count()%20FROM%20events%20WHERE%20game_id%3D'p1'%20AND%20environment%3D'dev'") || CNT=0
   echo "ClickHouse events count: $CNT"
   if [ "$CNT" -ge 2 ]; then echo "[PASS] end-to-end to ClickHouse"; else echo "[WARN] Flink not inserted or not available"; fi
 else
@@ -74,18 +74,18 @@ fi
 
 # 5b) Apply ClickHouse experiment MVs and fast views (idempotent)
 echo "[5b] Applying ClickHouse experiment MVs and fast views"
-if curl -fsS "http://localhost:8123/?query=SELECT%201" >/dev/null 2>&1; then
-  curl -fsS --data-binary @schema/sql/clickhouse/schema_experiments_mv.sql "http://localhost:8123/?query=\n" >/dev/null || true
-  curl -fsS --data-binary @schema/sql/clickhouse/queries_experiment_mv.sql "http://localhost:8123/?query=\n" >/dev/null || true
-  curl -fsS --data-binary @schema/sql/clickhouse/schema_experiments_daily_mv.sql "http://localhost:8123/?query=\n" >/dev/null || true
-  curl -fsS --data-binary @schema/sql/clickhouse/schema_experiments_daily_dim_mv.sql "http://localhost:8123/?query=\n" >/dev/null || true
-  curl -fsS --data-binary @schema/sql/clickhouse/queries_experiment_dim_mv.sql "http://localhost:8123/?query=\n" >/dev/null || true
+if curl -fsS "http://localhost:29123/?query=SELECT%201" >/dev/null 2>&1; then
+  curl -fsS --data-binary @schema/sql/clickhouse/schema_experiments_mv.sql "http://localhost:29123/?query=\n" >/dev/null || true
+  curl -fsS --data-binary @schema/sql/clickhouse/queries_experiment_mv.sql "http://localhost:29123/?query=\n" >/dev/null || true
+  curl -fsS --data-binary @schema/sql/clickhouse/schema_experiments_daily_mv.sql "http://localhost:29123/?query=\n" >/dev/null || true
+  curl -fsS --data-binary @schema/sql/clickhouse/schema_experiments_daily_dim_mv.sql "http://localhost:29123/?query=\n" >/dev/null || true
+  curl -fsS --data-binary @schema/sql/clickhouse/queries_experiment_dim_mv.sql "http://localhost:29123/?query=\n" >/dev/null || true
   echo "Applied experiment MVs and fast views."
   # Quick verification queries for fast views (will be 0 if no data yet)
-  V1=$(curl -fsS "http://localhost:8123/?query=SELECT%20count()%20FROM%20v_exp_exposures_by_day_fast%20LIMIT%201" || echo 0)
-  V2=$(curl -fsS "http://localhost:8123/?query=SELECT%20count()%20FROM%20v_exp_exposures_by_day_dim_fast%20LIMIT%201" || echo 0)
-  V3=$(curl -fsS "http://localhost:8123/?query=SELECT%20count()%20FROM%20v_exp_conversion_24h_fast%20LIMIT%201" || echo 0)
-  V4=$(curl -fsS "http://localhost:8123/?query=SELECT%20count()%20FROM%20v_exp_conversion_24h_dim_fast%20LIMIT%201" || echo 0)
+  V1=$(curl -fsS "http://localhost:29123/?query=SELECT%20count()%20FROM%20v_exp_exposures_by_day_fast%20LIMIT%201" || echo 0)
+  V2=$(curl -fsS "http://localhost:29123/?query=SELECT%20count()%20FROM%20v_exp_exposures_by_day_dim_fast%20LIMIT%201" || echo 0)
+  V3=$(curl -fsS "http://localhost:29123/?query=SELECT%20count()%20FROM%20v_exp_conversion_24h_fast%20LIMIT%201" || echo 0)
+  V4=$(curl -fsS "http://localhost:29123/?query=SELECT%20count()%20FROM%20v_exp_conversion_24h_dim_fast%20LIMIT%201" || echo 0)
   echo "Fast view counts: exposures_fast=$V1, exposures_dim_fast=$V2, conv24h_fast=$V3, conv24h_dim_fast=$V4"
 else
   echo "ClickHouse HTTP not reachable; skip applying MVs"

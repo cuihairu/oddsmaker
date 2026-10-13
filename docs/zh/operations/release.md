@@ -10,6 +10,10 @@
 ```bash
 bash scripts/e2e.sh
 ```
+- 监控看板（可选，`e2e.sh` 只起 otel-collector，不起这两个）：
+```bash
+cd infra && docker compose up -d prometheus grafana
+```
 - 导入 Superset 仪表盘（可选）：
 ```bash
 bash scripts/superset-import.sh
@@ -17,9 +21,9 @@ bash scripts/superset-import.sh
 3) 查看
 - 网关健康：`http://localhost:8080/actuator/health`
 - 控制面 UI：`http://localhost:8085/`（`x-admin-token: admin`）
-- ClickHouse：`http://localhost:8123`（直接执行 SQL）
-- Superset：`http://localhost:8088`（`admin/admin`）
-- Grafana：`http://localhost:3000`（`admin/admin`）
+- ClickHouse：`http://localhost:29123`（直接执行 SQL；infra 栈宿主端口 29123:8123——根 compose 为 28123、deploy-rt e2e 栈为 18123，按所用栈区分）
+- Superset：`http://localhost:18088`（`admin/admin`；infra 栈 18088:8088）
+- Grafana：`http://localhost:13000`（`admin/admin`；infra 栈 13000:3000）
 
 压测（可选）
 ```bash

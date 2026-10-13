@@ -27,8 +27,8 @@
     OTEL_SERVICE_NAME=oddsmaker-gateway \
     ./gradlew :services:gateway-service:bootRun
     ```
-  - 方式二：Micrometer OTel Registry（代码集成）：引入 `micrometer-registry-otlp` 并配置 MeterRegistry 指向 Collector
-- Flink 作业：可启用 OTel Metrics Reporter，将指标上报至 Collector
+  - 方式二：Micrometer Prometheus Registry（当前实现）：网关/控制面经 Micrometer→Prometheus 暴露指标；OTLP 通道需另加 `micrometer-registry-otlp` 依赖（尚未引入）
+- Flink 作业：可启用 OTel Metrics Reporter 将指标上报至 Collector——需引入 reporter/agent 依赖，当前未集成
 
 Grafana 面板
 - 已预置的 `Oddsmaker Overview` 显示 OTel Collector 接收的 Spans/Metrics/Logs 速率与 uptime

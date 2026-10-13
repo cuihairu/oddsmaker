@@ -63,7 +63,7 @@
 
 | 能力 | Oddsmaker | Unity UGS | Firebase | GameAnalytics | PlayFab | PostHog |
 |------|-----------|-----------|----------|---------------|---------|---------|
-| A/B 实验（分流+统计检验+SRM） | ✅（SHA-256 确定性分桶、z/t 检验、卡方 SRM） | ✅（Game Overrides） | ✅ | 🟡（付费档） | ✅（Experiments） | ✅ |
+| A/B 实验（分流+统计检验+SRM） | ✅（FNV-1a hash32 确定性分桶、z/t 检验、卡方 SRM） | ✅（Game Overrides） | ✅ | 🟡（付费档） | ✅（Experiments） | ✅ |
 | Remote Config（环境覆盖+增量拉取） | ✅ | ✅ | ✅ | 🟡 | ✅（Title Data） | ✅ |
 | Feature Flags（百分比放量/advance） | ✅ | 🟡（借 Remote Config） | 🟡 | ❌ | 🟡 | ✅（强项） |
 
@@ -74,7 +74,7 @@
 | 能力 | Oddsmaker | Unity UGS | Firebase | GameAnalytics | PlayFab | PostHog |
 |------|-----------|-----------|----------|---------------|---------|---------|
 | Crash/Error 上报与聚合 | ✅（指纹规范化+符号化规则+版本崩溃率） | ✅（Cloud Diagnostics） | ✅（Crashlytics） | 🟡（error 事件） | 🟡 | 🟡 |
-| 实时风控规则（阈值/速度/序列/黑名单/重放） | ✅（内建主链路，Gateway 前置 + Flink 实时） | ❌ | 🟡（仅 App Check 设备完整性，非行为风控） | ❌ | 🟡（封禁/审计，无实时规则） | ❌ |
+| 实时风控规则（THRESHOLD/FREQUENCY/PATTERN/VELOCITY/RATIO/ANOMALY/MACHINE_LEARNING/FEATURE + 黑名单 + 重放防护） | ✅（内建主链路，Gateway 前置 + Flink 实时） | ❌ | 🟡（仅 App Check 设备完整性，非行为风控） | ❌ | 🟡（封禁/审计，无实时规则） | ❌ |
 | 风险评分与处置（block/review/mark/throttle + Webhook） | ✅ | ❌ | ❌ | ❌ | 🟡（人工 moderation） | ❌ |
 
 ### 2.5 LiveOps 与玩家运营

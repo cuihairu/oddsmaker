@@ -143,12 +143,18 @@ Events, partitions, queries, experiments, and risk rules all use `game_id + envi
 - `bi/`: Superset resources
 - `infra/`: Docker Compose, K8s, Helm, Grafana, Prometheus
 - `docs/`: architecture, API, operations, redesign, and roadmap
+- `web/`: Vue 3 operations console (source under `web/src/`, built assets ship with releases)
+- `scripts/`: helper scripts (quickstart, e2e, superset import, perf tooling)
+- `tests/`: cross-cutting test resources
+- `deploy/`: deployment resources (K8s manifests, monitoring alerts/dashboards, demo)
+- `deploy-rt/`: real-time deployment compose stacks
+- Root files: `Makefile` (dev task entry), `Dockerfile` (multi-stage server image), `docker-compose.yml` (full stack), `docker-compose.quickstart.yml` (quickstart stack), `pnpm-workspace.yaml` (web/docs workspace)
 
 ## Quick Start
 
 ### Demo Site
 
-Demo site: https://oddsmaker.cuihairu.site/ | Demo account `demo` / `EBluYQvTaeN78p` (for trial use; data is reset periodically)
+Demo site: https://oddsmaker.cuihairu.site/ | Demo account `demo` (for trial use; data is reset periodically). The demo environment's password is set at deploy time (see `deploy/demo/`) and may be rotated — it is not a fixed credential distributed with the repo.
 
 > The demo site is for trial purposes only: data is reset periodically, so do not store real business data there. The demo account has the read-only VIEWER role.
 > For private deployment, follow the Docker Compose path below.
@@ -204,7 +210,7 @@ The root `Dockerfile` is a multi-stage build (Gradle compilation → `eclipse-te
 docker build -t ghcr.io/cuihairu/oddsmaker:local .
 ```
 
-Image tagging: CI publishes `:nightly` on the daily schedule and on every push to main (nightly-build.yml), and publishes `:<version>` and `:latest` on releases (release.yaml).
+Image tagging: CI publishes `:nightly` on the daily schedule and on every push to main (nightly-build.yml), and publishes `:<version>`, `:<major.minor>`, `:<major>`, and `:latest` on releases (release.yaml).
 
 ### Nightly Build Artifacts
 

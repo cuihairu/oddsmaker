@@ -23,7 +23,7 @@ PostgreSQL（元数据）
 └─ ...
 
 ClickHouse（共享表）
-├─ events / sessions / retention / resource_changes
+├─ events / sessions / retention
 ├─ risk_events / risk_scores / risk_actions
 └─ （全部按 (game_id, environment, 日期) 分区）
 ```

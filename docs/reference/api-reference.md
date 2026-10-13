@@ -534,8 +534,6 @@ Dimension sync status, HTTP Pull source configuration, and Control-hosted Agent 
 
 Import/export YAML shape: a `dimensions` root mapping keyed by `sourceKey`; allowed fields are `environment`, `dimType`, `endpoint`, `credential`, `intervalSeconds`, `pageLimit`, `enabled` — unknown fields are rejected with a precise error. Agent config keys reuse the `agent.properties` dot-key names split by visibility: non-secret keys go in `props`, six secret keys (`gateway.api-key`, `status.token`, DB/Kafka/keystore passwords) go in `secrets`. See the config-driven section in [dimension-sync.md](/reference/dimension-sync) for examples.
 
-Import/export YAML shape: a `dimensions` root mapping keyed by `sourceKey`; allowed fields are `environment`, `dimType`, `endpoint`, `credential`, `intervalSeconds`, `pageLimit`, `enabled` — unknown fields are rejected with a precise error. See the config-driven section in [dimension-sync.md](/reference/dimension-sync) for examples.
-
 ### Machine Learning Models
 
 | Method | Endpoint | Description |
@@ -579,7 +577,7 @@ Import/export YAML shape: a `dimensions` root mapping keyed by `sourceKey`; allo
 
 **Feedback types**: `CORRECT`, `INCORRECT`, `PARTIAL`, `UNKNOWN`
 
-**Model frameworks**: `TENSORFLOW`, `PYTORCH`, `SCIKIT_LEARN`, `XGBOOST`, `LIGHTGBM`, `ONNX`, `CUSTOM`
+**Model framework**: free-text `VARCHAR(50)` on the model record — no enum validation; common values include TensorFlow, PyTorch, scikit-learn, XGBoost, LightGBM, ONNX, and custom names
 
 ### Developer Tools
 
@@ -676,11 +674,13 @@ All of the following are implemented and exposed through the same auth model; se
 | Cohorts | `/api/cohorts` | Cohort definitions, calculation, results |
 | Crash metrics | `/api/crash-metrics` | Crash aggregation and symbolication (`/{gameId}/symbolicate`) |
 | Dashboards | `/api/games/{gameId}/dashboards` | Custom dashboard layouts and widgets |
+| Data quality & feature store | `/api/data-quality`, `/api/feature-store` | Data-quality series + summary (B10); per-game/environment feature store |
 | Dimension sync | `/api/dimensions` | `/sync-status` heartbeat from the dimension-sync agent |
 | Event export | `/api/games/{gameId}/events-export` | Raw event export jobs (daily JSONL + manifest) |
 | Funnels | `/api/funnels` | Funnel definitions and results |
 | Identities | `/api/identities` | Identity lookup (by device/player/user/identifier) + explicit merge (`POST /{gameId}/merge`, `privacy:manage`; secondary absorbed into primary, tombstoned, audited) |
 | Event inspector | `/api/inspector` (control) and gateway `/v1/inspector/recent` | Recent raw events for debugging |
+| Finance metrics | `/api/finance-metrics/{gameId}` | Finance report (`/report`) and export (`/export`) |
 | Integrations | `/api/integrations` | Slack/Discord/email/payment/webhook integrations |
 | LTV metrics | `/api/ltv-metrics` | LTV forecast queries |
 | Mail | `/api/games/{gameId}/mails` | Player mail with attachments and claim receipts |
@@ -700,6 +700,7 @@ All of the following are implemented and exposed through the same auth model; se
 | Retention metrics | `/api/retention-metrics` | N-day / rolling retention queries |
 | Risk metrics | `/api/risk-metrics` | Trend / rule-hits / severity / action distributions |
 | Roles | `/api/roles` | Role CRUD, permission binding (roles table is the source of truth) |
+| Schemas | `/api/games/{gameId}/schemas` | Event schema CRUD (B7): create/list/active/get/update/publish/compatibility/deactivate/delete + event-definition & property CRUD |
 | Segments | `/api/games/{gameId}/segments` | User segment definitions, compute, members |
 | Symbol mappings | `/api/symbols` | Crash symbolication regex rules |
 | System | `/api/system` | Maintenance windows, system configs, feature flags (see section above) |
@@ -714,7 +715,7 @@ All of the following are implemented and exposed through the same auth model; se
   "code": 200,
   "message": "Success",
   "data": {},
-  "timestamp": "2026-06-18T12:00:00Z",
+  "timestamp": "2026-06-18 12:00:00",
   "traceId": "abc123"
 }
 ```

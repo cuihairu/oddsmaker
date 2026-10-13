@@ -33,7 +33,6 @@ flowchart LR
     PG[(PostgreSQL 元数据)]
     CH[(ClickHouse 事件与聚合)]
     REDIS[(Redis 计数器与风控状态)]
-    S3[(S3 归档)]
   end
 
   subgraph Control
@@ -45,7 +44,7 @@ flowchart LR
 
   subgraph App
     DASH[运营与风控大屏]
-    BI[Superset / Metabase]
+    BI[Superset]
     WEBHOOK[Webhook 到游戏服]
   end
 
@@ -94,7 +93,7 @@ PostgreSQL（元数据）
 
 ClickHouse（事件与聚合，共享表）
 ├─ events / sessions
-├─ retention / funnels / resource_changes
+├─ retention / funnels
 ├─ risk_events / risk_scores / risk_actions
 └─ （全部按 (game_id, environment, 日期) 分区）
 （risk_cases 是 PostgreSQL 表，记录案例与判定状态机：OPEN → REVIEW/ALERT/MARK → THROTTLE/BLOCK → RESOLVED，分层前向单向流转）
@@ -121,8 +120,8 @@ ClickHouse（事件与聚合，共享表）
 - 商业化：`order_id,product_id,revenue_amount,revenue_currency,receipt_hash`
 - 虚拟经济：`resource_id,resource_amount,flow_type,item_id`
 - 广告：`ad_network,ad_placement,ad_format,ad_impression_id`
-- 风控：`risk_context,client_integrity,device_fingerprint`
-- 扩展：`props,experiments,attribution`
+- 风控：`risk_context`（`client_integrity,device_fingerprint` 仅为契约字段（Avro），未落 ClickHouse events 表）
+- 扩展：`props_json,experiments,attribution`
 
 ClickHouse 分区（共享表）：
 
@@ -161,7 +160,7 @@ ORDER BY (game_id, environment, event_type, event_date, player_id, user_id, devi
 ## 组件与语言
 
 - Java 21
-- Spring Boot 3 WebFlux
+- Spring Boot 3（网关 WebFlux / 控制面 Web MVC）
 - Kafka 3
 - Flink 1.19
 - ClickHouse 24
