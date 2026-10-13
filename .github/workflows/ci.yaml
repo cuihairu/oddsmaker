@@ -7,9 +7,23 @@ on:
       - main
       - 'release/**'
       - 'feature/**'
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - '.gitignore'
+      - '*.svg'
+      - '.editorconfig'
   pull_request:
     branches:
       - main
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - '.gitignore'
+      - '*.svg'
+      - '.editorconfig'
 
 env:
   JAVA_VERSION: '21'
