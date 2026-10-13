@@ -103,7 +103,16 @@ jobs:
           # inspect 拿到的是新 digest，回滚腿会拉回同一个坏镜像空转（等于没回滚）。
           # 记的就是「当前在跑的上一版」；首次部署无本地镜像则留空，回滚步自动跳过。
           echo "PREV_DIGEST=$(docker inspect --format '{{index .RepoDigests 0}}' "$IMAGE" 2>/dev/null || true)" >> "$GITHUB_ENV"
-          docker pull "$IMAGE"
+          # GHCR 拉取在部署机上偶发 TLS handshake timeout（网络抖动），重试 3 次
+          for i in 1 2 3; do
+            if docker pull "$IMAGE"; then
+              exit 0
+            fi
+            echo "pull attempt $i failed, retrying in 15s"
+            sleep 15
+          done
+          echo "::error::docker pull failed after 3 attempts"
+          exit 1
 
       - name: Deploy stack and verify health
         run: |
