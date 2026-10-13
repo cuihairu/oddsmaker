@@ -148,7 +148,7 @@ Critical alerts include:
 - [x] Configure CORS — 已交付：Spring Security `SecurityConfig#corsConfigurationSource`（白名单源/方法/请求头/凭证，注册 `/api/**`）
 - [ ] Set up firewall rules — 部署环境执行项（仓库无对应配置面，如实保留）
 - [x] Enable audit logging — 已交付：`audit_log` 落库 + `GET /api/audit-logs` 查询（策略/密钥/权限/风控动作全记录）
-- [ ] Configure rate limiting — 部分：control ingress `rate-limit 100/min` 注解已随仓；网关（公网事件入口）侧未覆盖——待部署环境生效
+- [x] Configure rate limiting — 已交付：控制面 ingress `rate-limit 100/min` 注解随仓（`deploy/k8s/control-service.yaml`）+ 网关公网事件入口 `/v1/batch` 应用内限流（`RateLimitFilter`：per-apiKey `rpm` 与 per-IP `ipRpm`，策略级值可覆盖、匿名回退桶，超限 429 + `Retry-After`；e9ebbac，`GatewayFiltersCoverageTest` 5 例 + `RateLimitAndPolicyTest` 5 例绿，网关模块 237 例 0 失败）
 - [x] Set up MFA for admin users — 已交付：登录链路接入 MFA 校验（`AuthController` 密码验证后查 `isUserMFAEnabled`，未带码返回 `{mfaRequired:true}` 挑战、带码经 `verifyMFA` 校验，失败 401 + LOGIN_FAILED 审计；前端 `LoginView` 弹验证码输入重发）。`/api/security/mfa/*` 配置端点与 `SecurityPolicyEntity.mfaRequired` 策略字段均已建
 - [x] Rotate secrets regularly — 已交付：API Key 自动轮换执行端（`V0.9.27` 补 `last_rotated_at` 时间轴；`ControlService.rotateDueApiKeys` 每小时扫描 ACTIVE 且 `auto_rotate=TRUE` 的 key，到期换发 `sk_` 密钥、`pk_` 标识不动，`rotation_days` 空/≤0 回落 90 天，轮换写审计日志；`PUT /api-keys/{key}` 读写 `autoRotate`/`rotationDays`）。密钥值轮换动作已随仓；具体周期由 `rotation_days` 与调度周期配置
 - [x] Monitor security events — 已交付：风控大屏 `/api/risk-metrics`（风险趋势/命中/处置状态）+ 审计日志查询；告警规则接入属监控栈（见 Monitoring Stack）
