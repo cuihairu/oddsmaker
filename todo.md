@@ -41,6 +41,7 @@
 - [x] 文档对账勾账：operations 清单「限流」标网关侧未覆盖，实为已实现（`RateLimitFilter` 拦 `/v1/batch`，per-key `rpm` + per-IP `ipRpm` 超限 429 + `Retry-After`）→ 改判 [x]（e9ebbac，网关 237 例 0 失败）
 - [x] DR 缺口入库：postgres WAL 归档（`archive_mode=on`/`wal_level=replica`/`max_wal_senders=3`/`wal_archive_timeout=30s` + 30 天就地留存清理，归档独立卷/PVC）、Redis 快照+AOF（`save 60 10000/300 10/900 1` + `appendfsync everysec`）、ClickHouse 全量/增量备份脚本（90 天留存）（39e2a1c，纯配置，YAML 解析与 `docker compose config` 全过）
 - [x] Redis 备份 CronJob 去 RWO 共挂：`redis-cli --rdb` 网络流式导出替代数据 PVC 挂载（消除同节点调度耦合 + BGSAVE 完成竞态），补 7 天留存就地清理（backup-strategy.md §Redis 对齐）（6e4bf1d，纯配置，YAML 解析与 shell 语法校验过）
+- [x] K8s 控制面清单镜像指真：`deploy/k8s/control-service.yaml` 的 `oddsmaker/control-service:latest`（仓内无任何 workflow 构建）改指 `ghcr.io/cuihairu/oddsmaker:nightly` + ConfigMap 显式 `SERVICE=control`（与 release.yaml:170 `kubectl set image` 实际镜像对齐），MODES.md K8s 形态行补 gateway（58e7b48，纯配置，YAML 解析过）
 
 ## 边界（决定不做，勿再提）
 
