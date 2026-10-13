@@ -39,6 +39,7 @@
 - [x] ml 训练管线测试纳入 CI：ml-tests job、Python 3.12、editable 安装含 dev extras（a707a32，68 例绿）
 - [x] API Key 自动轮换执行端：`auto_rotate`/`rotation_days` 死字段接活（V0.9.27 `last_rotated_at`、每小时扫描换发 sk_、pk_ 不动、策略 null 不覆盖、轮换写审计）（68ce564，10 例绿，模块 1998 例 0 失败）
 - [x] 文档对账勾账：operations 清单「限流」标网关侧未覆盖，实为已实现（`RateLimitFilter` 拦 `/v1/batch`，per-key `rpm` + per-IP `ipRpm` 超限 429 + `Retry-After`）→ 改判 [x]（e9ebbac，网关 237 例 0 失败）
+- [x] DR 缺口入库：postgres WAL 归档（`archive_mode=on`/`wal_level=replica`/`max_wal_senders=3`/`wal_archive_timeout=30s` + 30 天就地留存清理，归档独立卷/PVC）、Redis 快照+AOF（`save 60 10000/300 10/900 1` + `appendfsync everysec`）、ClickHouse 全量/增量备份脚本（90 天留存）（纯配置，YAML 解析与 `docker compose config` 全过）
 
 ## 边界（决定不做，勿再提）
 

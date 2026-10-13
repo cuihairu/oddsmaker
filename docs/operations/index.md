@@ -124,7 +124,7 @@ Critical alerts include:
 
 ### Backup Schedule
 
-> 目标节奏（设计目标，非仓库已交付配置）：仓库 `deploy/backup/` 仅有 `postgres-backup.sh` 与 `backup-strategy.md`；WAL 归档 / Redis 快照 / ClickHouse 增量配置尚未入库。
+> 仓库已交付配置：postgres WAL 归档（`archive_mode=on` + `wal_archive_timeout=30s` + 30 天就地留存清理，归档走独立卷/PVC）、Redis 快照 + AOF（`save 60 10000/300 10/900 1` + `appendfsync everysec`）、ClickHouse 全量/增量脚本（`deploy/backup/clickhouse-backup.sh`，90 天留存）、pg_dump 全量与 30 天留存（`deploy/backup/postgres-backup.sh` + `deploy/k8s/backup-cronjob.yaml`）。
 
 - **PostgreSQL**: Daily full backup, continuous WAL archiving
 - **Redis**: RDB snapshots every 15 minutes
@@ -132,7 +132,7 @@ Critical alerts include:
 
 ### Recovery Objectives
 
-> 目标 RPO/RTO（设计目标，待部署环境验证）。
+> 目标 RPO/RTO（配置已入库：postgres WAL 归档满足 RPO 5 分钟；待部署环境验证）。
 
 | Component | RPO | RTO |
 |-----------|-----|-----|

@@ -28,10 +28,26 @@ services:
       POSTGRES_DB: oddsmaker
       POSTGRES_USER: oddsmaker
       POSTGRES_PASSWORD: oddsmaker
+    # WAL 归档：PITR 前置（deploy/backup/backup-strategy.md §PostgreSQL）
+    # archive_command 建目录 + 写归档卷 + 就地 30 天留存清理（单段归档后同一次 shell 内完成，
+    # 不依赖第二个 pod 挂载 RWO 卷）；wal_archive_timeout=30s 保证 RPO ≤ 5 分钟
+    command:
+      - postgres
+      - -c
+      - archive_mode=on
+      - -c
+      - wal_level=replica
+      - -c
+      - max_wal_senders=3
+      - -c
+      - wal_archive_timeout=30s
+      - -c
+      - "archive_command=mkdir -p /var/lib/postgresql/archive && cp %p /var/lib/postgresql/archive/%f && find /var/lib/postgresql/archive -type f -mtime +30 -delete"
     ports:
       - "25432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - postgres_archive:/var/lib/postgresql/archive
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U oddsmaker"]
       interval: 5s
@@ -45,6 +61,19 @@ services:
     container_name: oddsmaker-redis
     ports:
       - "26379:6379"
+    # 快照 + AOF：与 backup-strategy.md §Redis 对齐（900/1、300/10、60/10000 + everysec）
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --appendfsync
+      - everysec
+      - --save
+      - "60 10000"
+      - --save
+      - "300 10"
+      - --save
+      - "900 1"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -546,6 +575,9 @@ services:
 
 volumes:
   postgres_data:
+    driver: local
+  # postgres WAL 归档卷（archive_command 目标）；PITR 恢复从这里取全量 WAL 段
+  postgres_archive:
     driver: local
   redis_data:
     driver: local

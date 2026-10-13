@@ -46,7 +46,22 @@ spec:
             - name: redis
               containerPort: 6379
               protocol: TCP
-          command: ["redis-server", "--appendonly", "yes", "--requirepass", "$(REDIS_PASSWORD)"]
+          # 快照 + AOF：与 deploy/backup/backup-strategy.md §Redis 对齐
+          # （save 60 10000 / 300 10 / 900 1，AOF everysec）
+          command:
+            - redis-server
+            - --appendonly
+            - "yes"
+            - --appendfsync
+            - everysec
+            - --save
+            - "60 10000"
+            - --save
+            - "300 10"
+            - --save
+            - "900 1"
+            - --requirepass
+            - "$(REDIS_PASSWORD)"
           env:
             - name: REDIS_PASSWORD
               valueFrom:

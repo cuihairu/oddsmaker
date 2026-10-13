@@ -25,14 +25,21 @@ This document outlines the backup and disaster recovery (DR) strategy for the Od
 - WAL archiving: Continuous
 - Retention: 30 days
 
-**Configuration**:
+**Configuration** (in-repo, both compose and k8s):
 ```sql
--- postgresql.conf
+-- postgresql.conf（等价于 docker-compose.yml 的 postgres command 与 deploy/k8s/postgres.yaml 的 args）
 archive_mode = on
-archive_command = 'cp %p /var/lib/postgresql/archive/%f'
 wal_level = replica
 max_wal_senders = 3
+wal_archive_timeout = 30s      -- 保证 RPO ≤ 5 分钟
+archive_command = 'mkdir -p /var/lib/postgresql/archive \
+  && cp %p /var/lib/postgresql/archive/%f \
+  && find /var/lib/postgresql/archive -type f -mtime +30 -delete'
 ```
+
+归档目录与数据卷分离（compose 命名卷 `postgres_archive` / k8s PVC `oddsmaker-postgres-archive-pvc`），
+留存清理在同一次 `archive_command` shell 调用内完成，不依赖第二个 pod 挂载 RWO 卷。
+归档卷属单主机存储，跨主机 DR 需平台侧快照或挂载到具备对象存储的 PVC 后再由备份作业上传。
 
 **Backup Command**:
 ```bash
@@ -78,13 +85,16 @@ cp /var/lib/redis/dump.rdb /backup/redis/dump_$(date +%Y%m%d%H%M%S).rdb
 - Incremental backup: Daily at 03:00 UTC
 - Retention: 90 days
 
-**Backup Command**:
+**Backup Command** (in-repo, `deploy/backup/clickhouse-backup.sh`):
 ```bash
-# Full backup
-clickhouse-backup create full_$(date +%Y%m%d)
+# Full backup（周日 03:00 UTC）
+clickhouse-backup.sh full
 
-# Incremental backup
-clickhouse-backup create incremental_$(date +%Y%m%d) --diff-from=full_$(date +%Y%m%d -d "7 days ago")
+# Incremental backup（每日 03:00 UTC；自动 diff-from 最近一次 full，无 full 时回退 full）
+clickhouse-backup.sh incremental
+
+# 配置项：CLICKHOUSE_HOST / CLICKHOUSE_PORT / CLICKHOUSE_USER / CLICKHOUSE_PASSWORD
+#         BACKUP_DIR（默认 /backup/clickhouse）/ RETENTION_DAYS（默认 90）/ S3_BUCKET（可选上传）
 ```
 
 ### Kafka

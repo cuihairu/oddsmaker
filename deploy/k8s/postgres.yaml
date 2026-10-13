@@ -17,6 +17,24 @@ spec:
   storageClassName: standard
 
 ---
+# PersistentVolumeClaim for WAL archive（archive_command 目标，与数据卷分离便于独立留存与扩容）
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: oddsmaker-postgres-archive-pvc
+  namespace: oddsmaker
+  labels:
+    app: oddsmaker-postgres
+    component: wal-archive
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 50Gi
+  storageClassName: standard
+
+---
 # Deployment
 apiVersion: apps/v1
 kind: Deployment
@@ -46,6 +64,21 @@ spec:
             - name: postgres
               containerPort: 5432
               protocol: TCP
+          # WAL 归档：PITR 前置（deploy/backup/backup-strategy.md §PostgreSQL）
+          # archive_command 建目录 + 写归档 PVC + 就地 30 天留存清理（单段归档后同一次 shell 内完成，
+          # 不依赖第二个 pod 挂载 RWO 卷）；wal_archive_timeout=30s 保证 RPO ≤ 5 分钟
+          args:
+            - postgres
+            - -c
+            - archive_mode=on
+            - -c
+            - wal_level=replica
+            - -c
+            - max_wal_senders=3
+            - -c
+            - wal_archive_timeout=30s
+            - -c
+            - "archive_command=mkdir -p /var/lib/postgresql/archive && cp %p /var/lib/postgresql/archive/%f && find /var/lib/postgresql/archive -type f -mtime +30 -delete"
           env:
             - name: POSTGRES_DB
               value: "oddsmaker"
@@ -91,12 +124,17 @@ spec:
           volumeMounts:
             - name: postgres-storage
               mountPath: /var/lib/postgresql/data
+            - name: postgres-archive-storage
+              mountPath: /var/lib/postgresql/archive
             - name: init-scripts
               mountPath: /docker-entrypoint-initdb.d
       volumes:
         - name: postgres-storage
           persistentVolumeClaim:
             claimName: oddsmaker-postgres-pvc
+        - name: postgres-archive-storage
+          persistentVolumeClaim:
+            claimName: oddsmaker-postgres-archive-pvc
         - name: init-scripts
           configMap:
             name: oddsmaker-postgres-init
