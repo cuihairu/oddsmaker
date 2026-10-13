@@ -144,7 +144,7 @@ Critical alerts include:
 
 > 2026-10 收尾核验：`[x]` = 仓库已交付且运行时/配置面可证；`[ ]` 附仓库现状证据如实保留（环境执行项与未交付项不假勾）。
 
-- [ ] Enable HTTPS — 部分：k8s control ingress 已配 TLS + ssl-redirect（`deploy/k8s/control-service.yaml`，证书 secret 由运维注入）；网关侧无 ingress 清单、本机 compose 为 HTTP——平台级 HTTPS 待部署环境生效
+- [x] Enable HTTPS — 已交付：控制面与网关 ingress 均配 TLS + ssl-redirect（`deploy/k8s/control-service.yaml`、`deploy/k8s/gateway-service.yaml`，证书 secret 由运维注入；网关入口 `ingest.oddsmaker.local`）。本机 compose 为 HTTP（本地/dev 预期），平台级 HTTPS 随 k8s 清单生效
 - [x] Configure CORS — 已交付：Spring Security `SecurityConfig#corsConfigurationSource`（白名单源/方法/请求头/凭证，注册 `/api/**`）
 - [ ] Set up firewall rules — 部署环境执行项（仓库无对应配置面，如实保留）
 - [x] Enable audit logging — 已交付：`audit_log` 落库 + `GET /api/audit-logs` 查询（策略/密钥/权限/风控动作全记录）
