@@ -75,8 +75,10 @@ jobs:
           node-version: '24'
       - run: npm ci || npm i
       - run: npm run build
-      - name: Run Web SDK consistency tests
-        run: npm run test:hash
+      # 全量三套（test:hash + test:game + test:src 的 node --test）：此前只跑 test:hash，
+      # test:game 与 test:src（含 1009ecb 补的桶文件导出断言）在 CI 上从未执行。
+      - name: Run Web SDK tests
+        run: npm test
 
   # Job 3: ML 训练管线测试（Python，离线合成数据不联网；依赖以 ml/pyproject.toml 为单一真源）
   ml-tests:
@@ -132,4 +134,4 @@ jobs:
   # 镜像推送已从本流水线移出，统一由两处负责，避免同一 :latest 由两条链路竞争：
   #   - nightly-build.yml → ghcr.io/cuihairu/oddsmaker:nightly（每日 cron + main 推送）
   #   - release.yaml      → ghcr.io/cuihairu/oddsmaker:<version>/<major.minor>/<major>/latest（v* tag）
-  # 本流水线只做校验（Java 全模块测试 + Web SDK 构建/一致性测试 + ML 训练管线测试 + Web 控制台测试）。
+  # 本流水线只做校验（Java 全模块测试 + Web SDK 构建/全量测试 + ML 训练管线测试 + Web 控制台测试）。
