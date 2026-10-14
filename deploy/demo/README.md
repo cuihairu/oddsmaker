@@ -15,6 +15,12 @@
   `kafka(healthy)` + `topic-init(completed)`，按服务名挑着 `up` 也会连带拉起 Kafka/Apicurio，
   1.6 GB 机器跑不动（本编排直接省掉 Kafka：分析类接口按 designed 降级 `available=false`）。
 - JVM 堆在 `.env`/编排里已按 `-Xms256m -Xmx512m -XX:MaxMetaspaceSize=256m` 收窄。
+- 编排里的 `redis` 服务当前**无任何代码连接**（全仓无 Redis 依赖、无 `RedisTemplate`/连接工厂、
+  无 `spring.data.redis.*` 配置；根编排里的 `SPRING_DATA_REDIS_HOST` 因缺依赖同样不生效），
+  按目标架构（限流、实时计数、风控短窗状态）预留，`deploy/MODES.md` 的组件矩阵亦按此登记。
+  若确认不再需要，删除须同时改三处：本手册、`deploy/MODES.md` 矩阵、以及部署机上的
+  `/opt/oddsmaker/docker-compose.yml`（该文件是首次落地时的人工拷贝，仓库改动不会自动下发，
+  且 `docker compose up -d` 不带 `--remove-orphans` 时旧容器会残留）。
 
 ### 1.1 必做系统调优：`vm.swappiness=60`
 
