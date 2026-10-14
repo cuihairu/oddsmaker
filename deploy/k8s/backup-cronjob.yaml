@@ -14,23 +14,32 @@ data:
     set -e
 
     # Configuration
-    BACKUP_DIR="/backup"
+    BACKUP_DIR="${BACKUP_DIR:-/backup}"
+    RETENTION_DAYS="${RETENTION_DAYS:-30}"
     TIMESTAMP=$(date +%Y%m%d_%H%M%S)
     BACKUP_FILE="$BACKUP_DIR/postgres_$TIMESTAMP.sql.gz"
 
-    # Perform backup
+    mkdir -p "$BACKUP_DIR"
+
+    # Perform backup（pg_dump 恒为全量逻辑备份；时间点恢复由 postgres WAL 归档承担）
     pg_dump -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME --format=custom --compress=9 --file=$BACKUP_FILE
 
     # Verify backup
-    pg_restore --list $BACKUP_FILE > /dev/null 2>&1
+    pg_restore --list "$BACKUP_FILE" > /dev/null 2>&1
 
-    # Upload to S3 (if configured)
+    # Upload to S3 (if configured)。本 CronJob 镜像是 postgres:16-alpine，**不含 aws CLI**，
+    # 故先判存在再传：否则 aws: not found 会被上面的 set -e 当成失败中止，
+    # 连带下面的留存清理永不执行，备份 PVC 无界增长直到写满。
     if [ -n "$S3_BUCKET" ]; then
-      aws s3 cp $BACKUP_FILE s3://$S3_BUCKET/postgres/ --storage-class STANDARD_IA
+      if command -v aws > /dev/null 2>&1; then
+        aws s3 cp "$BACKUP_FILE" s3://$S3_BUCKET/postgres/ --storage-class STANDARD_IA
+      else
+        echo "WARN: S3_BUCKET=$S3_BUCKET 已配置但镜像内无 aws CLI，跳过离站副本（备份已落本地 $BACKUP_FILE）" >&2
+      fi
     fi
 
-    # Clean up old backups (keep last 30 days)
-    find $BACKUP_DIR -name "*.sql.gz" -type f -mtime +30 -delete
+    # Clean up old backups（清理置于上传之后但不受上传成败牵连）
+    find "$BACKUP_DIR" -name "*.sql.gz" -type f -mtime +$RETENTION_DAYS -delete
 
     echo "Backup completed: $BACKUP_FILE"
 
@@ -132,7 +141,9 @@ metadata:
   labels:
     app: oddsmaker-backup
 spec:
-  schedule: "0 3 * * 0"  # Weekly on Sunday at 3:00 AM
+  # 每周日 03:00 的保留副本：与每日档同走 pg_dump 全量逻辑备份，
+  # 差异仅在错开时段（避免与日档 02:00 争抢同一备份卷），不再注入无接线效果的 BACKUP_TYPE。
+  schedule: "0 3 * * 0"
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 3
@@ -149,9 +160,6 @@ spec:
             - name: backup
               image: postgres:16-alpine
               command: ["/bin/bash", "/scripts/backup.sh"]
-              env:
-                - name: BACKUP_TYPE
-                  value: "full"
               envFrom:
                 - secretRef:
                     name: oddsmaker-backup-secrets

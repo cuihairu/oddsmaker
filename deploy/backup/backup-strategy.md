@@ -25,6 +25,13 @@ This document outlines the backup and disaster recovery (DR) strategy for the Od
 - WAL archiving: Continuous
 - Retention: 30 days
 
+> k8s CronJob（`deploy/k8s/backup-cronjob.yaml`）每日 02:00 与每周日 03:00 各跑一次
+> `pg_dump --format=custom` 全量逻辑备份（30 天就地留存清理）。两个作业同一脚本、同一镜像
+> （`postgres:16-alpine`），差异仅在时段错开。**该镜像不含 aws CLI**，故脚本先判
+> `command -v aws` 再传：`S3_BUCKET` 已配置但缺 CLI 时打 WARN 跳过离站副本，而不是让
+> `set -e` 中止并连带跳过留存清理（那会让备份 PVC 无界增长直到写满）。离站副本需在基础
+> 镜像装 aws-cli，或改由外部备份控制器接管。
+
 **Configuration** (in-repo, both compose and k8s):
 ```sql
 -- postgresql.conf（等价于 docker-compose.yml 的 postgres command 与 deploy/k8s/postgres.yaml 的 args）
