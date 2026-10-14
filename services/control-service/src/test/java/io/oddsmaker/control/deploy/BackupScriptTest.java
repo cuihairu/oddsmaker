@@ -6,6 +6,7 @@ import org.yaml.snakeyaml.Yaml;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -31,6 +32,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * {@code aws: not found} 会让 set -e 直接中止——S3 离站副本从未产生，且其后的
  * {@code find -mtime -delete} 留存清理同样不执行，备份 PVC 无界增长直到写满。
  * 本测试要求：缺 aws 时脚本仍退出 0、留存清理照常跑、且就地把缺口喊出来。
+ *
+ * <p>沙箱 PATH 刻意只留桩 bin（宿主 coreutils 由 {@code linkSystemTools} 按需符号链接，
+ * 见 {@link #SANDBOX_TOOLS}）。GH-hosted runner 预装 aws CLI，早年把整段宿主目录挂进 PATH
+ * 的做法会让「镜像内无 aws」这条前提在 CI 上静默失效——脚本真的去传 S3，无凭证失败被
+ * set -e 带走，留存清理连带跳过（已发生过，见 a0c1b9f 之后的 CI 红）。
  */
 class BackupScriptTest {
 
@@ -44,18 +50,43 @@ class BackupScriptTest {
         stub.toFile().setExecutable(true);
     }
 
-    /** coreutils 等真实工具所在目录（桩 bin 在前，故 pg_dump 必被桩接管）。 */
-    private static final String SYSTEM_PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
+    /** 宿主工具可搜索目录，仅用于「找」符号链接源，本身不进入沙箱 PATH。 */
+    private static final String HOST_TOOL_DIRS = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
 
     /**
-     * 造 PATH：桩 bin 在前（pg_dump/pg_restore 被桩接管，不打真库），
-     * 其后接系统目录（date/mkdir/find 等 coreutils 需真实可执行）。
-     *
-     * <p>全路径**刻意不含 aws**——复现 postgres:16-alpine 的真实能力边界（实测该镜像无 aws）。
+     * 沙箱内必须的宿主 coreutils。GH-hosted runner 预装 aws CLI，若像早年那样把整段
+     * 宿主目录挂进 PATH，「镜像内无 aws」这条前提在 CI 上会失效（脚本真的去传 S3，
+     * 无凭证失败被 set -e 带走）。故 PATH 只留桩 bin，把用到的工具逐个链进来。
+     */
+    private static final List<String> SANDBOX_TOOLS =
+            List.of("date", "tee", "mkdir", "find", "du", "cut", "rm", "tar", "gzip");
+
+    /** 把宿主 coreutils 符号链接进桩 bin；宿主缺工具时立即报清晰错误，不做静默降级。 */
+    private static void linkSystemTools(Path binDir) throws IOException {
+        for (String tool : SANDBOX_TOOLS) {
+            Path src = findHostTool(tool);
+            try {
+                Files.createSymbolicLink(binDir.resolve(tool), src);
+            } catch (FileAlreadyExistsException ignored) { }
+        }
+    }
+
+    private static Path findHostTool(String tool) throws IOException {
+        for (String dir : HOST_TOOL_DIRS.split(":")) {
+            Path candidate = Path.of(dir, tool);
+            if (Files.isExecutable(candidate)) return candidate;
+        }
+        throw new IllegalStateException("sandbox tool not found in " + HOST_TOOL_DIRS + ": " + tool);
+    }
+
+    /**
+     * 造 PATH：桩 bin 独享（pg_dump/pg_restore 被桩接管，date/mkdir/find 由 linkSystemTools
+     * 链入）。刻意不挂宿主目录——复现 postgres:16-alpine 的能力边界（该镜像无 aws），
+     * 且在预装 aws 的 runner 上保持同样语义。
      */
     private static Map<String, String> sandboxEnv(Path binDir, Path backupDir) {
         Map<String, String> env = new HashMap<>();
-        env.put("PATH", binDir.toAbsolutePath() + ":" + SYSTEM_PATH);
+        env.put("PATH", binDir.toAbsolutePath().toString());
         env.put("BACKUP_DIR", backupDir.toAbsolutePath().toString());
         env.put("DB_HOST", "oddsmaker-postgres");
         env.put("DB_PORT", "5432");
@@ -69,7 +100,7 @@ class BackupScriptTest {
     /** 沙箱 PATH 下命令是否可解析（前提校验：aws 不应可解析）。 */
     private static boolean commandExists(Path binDir, String name) {
         ProcessBuilder pb = new ProcessBuilder(List.of("/bin/sh", "-c",
-                "PATH=" + binDir.toAbsolutePath() + ":" + SYSTEM_PATH + " command -v " + name));
+                "PATH=" + binDir.toAbsolutePath() + " command -v " + name));
         pb.redirectErrorStream(true);
         try {
             Process p = pb.start();
@@ -131,6 +162,7 @@ class BackupScriptTest {
         Path root = freshDir("cronjob-backup");
         Path bin = Files.createDirectories(root.resolve("bin"));
         Path backupDir = Files.createDirectories(root.resolve("backup"));
+        linkSystemTools(bin);
         writeStub(bin, "pg_dump", "#!/bin/bash\nfor a in \"$@\"; do case \"$a\" in --file=*) : > \"${a#--file=}\";; esac; done\nexit 0\n");
         writeStub(bin, "pg_restore", "#!/bin/bash\nexit 0\n");
 
@@ -138,7 +170,7 @@ class BackupScriptTest {
         Path script = root.resolve("backup.sh");
         Files.writeString(script, embeddedCronJobScript(), StandardCharsets.UTF_8);
         assertFalse(commandExists(bin, "aws"),
-                "沙箱前提失效：宿主 PATH 里有 aws，本用例就测不出「镜像无 aws」这条降级路径");
+                "沙箱前提失效：桩 bin 内出现 aws，本用例就测不出「镜像无 aws」这条降级路径");
 
         Run run = runScript(script, bin, backupDir);
 
@@ -172,6 +204,7 @@ class BackupScriptTest {
         Path root = freshDir("standalone-backup");
         Path bin = Files.createDirectories(root.resolve("bin"));
         Path backupDir = Files.createDirectories(root.resolve("backup"));
+        linkSystemTools(bin);
         writeStub(bin, "pg_dump", "#!/bin/bash\nfor a in \"$@\"; do case \"$a\" in --file=*) : > \"${a#--file=}\";; esac; done\nexit 0\n");
         writeStub(bin, "pg_restore", "#!/bin/bash\nexit 0\n");
 
@@ -204,6 +237,7 @@ class BackupScriptTest {
         Path root = freshDir("standalone-verify");
         Path bin = Files.createDirectories(root.resolve("bin"));
         Path backupDir = Files.createDirectories(root.resolve("backup"));
+        linkSystemTools(bin);
         writeStub(bin, "pg_dump", "#!/bin/bash\nfor a in \"$@\"; do case \"$a\" in --file=*) : > \"${a#--file=}\";; esac; done\nexit 0\n");
         writeStub(bin, "pg_restore", "#!/bin/bash\necho 'corrupt archive' >&2\nexit 1\n");
 
@@ -238,6 +272,7 @@ class BackupScriptTest {
         Path root = freshDir("ch-backup");
         Path bin = Files.createDirectories(root.resolve("bin"));
         Path backupDir = Files.createDirectories(root.resolve("backup"));
+        linkSystemTools(bin);
         // clickhouse-backup 桩：脚本以 `$CH_FLAGS create "$BACKUP_NAME"` 调用，flags 数量不定，
         // 故只认恰好等于子命令词的参数（flag 值 localhost/9000/oddsmaker 不会与之相撞）。
         Path trace = root.resolve("trace.log");
@@ -261,7 +296,7 @@ class BackupScriptTest {
         assertTrue(Files.exists(script), "clickhouse-backup.sh missing: " + script);
 
         Map<String, String> env = new HashMap<>();
-        env.put("PATH", bin.toAbsolutePath() + ":" + SYSTEM_PATH);
+        env.put("PATH", bin.toAbsolutePath().toString());
         env.put("BACKUP_DIR", backupDir.toAbsolutePath().toString());
         env.put("RETENTION_DAYS", "90");
         env.put("CLICKHOUSE_HOST", "localhost");
