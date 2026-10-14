@@ -58,18 +58,20 @@ jobs:
           distribution: 'temurin'
           cache: gradle
 
+      # 走仓库 wrapper（不钉 gradle-version）：此前硬钉 8.7，Boot 4 插件要求 Gradle 8.14+，
+      # 下次发版会在配置阶段直接失败（nightly Dockerfile 同款坑，28c3a20 修过 Dockerfile 侧）；
+      # 且版本真源应为 wrapper，与 ci/nightly 同源。test 走全模块（与 ci/nightly 同口径）。
       - name: Run tests
         uses: gradle/gradle-build-action@v3
         with:
-          gradle-version: '8.7'
           arguments: |
             --no-daemon
-            :services:control-service:test
+            --stacktrace
+            test
 
       - name: Build application
         uses: gradle/gradle-build-action@v3
         with:
-          gradle-version: '8.7'
           arguments: |
             --no-daemon
             :services:control-service:bootJar
