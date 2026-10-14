@@ -97,7 +97,37 @@ jobs:
       - name: Run ML pipeline tests
         run: python -m pytest
 
+  # Job 4: Web 控制台测试（web/ vitest，198+ 例）
+  # 此前只由 nightly 跑：push/PR 阶段无门，改坏 web/ 的提交在 CI 上是绿的、到夜里才红。
+  web-console-tests:
+    name: Web Console tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      # pnpm 必须先于 setup-node 安装：cache: 'pnpm' 会执行 pnpm store path，pnpm 不在 PATH 时 setup-node 直接失败
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 12
+          run_install: false
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: 'pnpm'
+          cache-dependency-path: 'web/pnpm-lock.yaml'
+
+      - name: Install dependencies
+        run: pnpm -C web install --frozen-lockfile
+
+      - name: Run tests
+        run: pnpm -C web test
+
+      - name: Build (verify compile)
+        run: pnpm -C web build
+
   # 镜像推送已从本流水线移出，统一由两处负责，避免同一 :latest 由两条链路竞争：
   #   - nightly-build.yml → ghcr.io/cuihairu/oddsmaker:nightly（每日 cron + main 推送）
   #   - release.yaml      → ghcr.io/cuihairu/oddsmaker:<version>/<major.minor>/<major>/latest（v* tag）
-  # 本流水线只做校验（Java 服务测试 + Web SDK 构建/一致性测试 + ML 训练管线测试）。
+  # 本流水线只做校验（Java 服务测试 + Web SDK 构建/一致性测试 + ML 训练管线测试 + Web 控制台测试）。
