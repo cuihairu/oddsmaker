@@ -31,7 +31,7 @@ otel-collector/Prometheus/Grafana，端口 29xxx/18088/13000 段），两者注�
 | Flink 作业 ×7（enrich / sessions / retention / funnels / configurable-funnels / identity-merge / risk） | ❌ | ❌ | ✅ 根（eclipse-temurin:21-jre 直跑 fatJar 的 local executor 形态） |
 | Superset | ❌ | ✅ 3.1.0（38088） | ✅ 根 3.1.0（8088）；infra 3.0.2（18088） |
 | otel-collector + Prometheus + Grafana | ❌ | ❌ | ✅ infra（4317/4318/9464、9090、13000；配置在 `infra/prometheus.yml`、`infra/grafana/`、`deploy/monitoring/`） |
-| 对象存储归档 | ❌ | ❌ | 不在任何 compose：`deploy/backup/postgres-backup.sh`（`aws s3 cp` → S3）+ `deploy/k8s/backup-cronjob.yaml` |
+| 对象存储归档 | ❌ | ❌ | 不在任何 compose：`deploy/backup/postgres-backup.sh` + `deploy/k8s/backup-cronjob.yaml`（`pg_dump` 全量 + 30 天就地留存；S3 离站需环境内备 aws CLI，k8s 基础镜像 `postgres:16-alpine` 不含，缺 CLI 时脚本 WARN 跳过而非中断） |
 | K8s 形态 | — | — | `deploy/k8s/`（namespace/postgres/redis/control/gateway/backup-cronjob）+ `infra/helm/` |
 
 ## 各档说明
