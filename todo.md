@@ -45,6 +45,7 @@
 - [x] K8s 部署文档对账：`deploy.k8s.md` 方式二由 legacy `infra/k8s/` 改指当前 `deploy/k8s/` 清单，前提与镜像构建段改述单镜像双服务 `ghcr.io/cuihairu/oddsmaker:nightly` + `SERVICE`（665d630，纯文档，docs:build 绿）
 - [x] Web SDK 游戏事件 helper 出口接线：`sdks/web/src/game-events.ts`（`GameEvents` 19 方法 + 8 常量对象，468 行）自 e9ebbac 起存在但从未从 `index.ts` 桶文件导出，`game-event-dictionary.zh.md:98` 标「待补」——补 `export * from './game-events.ts'` + tsconfig `rewriteRelativeImportExtensions`（tsc 5.9 将 `.ts` 重写为 `.js` 输出，Node 24 原生 TS 运行时需显式扩展名），index.test.ts 补桶文件导出断言（1009ecb，web 47 例 0 失败，docs:build 绿）
 - [x] K8s 备份作业留存清理被 aws 缺失整条掐断：`backup-cronjob.yaml` 内嵌 backup.sh 跑在 `postgres:16-alpine`（实测镜像内无 aws CLI），`set -e` 下 `aws s3 cp` 直接 127 中止，其后 `find -mtime +30 -delete` 永不执行——100Gi 备份 PVC 无界增长直到写满，离站副本也从未产生；上传分支加 `command -v aws` 判存 + WARN 降级，同款修 `deploy/backup/postgres-backup.sh`（另修 LOG_FILE 不可写致首条 log 即中止、pg_restore 校验在 set -e 后形同虚设），BACKUP_DIR/LOG_FILE 开放环境覆盖，周档去掉脚本不读的 `BACKUP_TYPE` 死变量（a0c1b9f，新增 BackupScriptTest 5 例，control-service 167 suite/2003 例 0 失败）
+- [x] 运维文档三处失效部署指令对账：operations/index.md ① `kubectl apply -f deploy/monitoring/` 改述配置文件挂载/导入语义（目录内是 Prometheus 抓取配置+告警规则+Grafana 看板导出，无任何 k8s manifests，原命令必失败）② Helm 段假仓库 `helm repo add oddsmaker https://charts.oddsmaker.local` + `helm install oddsmaker/oddsmaker` 改指仓内 chart `./infra/helm/oddsmaker`（与 deploy.k8s.md 对齐）③ `kubectl apply -f deploy/k8s/` 目录整体应用改逐清单+备份注释可选（backup-cronjob 非必装）；release.md 镜像构建段补单镜像双服务 CI 路径并注明 Helm 需逐服务镜像、deploy/k8s/ 走单镜像（0550588/996780f/abccfe2，纯文档，docs:build 绿，引用路径全存在）
 
 ## 边界（决定不做，勿再提）
 
