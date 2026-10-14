@@ -55,6 +55,7 @@
 - [x] Java 测试门禁扩到全模块：ci.yaml 的 build-and-test 由 control+gateway 两模块（2243 例）改为 bare `test`，此前其余 13 个模块 493 例（agent 211 / Flink 七作业 257 / sdks-server 8 / libs 17）只在 nightly 跑，与 ml、web 缺门同族（f86f218，全量 2736 例 0 失败，254 suite）
 - [x] Release 流水线拆弹：release.yaml build job 两步硬钉 gradle-version '8.7'（Boot 4 要求 8.14+，下次发版必在配置阶段炸；28c3a20 只修了 Dockerfile 侧）+ 测试步仅 control 单模块——改走仓库 wrapper + bare `test` 全模块，与 ci/nightly 同源同口径（878dd48，YAML 解析过，零源码变更沿用同源全量 2736 例 0 失败；未打 tag 未触发发版）
 - [x] Web SDK 测试门禁补全：ci.yaml build-web-sdk 由只跑 `test:hash` 改为 `npm test` 三套全跑——`test:game` 与 `test:src`（含 1009ecb 桶文件导出断言）此前在 CI 上从未执行，各流水线对 sdks/ 仅此一处引用（1115c6b，本机三套全绿：test:src 47 例 0 失败，hash/game OK）
+- [x] Nightly Full Test Suite 口径补齐：nightly job 1 名为 Full Test Suite 却缺 ml（68 例）与 Web SDK 三套两腿，补齐与 ci.yaml 四腿同口径；顺带 web/ 步骤误标 "Web SDK" 命名对正为 Web Console（eaab3f5，YAML 解析过；本机全量：gradle 2736 例 / web 202 例+build / ml 68 例 / SDK 三套，均 0 失败）
 
 ## 边界（决定不做，勿再提）
 
