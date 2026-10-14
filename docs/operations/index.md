@@ -79,13 +79,18 @@ The recommended monitoring stack includes:
 
 ### Quick Setup
 
-```bash
-# Deploy monitoring stack
-kubectl apply -f deploy/monitoring/
+`deploy/monitoring/` contains **configuration files** (not Kubernetes manifests) — mount them into an existing Prometheus / Grafana installation:
 
-# Access Grafana
+```bash
+# prometheus.yaml  → Prometheus scrape config (scrape targets + rule_files)
+# alerts/oddsmaker-alerts.yml → alerting rules (referenced from prometheus.yaml)
+# grafana-dashboard.json → Grafana dashboard export (import via Grafana UI)
+
+# Access Grafana (after deploying the stack with your own manifests or operator)
 kubectl port-forward svc/grafana 3000:80 -n monitoring
 ```
+
+The `deploy/k8s/` service manifests carry `prometheus.io/scrape` annotations — point your Prometheus Operator ServiceMonitor or scrape config at those ports.
 
 ## Key Metrics
 
@@ -125,6 +130,8 @@ Critical alerts include:
 ### Backup Schedule
 
 > 仓库已交付配置：postgres WAL 归档（`archive_mode=on` + `wal_archive_timeout=30s` + 30 天就地留存清理，归档走独立卷/PVC）、Redis 快照 + AOF（`save 60 10000/300 10/900 1` + `appendfsync everysec`）、ClickHouse 全量/增量脚本（`deploy/backup/clickhouse-backup.sh`，90 天留存）、pg_dump 全量与 30 天留存（`deploy/backup/postgres-backup.sh` + `deploy/k8s/backup-cronjob.yaml`）。
+>
+> S3 离站副本需运行环境中存在 aws CLI。k8s CronJob 镜像 `postgres:16-alpine` 不含该 CLI，脚本会判存后打 WARN 跳过（备份仍落本地并照常清理留存），不会中断作业——离站副本请在基础镜像装 aws-cli，或改由外部备份控制器接管。
 
 - **PostgreSQL**: Daily full backup, continuous WAL archiving
 - **Redis**: RDB snapshots every 15 minutes
