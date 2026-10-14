@@ -30,8 +30,11 @@ dependencies {
   implementation("org.springframework.boot:spring-boot-starter-oauth2-resource-server")
   implementation("org.springframework.boot:spring-boot-starter-oauth2-client")
 
-  // Kafka
+  // Kafka：spring-kafka 只是客户端，Boot 4 把 KafkaAutoConfiguration 拆到了
+  // spring-boot-kafka 模块（Boot 3 时它在 spring-boot-autoconfigure 里）。
+  // 缺这个模块 = 没有 kafkaListenerContainerFactory，@KafkaListener 组件让整个 context 起不来。
   implementation("org.springframework.kafka:spring-kafka")
+  implementation("org.springframework.boot:spring-boot-kafka")
 
   // ClickHouse（风控处置归档 risk_actions + 风控大屏指标查询）
   implementation("com.clickhouse:clickhouse-jdbc:0.6.5")
@@ -41,9 +44,13 @@ dependencies {
   implementation("io.jsonwebtoken:jjwt-impl:0.12.6")
   implementation("io.jsonwebtoken:jjwt-jackson:0.12.6")
 
-  // Database migrations
+  // Database migrations：flyway-core 只是引擎，Boot 4 把 FlywayAutoConfiguration 拆到了
+  // spring-boot-flyway 模块（Boot 3 时在 spring-boot-autoconfigure 里）。
+  // 缺这个模块 = Flyway 静默不执行：老库因 schema 已在而不报错，新库直接 validate 失败，
+  // 新迁移永远不落库（2026-10-14 真机复现 missing table [ad_analysis]）。
   implementation("org.flywaydb:flyway-core")
   implementation("org.flywaydb:flyway-database-postgresql")
+  implementation("org.springframework.boot:spring-boot-flyway")
 
   // PostgreSQL driver
   runtimeOnly("org.postgresql:postgresql")
