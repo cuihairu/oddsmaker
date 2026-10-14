@@ -223,7 +223,69 @@ class BackupScriptTest {
         assertFalse(p.exitValue() == 0, "校验失败必须非 0 退出，否则损坏备份会被当作成功并进入留存/上传链路");
     }
 
+    /** 造一个 mtime 落在 N 天前的目录。 */
+    private static Path agedDir(Path parent, String name, int ageDays) throws IOException {
+        Path d = Files.createDirectories(parent.resolve(name));
+        Files.setLastModifiedTime(d, FileTime.from(Instant.now().minus(ageDays, ChronoUnit.DAYS)));
+        return d;
+    }
+
     // ===== CronJob 清单层面的死配置 =====
+
+    @Test
+    @DisplayName("clickhouse-backup.sh: 留存清理不被上传分支牵连，且表达式按名分组正确")
+    void clickHouseRetentionRunsAndPredicateGroupsCorrectly() throws Exception {
+        Path root = freshDir("ch-backup");
+        Path bin = Files.createDirectories(root.resolve("bin"));
+        Path backupDir = Files.createDirectories(root.resolve("backup"));
+        // clickhouse-backup 桩：脚本以 `$CH_FLAGS create "$BACKUP_NAME"` 调用，flags 数量不定，
+        // 故只认恰好等于子命令词的参数（flag 值 localhost/9000/oddsmaker 不会与之相撞）。
+        Path trace = root.resolve("trace.log");
+        Files.writeString(trace, "", StandardCharsets.UTF_8);
+        writeStub(bin, "clickhouse-backup", "#!/bin/bash\n"
+                + "sub=\"\"\n"
+                + "for a in \"$@\"; do case \"$a\" in create|upload|list) sub=\"$a\"; break ;; esac; done\n"
+                + "case \"$sub\" in\n"
+                + "  create) echo \"create $1\" >> " + trace + " ;;\n"
+                + "  upload) echo \"upload\" >> " + trace + " ;;\n"
+                + "  list) echo \"\" ;;\n"
+                + "esac\n"
+                + "exit 0\n");
+
+        Path stale = agedDir(backupDir, "full_20200101_000000", 120);
+        Path fresh = agedDir(backupDir, "full_20990101_000000", 1);
+        // 同名干扰项：retention 表达式若不加括号，会被 -o 优先级串味误删。
+        Path bystander = Files.createDirectories(backupDir.resolve("unrelated_old"));
+
+        Path script = REPO.resolve("deploy/backup/clickhouse-backup.sh");
+        assertTrue(Files.exists(script), "clickhouse-backup.sh missing: " + script);
+
+        Map<String, String> env = new HashMap<>();
+        env.put("PATH", bin.toAbsolutePath() + ":" + SYSTEM_PATH);
+        env.put("BACKUP_DIR", backupDir.toAbsolutePath().toString());
+        env.put("RETENTION_DAYS", "90");
+        env.put("CLICKHOUSE_HOST", "localhost");
+        env.put("S3_BUCKET", "oddsmaker-backups");
+
+        ProcessBuilder pb = new ProcessBuilder(List.of("/bin/bash", script.toAbsolutePath().toString(), "full"));
+        pb.environment().clear();
+        pb.environment().putAll(env);
+        pb.directory(root.toFile());
+        pb.redirectErrorStream(true);
+        Path out = Files.createTempFile("ch-out", ".log");
+        pb.redirectOutput(out.toFile());
+        Process p = pb.start();
+        assertTrue(p.waitFor(60, TimeUnit.SECONDS), "clickhouse-backup.sh timed out");
+        String text = Files.readString(out);
+
+        assertEquals(0, p.exitValue(), "上传失败不应中断作业（留存清理在其后）；实际输出：\n" + text);
+        assertFalse(Files.exists(stale), "超期备份目录未被清理——留存清理被上传分支掐断");
+        assertTrue(Files.exists(fresh), "未超期备份目录被误删");
+        assertTrue(Files.exists(bystander), "非备份目录被误删——-name 谓词缺括号导致 -o 串味");
+        String traced = Files.readString(trace);
+        assertTrue(traced.contains("create"), "备份本体未执行；桩未命中 create 子命令");
+        assertTrue(traced.contains("upload"), "配了 S3_BUCKET 应仍尝试上传（离站副本是既有能力，不因本轮加固而移除）");
+    }
 
     @Test
     @DisplayName("CronJob 清单: 不留未接线的 BACKUP_TYPE 死环境变量（脚本不读它，易被误读为全量/增量有别）")

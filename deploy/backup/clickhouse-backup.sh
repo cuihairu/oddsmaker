@@ -59,13 +59,16 @@ else
 fi
 
 # Upload to S3 (if configured)
+# 注意 set -e：上传失败不得中止——留存清理在其后，中止会让备份目录无界增长。
 if [ -n "$S3_BUCKET" ]; then
     log "Uploading $BACKUP_NAME to s3://$S3_BUCKET/clickhouse/"
-    clickhouse-backup $CH_FLAGS upload "$BACKUP_NAME" --storage-class STANDARD_IA
+    clickhouse-backup $CH_FLAGS upload "$BACKUP_NAME" --storage-class STANDARD_IA \
+        || log "WARN: S3 上传失败（备份保留在本地 $BACKUP_DIR/$BACKUP_NAME）"
 fi
 
 # Retention: delete local backups older than RETENTION_DAYS
-find "$BACKUP_DIR" -maxdepth 1 -type d -name "full_*" -o -name "incremental_*" | while read -r d; do
+# -name 谓词必须括号分组：-o 优先级低于隐式 AND，不分组时 -maxdepth/-type 只约束第一个分支。
+find "$BACKUP_DIR" -maxdepth 1 -type d \( -name "full_*" -o -name "incremental_*" \) | while read -r d; do
     if [ -n "$(find "$d" -maxdepth 0 -mtime +"$RETENTION_DAYS" -print -quit 2>/dev/null)" ]; then
         log "Pruning expired backup: $d"
         rm -rf "$d"
