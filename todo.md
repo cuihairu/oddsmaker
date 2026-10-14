@@ -53,6 +53,7 @@
 - [x] Deploy Demo 假绿：上游 Nightly 失败时 deploy job 被 `if` 跳过，workflow_run 触发的 run 仍报 success——「Deploy Demo 绿」会被读成部署成功，实际什么都没部署（实测 38517953004：deploy=skipped、run=success，本轮排障被误导过）。加 `no-deploy` 哨兵 job，仅在 deploy 被跳过时显式变红，保证该工作流绿 = 真部署过且健康（6ccf1b6，YAML 解析过；同日 38543678647 实测 deploy 绿 + 哨兵 skipped）
 - [x] Web 控制台测试纳入 push/PR 门禁：web/ vitest 202 例此前只在 nightly-build.yml 跑，ci.yaml 三 job（Java 服务 / Web SDK / ML）均不覆盖——改坏 web/ 的提交在 CI 上绿、到夜里才红（与 ml 缺 CI 同族，a707a32 已闭合 ml）。ci.yaml 补 web-console-tests job，步骤与 nightly 同形同源（pnpm 12 + Node 24 + frozen-lockfile + test + build）（8435700，全量门禁本机实跑：gradle 全模块 2736 例、web 202 例、ml 68 例，均 0 失败）
 - [x] Java 测试门禁扩到全模块：ci.yaml 的 build-and-test 由 control+gateway 两模块（2243 例）改为 bare `test`，此前其余 13 个模块 493 例（agent 211 / Flink 七作业 257 / sdks-server 8 / libs 17）只在 nightly 跑，与 ml、web 缺门同族（f86f218，全量 2736 例 0 失败，254 suite）
+- [x] Release 流水线拆弹：release.yaml build job 两步硬钉 gradle-version '8.7'（Boot 4 要求 8.14+，下次发版必在配置阶段炸；28c3a20 只修了 Dockerfile 侧）+ 测试步仅 control 单模块——改走仓库 wrapper + bare `test` 全模块，与 ci/nightly 同源同口径（878dd48，YAML 解析过，零源码变更沿用同源全量 2736 例 0 失败；未打 tag 未触发发版）
 
 ## 边界（决定不做，勿再提）
 
