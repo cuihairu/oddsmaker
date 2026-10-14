@@ -6,7 +6,9 @@
 # ============================================================
 # Stage 1: Build both services (Gradle with full monorepo context)
 # ============================================================
-FROM gradle:8.10-jdk21 AS build
+# Gradle 版本须与仓库 wrapper 同步（gradle/wrapper/gradle-wrapper.properties = 9.8.1）：
+# Spring Boot 4 插件要求 Gradle 8.14+ 或 9.x，镜像内旧钉 8.10 会让 bootJar 在配置阶段直接失败。
+FROM gradle:9.8.1-jdk21 AS build
 WORKDIR /workspace
 
 # 先拷全部构建文件作缓存层（settings include 的模块一个不能少）
@@ -24,6 +26,8 @@ COPY jobs/flink/funnels-job/build.gradle.kts jobs/flink/funnels-job/
 COPY jobs/flink/risk-job/build.gradle.kts jobs/flink/risk-job/
 COPY jobs/flink/identity-merge-job/build.gradle.kts jobs/flink/identity-merge-job/
 COPY jobs/flink/dimension-sync-job/build.gradle.kts jobs/flink/dimension-sync-job/
+COPY sdks/server/build.gradle.kts sdks/server/
+COPY agents/dimension-sync-agent/build.gradle.kts agents/dimension-sync-agent/
 
 # 预热依赖（构建文件不变时命中缓存层）
 RUN gradle :services:control-service:dependencies :services:gateway-service:dependencies --no-daemon || true

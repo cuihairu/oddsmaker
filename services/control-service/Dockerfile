@@ -4,7 +4,8 @@
 #   docker build -f services/control-service/Dockerfile .
 
 # Stage 1: Build the application
-FROM gradle:8.10-jdk21 AS build
+# 与仓库 wrapper（9.8.1）同步：Spring Boot 4 插件要求 Gradle 8.14+ 或 9.x
+FROM gradle:9.8.1-jdk21 AS build
 WORKDIR /workspace
 
 # 先拷全部构建文件作缓存层（settings include 的模块一个不能少）
@@ -22,6 +23,8 @@ COPY jobs/flink/funnels-job/build.gradle.kts jobs/flink/funnels-job/
 COPY jobs/flink/risk-job/build.gradle.kts jobs/flink/risk-job/
 COPY jobs/flink/identity-merge-job/build.gradle.kts jobs/flink/identity-merge-job/
 COPY jobs/flink/dimension-sync-job/build.gradle.kts jobs/flink/dimension-sync-job/
+COPY sdks/server/build.gradle.kts sdks/server/
+COPY agents/dimension-sync-agent/build.gradle.kts agents/dimension-sync-agent/
 
 # 预热依赖（构建文件不变时命中缓存层）
 RUN gradle :services:control-service:dependencies --no-daemon || true

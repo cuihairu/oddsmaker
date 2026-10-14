@@ -1,9 +1,15 @@
 # docker build context 瘦身（context = 仓库根）：构建产物与宿主 jar 不进 context，
-# Dockerfile 只 COPY 精确源码路径；deploy-rt/jars 由 compose bind mount 使用，无需进镜像
+# Dockerfile 只 COPY 精确源码路径；deploy-rt/jars 由 compose bind mount 使用，无需进镜像。
+# 注意顺序语义：后匹配优先，故 sdks 的反排除必须排在 **/build/ 之前。
 .git
 .gradle
 .claude
 .idea
+# sdks/server 是 settings include 的 Gradle 模块，其 build.gradle.kts 须进 context
+# （Gradle 9 起 include 了但目录不存在的项目在配置阶段直接报错）；其余 sdks 内容
+# （web SDK / node_modules 等）不参与镜像构建，保持排除。
+sdks/*
+!sdks/server
 **/build/
 node_modules/
 deploy-rt/jars/
@@ -11,5 +17,4 @@ data/
 docs/
 bi/
 web/
-sdks/
 tests/
