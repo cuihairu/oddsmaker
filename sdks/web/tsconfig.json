@@ -7,6 +7,7 @@
     "outDir": "dist",
     "strict": true,
     "moduleResolution": "Bundler",
+    "rewriteRelativeImportExtensions": true,
     "resolveJsonModule": true,
     "skipLibCheck": true,
     "lib": ["DOM", "ES2020"],

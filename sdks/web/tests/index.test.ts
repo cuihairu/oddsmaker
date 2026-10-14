@@ -13,6 +13,7 @@ import {
   versionGte, versionLte, matchTargeting,
   getCachedExperiments, fetchExperimentsCached,
   startExperimentsAutoRefresh, ensureFreshExperimentsAndAssign,
+  createGameEvents, GameEvents, GameEventType,
 } from '../src/index.ts';
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
@@ -789,4 +790,14 @@ test('ensureFreshExperimentsAndAssign:拉取 → 过滤 → expose', async t => 
     { expose: (e: string, v: string) => exposed.push([e, v]) } as any, 'https://c', 'gf', 'ef', 'user1', { platform: 'web' });
   assert.deepEqual(res, { exp1: 'A' });
   assert.deepEqual(exposed, [['exp1', 'A']]);
+});
+
+test('barrel 导出 game-events:createGameEvents/GameEvents/GameEventType 可从 index 入口 import', () => {
+  const calls: Array<[string, Record<string, any>]> = [];
+  const ge = createGameEvents((name, props) => { calls.push([name!, props!]); return 'eid'; });
+  assert.ok(ge instanceof GameEvents);
+  ge.levelComplete({ level_id: '1' });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0][0], GameEventType.LEVEL_COMPLETE);
+  assert.equal(calls[0][1].game_event_type, GameEventType.LEVEL_COMPLETE);
 });

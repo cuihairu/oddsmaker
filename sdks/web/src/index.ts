@@ -1,3 +1,5 @@
+export * from './game-events.ts';
+
 export type OddsmakerOptions = {
   apiKey: string;
   endpoint: string;
