@@ -43,14 +43,16 @@ jobs:
           java-version: ${{ env.JAVA_VERSION }}
           distribution: 'temurin'
 
+      # 全模块 test（与 nightly 同一条命令）：此前只跑 control/gateway 两模块（2243 例），
+      # 其余 13 个模块 493 例（agent 211 / Flink 七作业 257 / sdks-server 8 / libs/common-* 17）
+      # 只在 nightly 跑——改坏它们的提交在 CI 上绿、到夜里才红（与 ml、web 缺门一族）。
       - name: Build and test（走仓库 wrapper，与 nightly/release 同一 Gradle 版本真源）
         uses: gradle/gradle-build-action@v3
         with:
           arguments: |
             --no-daemon
             --stacktrace
-            :services:control-service:test
-            :services:gateway-service:test
+            test
 
       - name: Upload test results
         uses: actions/upload-artifact@v5
@@ -130,4 +132,4 @@ jobs:
   # 镜像推送已从本流水线移出，统一由两处负责，避免同一 :latest 由两条链路竞争：
   #   - nightly-build.yml → ghcr.io/cuihairu/oddsmaker:nightly（每日 cron + main 推送）
   #   - release.yaml      → ghcr.io/cuihairu/oddsmaker:<version>/<major.minor>/<major>/latest（v* tag）
-  # 本流水线只做校验（Java 服务测试 + Web SDK 构建/一致性测试 + ML 训练管线测试 + Web 控制台测试）。
+  # 本流水线只做校验（Java 全模块测试 + Web SDK 构建/一致性测试 + ML 训练管线测试 + Web 控制台测试）。
