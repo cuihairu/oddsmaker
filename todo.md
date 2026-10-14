@@ -44,6 +44,7 @@
 - [x] K8s 控制面清单镜像指真：`deploy/k8s/control-service.yaml` 的 `oddsmaker/control-service:latest`（仓内无任何 workflow 构建）改指 `ghcr.io/cuihairu/oddsmaker:nightly` + ConfigMap 显式 `SERVICE=control`（与 release.yaml:170 `kubectl set image` 实际镜像对齐），MODES.md K8s 形态行补 gateway（58e7b48，纯配置，YAML 解析过）
 - [x] K8s 部署文档对账：`deploy.k8s.md` 方式二由 legacy `infra/k8s/` 改指当前 `deploy/k8s/` 清单，前提与镜像构建段改述单镜像双服务 `ghcr.io/cuihairu/oddsmaker:nightly` + `SERVICE`（665d630，纯文档，docs:build 绿）
 - [x] Web SDK 游戏事件 helper 出口接线：`sdks/web/src/game-events.ts`（`GameEvents` 19 方法 + 8 常量对象，468 行）自 e9ebbac 起存在但从未从 `index.ts` 桶文件导出，`game-event-dictionary.zh.md:98` 标「待补」——补 `export * from './game-events.ts'` + tsconfig `rewriteRelativeImportExtensions`（tsc 5.9 将 `.ts` 重写为 `.js` 输出，Node 24 原生 TS 运行时需显式扩展名），index.test.ts 补桶文件导出断言（1009ecb，web 47 例 0 失败，docs:build 绿）
+- [x] K8s 备份作业留存清理被 aws 缺失整条掐断：`backup-cronjob.yaml` 内嵌 backup.sh 跑在 `postgres:16-alpine`（实测镜像内无 aws CLI），`set -e` 下 `aws s3 cp` 直接 127 中止，其后 `find -mtime +30 -delete` 永不执行——100Gi 备份 PVC 无界增长直到写满，离站副本也从未产生；上传分支加 `command -v aws` 判存 + WARN 降级，同款修 `deploy/backup/postgres-backup.sh`（另修 LOG_FILE 不可写致首条 log 即中止、pg_restore 校验在 set -e 后形同虚设），BACKUP_DIR/LOG_FILE 开放环境覆盖，周档去掉脚本不读的 `BACKUP_TYPE` 死变量（a0c1b9f，新增 BackupScriptTest 5 例，control-service 167 suite/2003 例 0 失败）
 
 ## 边界（决定不做，勿再提）
 
