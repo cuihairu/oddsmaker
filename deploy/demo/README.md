@@ -79,8 +79,15 @@ curl -k -I --resolve oddsmaker.cuihairu.site:443:<部署机IP> https://oddsmaker
 
 - `build-web`（GitHub-hosted）：`pnpm -C web build` 出 `web/dist` artifact——vite 构建的内存峰值不落在 1.6 G 机器上。
 - `deploy`（self-hosted `runner-docker`）：拉 `:nightly` 镜像 → `docker compose up -d` →
-  轮询 `/actuator/health` 最多 5 分钟（首启含 Flyway）→ 原子换名发布 web 静态资源 → 记录 `.last-good-digest`。
-- 任一步失败：`Rollback on failure` 把镜像 tag 退回上一个 digest 再起栈，回滚成功也判本次失败（让变更可见）。
+  健康探活 → 原子换名发布 web 静态资源 → 记录 `.last-good-digest`。
+  探活预算分两段（2026-10-14 起）：先等 `control-service` 容器 Running（≤10 分钟，慢机解包镜像
+  实测要 ~4 分钟，不该吃应用冷启动的预算），再轮询 `/actuator/health`（≤10 分钟，Boot 4 +
+  Hibernate 7 冷启动 + 首启 Flyway 全量迁移）；job 超时 30 分钟。
+- 任一步失败：`Rollback on failure` 把镜像 tag 退回上一个 digest，再 `docker compose up -d
+  --force-recreate control-service` 起栈（重指同名 tag 不会触发 compose 重建，不显式 force-recreate
+  等于回滚空转），回滚成功也判本次失败（让变更可见）。
+- 上游 `Nightly Build` 失败时 `deploy` job 会被跳过，此时 `no-deploy` 哨兵 job 显式判红：
+  **本工作流绿 = 真的部署过且健康**，不会出现「什么都没部署却报 success」的假绿。
 
 runner 注册（部署机上一次性）：
 
