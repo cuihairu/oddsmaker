@@ -46,11 +46,13 @@ podman compose down
 ### Kubernetes (Production)
 
 ```bash
-# Create namespace
+# Deploy services (namespace first, then manifests; backup CronJob is optional)
 kubectl apply -f deploy/k8s/namespace.yaml
-
-# Deploy services
-kubectl apply -f deploy/k8s/
+kubectl apply -f deploy/k8s/postgres.yaml
+kubectl apply -f deploy/k8s/redis.yaml
+kubectl apply -f deploy/k8s/control-service.yaml
+kubectl apply -f deploy/k8s/gateway-service.yaml
+# kubectl apply -f deploy/k8s/backup-cronjob.yaml   # optional
 
 # Check status
 kubectl get pods -n oddsmaker
@@ -59,13 +61,11 @@ kubectl get pods -n oddsmaker
 ### Helm Chart (Recommended for Production)
 
 ```bash
-# Add Helm repository
-helm repo add oddsmaker https://charts.oddsmaker.local
-
-# Install
-helm install oddsmaker oddsmaker/oddsmaker \
-  --namespace oddsmaker \
-  --values values.yaml
+# Install from the in-repo chart
+helm upgrade --install oddsmaker ./infra/helm/oddsmaker \
+  --namespace oddsmaker --create-namespace \
+  --set image.gateway=your-registry/oddsmaker-gateway:tag \
+  --set image.control=your-registry/oddsmaker-control:tag
 ```
 
 ## Monitoring Stack
