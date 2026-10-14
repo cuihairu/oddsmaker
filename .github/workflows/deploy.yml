@@ -188,3 +188,18 @@ jobs:
           done
           echo "rolled back to last-good digest"
           exit 1  # 回滚成功也标记部署失败，让本次变更可见
+
+  # 假绿哨兵：上游 Nightly 失败时 deploy job 被 if 跳过，而 workflow_run 触发的
+  # run 仍报 success——「Deploy Demo 绿」会被读成「部署成功」，实际什么都没部署
+  # （2026-10-14 实测 38517953004：deploy=skipped、run=success，误导了排障方向）。
+  # 该哨兵只在 deploy 被跳过时显式变红：Deploy Demo 绿 = 真的部署过且健康。
+  no-deploy:
+    name: No deploy performed
+    needs: [build-web, deploy]
+    if: always() && needs.deploy.result == 'skipped'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail because nothing was deployed
+        run: |
+          echo "::error::上游 Nightly 结论为 '${{ github.event.workflow_run.conclusion }}'，deploy job 被跳过，本次未部署任何东西"
+          exit 1
