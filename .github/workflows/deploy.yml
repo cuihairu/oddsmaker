@@ -71,7 +71,9 @@ jobs:
     needs: build-web
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: [self-hosted, runner-docker]
-    timeout-minutes: 15
+    # 这条腿串了 pull 重试（3×15s）、慢宿主上的镜像解包与冷启动、探活、以及失败回滚探活；
+    # 15 分钟会被前段吃光，回滚腿还没跑完就被掐（2026-10-14 实测）。
+    timeout-minutes: 30
     env:
       DEMO_HOME: /opt/oddsmaker
       IMAGE: ghcr.io/cuihairu/oddsmaker:nightly
@@ -121,8 +123,21 @@ jobs:
 
           docker compose up -d
 
-          # 健康门槛：/actuator/health 是 permitAll，最多等 5 分钟（首启含 Flyway 全量迁移）
-          deadline=$((SECONDS + 300))
+          # 预算分两段：compose up 在慢宿主上可能先解包镜像数分钟（2026-10-14 实测 ~4 分钟），
+          # 这段编排杂务不应吃掉应用冷启动的探活预算——先等 control-service 真正 Running（段一），
+          # 再开始健康探活（段二）。应用若真起不来，段二到期打印 ps+logs 并触发回滚腿。
+          phase_deadline=$((SECONDS + 600))
+          until [ -n "$(docker compose ps --status running -q control-service)" ]; do
+            if [ "$SECONDS" -ge "$phase_deadline" ]; then
+              echo "::error::container never reached running state"; docker compose ps; docker compose logs --tail 50 control-service
+              exit 1
+            fi
+            sleep 5
+          done
+
+          # 健康门槛：/actuator/health 是 permitAll；Boot 4 + Hibernate 7 在 1.6G 宿主冷启动
+          # 实测 300s 不够（探针到期时仍在 JPA 初始化中段），给 10 分钟
+          deadline=$((SECONDS + 600))
           until curl -fsS http://127.0.0.1:"${CONTROL_PORT:-38085}"/actuator/health 2>/dev/null | grep -q '"status":"UP"'; do
             if [ "$SECONDS" -ge "$deadline" ]; then
               echo "::error::health check timeout"; docker compose ps; docker compose logs --tail 50 control-service
@@ -163,8 +178,10 @@ jobs:
           echo "rolling back to $PREV_DIGEST"
           docker pull "$PREV_DIGEST"
           docker tag "$PREV_DIGEST" "$IMAGE"
-          docker compose up -d
-          deadline=$((SECONDS + 300))
+          # 重指同名 tag 后 compose 不会主动重建（实测容器保持 Running，回滚等于没生效），
+          # 必须显式 force-recreate；只动 control-service，不弹 PG/Redis
+          docker compose up -d --force-recreate control-service
+          deadline=$((SECONDS + 600))
           until curl -fsS http://127.0.0.1:"${CONTROL_PORT:-38085}"/actuator/health 2>/dev/null | grep -q '"status":"UP"'; do
             if [ "$SECONDS" -ge "$deadline" ]; then echo "::error::rollback still unhealthy"; exit 1; fi
             sleep 5
