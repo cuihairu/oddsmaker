@@ -18,7 +18,7 @@ Oddsmaker provides:
 Before getting started, ensure you have:
 
 - Java 21
-- Gradle 8.10+ (the repo ships a Gradle Wrapper 8.10.1 — prefer `./gradlew`)
+- Gradle 9.8.1 (the repo ships a Gradle Wrapper 9.8.1 — prefer `./gradlew`)
 - Docker and Docker Compose
 - PostgreSQL 16+
 - Redis 7+

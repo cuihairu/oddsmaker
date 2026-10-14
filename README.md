@@ -228,7 +228,7 @@ bash scripts/run_flink.sh
 
 Notes:
 
-- Full test suite: `./gradlew test --continue` (Gradle Wrapper 8.10.1, JDK 21).
+- Full test suite: `./gradlew test --continue` (Gradle Wrapper 9.8.1, JDK 21).
 - Web console: `pnpm -C web test && pnpm -C web build` (for development, `pnpm -C web dev`, which proxies to control on 8085).
 
 ## Current Direction
@@ -256,7 +256,7 @@ The current priorities are:
 The foundation is built on open-source components: Spring Boot, Kafka, Flink, ClickHouse, PostgreSQL, Redis, Superset, and others; what this repository implements itself is the wiring, the business layers, and the SDKs.
 
 - Java 21
-- Spring Boot 3 WebFlux
+- Spring Boot 4 (gateway WebFlux, control Web MVC)
 - Kafka + Apicurio Schema Registry
 - Flink
 - ClickHouse

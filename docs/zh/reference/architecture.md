@@ -160,7 +160,7 @@ ORDER BY (game_id, environment, event_type, event_date, player_id, user_id, devi
 ## 组件与语言
 
 - Java 21
-- Spring Boot 3（网关 WebFlux / 控制面 Web MVC）
+- Spring Boot 4（网关 WebFlux / 控制面 Web MVC）
 - Kafka 3
 - Flink 1.19
 - ClickHouse 24

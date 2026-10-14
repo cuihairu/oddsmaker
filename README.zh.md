@@ -228,7 +228,7 @@ bash scripts/run_flink.sh
 
 说明：
 
-- 全量测试：`./gradlew test --continue`（Gradle Wrapper 8.10.1，JDK 21）。
+- 全量测试：`./gradlew test --continue`（Gradle Wrapper 9.8.1，JDK 21）。
 - Web 控制台：`pnpm -C web test && pnpm -C web build`（开发态 `pnpm -C web dev`，代理到 control 8085）。
 
 ## Current Direction
@@ -256,7 +256,7 @@ bash scripts/run_flink.sh
 底座是开源组件：Spring Boot、Kafka、Flink、ClickHouse、PostgreSQL、Redis、Superset 等；本仓自写的是接线、业务层与 SDK。
 
 - Java 21
-- Spring Boot 3 WebFlux
+- Spring Boot 4（网关 WebFlux，控制面 Web MVC）
 - Kafka + Apicurio Schema Registry
 - Flink
 - ClickHouse

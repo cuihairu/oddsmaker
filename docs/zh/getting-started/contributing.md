@@ -1,7 +1,7 @@
 # 贡献指南
 
 代码风格
-- Java：Google Java Style（缩进2空格）；Spring Boot 3；Lombok 禁用（便于审查）
+- Java：Google Java Style（缩进2空格）；Spring Boot 4；Lombok 禁用（便于审查）
 - Kotlin：Kotlin 官方风格；Android SDK 仅依赖 OkHttp
 - TypeScript：严格模式；ES2019（target；module/lib 为 ES2020）；无 any；小函数
 - C#/Swift：尽量无第三方依赖，保持 SDK 轻量
