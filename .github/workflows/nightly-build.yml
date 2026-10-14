@@ -9,6 +9,13 @@ on:
   schedule:
     - cron: '0 0 * * *'  # 每日 UTC 00:00
   push:
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "LICENSE"
+      - ".gitignore"
+      - "*.svg"
+      - ".editorconfig"
     branches:
       - main
   workflow_dispatch:
