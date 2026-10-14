@@ -34,9 +34,10 @@ python3 scripts/perf-report.py var/perf > var/perf/report.csv
 生产部署（K8s + Helm）
 1) 构建并推送镜像
 ```bash
-# Gateway
+# 单镜像双服务（CI 路径，SERVICE=control|gateway 选服务）
+docker build -t <registry>/oddsmaker:<tag> . && docker push <registry>/oddsmaker:<tag>
+# 或按服务自建（Helm 路径需逐服务镜像，deploy/k8s/ 清单可走单镜像）
 cd services/gateway-service && docker build -t <registry>/oddsmaker-gateway:<tag> . && docker push <...>
-# Control
 cd ../control-service && docker build -t <registry>/oddsmaker-control:<tag> . && docker push <...>
 ```
 2) 使用 Helm 安装
