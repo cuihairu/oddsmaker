@@ -121,9 +121,16 @@ jobs:
         run: python -m pytest
         working-directory: ml
 
-      # Web SDK 三套（test:hash + test:game + test:src，npm test）：此前只在 ci.yaml 跑，同上补口径
+      # Web SDK 三套（test:hash + test:game + test:src，npm test）：此前只在 ci.yaml 跑，同上补口径。
+      # 顺序与 ci.yaml 同：test:hash 校验的是构建产物 dist/index.js，必须 build 先于 test
+      #（首轮 38649302270 冷树上先 test 后缺 build，hash_test 报 ERR_MODULE_NOT_FOUND；
+      #  本机暖树 dist/ 残留掩盖了顺序依赖）。
       - name: Install Web SDK dependencies
         run: npm ci || npm i
+        working-directory: sdks/web
+
+      - name: Build Web SDK
+        run: npm run build
         working-directory: sdks/web
 
       - name: Run Web SDK tests
