@@ -1,7 +1,6 @@
 plugins {
-  id("org.springframework.boot") version "3.3.3" apply false
-  id("io.spring.dependency-management") version "1.1.6" apply false
-  // core plugins like 'java' need not be declared here in Gradle 9+
+  id("org.springframework.boot") version "4.1.1" apply false
+  id("io.spring.dependency-management") version "1.1.7" apply false
 }
 
 allprojects {
@@ -18,6 +17,12 @@ allprojects {
 subprojects {
   apply(plugin = "java")
   tasks.withType<JavaCompile> { options.release.set(21) }
+
+  dependencies {
+    // Gradle 9 不再自动把 JUnit Platform launcher 注入 test runtime classpath，
+    // 缺它则所有 Test 任务启动即失败（"Failed to load JUnit Platform"），故统一在此声明
+    add("testRuntimeOnly", "org.junit.platform:junit-platform-launcher")
+  }
 
   // 测试覆盖率：test 后自动生成 JaCoCo 报告（build/reports/jacoco/test/）
   apply(plugin = "jacoco")

@@ -8,9 +8,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.reactive.AutoConfigureWebTestClient;
+import org.springframework.boot.webtestclient.autoconfigure.AutoConfigureWebTestClient;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import reactor.core.publisher.Mono;
@@ -30,7 +30,7 @@ import static org.mockito.Mockito.when;
 
 /**
  * BatchController 端到端分支覆盖：key 作用域/环境维护态/环境采样/封禁联动/Kafka 异常/超大事件载荷。
- * key 上下文与封禁查询经 @MockBean 注入（避免真实 HTTP 依赖），走完整 WebFilter + Controller 链。
+ * key 上下文与封禁查询经 @MockitoBean 注入（避免真实 HTTP 依赖），走完整 WebFilter + Controller 链。
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureWebTestClient
@@ -43,16 +43,16 @@ class BatchControllerCoverageTest {
     @org.springframework.boot.test.web.server.LocalServerPort
     int port;
 
-    @MockBean
+    @MockitoBean
     AvroPublisher avroPublisher;
 
-    @MockBean
+    @MockitoBean
     DlqPublisher dlqPublisher;
 
-    @MockBean
+    @MockitoBean
     AuthService authService;
 
-    @MockBean
+    @MockitoBean
     BlockListClient blockListClient;
 
     @BeforeEach

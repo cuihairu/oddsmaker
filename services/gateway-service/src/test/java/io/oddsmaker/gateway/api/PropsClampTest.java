@@ -7,9 +7,9 @@ import io.oddsmaker.gateway.config.PolicyService;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.reactive.AutoConfigureWebTestClient;
+import org.springframework.boot.webtestclient.autoconfigure.AutoConfigureWebTestClient;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.reactive.server.WebTestClient;
 
@@ -26,13 +26,13 @@ class PropsClampTest {
     @Autowired
     WebTestClient client;
 
-    @MockBean
+    @MockitoBean
     AvroPublisher avroPublisher;
 
-    @MockBean
+    @MockitoBean
     DlqPublisher dlqPublisher;
 
-    @MockBean
+    @MockitoBean
     PolicyService policyService;
 
     @Test

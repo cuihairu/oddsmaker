@@ -10,7 +10,7 @@ import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.config.annotation.authentication.builders.AuthenticationManagerBuilder;
-import org.springframework.security.config.annotation.ObjectPostProcessor;
+import org.springframework.security.config.ObjectPostProcessor;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
@@ -168,15 +168,15 @@ class SecurityFilterChainTest {
         // ROLE_INTERNAL（AdminTokenFilter 校验 x-internal-token 后设置）→ 放行
         var internal = new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
             "internal-gateway", null, List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_INTERNAL")));
-        assertTrue(manager.check(() -> internal, request).isGranted());
+        assertTrue(manager.authorize(() -> internal, request).isGranted());
 
         // 登录管理员（ROLE_ADMIN）→ 拒绝：内部端点不接受用户身份，只认服务间令牌
         var admin = new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
             "admin", null, List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_ADMIN")));
-        assertFalse(manager.check(() -> admin, request).isGranted());
+        assertFalse(manager.authorize(() -> admin, request).isGranted());
 
         // 匿名 → 拒绝
-        assertFalse(manager.check(() -> null, request).isGranted());
+        assertFalse(manager.authorize(() -> null, request).isGranted());
         ctx.close();
     }
 

@@ -2,8 +2,8 @@ package io.oddsmaker.control.api;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import io.oddsmaker.control.jpa.GameRepo;
 import io.oddsmaker.control.service.ExperimentService;
@@ -18,19 +18,19 @@ import io.oddsmaker.control.service.StorageProfileService;
 @DisplayName("ApiController 测试")
 class ApiControllerTest {
 
-    @MockBean
+    @MockitoBean
     private ControlService controlService;
 
-    @MockBean
+    @MockitoBean
     private GameService gameService;
 
-    @MockBean
+    @MockitoBean
     private ExperimentService experimentService;
 
-    @MockBean
+    @MockitoBean
     private StorageProfileService storageProfileService;
 
-    @MockBean
+    @MockitoBean
     private GameRepo gameRepo;
 
     @Test

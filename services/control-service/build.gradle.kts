@@ -8,6 +8,14 @@ dependencies {
   implementation("org.springframework.boot:spring-boot-starter-web")
   implementation("org.springframework.boot:spring-boot-starter-actuator")
 
+  // RestTemplateBuilder 自 Boot 4 起从 spring-boot-webmvc 拆到 spring-boot-restclient，
+  // 包名同步由 org.springframework.boot.web.client 迁到 org.springframework.boot.restclient
+  implementation("org.springframework.boot:spring-boot-restclient")
+
+  // Boot 4 起默认 JSON 库换 Jackson 3（tools.jackson），Jackson 2 自动配置拆到独立模块；
+  // 控制面 40+ 处注入 com.fasterxml.jackson.databind.ObjectMapper，故显式引兼容模块保持原行为
+  implementation("org.springframework.boot:spring-boot-jackson2")
+
   // RestTemplate 的 PATCH 支持（Flink cancel 是 PATCH /jobs/{id}?mode=cancel）：
   // classpath 有 httpclient5 时 RestTemplateBuilder 自动切换 HttpComponents requestFactory
   implementation("org.apache.httpcomponents.client5:httpclient5")
@@ -33,9 +41,6 @@ dependencies {
   implementation("io.jsonwebtoken:jjwt-impl:0.12.6")
   implementation("io.jsonwebtoken:jjwt-jackson:0.12.6")
 
-  // Keycloak
-  implementation("org.keycloak:keycloak-spring-boot-starter:24.0.3")
-
   // Database migrations
   implementation("org.flywaydb:flyway-core")
   implementation("org.flywaydb:flyway-database-postgresql")
@@ -46,8 +51,8 @@ dependencies {
   // JSON Schema validation for experiment config - removed for now
   // implementation("com.networknt:json-schema-validator:1.0.91")
 
-  // Swagger/OpenAPI documentation
-  implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.3.0")
+  // Swagger/OpenAPI documentation（springdoc 3.x 起适配 Boot 4 / Spring Framework 7）
+  implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.1.1")
 
   // Password encoding
   implementation("org.springframework.security:spring-security-crypto")
@@ -57,6 +62,8 @@ dependencies {
 
   // Testing
   testImplementation("org.springframework.boot:spring-boot-starter-test")
+  // Boot 4 把测试切片从 spring-boot-test-autoconfigure 拆到各模块 *-test，WebMvcTest 随之迁包
+  testImplementation("org.springframework.boot:spring-boot-webmvc-test")
   testImplementation("org.springframework.security:spring-security-test")
   testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }

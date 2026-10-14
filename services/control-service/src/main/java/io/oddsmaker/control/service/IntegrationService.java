@@ -146,7 +146,7 @@ public class IntegrationService {
         long startTime = System.currentTimeMillis();
         try {
             ResponseEntity<String> response = restTemplateFor(integration).exchange(
-                integration.endpointUrl, HttpMethod.GET, new HttpEntity<>(null, null), String.class);
+                integration.endpointUrl, HttpMethod.GET, HttpEntity.EMPTY, String.class);
             log.responseStatus = response.getStatusCode().value();
             log.markAsSuccess();
         } catch (HttpStatusCodeException e) {

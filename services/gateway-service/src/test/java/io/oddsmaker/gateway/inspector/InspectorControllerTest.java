@@ -8,9 +8,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.reactive.AutoConfigureWebTestClient;
+import org.springframework.boot.webtestclient.autoconfigure.AutoConfigureWebTestClient;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.reactive.server.WebTestClient;
 
 import static org.mockito.Mockito.when;
@@ -28,14 +28,17 @@ class InspectorControllerTest {
     @Autowired
     WebTestClient client;
 
-    @MockBean
+    @Autowired
+    org.springframework.context.ApplicationContext context;
+
+    @MockitoBean
     AuthService authService;
 
     // 与其他独立上下文测试类同构：Mock Avro/Dlq 发布器，避免真实 Kafka/Registry 初始化
-    @MockBean
+    @MockitoBean
     AvroPublisher avroPublisher;
 
-    @MockBean
+    @MockitoBean
     DlqPublisher dlqPublisher;
 
     @Autowired
@@ -176,7 +179,10 @@ class InspectorControllerTest {
     @Test
     @DisplayName("鉴权：x-api-key 空白串（非 null）同样 401")
     void blankApiKeyRejected() {
-        client.get().uri(b -> b.path("/v1/inspector/recent")
+        // Spring Framework 7 起真实 HTTP 传输层会拒绝空白串 header 值（请求根本发不出去），
+        // 改用绑定同一上下文的 mock 传输：空白串原样抵达过滤器，仍能守护 isBlank 分支。
+        WebTestClient mockClient = WebTestClient.bindToApplicationContext(context).build();
+        mockClient.get().uri(b -> b.path("/v1/inspector/recent")
                         .queryParam("game_id", "game_a")
                         .queryParam("environment", "prod").build())
                 .header("x-api-key", "  ")

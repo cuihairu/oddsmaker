@@ -418,7 +418,7 @@ class BranchTopUpCTest {
     void inspTwoxxNullBodyRejected() {
         stubScopedKey();
         when(restTemplate.exchange(anyString(), eq(HttpMethod.GET), any(HttpEntity.class), eq(Map.class)))
-                .thenReturn(new ResponseEntity<Map>(null, HttpStatus.OK));
+                .thenReturn(ResponseEntity.status(HttpStatus.OK).build());
 
         Map<String, Object> resp = proxyService.recent("game_a", "prod", null, null);
 
