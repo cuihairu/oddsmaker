@@ -14,11 +14,11 @@
   - **卡点类型**：触发条件未成立——条件 (a) 非等待可解，需先补部署面
   - **解锁条件**：四项触发条件任一达标；其中条件 (a) 需先有**带网关流量的部署面**，并自指标开始落库起算满 **7 天**（7d/28d 分位基线方可算）
   - 复核留痕（2026-10-15）：演示库 health_metrics / data_quality_metrics / metric_alert_rules 三表皆 0 行、最早指标日期为无；health_metrics 无产线写入方（`collectMetric` 仅模拟开关路径、默认关），data_quality_metrics 需网关真实流量而演示栈无 gateway
-- [ ] Signal 显式信号清单（P2，重构契约 §2.4「2.0 动作」代决开工）：按契约枚举 gold_gain / login_ip / device / … 显式声明（snake_case 沿用仓内惯例），只补显式声明与文档，**不改既有暴露面**（序列化格式与既有指标名不变）；control-service 与 Flink risk-job 两侧同批对齐。验收：两侧清单常量齐备且被测试钉住、契约文档行同步、相关测试全绿
-- [ ] ruleConditions 结构化 JSON schema（P2，重构契约 §2.4「2.0 动作」代决开工）：`RiskRuleEntity.ruleConditions` 自由文本收敛为类型化结构 + 写路径校验测试钉住（FEATURE 条件结构校验收紧；PATTERN 既有 2-8 序列约束不动；THRESHOLD 任意串既有口径不动）；存量行不改写、读路径保持容忍（可解析即兼容，不可解析在类型化读取上显式报错），Flink 侧既有跳过语义不变。验收：类型化结构 + 校验测试全绿、replay/fetcher 既有测试原样绿（存量行为不变）
 
 ## 已完成需求
 
+- [x] Signal 显式信号清单（P2，重构契约 §2.4「2.0 动作」代决开工）：按契约枚举 gold_gain / login_ip / device / … 显式声明（snake_case 沿用仓内惯例），只补显式声明与文档，**不改既有暴露面**（序列化格式与既有指标名不变）；control-service 与 Flink risk-job 两侧同批对齐。验收：两侧清单常量齐备且被测试钉住、契约文档行同步、相关测试全绿 ✅（7602a72：两侧 `RiskSignals` 9 信号清单 + 各 3 例测试同钉 `DOCUMENTED` 名单；契约 §2.4 Signal 行已落地注记；risk-job 全模块 96 例 0 失败）
+- [x] ruleConditions 结构化 JSON schema（P2，重构契约 §2.4「2.0 动作」代决开工）：`RiskRuleEntity.ruleConditions` 自由文本收敛为类型化结构 + 写路径校验测试钉住（FEATURE 条件结构校验收紧；PATTERN 既有 2-8 序列约束不动；THRESHOLD 任意串既有口径不动）；存量行不改写、读路径保持容忍（可解析即兼容，不可解析在类型化读取上显式报错），Flink 侧既有跳过语义不变。验收：类型化结构 + 校验测试全绿、replay/fetcher 既有测试原样绿（存量行为不变） ✅（7602a72：`dto/RuleConditions` 严格/容忍双档 + `conditions()` 实体访问器；FEATURE 写路径收紧、PATTERN/THRESHOLD 口径不动；受影响 5 测试类 25/25 绿、control-service 全模块 173 suite/2034 例 0 失败；契约 §2.4 RiskRule 行已落地注记，EventSchema 引用留后续）
 - [x] B1 产品定位与文档对齐：GitHub description 一句话定位、三份旧评估归档横幅（PIT 改 Oddsmaker、完成度数字改指批次跟踪）、redesign index 补 06 行（0f8617a、4a86775、568ffcb）
 - [x] B2 权限单真源收敛：user_role_assignments 回填迁移 V0.9.16、UserService 唯一写路径、demo README 删手工 psql 兜底、真 PG 复现验证（ace946f，208 suite 绿）
 - [x] B3 Server SDK 骨架：Java SDK 四方法、内存溢出落盘队列、批量 gzip HMAC 上报、网关验签正负臂、SERVER key 发放校验（115b51f，211 suite 绿）
