@@ -14,6 +14,8 @@
   - **卡点类型**：触发条件未成立——条件 (a) 非等待可解，需先补部署面
   - **解锁条件**：四项触发条件任一达标；其中条件 (a) 需先有**带网关流量的部署面**，并自指标开始落库起算满 **7 天**（7d/28d 分位基线方可算）
   - 复核留痕（2026-10-15）：演示库 health_metrics / data_quality_metrics / metric_alert_rules 三表皆 0 行、最早指标日期为无；health_metrics 无产线写入方（`collectMetric` 仅模拟开关路径、默认关），data_quality_metrics 需网关真实流量而演示栈无 gateway
+- [ ] Signal 显式信号清单（P2，重构契约 §2.4「2.0 动作」代决开工）：按契约枚举 gold_gain / login_ip / device / … 显式声明（snake_case 沿用仓内惯例），只补显式声明与文档，**不改既有暴露面**（序列化格式与既有指标名不变）；control-service 与 Flink risk-job 两侧同批对齐。验收：两侧清单常量齐备且被测试钉住、契约文档行同步、相关测试全绿
+- [ ] ruleConditions 结构化 JSON schema（P2，重构契约 §2.4「2.0 动作」代决开工）：`RiskRuleEntity.ruleConditions` 自由文本收敛为类型化结构 + 写路径校验测试钉住（FEATURE 条件结构校验收紧；PATTERN 既有 2-8 序列约束不动；THRESHOLD 任意串既有口径不动）；存量行不改写、读路径保持容忍（可解析即兼容，不可解析在类型化读取上显式报错），Flink 侧既有跳过语义不变。验收：类型化结构 + 校验测试全绿、replay/fetcher 既有测试原样绿（存量行为不变）
 
 ## 已完成需求
 
