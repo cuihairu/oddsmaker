@@ -88,7 +88,7 @@
 |---|---|---|---|
 | **User/Permission** | 用户 + 角色 | **B2（V0.9.16）已落**：`user_role_assignments` 为单真源，`UserService` 是唯一写路径（`createUser` UserService.java:94-97、`updateRoles` UserService.java:261，users.roles 降级为展示投影）；`deploy/demo/README.md §5` 手工 psql 段已删 | **B2 收敛为单一真源**：`user_role_assignments`；`users.roles` 降级为展示/兼容列（读多写少）；补一次性回填迁移 + `deploy/demo/README.md §5` 删除手工 psql 段 |
 
-审计：`AuditLogEntity`（V0.2.4）已是唯一留痕通道；2.0 增加事件分类常量（RISK_POLICY_CHANGED / API_KEY_ROTATED / DATA_EXPORTED / PERMISSION_CHANGED / EXPERIMENT_PUBLISHED），不做新表——**未排期**（设计意向，无归属批次，代码零落地）。
+审计：`AuditLogEntity`（V0.2.4）已是唯一留痕通道；2.0 增加事件分类常量（RISK_POLICY_CHANGED / API_KEY_ROTATED / DATA_EXPORTED / PERMISSION_CHANGED / EXPERIMENT_PUBLISHED），不做新表——**已落地（2026-10-15）**：`AuditEventType` 枚举（五类 + OTHER，读时派生 `AuditLogEntity.getEventType()`，判定=资源×动作×details.operation），resource-first `logCreate`/`logUpdate` 的 metadata 落 details（gameId/environment 提列），轮换行（68ce564 约定）自此可直接派生 API_KEY_ROTATED。
 
 ---
 
