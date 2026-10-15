@@ -19,6 +19,7 @@
 
 ## 已完成需求
 
+- [x] ruleConditions 引 EventSchema 字段（P2，**已代决** FW1016D 2026-10-16，契约行 74；用户可推翻）：FEATURE 条件 feature 名合法取值域 = risk-job 计算面特征登记表（`RiskFeatures` 两侧清单 6 特征），写路径未知名显式拒绝；不做 EventSchema 交叉校验（特征名是「信号 × 窗口」派生量、非事件契约字段）。理由/影响面/推翻方式见 docs/决策记录.md。验收：两侧清单常量齐备且测试钉同一份名单、未知名写路径拒绝测试绿、JSON 形态/列/存量行/读路径跳过语义/既有指标名全不变 ✅（5c501aa：control-service 174 suites/2039 例 0 失败、risk-job 10 suites/99 例 0 失败；顺带修 control.md FEATURE 示例 `threshold`→真源 `value`）
 - [x] Signal 显式信号清单（P2，重构契约 §2.4「2.0 动作」代决开工）：按契约枚举 gold_gain / login_ip / device / … 显式声明（snake_case 沿用仓内惯例），只补显式声明与文档，**不改既有暴露面**（序列化格式与既有指标名不变）；control-service 与 Flink risk-job 两侧同批对齐。验收：两侧清单常量齐备且被测试钉住、契约文档行同步、相关测试全绿 ✅（7602a72：两侧 `RiskSignals` 9 信号清单 + 各 3 例测试同钉 `DOCUMENTED` 名单；契约 §2.4 Signal 行已落地注记；risk-job 全模块 96 例 0 失败）
 - [x] ruleConditions 结构化 JSON schema（P2，重构契约 §2.4「2.0 动作」代决开工）：`RiskRuleEntity.ruleConditions` 自由文本收敛为类型化结构 + 写路径校验测试钉住（FEATURE 条件结构校验收紧；PATTERN 既有 2-8 序列约束不动；THRESHOLD 任意串既有口径不动）；存量行不改写、读路径保持容忍（可解析即兼容，不可解析在类型化读取上显式报错），Flink 侧既有跳过语义不变。验收：类型化结构 + 校验测试全绿、replay/fetcher 既有测试原样绿（存量行为不变） ✅（7602a72：`dto/RuleConditions` 严格/容忍双档 + `conditions()` 实体访问器；FEATURE 写路径收紧、PATTERN/THRESHOLD 口径不动；受影响 5 测试类 25/25 绿、control-service 全模块 173 suite/2034 例 0 失败；契约 §2.4 RiskRule 行已落地注记，EventSchema 引用留后续）
 - [x] B1 产品定位与文档对齐：GitHub description 一句话定位、三份旧评估归档横幅（PIT 改 Oddsmaker、完成度数字改指批次跟踪）、redesign index 补 06 行（0f8617a、4a86775、568ffcb）
