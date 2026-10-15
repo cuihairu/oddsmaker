@@ -1,3 +1,5 @@
 # Control Service API Reference
 
-文档已移动到 [reference/api-reference.md](reference/api-reference.md)。
+> 🌐 Language: **English** · 中文 → [api-reference.zh.md](api-reference.zh.md)
+
+This document has moved to [reference/api-reference.md](reference/api-reference.md).

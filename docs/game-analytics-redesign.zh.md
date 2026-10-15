@@ -1,5 +1,7 @@
 # complier 游戏数据分析项目重设计
 
+> 🌐 Language: **中文** · English → [game-analytics-redesign.md](game-analytics-redesign.md)
+
 更新时间：`2026-06-05`
 
 ## 1. 命名与目标

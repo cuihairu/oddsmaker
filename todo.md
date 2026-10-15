@@ -4,6 +4,8 @@
 
 ## 开放需求
 
+- [ ] docs 子目录双语配对（P2，2026-10-16 执行单登记，下一轮做）：52 个 .md 待处理——docs/reference 10、docs/zh 32、docs/operations 4、docs/release-notes 3、docs/analysis 1、docs/guide 1、docs/research 1。口径同本轮：每页补对应语言版（中文→英文，英文→`.zh.md`）+ 两份顶部第 3 行内语言切换器；英文页正文不得混入中文正文（切换器行除外）；1000 行以上长页只加切换器并注明「该文档暂无译版」，不硬造劣质翻译；命令/路径/代码块/专有名词原样保留
+
 > R1015F 代决（用户可推翻）：以下两条维持卡点、不重启；2026-10-11 parked 拍板项（provider+token_ref、HarmonyOS SDK）维持 parked。
 
 - [ ] Debezium CDC 维度同步：等真实游戏方开 binlog 并部署 Kafka Connect 后排期，消费端复用 dimension-sync-job 事件入口

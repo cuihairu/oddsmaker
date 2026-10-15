@@ -1,19 +1,21 @@
-# 文档总览
+# Documentation Overview
 
-本目录是 Oddsmaker 的文档源（VitePress）。线上站点按语言分英文（`/`）和中文（`/zh/`）两套入口。
+> 🌐 Language: **English** · 中文 → [README.zh.md](README.zh.md)
 
-## 入口
-- [index.md](./index.md): 英文首页
-- [zh/index.md](./zh/index.md): 中文首页
-- [release-notes/README.md](./release-notes/README.md): 发布记录
+This directory is Oddsmaker's documentation source (VitePress). The published site ships two entry points by language: English (`/`) and Chinese (`/zh/`).
 
-## 中文文档（按主题）
-- [zh/reference/](./zh/reference/): 架构与接口
-- [zh/operations/](./zh/operations/deploy.k8s): 运行与发布
-- [zh/analysis/](./zh/analysis/jobs): 分析与路线图
-- [zh/getting-started/](./zh/getting-started/e2e): 快速入门
-- [zh/redesign/](./zh/redesign/): 平台重设计方案
+## Entry points
+- [index.md](./index.md): English home page
+- [zh/index.md](./zh/index.md): Chinese home page
+- [release-notes/README.md](./release-notes/README.md): release notes
 
-## 说明
-- 主体中文文档统一放在 `zh/` 下，与 VitePress 的中文 locale 对齐。
-- 英文页面见 `guide/`、`reference/`、`operations/`。
+## Chinese documentation (by topic)
+- [zh/reference/](./zh/reference/): architecture and interfaces
+- [zh/operations/](./zh/operations/deploy.k8s): running and releasing
+- [zh/analysis/](./zh/analysis/jobs): analytics and roadmap
+- [zh/getting-started/](./zh/getting-started/e2e): getting started
+- [zh/redesign/](./zh/redesign/): platform redesign proposals
+
+## Notes
+- Chinese content lives under `zh/`, aligned with the VitePress Chinese locale.
+- English pages live under `guide/`, `reference/`, and `operations/`.

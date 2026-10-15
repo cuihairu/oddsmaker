@@ -1,5 +1,6 @@
 # Oddsmaker 竞品对比与功能差距分析
 
+> 🌐 Language: **中文** · English → [competitive-analysis.en.md](competitive-analysis.en.md)
 > 调研时间：2026-09 ｜ 方法：网络搜索 + 各产品官方文档（Unity docs.unity.com / firebase.google.com / gameanalytics.com / learn.microsoft.com PlayFab / posthog.com）
 > 结论用途：更新 `todo.md` 路线图优先级（新增 P7 差距收敛批次），并驱动首个落地功能（P7-1 实时事件检视器）。
 

@@ -40,6 +40,8 @@ features:
     details: RBAC with 8 roles, and audit logging on control-plane writes
 ---
 
+> 🌐 Language: **English** · 中文 → [zh/index.md](/zh/)
+
 ## Quick Start
 
 ```bash
