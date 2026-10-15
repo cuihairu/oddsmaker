@@ -131,7 +131,37 @@ jobs:
       - name: Build (verify compile)
         run: pnpm -C web build
 
+  # Job 5: Android SDK 源码直测（sdks/android/jvm-coverage，70 例）
+  # 该工程是独立 Gradle 工程（自带 settings.gradle.kts），不在根 settings 的 include 列表里，
+  # 因此上面 Java job 的 bare `test` 永远跑不到它——此前它与 sdk 源码同仓演进却无任何门，
+  # 改坏 Android SDK（队列恢复/批量响应/实验缓存等）在 CI 上是绿的。
+  # 走根 wrapper + `-p`（不装第二份 wrapper，Gradle 版本真源仍是仓库 wrapper）。
+  # 原生 oddsmaker-android 的单测需 Android SDK(compileSdk 34) 才能跑，不入本门：
+  # jvm-coverage 以 srcDir 链接同一份源码 + android.* stub 替身，覆盖面即其等价物。
+  android-sdk-tests:
+    name: Android SDK tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-java@v5
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Run Android SDK tests
+        run: ./gradlew --no-daemon --stacktrace -p sdks/android/jvm-coverage test
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: android-sdk-test-results
+          path: 'sdks/android/jvm-coverage/build/reports/tests/'
+
   # 镜像推送已从本流水线移出，统一由两处负责，避免同一 :latest 由两条链路竞争：
   #   - nightly-build.yml → ghcr.io/cuihairu/oddsmaker:nightly（每日 cron + main 推送）
   #   - release.yaml      → ghcr.io/cuihairu/oddsmaker:<version>/<major.minor>/<major>/latest（v* tag）
-  # 本流水线只做校验（Java 全模块测试 + Web SDK 构建/全量测试 + ML 训练管线测试 + Web 控制台测试）。
+  # 本流水线只做校验（Java 全模块测试 + Web SDK 构建/全量测试 + ML 训练管线测试 + Web 控制台测试
+  # + Android SDK 源码直测）。

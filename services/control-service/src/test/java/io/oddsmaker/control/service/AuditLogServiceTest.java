@@ -1,5 +1,8 @@
 package io.oddsmaker.control.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import io.oddsmaker.control.jpa.AuditEventType;
 import io.oddsmaker.control.jpa.AuditLogEntity;
 import io.oddsmaker.control.jpa.AuditLogRepo;
 import org.junit.jupiter.api.DisplayName;
@@ -13,6 +16,7 @@ import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
@@ -133,5 +137,78 @@ class AuditLogServiceTest {
         // 集成调用 result="SUCCESS" 命中 SUCCESS 侧（既有用例已走非 SUCCESS 侧）
         assertEquals(AuditLogEntity.AuditStatus.SUCCESS,
             service.logIntegrationCall("i1", "risk_action", "SUCCESS", "g").status);
+    }
+
+    // ===== metadata 落 details（审计事件分类的判定依据）=====
+
+    private static final ObjectMapper MAPPER = new ObjectMapper();
+
+    @Test
+    @DisplayName("轮换行：metadata 序列化进 details、gameId 走独立列，行可直接派生出 API_KEY_ROTATED")
+    void metadataLandsInDetails() throws Exception {
+        when(auditLogRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        AuditLogEntity rotated = service.logUpdate("api_key", "ak_1", "Demo", "api", "api", null,
+            Map.of("action", "auto_rotate", "gameId", "g_demo", "rotationDays", "90"));
+
+        JsonNode details = MAPPER.readTree(rotated.details);
+        assertEquals("auto_rotate", details.path("action").asText());
+        assertEquals("90", details.path("rotationDays").asText());
+        assertFalse(details.has("gameId"), "gameId 有独立列，不重复进 details");
+        assertEquals("g_demo", rotated.gameId);
+        assertEquals(AuditEventType.API_KEY_ROTATED, rotated.getEventType());
+
+        // 策略更新行同样带 details，但无 auto_rotate operation → 分类回落 OTHER
+        AuditLogEntity policy = service.logUpdate("api_key", "ak_1", "Demo", "api", "api", null,
+            Map.of("gameId", "g_demo", "rpmBefore", "100", "rpmAfter", "500"));
+        assertEquals("100", MAPPER.readTree(policy.details).path("rpmBefore").asText());
+        assertEquals(AuditEventType.OTHER, policy.getEventType());
+
+        // logCreate 同形：metadata 进 details
+        AuditLogEntity created = service.logCreate("api_key", "ak_2", "Demo", "api", "api", null,
+            Map.of("gameId", "g_demo", "plan", "pro"));
+        assertEquals("pro", MAPPER.readTree(created.details).path("plan").asText());
+    }
+
+    @Test
+    @DisplayName("metadata 只有 gameId/为空 → 不写空 details")
+    void metadataWithoutExtrasLeavesDetailsNull() {
+        when(auditLogRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        assertNull(service.logUpdate("game", "g1", "Demo", "ops", "ops", null,
+            Map.of("gameId", "g9")).details);
+        assertNull(service.logCreate("game", "g1", "Demo", "ops", "ops", null, Map.of()).details);
+        assertNull(service.logCreate("game", "g1", "Demo", "ops", "ops", null, null).details);
+        // 12 参重载：metadata 全是已提升为独立列的键
+        assertNull(service.log(AuditLogEntity.AuditAction.UPDATE, "risk_case", "rc_1", "案例",
+            null, AuditLogEntity.AuditResult.SUCCESS, "admin", null, null, null, null,
+            Map.of("gameId", "g_demo", "environment", "env_prod")).details);
+    }
+
+    @Test
+    @DisplayName("12 参重载：details 有原文时以原文为准，metadata 仍提列")
+    void explicitDetailsWinsOverMetadata() {
+        when(auditLogRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        AuditLogEntity merged = service.log(AuditLogEntity.AuditAction.UPDATE, "identity", "p1", "显示ID",
+            "merge identity s1 into p1", AuditLogEntity.AuditResult.SUCCESS, "admin", null, "{}", null, null,
+            Map.of("gameId", "g_demo", "environment", "env_prod", "movedLinks", 3));
+
+        assertEquals("merge identity s1 into p1", merged.details);
+        assertEquals("g_demo", merged.gameId);
+        assertEquals("env_prod", merged.environment);
+    }
+
+    @Test
+    @DisplayName("metadata 序列化失败降级：details 留空、业务不失败，gameId 照常提列")
+    void unserializableMetadataDegrades() {
+        when(auditLogRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        AuditLogEntity log = service.logUpdate("api_key", "ak_1", "Demo", "api", "api", null,
+            Map.of("gameId", "g_demo", "bad", new Object()));
+
+        assertNull(log.details);
+        assertEquals("g_demo", log.gameId);
+        assertEquals(AuditEventType.OTHER, log.getEventType());
     }
 }

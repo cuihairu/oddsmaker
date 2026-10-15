@@ -137,6 +137,12 @@ jobs:
         run: npm test
         working-directory: sdks/web
 
+      # Android SDK 源码直测（sdks/android/jvm-coverage，70 例，与 ci.yaml 同形同源）：
+      # 独立 Gradle 工程，不在根 settings 的 include 列表里，Java job 的 bare `test` 覆盖不到。
+      # 走根 wrapper + `-p`，不另装 wrapper，保持 Gradle 版本单一真源。
+      - name: Run Android SDK tests
+        run: ./gradlew --no-daemon --stacktrace -p sdks/android/jvm-coverage test
+
   # ============================================================
   # Job 2: Multi-platform Build (needs test to pass)
   # ============================================================
