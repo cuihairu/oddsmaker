@@ -4,10 +4,16 @@
 
 ## 开放需求
 
+> R1015F 代决（用户可推翻）：以下两条维持卡点、不重启；2026-10-11 parked 拍板项（provider+token_ref、HarmonyOS SDK）维持 parked。
+
 - [ ] Debezium CDC 维度同步：等真实游戏方开 binlog 并部署 Kafka Connect 后排期，消费端复用 dimension-sync-job 事件入口
-  - R1015 卡点：真实游戏方未开 binlog、未部署 Kafka Connect（2026-10-15 复核：仓内 debezium/Kafka Connect 检索零信号）；所需输入：游戏方开 binlog + 部署 Kafka Connect + 提供 CDC 事件格式与目标表映射
+  - **卡点类型**：外部输入缺失——仓内无可推进前置项，属「等外部基建」而非「等时间」
+  - **解锁条件**：游戏方开 binlog + 部署 Kafka Connect + 提供 CDC 事件格式与目标表映射（三者齐备即开工）
+  - 复核留痕（2026-10-15）：仓内 debezium/Kafka Connect 检索零信号（命中全为文档 + `DimensionSyncJobTest` 一处方法名）；演示栈无 Kafka、无 gateway
 - [ ] ML 异常检测进评估批次：任一触发条件成立即开工——指标历史可回看 7 天以上且 7d/28d 分位基线可算；单游戏阈值告警规则月均调整 3 次以上；告警误杀率超 30% 持续 2 周
-  - R1015 卡点：触发条件未成立（2026-10-15 复核三表仍 0 行）——演示库 health_metrics、data_quality_metrics、metric_alert_rules 三表皆 0 行，最早指标日期为无；且 health_metrics 无产线写入方（collectMetric 仅模拟开关路径、默认关），data_quality_metrics 需网关真实流量而演示栈无 gateway，条件 (a) 非等待可解；解锁条件：四项任一达标，其中 (a) 需先有带网关流量的部署面并自指标开始落库起算 7 天
+  - **卡点类型**：触发条件未成立——条件 (a) 非等待可解，需先补部署面
+  - **解锁条件**：四项触发条件任一达标；其中条件 (a) 需先有**带网关流量的部署面**，并自指标开始落库起算满 **7 天**（7d/28d 分位基线方可算）
+  - 复核留痕（2026-10-15）：演示库 health_metrics / data_quality_metrics / metric_alert_rules 三表皆 0 行、最早指标日期为无；health_metrics 无产线写入方（`collectMetric` 仅模拟开关路径、默认关），data_quality_metrics 需网关真实流量而演示栈无 gateway
 
 ## 已完成需求
 
