@@ -301,14 +301,32 @@ DELETE /api/users/{userId}/role-assignments?roleId=&gameId=&environment=
 ### Audit Log
 
 ```http
-GET /api/audit-logs?page=&size=&sortBy=&sortDir=
-GET /api/audit-logs/user/{userId}
-GET /api/audit-logs/resource/{resourceType}/{resourceId}
-GET /api/audit-logs/action/{action}
-GET /api/audit-logs/time-range?start=&end=
-GET /api/audit-logs/statistics
-GET /api/audit-logs/{logId}
+GET    /api/audit-logs?page=&size=&sortBy=&sortDir=          # audit:read
+GET    /api/audit-logs/user/{userId}                         # audit:read
+GET    /api/audit-logs/resource/{resourceType}/{resourceId}  # audit:read
+GET    /api/audit-logs/action/{action}                       # audit:read
+GET    /api/audit-logs/status/{status}                       # audit:read
+GET    /api/audit-logs/time-range?start=&end=                # audit:read
+GET    /api/audit-logs/game/{gameId}                         # audit:read
+GET    /api/audit-logs/search?query=                         # audit:read
+GET    /api/audit-logs/{logId}                               # audit:read
+GET    /api/audit-logs/failed                                # audit:sensitive
+GET    /api/audit-logs/auth                                  # audit:sensitive
+GET    /api/audit-logs/sensitive                             # audit:sensitive
+GET    /api/audit-logs/statistics?days=                      # audit:sensitive
+DELETE /api/audit-logs/cleanup?daysToKeep=                   # audit:manage
 ```
+
+响应为审计实体直出（无 DTO 隔离层），除落库列外含**读时派生**的 `eventType`——不落新列，判定 = `resourceType` × `action` × `details.action`（`AuditLogService` 把 metadata 的 `action` 等键写进 `details`，`gameId` / `environment` 提为独立列）：
+
+| `eventType` | 判定 |
+|-------------|------|
+| `RISK_POLICY_CHANGED` | `risk_rule` × 变更类动作（create/update/delete/enable/disable/activate/deactivate） |
+| `API_KEY_ROTATED` | `api_key` × update × `details.action=auto_rotate`（自动轮换执行端写入） |
+| `DATA_EXPORTED` | 动作 `EXPORT`（与资源无关） |
+| `PERMISSION_CHANGED` | grant_role / revoke_role / grant_permission / revoke_permission，或 `user` × 裸 `GRANT` |
+| `EXPERIMENT_PUBLISHED` | `experiment` × update × `details.action=publish` |
+| `OTHER` | 其余（含 `details` 非法 JSON、缺 `action` 键、`action` 非字符串） |
 
 必须审计（以代码实际写库为准）：
 
