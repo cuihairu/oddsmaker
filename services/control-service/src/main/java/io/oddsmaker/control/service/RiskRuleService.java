@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -179,7 +180,8 @@ public class RiskRuleService {
      *   <li>PATTERN：既有口径不动——{"sequence": [...]} 2-8 个非空事件名（各 ≤100 字符），
      *       坏 JSON 与非法形态同一条报错文案</li>
      *   <li>FEATURE：收紧——至少一条合法特征条件（scope SUBJECT/IP、feature 非空、
-     *       op ∈ RuleConditions.FEATURE_OPS、value 数值）；此前写路径不校验、坏条件下线
+     *       op ∈ RuleConditions.FEATURE_OPS、value 数值），且 feature 名须 ∈
+     *       {@link RiskFeatures#ALL}（已代决 2026-10-16）；此前写路径不校验、坏条件下线
      *       只能靠 risk-job/replay 静默跳过</li>
      *   <li>其余类型（THRESHOLD 等）：既有口径不动——不校验（自由文本兼容）</li>
      * </ul>
@@ -193,11 +195,24 @@ public class RiskRuleService {
             }
         } else if (ruleType == RiskRuleEntity.RuleType.FEATURE) {
             // 严格档：不可解析 / 形态非法显式报错；可解析但零合法条件同样拒绝（线上会静默跳过）
-            if (!io.oddsmaker.control.dto.RuleConditions.parse(ruleConditions).hasFeatures()) {
+            io.oddsmaker.control.dto.RuleConditions parsed =
+                io.oddsmaker.control.dto.RuleConditions.parse(ruleConditions);
+            if (!parsed.hasFeatures()) {
                 throw new IllegalArgumentException(
                     "FEATURE rule requires ruleConditions {\"features\": [{\"scope\": \"SUBJECT|IP\","
                         + " \"feature\": \"...\", \"op\": \"one of " + io.oddsmaker.control.dto.RuleConditions.FEATURE_OPS
                         + "\", \"value\": <number>}]} with at least one valid condition");
+            }
+            // 特征名登记表校验（已代决 2026-10-16）：feature 取值域 = risk-job 计算面特征清单，
+            // 未知名规则在生产侧永远不会命中（risk_features 表无此键），写路径显式拒绝
+            List<String> unknown = parsed.features.stream()
+                .map(io.oddsmaker.control.dto.RuleConditions.FeatureCondition::feature)
+                .filter(f -> !RiskFeatures.ALL.contains(f))
+                .toList();
+            if (!unknown.isEmpty()) {
+                throw new IllegalArgumentException(
+                    "FEATURE rule references unknown feature(s) " + unknown
+                        + "; known feature names are " + RiskFeatures.ALL);
             }
         }
     }

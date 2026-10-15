@@ -266,14 +266,14 @@ public class RiskJob {
                 .filter(FeatureCalc::isGoldSource)
                 .keyBy(RiskJob::subjectWindowKey)
                 .window(SlidingEventTimeWindows.of(Time.hours(1), Time.minutes(5)))
-                .process(new FeatureCalc.GoldGainFeature("gold_gain_1h"))
+                .process(new FeatureCalc.GoldGainFeature(RiskFeatures.GOLD_GAIN_1H))
                 .returns(Types.POJO(FeatureRow.class));
 
         DataStream<FeatureRow> gold24h = inputs
                 .filter(FeatureCalc::isGoldSource)
                 .keyBy(RiskJob::subjectWindowKey)
                 .window(SlidingEventTimeWindows.of(Time.hours(24), Time.minutes(30)))
-                .process(new FeatureCalc.GoldGainFeature("gold_gain_24h"))
+                .process(new FeatureCalc.GoldGainFeature(RiskFeatures.GOLD_GAIN_24H))
                 .returns(Types.POJO(FeatureRow.class));
 
         DataStream<FeatureRow> deviceCount = inputs

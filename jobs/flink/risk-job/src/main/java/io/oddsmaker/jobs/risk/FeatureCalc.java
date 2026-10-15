@@ -11,7 +11,7 @@ import java.util.HashSet;
 import java.util.Set;
 
 /**
- * 首批 6 特征的口径与窗口聚合（B5，特征清单以计划书 §5.1 为准）：
+ * 首批 6 特征的口径与窗口聚合（B5，计划书 §5.1；特征名以 {@link RiskFeatures} 为单一真源）：
  * <ul>
  *   <li>gold_gain_1h / gold_gain_24h：主体口径，窗口内金币资源流入合计（flow_type=source 且 resource_id=gold）</li>
  *   <li>device_count：主体（仅 PLAYER）口径，窗口内使用过的不同设备数</li>
@@ -176,19 +176,19 @@ final class FeatureCalc {
 
     /** 仅 PLAYER 主体：设备聚集对匿名设备口径无意义（单设备恒 1） */
     static final class DeviceCountFeature extends FeatureWindowFunction {
-        DeviceCountFeature() { super("device_count"); }
+        DeviceCountFeature() { super(RiskFeatures.DEVICE_COUNT); }
         @Override double aggregate(Iterable<RiskJob.RiskInput> events) { return deviceCount(events); }
     }
 
     /** IP 口径：scope_key 取 IP:&lt;client_ip&gt; */
     static final class AccountPerIpFeature extends FeatureWindowFunction {
-        AccountPerIpFeature() { super("account_count_per_ip"); }
+        AccountPerIpFeature() { super(RiskFeatures.ACCOUNT_COUNT_PER_IP); }
         @Override String scopeKeyOf(RiskJob.RiskInput last) { return ipScopeKey(last); }
         @Override double aggregate(Iterable<RiskJob.RiskInput> events) { return accountCount(events); }
     }
 
     static final class WinRateFeature extends FeatureWindowFunction {
-        WinRateFeature() { super("win_rate"); }
+        WinRateFeature() { super(RiskFeatures.WIN_RATE); }
         @Override double aggregate(Iterable<RiskJob.RiskInput> events) {
             double r = winRate(events);
             return r < 0 ? Double.NaN : r;
@@ -196,7 +196,7 @@ final class FeatureCalc {
     }
 
     static final class EventCountFeature extends FeatureWindowFunction {
-        EventCountFeature() { super("event_count_10m"); }
+        EventCountFeature() { super(RiskFeatures.EVENT_COUNT_10M); }
         @Override double aggregate(Iterable<RiskJob.RiskInput> events) { return eventCount(events); }
     }
 }

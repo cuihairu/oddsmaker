@@ -202,6 +202,42 @@ class RiskRuleServiceTest {
     }
 
     @Test
+    @DisplayName("create：FEATURE 条件结构合法但特征名不在已知清单（RiskFeatures 6 特征）内——显式拒绝")
+    void createRejectsUnknownFeatureNames() {
+        when(gameRepo.findById("g1")).thenReturn(Optional.of(game()));
+
+        List<String> unknown = List.of(
+                "{\"features\":[{\"feature\":\"total_amount\",\"op\":\">\",\"value\":100}]}",     // 非计算面特征
+                "{\"features\":[{\"feature\":\"Gold_Gain_1h\",\"op\":\">\",\"value\":100}]}",   // 大小写变体亦不算
+                "{\"features\":[{\"feature\":\"gold_gain_1h\",\"op\":\">\",\"value\":100},"
+                    + "{\"feature\":\"custom_kpi\",\"op\":\">\",\"value\":1}]}");            // 已知+未知名混合整列表作废
+        for (String conditions : unknown) {
+            IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                    () -> service.create(featureRule(conditions), "op"),
+                    "应拒绝: " + conditions);
+            assertTrue(ex.getMessage().contains("known feature"), ex.getMessage());
+        }
+        verify(ruleRepo, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("update：触及条件改为合法形态但未知名特征——拒绝（同 create 校验口径）")
+    void updateRejectsUnknownFeatureNamesWhenTouched() {
+        RiskRuleEntity existing = featureRule("{\"features\":[{\"feature\":\"win_rate\",\"op\":\"<\",\"value\":0.9}]}");
+        existing.id = "rr_f4";
+        when(ruleRepo.findById("rr_f4")).thenReturn(Optional.of(existing));
+        when(ruleRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        RiskRuleEntity bad = new RiskRuleEntity();
+        bad.ruleType = null;
+        bad.ruleConditions = "{\"features\":[{\"feature\":\"risk_score_1h\",\"op\":\">\",\"value\":10}]}";
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> service.update("rr_f4", bad, "op"));
+        assertTrue(ex.getMessage().contains("known feature"), ex.getMessage());
+        verify(ruleRepo, never()).save(any());
+    }
+
+    @Test
     @DisplayName("create：FEATURE 非法条件——缺失/坏 JSON/空数组/坏算子/坏 scope/空特征名/非数值 全部显式拒绝")
     void createRejectsInvalidFeatureConditions() {
         when(gameRepo.findById("g1")).thenReturn(Optional.of(game()));

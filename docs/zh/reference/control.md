@@ -266,10 +266,16 @@ POST /api/risk-rules/{ruleId}/disable
 状态：`DRAFT` / `ACTIVE` / `PAUSED` / `ARCHIVED` / `DEPRECATED`。
 
 `ruleType=FEATURE` 的特征规则（B5）：`ruleConditions` 形状为
-`{"features":[{"scope":"SUBJECT","feature":"gold_gain_1h","op":">","threshold":500000}]}`，
+`{"features":[{"scope":"SUBJECT","feature":"gold_gain_1h","op":">","value":500000}]}`，
 `scope` 取 `SUBJECT`（玩家/设备主体）或 `IP`，条件间全 AND；特征行未产出按不满足计（无值不判真）。
+写路径结构校验：`feature` 非空、`op ∈ {>, >=, <, <=, ==}`、`value` 须为数值、`scope` 须为 `SUBJECT|IP`，
+任一违反整列表拒绝（4xx，文案以 `ruleConditions` 或 `features` 开头）；特征名须落在 risk-job 计算面的
+**已知特征清单**内（`service/RiskFeatures` ↔ risk-job `RiskFeatures`，两侧测试钉同一份名单）——
+未知名规则在 `risk_features` 表永远查不到、生产侧永远不命中，写路径显式拒绝
+（`FEATURE rule references unknown feature(s) …`，已代决 2026-10-16）。
 特征值来自 risk-job 特征作业按滑动窗口写入的 `risk_features`（首 6 个：gold_gain_1h/24h、device_count、
-account_count_per_ip、win_rate、event_count_10m），risk-job 每 60 秒拉取规则时解析 `features` 数组。
+account_count_per_ip、win_rate、event_count_10m），risk-job 每 60 秒拉取规则时解析 `features` 数组；
+读路径（replay/RuleFetcher）维持容忍：坏形态或未知特征名整条跳过，存量行不改写。
 
 ### User 与 RoleAssignment
 
