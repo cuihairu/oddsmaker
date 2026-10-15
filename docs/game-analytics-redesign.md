@@ -38,7 +38,7 @@ But the current state still leans toward "platform capability," and it is still 
 
 | Workbench | Problem Solved | Essential Metrics | Product Actions Needed |
 | --- | --- | --- | --- |
-| Growth and UA | Which channels and creatives bring high-quality players | CAC, ROAS, payback period, day-one payer rate | Channel comparison, creative attribution, payboard dashboard |
+| Growth and UA | Which channels and creatives bring high-quality players | CAC, ROAS, payback period, day-one payer rate | Channel comparison, creative attribution, payback dashboard |
 | Onboarding and Progress | Where and why players fall off | Tutorial completion rate, first-level pass rate, level failure rate, average attempt count | Funnel, level heatmaps, failure reason distribution |
 | Economy and Monetization | Where revenue comes from and whether the virtual economy is healthy | ARPU, ARPPU, payer conversion rate, ILRD, currency source/sink ratio | Shop analysis, currency water level, gift pack and ad placement effectiveness |
 | LiveOps and Experiments | Which configuration, activity, or numerical change is more effective | uplift, retention change, revenue change, activity participation rate | Player segmentation, A/B testing, Remote Config |
@@ -62,7 +62,7 @@ Strategically, "preset core events + custom extension fields" is recommended:
 - Amount and resource quantity fields use Decimal/Double semantics, avoiding decimal precision loss for items, virtual currency, and ad revenue.
 - Key objects get their own wide tables or materialized views, such as `level_progress`, `economy_flows`, `monetization_daily`.
 
-See [game-event-dictionary.zh.md](game-event-dictionary.zh.md) for the dictionary draft.
+See [game-event-dictionary.md](game-event-dictionary.md) for the dictionary draft.
 
 ## 4. Benchmark Cases
 
