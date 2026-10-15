@@ -10,6 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * 审计事件分类常量（路线图 §2.6）：五类敏感事件 + OTHER 兜底。
@@ -117,7 +118,7 @@ class AuditEventTypeTest {
         for (AuditEventType type : AuditEventType.values()) {
             assertNotNull(type.getDescription());
             assertFalse(type.getDescription().isBlank(), type + " 描述不应为空");
-            assertFalse(descriptions.add(type.getDescription()), type + " 描述与同类重复：" + type.getDescription());
+            assertTrue(descriptions.add(type.getDescription()), type + " 描述与同类重复：" + type.getDescription());
         }
         assertEquals("风控策略变更", AuditEventType.RISK_POLICY_CHANGED.getDescription());
         assertEquals("API Key 轮换", AuditEventType.API_KEY_ROTATED.getDescription());

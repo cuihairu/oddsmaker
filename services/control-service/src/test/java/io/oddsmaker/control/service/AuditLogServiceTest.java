@@ -178,7 +178,7 @@ class AuditLogServiceTest {
         assertNull(service.logUpdate("game", "g1", "Demo", "ops", "ops", null,
             Map.of("gameId", "g9")).details);
         assertNull(service.logCreate("game", "g1", "Demo", "ops", "ops", null, Map.of()).details);
-        assertNull(service.logCreate("game", "g1", "Demo", "ops", "ops", null, null).details);
+        assertNull(service.logCreate("game", "g1", "Demo", "ops", "ops", null, (Map<String, ?>) null).details);
         // 12 参重载：metadata 全是已提升为独立列的键
         assertNull(service.log(AuditLogEntity.AuditAction.UPDATE, "risk_case", "rc_1", "案例",
             null, AuditLogEntity.AuditResult.SUCCESS, "admin", null, null, null, null,

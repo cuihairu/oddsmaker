@@ -10,7 +10,10 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -23,6 +26,9 @@ import java.util.Map;
 public class AuditLogService {
 
     private static final Logger logger = LoggerFactory.getLogger(AuditLogService.class);
+
+    /** metadata → details 序列化器（Jackson 2，与控制面其余 ObjectMapper 同库） */
+    private static final ObjectMapper MAPPER = new ObjectMapper();
 
     @Autowired
     private AuditLogRepo auditLogRepo;
@@ -226,10 +232,7 @@ public class AuditLogService {
         auditLog.resourceId = resourceId;
         auditLog.resourceName = resourceName;
         auditLog.ipAddress = ip;
-        if (metadata != null) {
-            Object gameId = metadata.get("gameId");
-            if (gameId != null) auditLog.gameId = gameId.toString();
-        }
+        applyMetadata(auditLog, metadata);
         auditLog.status = AuditLogEntity.AuditStatus.SUCCESS;
         return log(auditLog);
     }
@@ -247,12 +250,42 @@ public class AuditLogService {
         auditLog.resourceId = resourceId;
         auditLog.resourceName = resourceName;
         auditLog.ipAddress = ip;
-        if (metadata != null) {
-            Object gameId = metadata.get("gameId");
-            if (gameId != null) auditLog.gameId = gameId.toString();
-        }
+        applyMetadata(auditLog, metadata);
         auditLog.status = AuditLogEntity.AuditStatus.SUCCESS;
         return log(auditLog);
+    }
+
+    /**
+     * metadata 提列 + 落 details（审计事件分类 AuditEventType.classify 的判定依据）：
+     * gameId/environment 提为独立列不重复进 details，其余键序列化为 details JSON；
+     * metadata 为 null 或只剩已提列键时不写空 details；序列化失败留空降级、不阻断业务。
+     */
+    private void applyMetadata(AuditLogEntity auditLog, Map<String, ?> metadata) {
+        if (metadata == null) {
+            return;
+        }
+        Object gameId = metadata.get("gameId");
+        if (gameId != null) auditLog.gameId = gameId.toString();
+        Object environment = metadata.get("environment");
+        if (environment != null) auditLog.environment = environment.toString();
+
+        Map<String, Object> extras = new LinkedHashMap<>();
+        for (Map.Entry<String, ?> entry : metadata.entrySet()) {
+            if (entry.getKey() == null
+                    || "gameId".equals(entry.getKey())
+                    || "environment".equals(entry.getKey())) {
+                continue;
+            }
+            extras.put(entry.getKey(), entry.getValue());
+        }
+        if (extras.isEmpty()) {
+            return;
+        }
+        try {
+            auditLog.details = MAPPER.writeValueAsString(extras);
+        } catch (Exception e) {
+            logger.warn("Audit metadata serialization failed, details left empty", e);
+        }
     }
 
     /**

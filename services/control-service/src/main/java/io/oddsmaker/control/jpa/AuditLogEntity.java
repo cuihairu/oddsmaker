@@ -236,6 +236,14 @@ public class AuditLogEntity {
                action == AuditAction.IMPORT;
     }
 
+    /**
+     * 审计事件分类（读时派生，不落列）：按 资源 × 动作 × details.operation 判定，
+     * 见 {@link AuditEventType#classify}。
+     */
+    public AuditEventType getEventType() {
+        return AuditEventType.classify(resourceType, action, details);
+    }
+
     public String getActionDescription() {
         return switch (action) {
             case CREATE -> "创建";
