@@ -175,4 +175,100 @@ class RiskRuleServiceTest {
         assertEquals("新名字", saved.displayName);
         verify(ruleRepo).save(saved);
     }
+
+    // ===== FEATURE 规则条件结构校验（ruleConditions 结构化收敛，2026-10-15 代决落地） =====
+
+    private RiskRuleEntity featureRule(String ruleConditions) {
+        RiskRuleEntity r = new RiskRuleEntity();
+        r.gameId = "g1";
+        r.name = "feature-rule";
+        r.ruleType = RiskRuleEntity.RuleType.FEATURE;
+        r.ruleConditions = ruleConditions;
+        return r;
+    }
+
+    @Test
+    @DisplayName("create：FEATURE 合法特征条件入库（scope 缺省 SUBJECT）")
+    void createPersistsValidFeatureRule() {
+        when(gameRepo.findById("g1")).thenReturn(Optional.of(game()));
+        when(ruleRepo.findByGameId("g1")).thenReturn(List.of());
+        when(ruleRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        RiskRuleEntity saved = service.create(featureRule(
+                "{\"features\":[{\"feature\":\"gold_gain_1h\",\"op\":\">\",\"value\":100000}]}"), "op");
+
+        assertEquals(RiskRuleEntity.RuleType.FEATURE, saved.ruleType);
+        verify(ruleRepo).save(saved);
+    }
+
+    @Test
+    @DisplayName("create：FEATURE 非法条件——缺失/坏 JSON/空数组/坏算子/坏 scope/空特征名/非数值 全部显式拒绝")
+    void createRejectsInvalidFeatureConditions() {
+        when(gameRepo.findById("g1")).thenReturn(Optional.of(game()));
+
+        List<String> bad = java.util.Arrays.asList(
+                (String) null,                                              // 无条件（线上会静默跳过，写路径拒绝）
+                "   ",                                                      // 空白串
+                "not-json",                                                 // 坏 JSON
+                "{}",                                                       // 缺 features
+                "{\"features\":[]}",                                        // 空数组
+                "{\"features\":\"x\"}",                                     // 非数组
+                "{\"features\":[{\"feature\":\"f\",\"op\":\"~\",\"value\":1}]}",   // 非法算子
+                "{\"features\":[{\"scope\":\"GAME\",\"feature\":\"f\",\"op\":\">\",\"value\":1}]}", // 非法 scope
+                "{\"features\":[{\"feature\":\" \",\"op\":\">\",\"value\":1}]}",   // 空特征名
+                "{\"features\":[{\"feature\":\"f\",\"op\":\">\",\"value\":\"100\"}]}" // value 非数字
+        );
+        for (String conditions : bad) {
+            IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                    () -> service.create(featureRule(conditions), "op"),
+                    "应拒绝: " + conditions);
+            // 形态类拒绝提 features，坏 JSON 提 not valid JSON（RuleConditions.parse 严格档文案）
+            assertTrue(ex.getMessage().contains("features") || ex.getMessage().contains("not valid JSON"),
+                    ex.getMessage());
+        }
+        verify(ruleRepo, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("update：FEATURE 触及条件时按合并终态校验——坏条件拒绝；无关编辑不受存量坏条件影响")
+    void updateFeatureConditionsValidatedOnlyWhenTouched() {
+        RiskRuleEntity existing = featureRule("{\"features\":[{\"feature\":\"win_rate\",\"op\":\">\",\"value\":0.9}]}");
+        existing.id = "rr_f1";
+        when(ruleRepo.findById("rr_f1")).thenReturn(Optional.of(existing));
+        when(ruleRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        // 合法新条件 → 放行
+        RiskRuleEntity good = new RiskRuleEntity();
+        good.ruleType = null;
+        good.ruleConditions = "{\"features\":[{\"scope\":\"IP\",\"feature\":\"account_count_per_ip\",\"op\":\">=\",\"value\":3}]}";
+        RiskRuleEntity saved = service.update("rr_f1", good, "op");
+        assertTrue(saved.ruleConditions.contains("account_count_per_ip"));
+
+        // 非法新条件 → 拒绝且不落库
+        RiskRuleEntity bad = new RiskRuleEntity();
+        bad.ruleType = null;
+        bad.ruleConditions = "{\"features\":[{\"feature\":\"f\",\"op\":\"~\",\"value\":1}]}";
+        assertThrows(IllegalArgumentException.class, () -> service.update("rr_f1", bad, "op"));
+
+        // 类型改成 FEATURE 而存量无条件 → 拒绝
+        RiskRuleEntity toFeature = new RiskRuleEntity();
+        toFeature.ruleType = RiskRuleEntity.RuleType.FEATURE;
+        RiskRuleEntity noConditions = featureRule(null);
+        noConditions.id = "rr_f2";
+        when(ruleRepo.findById("rr_f2")).thenReturn(Optional.of(noConditions));
+        assertThrows(IllegalArgumentException.class, () -> service.update("rr_f2", toFeature, "op"));
+
+        // 存量坏条件 + 只改无关字段 → 不校验、放行（兜底由 job 侧跳过，存量行行为不变）
+        RiskRuleEntity legacyJunk = featureRule("legacy-free-text");
+        legacyJunk.id = "rr_f3";
+        when(ruleRepo.findById("rr_f3")).thenReturn(Optional.of(legacyJunk));
+        RiskRuleEntity rename = new RiskRuleEntity();
+        rename.ruleType = null;
+        rename.ruleConditions = null;
+        rename.displayName = "改名";
+        RiskRuleEntity renamed = service.update("rr_f3", rename, "op");
+        assertEquals("改名", renamed.displayName);
+
+        verify(ruleRepo, org.mockito.Mockito.times(2)).save(any());   // 合法 update + 无关改名，坏条件两次不落库
+    }
 }

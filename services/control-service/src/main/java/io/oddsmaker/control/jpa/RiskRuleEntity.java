@@ -43,9 +43,9 @@ public class RiskRuleEntity {
     @Column(nullable = false)
     public RuleType ruleType = RuleType.THRESHOLD;  // 规则类型
 
-    // 规则条件（JSON格式）
+    // 规则条件（JSON格式，形态见 dto/RuleConditions：PATTERN {"sequence":[...]} / FEATURE {"features":[...]}）
     @Column(name = "rule_conditions", columnDefinition = "TEXT")
-    public String ruleConditions;  // {"event_type": "purchase", "amount": ">1000", "frequency": ">10/hour"}
+    public String ruleConditions;  // 列维持 JSON 文本存储（存量行不改写）；类型化视图见 conditions()
 
     // 风险等级
     @Enumerated(EnumType.STRING)
@@ -205,6 +205,16 @@ public class RiskRuleEntity {
     }
 
     // 业务方法
+
+    /**
+     * 规则条件读时类型化（容忍档）：rule_conditions 列不改、存量行不改写；可解析即兼容、
+     * 不可解析 parsed=false 不抛（线上兜底由 risk-job 跳过）。严格档（写路径显式报错）见
+     * {@link io.oddsmaker.control.dto.RuleConditions#parse(String)}。
+     * 方法名不走 getX 形态，避免实体直出场景把类型化视图泄进 API 响应。
+     */
+    public io.oddsmaker.control.dto.RuleConditions conditions() {
+        return io.oddsmaker.control.dto.RuleConditions.parseTolerant(ruleConditions, null);
+    }
     public boolean isActive() {
         return status == RuleStatus.ACTIVE && deletedAt == null;
     }

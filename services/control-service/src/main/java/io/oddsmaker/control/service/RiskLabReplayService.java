@@ -1,6 +1,5 @@
 package io.oddsmaker.control.service;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.oddsmaker.control.jpa.RiskRuleEntity;
 import io.oddsmaker.control.jpa.RiskRuleRepo;
@@ -43,8 +42,7 @@ public class RiskLabReplayService {
     static final String STATUS_NOT_COVERED = "notCovered";
     static final String STATUS_INVALID = "invalid";
 
-    /** 合法特征条件算子集（与 RuleFetcher 同款） */
-    private static final Set<String> OPS = Set.of(">", ">=", "<", "<=", "==");
+    /** 合法特征条件算子集真源已收敛到 dto/RuleConditions.FEATURE_OPS（与 RuleFetcher 同款） */
 
     /** 依赖流式窗口/序列聚合的规则类型：dry-run 明示跳过，不模拟 */
     private static final Set<String> STREAMING_TYPES =
@@ -243,47 +241,15 @@ public class RiskLabReplayService {
     }
 
     /**
-     * ruleConditions JSON → 特征条件列表；与 RuleFetcher.parseFeatureConditions 同款校验：
-     * scope 缺省 SUBJECT 且仅 SUBJECT/IP、feature 非空、op 合法、value 数值，任一违反整列表作废。
+     * ruleConditions JSON → 特征条件列表；委托 {@link io.oddsmaker.control.dto.RuleConditions}
+     * 容忍档（与 RuleFetcher.parseFeatureConditions 同款校验口径：scope 缺省 SUBJECT 且仅
+     * SUBJECT/IP、feature 非空、op 合法、value 数值，任一违反整列表作废跳过）。
      */
     private List<FeatureCondition> parseFeatureConditions(String ruleConditions) {
-        if (ruleConditions == null || ruleConditions.isBlank()) {
-            return List.of();
-        }
-        JsonNode root;
-        try {
-            root = objectMapper.readTree(ruleConditions);
-        } catch (Exception e) {
-            return List.of();
-        }
-        if (root == null || !root.isObject()) {
-            return List.of();
-        }
-        JsonNode arr = root.path("features");
-        if (!arr.isArray() || arr.isEmpty()) {
-            return List.of();
-        }
-        List<FeatureCondition> out = new ArrayList<>();
-        for (JsonNode n : arr) {
-            String scope = n.path("scope").asText("SUBJECT").trim();
-            if (!"SUBJECT".equals(scope) && !"IP".equals(scope)) {
-                return List.of();
-            }
-            String feature = n.path("feature").asText("").trim();
-            if (feature.isEmpty()) {
-                return List.of();
-            }
-            String op = n.path("op").asText("").trim();
-            if (!OPS.contains(op)) {
-                return List.of();
-            }
-            JsonNode value = n.path("value");
-            if (!value.isNumber()) {
-                return List.of();
-            }
-            out.add(new FeatureCondition(feature, op, value.asDouble()));
-        }
-        return List.copyOf(out);
+        return io.oddsmaker.control.dto.RuleConditions
+            .parseTolerant(ruleConditions, objectMapper).features.stream()
+            .map(fc -> new FeatureCondition(fc.feature(), fc.op(), fc.value()))
+            .toList();
     }
 
     private static BigDecimal toAmount(Object v, int idx) {

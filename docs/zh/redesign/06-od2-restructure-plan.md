@@ -69,9 +69,9 @@
 
 | 对象 | 标识 | 现状 | 2.0 动作 |
 |---|---|---|---|
-| **Signal** | 流水，非实体 | Gateway 校验后的原始事件即信号（`risk_context` 字段已入事件契约） | 显式定义信号清单（gold_gain/login_ip/device/…），不需要新表 |
+| **Signal** | 流水，非实体 | Gateway 校验后的原始事件即信号（`risk_context` 字段已入事件契约） | 显式定义信号清单（gold_gain/login_ip/device/…），不需要新表——**已落地（2026-10-15）**：`RiskSignals` 两侧显式清单（9 信号：gold_gain/login_ip/device/win_flag/event_frequency/receipt/ad_reward/revenue/trust_level，snake_case）；只补显式声明与文档，提取逻辑（`FeatureCalc`/`RiskJob`）与序列化格式不变；两侧无共享依赖模块，由各自测试钉同一份文档名单对齐 |
 | **Feature**（**新增**） | `(game_id, scope_key, feature_name)` 时间窗值 | ✅（B5 落地：`risk_features` 表 + risk-job 特征作业首 6 特征滑动窗口） | ANALYTICS 侧共享 `feature_store` 双写见 §5.3（B10） |
-| **RiskRule** | `rule_id`，`environmentId` 可空（全局规则） | `RiskRuleEntity` 已具（THRESHOLD/SEQUENCE、riskScore、actionType、enableAutoBlock） | 收敛 `ruleConditions` 为结构化 JSON schema（引 EventSchema 字段），保持现状字段名 |
+| **RiskRule** | `rule_id`，`environmentId` 可空（全局规则） | `RiskRuleEntity` 已具（THRESHOLD/SEQUENCE、riskScore、actionType、enableAutoBlock） | 收敛 `ruleConditions` 为结构化 JSON schema（引 EventSchema 字段），保持现状字段名——**已落地（2026-10-15）**：`dto/RuleConditions` 类型化视图（读时类型化 + 写时校验单一入口，严格档显式报错 / 容忍档 `parsed=false` 兼容存量）；FEATURE 写路径结构校验收紧（scope/feature/op/value 逐条），PATTERN 既有 2-8 约束与 THRESHOLD 任意串口径不动；`rule_conditions` 列不改写、对外暴露面不变；「引 EventSchema 字段」留后续批次 |
 | **RiskScore** | `(game_id, subject, as_of)` 值对象 | ✅（B6 落地：risk-job 评估产出 CH `risk_scores`——主体累计各规则最大贡献分 + 规则触发明细 JSON，ReplacingMergeTree 主体快照） | **从 rule 提出**：一次评估产生一个累计分数记录（B6） |
 | **Decision**（**新增**） | 判定 `(case_id → status)` | ✅（B6 落地：`RiskCaseEntity.status` 分层前向状态机，Decision-first 判定先行、非法流转拒绝执行动作） | B6：判定状态机 `OPEN → REVIEW/ALERT/MARK → THROTTLE/BLOCK → RESOLVED` |
 | **Action** | 处置动作 | `RiskRuleEntity.ActionType`（IGNORE/ALERT/LOG_ONLY/CHALLENGE/THROTTLE/BLOCK/REVIEW/WEBHOOK 已实现）+ BlockList/封禁 | 与 Decision 绑定（Decision 决定动作，不反推） |

@@ -90,7 +90,7 @@ public class RiskRuleService {
         rule.name = rule.name.trim();
         if (rule.status == null) rule.status = RiskRuleEntity.RuleStatus.DRAFT;
         if (rule.status == RiskRuleEntity.RuleStatus.ACTIVE) rule.activatedAt = LocalDateTime.now();
-        validatePatternConditions(rule.ruleType, rule.ruleConditions);
+        validateConditions(rule.ruleType, rule.ruleConditions);
         rule.totalTriggeredCount = 0L;
         rule.totalBlockedCount = 0L;
         rule.totalReviewCount = 0L;
@@ -131,7 +131,7 @@ public class RiskRuleService {
         // 仅在本请求触及类型/条件时校验合并后的终态：
         // 无关字段编辑不应被历史遗留的坏数据卡住（存量非法序列由 job 侧跳过兜底）
         if (req.ruleType != null || req.ruleConditions != null) {
-            validatePatternConditions(existing.ruleType, existing.ruleConditions);
+            validateConditions(existing.ruleType, existing.ruleConditions);
         }
 
         RiskRuleEntity saved = ruleRepo.save(existing);
@@ -173,14 +173,32 @@ public class RiskRuleService {
         new com.fasterxml.jackson.databind.ObjectMapper();
 
     /**
-     * PATTERN 规则约束：ruleConditions 必须是 {"sequence": [事件名...]}，2-8 个非空事件名（各 ≤100 字符）。
-     * 非法即抛 IllegalArgumentException（create/update 的 4xx 语义）；其他类型不校验。
+     * 规则条件写路径校验（ruleConditions 结构化收敛，2026-10-15 代决落地；类型化结构见
+     * {@link io.oddsmaker.control.dto.RuleConditions}）：
+     * <ul>
+     *   <li>PATTERN：既有口径不动——{"sequence": [...]} 2-8 个非空事件名（各 ≤100 字符），
+     *       坏 JSON 与非法形态同一条报错文案</li>
+     *   <li>FEATURE：收紧——至少一条合法特征条件（scope SUBJECT/IP、feature 非空、
+     *       op ∈ RuleConditions.FEATURE_OPS、value 数值）；此前写路径不校验、坏条件下线
+     *       只能靠 risk-job/replay 静默跳过</li>
+     *   <li>其余类型（THRESHOLD 等）：既有口径不动——不校验（自由文本兼容）</li>
+     * </ul>
+     * 非法即抛 IllegalArgumentException（create/update 的 4xx 语义）。
      */
-    private static void validatePatternConditions(RiskRuleEntity.RuleType ruleType, String ruleConditions) {
-        if (ruleType != RiskRuleEntity.RuleType.PATTERN) return;
-        if (parseSequence(ruleConditions).isEmpty()) {
-            throw new IllegalArgumentException(
-                "PATTERN rule requires ruleConditions {\"sequence\": [...]} with 2-8 non-blank event names");
+    private static void validateConditions(RiskRuleEntity.RuleType ruleType, String ruleConditions) {
+        if (ruleType == RiskRuleEntity.RuleType.PATTERN) {
+            if (parseSequence(ruleConditions).isEmpty()) {
+                throw new IllegalArgumentException(
+                    "PATTERN rule requires ruleConditions {\"sequence\": [...]} with 2-8 non-blank event names");
+            }
+        } else if (ruleType == RiskRuleEntity.RuleType.FEATURE) {
+            // 严格档：不可解析 / 形态非法显式报错；可解析但零合法条件同样拒绝（线上会静默跳过）
+            if (!io.oddsmaker.control.dto.RuleConditions.parse(ruleConditions).hasFeatures()) {
+                throw new IllegalArgumentException(
+                    "FEATURE rule requires ruleConditions {\"features\": [{\"scope\": \"SUBJECT|IP\","
+                        + " \"feature\": \"...\", \"op\": \"one of " + io.oddsmaker.control.dto.RuleConditions.FEATURE_OPS
+                        + "\", \"value\": <number>}]} with at least one valid condition");
+            }
         }
     }
 
