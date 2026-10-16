@@ -1,0 +1,73 @@
+# 演示站点只读诊断腿：手动 workflow_dispatch 触发，跑在 runner-docker 部署机上。
+#
+# 用途：公网 https://oddsmaker.cuihairu.site/ 报 502 时，按 deploy/demo/README §3 的
+# 回源自查配方在本机取证据，区分故障在源站（nginx 服务/配置/证书/compose 栈）
+# 还是 CF↔源站链路（DNS A 记录、防火墙/安全组、CF SSL 模式）。
+# 只读红线：不改任何文件、不重启任何服务、不 echo 任何密钥；全部探针容忍失败，
+# 本工作流恒为绿（诊断取证，不是门禁），结论看运行日志。
+#
+# 2026-10-17 起因：Deploy Demo 连续绿（on-box 127.0.0.1:38085 健康）而公网持续 502，
+# 该层故障 workflow 健康门看不见，见 todo.md「Demo 站公网 502」卡点条目。
+
+name: Demo Diagnose
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    name: Read-only origin diagnostics
+    runs-on: [self-hosted, runner-docker]
+    timeout-minutes: 5
+    env:
+      DEMO_HOME: /opt/oddsmaker
+    steps:
+      - name: Host basics
+        run: |
+          echo "== host =="; hostname; date -u; uptime
+          echo "== loadavg =="; cat /proc/loadavg
+          echo "== memory =="; free -m
+          echo "== swappiness =="; cat /proc/sys/vm/swappiness
+
+      - name: Compose stack state
+        run: |
+          cd "$DEMO_HOME"
+          echo "== compose ps =="; docker compose ps 2>&1 || true
+          echo "== control health (direct :38085) =="
+          curl -sS -m 5 http://127.0.0.1:"${CONTROL_PORT:-38085}"/actuator/health 2>&1 || true; echo
+
+      - name: Listening ports 80/443/38085
+        run: |
+          echo "== ss -tlnp (80/443/38085) =="
+          ss -tlnp 2>/dev/null | grep -E ':(80|443|38085)\b' || echo "no listener matched"
+
+      - name: nginx service and config
+        run: |
+          echo "== systemctl is-active nginx =="; systemctl is-active nginx 2>&1 || true
+          echo "== nginx -t =="; nginx -t 2>&1 || true
+          echo "== sites-enabled =="; ls -l /etc/nginx/sites-enabled/ 2>&1 || true
+          echo "== oddsmaker site conf (listen/server_name/proxy_pass/root) =="
+          grep -nE 'listen|server_name|proxy_pass|root ' /etc/nginx/sites-available/oddsmaker.cuihairu.site 2>&1 || true
+
+      - name: Origin self-check (README §3 recipe)
+        run: |
+          echo "== http :80 no Host (default server) =="
+          curl -sS -m 5 -o /dev/null -w '%{http_code}\n' http://127.0.0.1/ 2>&1 || true
+          echo "== http :80 with Host header (SPA /) =="
+          curl -sS -m 5 -o /dev/null -w '%{http_code}\n' -H 'Host: oddsmaker.cuihairu.site' http://127.0.0.1/ 2>&1 || true
+          echo "== http :80 with Host header (/api/actuator/health) =="
+          curl -sS -m 5 -H 'Host: oddsmaker.cuihairu.site' http://127.0.0.1/api/actuator/health 2>&1 || true; echo
+          echo "== https :443 self-signed-tolerant (SPA /) =="
+          curl -ksS -m 5 -o /dev/null -w '%{http_code}\n' --resolve oddsmaker.cuihairu.site:443:127.0.0.1 https://oddsmaker.cuihairu.site/ 2>&1 || true
+          echo "== cert on :443 =="
+          echo | openssl s_client -connect 127.0.0.1:443 -servername oddsmaker.cuihairu.site 2>/dev/null | openssl x509 -noout -subject -dates 2>&1 || true
+
+      - name: Egress IP and nginx journal (for user-side cross-check)
+        run: |
+          echo "== public egress IP (对 CF 的 DNS A 记录核对面) =="
+          curl -4 -sS -m 8 https://api.ipify.org 2>&1 || true; echo
+          echo "== journalctl -u nginx last 20 (需 sudo/诊断组权限，无则跳过) =="
+          sudo -n journalctl -u nginx -n 20 --no-pager 2>&1 | tail -20 || true
