@@ -107,6 +107,11 @@ MFA is enforced at login (challenge/verify flow; see the [operations security ch
 - [Getting Started](/guide/) - Quick start guide
 - [API Reference](/reference/) - Complete API documentation
 - [Operations](/operations/) - Deployment and operations guides
+- [Game Event Dictionary](/game-event-dictionary) - Event contract fields by event family
+- [Game Analytics Redesign](/game-analytics-redesign) - Analytics capability redesign proposal
+- [Resource Event Design](/analysis/resource-event-design) - Resource and economy event modeling
+- [Release Notes](/release-notes/README) - Version release notes index
+- [Decision Log](/决策记录) - Ledger of delegated decisions cited across todo.md
 
 ## Community
 

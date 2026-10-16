@@ -91,6 +91,16 @@ MFA（两步验证）、RBAC 权限控制（8 角色 × global/game/environment 
 - [系统架构](/zh/reference/architecture) - 系统架构总览
 - [K8s 部署](/zh/operations/deploy.k8s) - 部署到生产
 - [分析场景](/zh/reference/gaming-scenarios) - 游戏分析覆盖度
+- [生产运维](/zh/operations/ops) - 生产部署与运维建议
+- [性能与压测](/zh/operations/perf) - 性能与压测指南
+- [网关性能调参](/zh/operations/perf-tuning) - 网关性能调参建议
+- [可观测性](/zh/operations/observability) - Metrics/Traces/Logs
+- [Release 指南](/zh/operations/release) - 30 分钟拉起演示与生产清单
+- [开发者指南](/zh/getting-started/developer) - 本地开发
+- [贡献指南](/zh/getting-started/contributing) - 提交与协作规范
+- [实验平台](/zh/analysis/experiments) - 实验平台（A/B）MVP
+- [产品路线图](/zh/analysis/roadmap) - 游戏分析平台产品路线图
+- [决策记录](/决策记录.zh) - 巡检代决台账
 
 ## 社区
 
