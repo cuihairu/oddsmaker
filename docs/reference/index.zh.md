@@ -92,23 +92,23 @@ gateway 上的摄入按 key 与客户端 IP 限流：
 
 ### 核心 API
 
-- [Games API](/reference/games) - 游戏管理
-- [Environments API](/reference/environments) - 环境管理
-- [Authentication](/reference/authentication) - API key 与请求认证
+- [Games API](/reference/games.zh) - 游戏管理
+- [Environments API](/reference/environments.zh) - 环境管理
+- [Authentication](/reference/authentication.zh) - API key 与请求认证
 
 ### 分析 API
 
-- [Experiments API](/reference/experiments) - A/B 测试
-- [Analytics API](/reference/analytics) - 分析与报表
+- [Experiments API](/reference/experiments.zh) - A/B 测试
+- [Analytics API](/reference/analytics.zh) - 分析与报表
 
 ### 风控管理 API
 
-- [Risk API](/reference/risk) - 风控管理
+- [Risk API](/reference/risk.zh) - 风控管理
 
 ### 高级 API
 
-- [ML Models API](/reference/ml-models) - 机器学习模型
-- [Gaming Scenarios](/reference/gaming-scenarios) - 玩法分析场景
+- [ML Models API](/reference/ml-models.zh) - 机器学习模型
+- [Gaming Scenarios](/reference/gaming-scenarios.zh) - 玩法分析场景
 
 ## SDK
 

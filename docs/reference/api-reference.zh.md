@@ -516,7 +516,7 @@ risk-job 按定时器（默认 60 秒）从 `GET /api/risk-dashboard/rules/{game
 
 ### 维度同步
 
-维度同步状态、HTTP Pull 来源配置，以及 Control 托管的 Agent 部署属性。Pull 行把游戏 API 的分页数据转换为 `dimension_define` 事件并推送到 `/v1/batch`；进度记录在 `dimension_sync_status`（`sourceType: agent|pull`）。完整链路设计参见 [dimension-sync.md](/reference/dimension-sync)。
+维度同步状态、HTTP Pull 来源配置，以及 Control 托管的 Agent 部署属性。Pull 行把游戏 API 的分页数据转换为 `dimension_define` 事件并推送到 `/v1/batch`；进度记录在 `dimension_sync_status`（`sourceType: agent|pull`）。完整链路设计参见 [dimension-sync.md](/zh/reference/dimension-sync)。
 
 | 方法 | 端点 | 说明 |
 |---|---|---|
@@ -534,7 +534,7 @@ risk-job 按定时器（默认 60 秒）从 `GET /api/risk-dashboard/rules/{game
 | DELETE | `/api/games/{gameId}/agent-configs/{id}` | 删除 Agent 配置（`dimension:manage`） |
 | GET | `/api/dimensions/agent-configs/resolved?gameId=&environment=&agentKey=` | Agent 配置拉取：响应体是一段可 `Properties.load` 的文本，包含注入的 `game.id`/`game.environment`/`status.source-key`、props 以及解密后的 secrets；已停用的配置会被拒绝（`dimension:read`） |
 
-导入/导出的 YAML 形态：以 `sourceKey` 为键的 `dimensions` 根映射；允许的字段为 `environment`、`dimType`、`endpoint`、`credential`、`intervalSeconds`、`pageLimit`、`enabled`——未知字段会被拒绝并给出精确错误。Agent 配置键复用 `agent.properties` 的点号键名并按可见性拆分：非敏感键放入 `props`，六个敏感键（`gateway.api-key`、`status.token`、数据库/Kafka/keystore 密码）放入 `secrets`。示例参见 [dimension-sync.md](/reference/dimension-sync) 中的配置驱动一节。
+导入/导出的 YAML 形态：以 `sourceKey` 为键的 `dimensions` 根映射；允许的字段为 `environment`、`dimType`、`endpoint`、`credential`、`intervalSeconds`、`pageLimit`、`enabled`——未知字段会被拒绝并给出精确错误。Agent 配置键复用 `agent.properties` 的点号键名并按可见性拆分：非敏感键放入 `props`，六个敏感键（`gateway.api-key`、`status.token`、数据库/Kafka/keystore 密码）放入 `secrets`。示例参见 [dimension-sync.md](/zh/reference/dimension-sync) 中的配置驱动一节。
 
 ### 机器学习模型
 
