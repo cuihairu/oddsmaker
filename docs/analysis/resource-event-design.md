@@ -1,21 +1,21 @@
-# Oddsmaker 资源事件设计
+# Oddsmaker Resource Event Design
 
-> 🌐 Language: **中文** · English → [resource-event-design.en.md](resource-event-design.en.md)
+> 🌐 Language: **English** · 中文 → [resource-event-design.zh.md](resource-event-design.zh.md)
 
-## 结论
+## Conclusion
 
-Oddsmaker 采用 **资源流水事实模型**：
+Oddsmaker adopts a **resource-flow fact model**:
 
-- 分析与风控主路径中，一条事件只表达一种资源的一次变动。
-- 一次业务操作包含多种资源时，拆成多条资源流水事件。
-- 多条资源流水通过同一个 `operation_id` 关联，保留业务操作的完整性。
-- SDK 可以提供一次性上报多资源的便捷 API，但 SDK 或 Gateway 必须在进入分析主表前展开为多条资源流水。
+- In the main analytics and risk-control path, a single event expresses only one change of one resource.
+- When one business operation involves multiple resources, it is split into multiple resource-flow events.
+- Multiple resource flows are linked by the same `operation_id`, preserving the integrity of the business operation.
+- The SDK may provide a convenience API that reports multiple resources at once, but the SDK or Gateway must expand it into multiple resource flows before entering the main analytics table.
 
-这个设计更适合 Oddsmaker 当前定位：单公司、多游戏、多环境下的游戏分析与风控平台。资源事件是风控高频查询对象，应该优先保证 ClickHouse 聚合、实时规则和异常检测的效率。
+This design better fits Oddsmaker's current positioning: a game analytics and risk-control platform for a single company across multiple games and multiple environments. Resource events are high-frequency query targets for risk control, so the efficiency of ClickHouse aggregation, real-time rules, and anomaly detection should be prioritized.
 
-## 为什么不采用数组作为主模型
+## Why Not Use Arrays as the Primary Model
 
-单事件多资源数组能表达完整业务操作，例如一次奖励里同时包含金币、宝石和装备：
+A single event with a multi-resource array can express a complete business operation, for example a single reward that contains gold, gems, and equipment at the same time:
 
 ```json
 {
@@ -28,20 +28,20 @@ Oddsmaker 采用 **资源流水事实模型**：
 }
 ```
 
-但它不适合作为 Oddsmaker 的分析主路径：
+But it is not suitable as Oddsmaker's main analytics path:
 
-- ClickHouse 查询需要 `ARRAY JOIN`，资源聚合和过滤成本更高。
-- 风控规则会变复杂，例如“10 分钟内金币异常增长”需要先展开数组。
-- 数组元素不容易作为排序键、物化视图维度和告警维度。
-- SDK、Flink、ClickHouse、BI 都要理解嵌套结构，后续扩展成本高。
+- ClickHouse queries require `ARRAY JOIN`, making resource aggregation and filtering more expensive.
+- Risk-control rules become more complex; for example, "abnormal gold growth within 10 minutes" requires expanding the array first.
+- Array elements are not easily used as sorting keys, materialized-view dimensions, or alert dimensions.
+- The SDK, Flink, ClickHouse, and BI all have to understand the nested structure, making future extension costly.
 
-数组可以保留在 `props` 中用于调试或原始上下文，但不能作为资源分析和风控的 canonical model。
+Arrays can be kept in `props` for debugging or raw context, but cannot serve as the canonical model for resource analytics and risk control.
 
-## 推荐事件形态
+## Recommended Event Shape
 
-一次业务操作产生多条资源流水，每条流水只表达一种资源。
+One business operation produces multiple resource flows, and each flow expresses only one resource.
 
-设计早期曾设想 `game_id`/`environment` 只在表层级体现；最终实现两者都是事件必填字段，且是 ClickHouse 的分区键（`PARTITION BY (game_id, environment, 日期)`）。
+In the early design it was assumed that `game_id`/`environment` would only be reflected at the table level; the final implementation makes both required event fields, and they are ClickHouse partition keys (`PARTITION BY (game_id, environment, date)`).
 
 ```json
 {
@@ -63,7 +63,7 @@ Oddsmaker 采用 **资源流水事实模型**：
 }
 ```
 
-同一次奖励中的第二种资源：
+The second resource in the same reward:
 
 ```json
 {
@@ -85,52 +85,52 @@ Oddsmaker 采用 **资源流水事实模型**：
 }
 ```
 
-装备、道具、体力、活动货币也使用同一套模型。
+Equipment, items, stamina, and event currency also use the same model.
 
-## 字段设计
+## Field Design
 
-核心字段：
+Core fields:
 
-| 字段 | 类型 | 说明 |
+| Field | Type | Description |
 |---|---|---|
-| `event_type` | string | 固定为 `resource` |
-| `event_name` | string | 推荐固定为 `resource_change` |
-| `operation_id` | string | 一次业务操作的关联 ID |
-| `operation_type` | string | `daily_reward`、`purchase_item`、`quest_reward` 等 |
-| `sequence` | int | 同一次操作内的资源流水顺序 |
-| `server_id` | string | 服务器/大区 ID，MMORPG 游戏必需 |
-| `resource_type` | string | `currency`、`item`、`energy`、`material` 等 |
-| `resource_id` | string | canonical 资源 ID，例如 `gold`、`s5_pvp_token` |
-| `resource_numeric_id` | int/string | 可选，游戏内部资源 ID |
-| `resource_amount` | decimal/int64 | 正数表示变动数量，方向由 `flow_type` 表达 |
-| `flow_type` | string | `source` 或 `sink` |
-| `reason` | string | 资源变化原因 |
-| `balance_after` | decimal/int64 | 可选，变化后的余额，用于风控校验 |
+| `event_type` | string | Fixed to `resource` |
+| `event_name` | string | Recommended fixed to `resource_change` |
+| `operation_id` | string | Correlation ID of one business operation |
+| `operation_type` | string | `daily_reward`, `purchase_item`, `quest_reward`, etc. |
+| `sequence` | int | Order of the resource flow within the same operation |
+| `server_id` | string | Server/region ID, required for MMORPG games |
+| `resource_type` | string | `currency`, `item`, `energy`, `material`, etc. |
+| `resource_id` | string | canonical resource ID, for example `gold`, `s5_pvp_token` |
+| `resource_numeric_id` | int/string | Optional, the game's internal resource ID |
+| `resource_amount` | decimal/int64 | A positive number represents the change amount; direction is expressed by `flow_type` |
+| `flow_type` | string | `source` or `sink` |
+| `reason` | string | Reason for the resource change |
+| `balance_after` | decimal/int64 | Optional, the balance after the change, used for risk-control validation |
 
-同上：`game_id` 和 `environment` 是事件字段与分区键，不在表名层级。
+As above: `game_id` and `environment` are event fields and partition keys, not at the table-name level.
 
-保留 `operation_id` 是关键。它解决了”单资源流水高性能”和”一次业务操作可追溯”之间的矛盾。
+Keeping `operation_id` is key. It resolves the conflict between "high performance of single-resource flows" and "traceability of one business operation".
 
-**新增 `server_id` 是必要的**：MMORPG 游戏玩家在不同服务器有不同的角色和资源，风控需要按服务器维度检测。
+**Adding `server_id` is necessary**: In MMORPG games, players have different characters and resources on different servers, and risk control needs to detect along the server dimension.
 
-## 资源 ID 设计
+## Resource ID Design
 
-不建议只使用整数 ID。
+Using only integer IDs is not recommended.
 
-更合适的方式是：
+A more appropriate approach is:
 
-- `resource_id` 使用字符串，作为跨 SDK、BI、文档和风控规则的主标识。
-- `resource_numeric_id` 可选，用于有内部数值 ID 的游戏。
-- 所有资源 ID 的真实唯一边界是 `game_id + environment + resource_id`。
+- `resource_id` uses a string, serving as the primary identifier across SDKs, BI, documentation, and risk-control rules.
+- `resource_numeric_id` is optional, for games that have internal numeric IDs.
+- The true uniqueness boundary of all resource IDs is `game_id + environment + resource_id`.
 
-原因：
+Reasons:
 
-- 一个公司有多个游戏，不同游戏的 `1001` 很可能表示不同资源。
-- 活动货币、赛季货币、临时道具更适合字符串 ID。
-- BI、风控规则和运营配置里字符串 ID 可读性更高。
-- 整数 ID 可以提升特定游戏内部查询，但不应该成为平台唯一契约。
+- A company has multiple games, and `1001` in different games very likely represents different resources.
+- Event currency, season currency, and temporary items are better suited to string IDs.
+- String IDs are more readable in BI, risk-control rules, and operations configuration.
+- Integer IDs can improve queries internal to a specific game, but should not become the platform's sole contract.
 
-推荐资源 ID 示例：
+Recommended resource ID examples:
 
 ```json
 {"resource_type": "currency", "resource_id": "gold"}
@@ -139,9 +139,9 @@ Oddsmaker 采用 **资源流水事实模型**：
 {"resource_type": "energy", "resource_id": "stamina"}
 ```
 
-## 与当前仓库的关系
+## Relationship to the Current Repository
 
-> **实现状态（2026-10）**：按游戏分库未实现；共享 ClickHouse 表按 `(game_id, environment)` 分区，隔离强度由存储 profile 的 `isolationStrategy` 配置（当前只有 `SHARED` 接线）。也没有独立的 `resource_changes` 表——资源流水落在 `events` 主表（`resource_id`/`resource_amount`/`flow_type`/`operation_id` 等列，DDL 见 `schema/sql/clickhouse/schema.sql`）。下图为设计期的目标形态。
+> **Implementation status (2026-10)**: Per-game database separation is not implemented; the shared ClickHouse table is partitioned by `(game_id, environment)`, and the isolation strength is configured by the storage profile's `isolationStrategy` (currently only `SHARED` is wired). There is also no separate `resource_changes` table — resource flows land in the `events` main table (`resource_id`/`resource_amount`/`flow_type`/`operation_id` and other columns; see `schema/sql/clickhouse/schema.sql` for the DDL). The diagram below is the target shape from the design phase.
 
 ```
 oddsmaker_meta (元数据库)
@@ -160,40 +160,40 @@ game_demo_staging
 └─ (同样的表结构)
 ```
 
-**当前 ClickHouse 主表已经有资源相关扁平列**：
+**The current ClickHouse main table already has resource-related flat columns**:
 
 - `virtual_currency`
 - `virtual_amount`
 - `flow_type`
 - `item_id`
 
-这说明底层方向已经偏向单资源流水，而不是数组模型。
+This shows the underlying direction already leans toward single-resource flows rather than an array model.
 
-但当前契约仍不完整：
+But the current contract is still incomplete:
 
-- Web / Android / iOS SDK 只有通用 `track()` 和部分 `revenue()`，缺少资源事件便捷 API。
-- ClickHouse 已有 `resource_id` / `resource_amount` 通用列与 `virtual_currency` / `virtual_amount` 并存，view 层 `v_economy_flows` 已 `coalesce(resource_id, virtual_currency, props.currency_code)` 归一；仍缺 `resource_type` / `sequence` / `balance_after`。
+- The Web / Android / iOS SDKs only have the generic `track()` and a partial `revenue()`, and lack a convenience API for resource events.
+- ClickHouse already has generic `resource_id` / `resource_amount` columns coexisting with `virtual_currency` / `virtual_amount`, and the view layer `v_economy_flows` already normalizes with `coalesce(resource_id, virtual_currency, props.currency_code)`; it still lacks `resource_type` / `sequence` / `balance_after`.
 
-建议后续把资源字段升级为通用命名：
+It is suggested to later upgrade the resource fields to generic naming:
 
-| 当前字段 | 推荐字段 |
+| Current field | Recommended field |
 |---|---|
 | `virtual_currency` | `resource_id` |
 | `virtual_amount` | `resource_amount` |
-| `item_id` | `resource_item_id` 或并入 `resource_id` |
-| `flow_type` | 保留 |
-| (新增) | `server_id` |
-| (新增) | `operation_id` |
-| (新增) | `operation_type` |
-| (新增) | `sequence` |
+| `item_id` | `resource_item_id` or merged into `resource_id` |
+| `flow_type` | Keep |
+| (new) | `server_id` |
+| (new) | `operation_id` |
+| (new) | `operation_type` |
+| (new) | `sequence` |
 
-兼容期可以同时写入旧字段和新字段。
+During the compatibility period, both the old and new fields can be written at the same time.
 
-## SDK API 建议
+## SDK API Recommendations
 
-SDK 应提供两个层级：
+The SDK should provide two levels:
 
-1. 单资源变动：
+1. Single-resource change:
 
 ```ts
 oddsmaker.resource({
@@ -207,7 +207,7 @@ oddsmaker.resource({
 });
 ```
 
-2. 多资源业务操作：
+2. Multi-resource business operation:
 
 ```ts
 oddsmaker.resourceBatch({
@@ -222,13 +222,13 @@ oddsmaker.resourceBatch({
 });
 ```
 
-`resourceBatch()` 只是 SDK 易用性 API。发送到 Gateway 或写入分析主表时，必须展开成多条 `resource_change` 事件。
+`resourceBatch()` is only an SDK usability API. When sending to the Gateway or writing to the main analytics table, it must be expanded into multiple `resource_change` events.
 
-## ClickHouse 查询形态
+## ClickHouse Query Shapes
 
-当前是共享表，查询必须过滤 `game_id` 和 `environment`（分区裁剪依赖这两个条件）；按游戏分库落地后才可省略。
+Currently it is a shared table, so queries must filter on `game_id` and `environment` (partition pruning depends on these two conditions); they can be omitted only after per-game database separation is in place.
 
-单玩家资源暴增：
+Single player's resource surge:
 
 ```sql
 SELECT
@@ -244,7 +244,7 @@ GROUP BY server_id, player_id, resource_id
 HAVING gained > 100000;
 ```
 
-全服 source / sink：
+Whole-server source / sink:
 
 ```sql
 SELECT
@@ -257,7 +257,7 @@ WHERE event_type = 'resource'
 GROUP BY day, resource_id, flow_type;
 ```
 
-按业务操作追溯：
+Trace by business operation:
 
 ```sql
 SELECT *
@@ -266,38 +266,38 @@ WHERE operation_id = 'op_daily_reward_001'
 ORDER BY sequence;
 ```
 
-## 风控设计收益
+## Risk-Control Design Benefits
 
-这个模型直接支持以下规则：
+This model directly supports the following rules:
 
-- 单玩家在短窗口内某资源 source 超阈值。
-- 某资源 source/sink 比例异常。
-- 新出现的资源 ID 在短时间内大量产出。
-- 同一个 `operation_id` 出现重复发奖。
-- 资源变化后余额不连续，疑似客户端伪造或重复请求。
-- 高价值资源从异常 `operation_type` 产出。
+- A single player's source of a resource exceeds the threshold within a short window.
+- The source/sink ratio of a resource is abnormal.
+- A newly appearing resource ID is produced in large quantities within a short time.
+- Duplicate rewards occur under the same `operation_id`.
+- The balance is discontinuous after a resource change, suspected of client forgery or duplicate requests.
+- High-value resources are produced from an abnormal `operation_type`.
 
-这些规则都能基于扁平字段和物化视图实现，不需要先展开数组。
+These rules can all be implemented based on flat fields and materialized views, without expanding arrays first.
 
-## 设计取舍
+## Design Trade-offs
 
-| 维度 | 选择 | 原因 |
+| Dimension | Choice | Reason |
 |---|---|---|
-| 分析主模型 | 单资源流水 | ClickHouse 和风控效率最高 |
-| 业务完整性 | `operation_id` 关联 | 可重构一次业务操作 |
-| SDK 易用性 | 支持 batch API | 游戏侧一次调用即可上报多资源 |
-| 存储模型 | 扁平字段 | 便于排序键、物化视图、BI |
-| 资源标识 | 字符串为主，可选数字 ID | 兼顾灵活性和内部系统映射 |
-| 数组资源 | 只做原始上下文 | 不进入 canonical 分析路径 |
+| Analytics main model | Single-resource flow | Highest efficiency for ClickHouse and risk control |
+| Business integrity | `operation_id` correlation | One business operation can be reconstructed |
+| SDK usability | Support batch API | The game side can report multiple resources in one call |
+| Storage model | Flat fields | Convenient for sorting keys, materialized views, and BI |
+| Resource identity | String primary, optional numeric ID | Balances flexibility and internal system mapping |
+| Array resources | Raw context only | Does not enter the canonical analytics path |
 
-## 后续改造建议（落地情况标注）
+## Follow-up Improvement Suggestions (with Implementation Status)
 
-1. **数据库架构**：实现按游戏分库，每个游戏独立 ClickHouse 数据库。→ 未实现；隔离配置位已建（storage profile `isolationStrategy`）。
-2. 更新 JSON Schema 和 Avro Schema，加入资源字段，**移除 `game_id` 和 `environment`**。→ 字段已加入（`server_id`/`operation_id`/`operation_type`/`resource_id`/`resource_amount`/`flow_type` 等已在 schema 与 events 表）；`game_id`/`environment` 保留为必填字段（不随此建议移除）。
-3. ClickHouse 增加通用资源字段，兼容保留 `virtual_currency` / `virtual_amount`。→ 已实现。
-4. SDK 增加 `resource()` 和 `resourceBatch()`。→ 未实现。
-5. Gateway 对资源事件做基础校验（金额为正、`flow_type ∈ source|sink`、`resource_id` 非空）。→ 未做资源专项校验（仅通用 schema 校验）。
-6. Flink 或 ClickHouse MV 增加资源风控聚合视图。→ 资源专项 MV 未建；风控走 risk-job 规则链路。
-7. Control API 支持数据库路由，根据 `game_id + environment` 路由到对应的数据库。→ 未实现（storage profile 是配置位，路由未接线）。
-8. Tracking Plan 支持按游戏配置资源 ID 白名单、允许的 `operation_type` 和单次变动阈值。→ Tracking Plan 管理面已建，资源专项约束未实现。
+1. **Database architecture**: Implement per-game database separation, with each game having its own ClickHouse database. → Not implemented; the isolation configuration slot is in place (storage profile `isolationStrategy`).
+2. Update the JSON Schema and Avro Schema, add resource fields, and **remove `game_id` and `environment`**. → The fields have been added (`server_id`/`operation_id`/`operation_type`/`resource_id`/`resource_amount`/`flow_type`, etc., are already in the schema and the events table); `game_id`/`environment` are kept as required fields (not removed per this suggestion).
+3. ClickHouse adds generic resource fields, keeping `virtual_currency` / `virtual_amount` for compatibility. → Implemented.
+4. SDK adds `resource()` and `resourceBatch()`. → Not implemented.
+5. Gateway performs basic validation on resource events (amount is positive, `flow_type ∈ source|sink`, `resource_id` is non-empty). → No resource-specific validation (only generic schema validation).
+6. Flink or ClickHouse MV adds resource risk-control aggregation views. → No resource-specific MV; risk control goes through the risk-job rule pipeline.
+7. Control API supports database routing, routing to the corresponding database based on `game_id + environment`. → Not implemented (the storage profile is a configuration slot; routing is not wired).
+8. Tracking Plan supports per-game configuration of resource ID whitelists, allowed `operation_type`s, and single-change thresholds. → The Tracking Plan management plane is in place; resource-specific constraints are not implemented.
 

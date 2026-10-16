@@ -1,36 +1,36 @@
 # Experiments API
 
-> 🌐 Language: **English** · 中文 → [experiments.md](experiments.md)
+> 🌐 Language: **中文** · English → [experiments.md](experiments.md)
 
-A/B test analytics API, used to analyze experiment data and conversion rates.
+A/B 测试分析 API，用于分析实验数据和转化率。
 
-## Endpoint List
+## 端点列表
 
-| Method | Endpoint | Description |
+| 方法 | 端点 | 说明 |
 |------|------|------|
-| POST | `/api/experiments` | Create experiment |
-| GET | `/api/experiments` | Get experiment list |
-| GET | `/api/experiments/{id}` | Get experiment details |
-| PUT | `/api/experiments/{id}` | Update experiment |
-| DELETE | `/api/experiments/{id}` | Delete experiment |
-| POST | `/api/experiments/{id}/publish` | Publish experiment |
-| POST | `/api/experiments/{id}/pause` | Pause experiment |
-| GET | `/api/experiments/{id}/assign?userId=&deviceId=` | Server-side deterministic split |
-| POST | `/api/experiments/{id}/metrics` | Receive metric snapshots |
-| POST | `/api/experiments/{id}/metrics/aggregate` | Aggregate metrics by window |
-| GET | `/api/experiments/{id}/results` | Experiment results (lift, confidence interval, p-value, SRM) |
-| GET | `/api/config/{gameId}/{environment}` | Get running experiment configuration |
+| POST | `/api/experiments` | 创建实验 |
+| GET | `/api/experiments` | 获取实验列表 |
+| GET | `/api/experiments/{id}` | 获取实验详情 |
+| PUT | `/api/experiments/{id}` | 更新实验 |
+| DELETE | `/api/experiments/{id}` | 删除实验 |
+| POST | `/api/experiments/{id}/publish` | 发布实验 |
+| POST | `/api/experiments/{id}/pause` | 暂停实验 |
+| GET | `/api/experiments/{id}/assign?userId=&deviceId=` | 服务端确定性分流 |
+| POST | `/api/experiments/{id}/metrics` | 接收指标快照 |
+| POST | `/api/experiments/{id}/metrics/aggregate` | 按窗口聚合指标 |
+| GET | `/api/experiments/{id}/results` | 实验结果（lift、置信区间、p 值、SRM） |
+| GET | `/api/config/{gameId}/{environment}` | 获取运行中的实验配置 |
 
-## Experiment Status
+## 实验状态
 
-| Status | Description |
+| 状态 | 说明 |
 |------|------|
-| `DRAFT` | Draft |
-| `LIVE` | Running |
-| `PAUSED` | Paused |
-| `ENDED` | Ended |
+| `DRAFT` | 草稿 |
+| `LIVE` | 运行中 |
+| `PAUSED` | 已暂停 |
+| `ENDED` | 已结束 |
 
-## Create Experiment
+## 创建实验
 
 ```http
 POST /api/experiments
@@ -59,7 +59,7 @@ Authorization: Bearer {token}
 }
 ```
 
-**Response:**
+**响应:**
 ```json
 {
   "id": "exp_abc123",
@@ -73,20 +73,20 @@ Authorization: Bearer {token}
 }
 ```
 
-## Publish Experiment
+## 发布实验
 
 ```http
 POST /api/experiments/{id}/publish
 Authorization: Bearer {token}
 ```
 
-## Get Running Experiment Configuration
+## 获取运行中的实验配置
 
 ```http
 GET /api/config/{gameId}/{environment}
 ```
 
-**Response (public endpoint, no authentication required):**
+**响应（公开端点，无需认证）:**
 ```json
 [
   {
@@ -102,7 +102,7 @@ GET /api/config/{gameId}/{environment}
 ]
 ```
 
-## SDK Usage
+## SDK 使用
 
 ```javascript
 // 获取实验配置
@@ -129,12 +129,12 @@ oddsmaker.track('experiment_exposure', {
 });
 ```
 
-## Analytics Metrics
+## 分析指标
 
-| Metric | Description |
+| 指标 | 说明 |
 |------|------|
-| Conversion rate | Comparison of conversion rates across variants |
-| Statistical significance | p-value < 0.05 |
-| SRM | Sample ratio mismatch detection |
-| Uplift | Improvement of B vs A |
-| Confidence interval | 95% confidence interval |
+| 转化率 | 各变体的转化率对比 |
+| 统计显著性 | p-value < 0.05 |
+| SRM | 样本比例不匹配检测 |
+| Uplift | B vs A 的提升度 |
+| 置信区间 | 95% 置信区间 |

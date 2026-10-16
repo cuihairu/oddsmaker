@@ -1,51 +1,51 @@
 # ML Models API
 
-> 🌐 Language: **中文** · English → [ml-models.en.md](ml-models.en.md)
+> 🌐 Language: **English** · 中文 → [ml-models.zh.md](ml-models.zh.md)
 
-机器学习模型管理 API，用于模型训练、部署和预测。实际训练由 `ml/` 目录的 `oddsmaker-ml` Python 管线执行（churn / pltv / risk / propensity 四类线性可解释模型），产物为版本化 JSON，经 `/api/ml-artifacts` 注册后由 Control 侧批量打分回写。
+Machine learning model management API for model training, deployment, and prediction. Actual training is executed by the `oddsmaker-ml` Python pipeline in the `ml/` directory (four types of linear, interpretable models: churn / pltv / risk / propensity). The outputs are versioned JSON, registered via `/api/ml-artifacts`, and then batch-scored and written back by the Control side.
 
-## 端点列表
+## Endpoint List
 
-| 方法 | 端点 | 说明 |
+| Method | Endpoint | Description |
 |------|------|------|
-| POST | `/api/ml-models` | 创建模型 |
-| GET | `/api/ml-models/{id}` | 获取模型详情 |
-| GET | `/api/ml-models/game/{gameId}` | 按游戏列模型 |
-| GET | `/api/ml-models/deployed` | 已部署模型列表 |
-| PUT | `/api/ml-models/{id}` | 更新模型配置 |
-| DELETE | `/api/ml-models/{id}` | 删除模型 |
-| POST | `/api/ml-models/{id}/archive` | 归档模型 |
-| POST | `/api/ml-models/{id}/training` | 创建训练任务 |
-| POST | `/api/ml-models/training/{trainingId}/start` | 启动训练任务 |
-| PUT | `/api/ml-models/training/{trainingId}/progress` | 回写训练进度 |
-| POST | `/api/ml-models/training/{trainingId}/complete` | 标记训练完成 |
-| POST | `/api/ml-models/training/{trainingId}/fail` | 标记训练失败 |
-| POST | `/api/ml-models/training/{trainingId}/cancel` | 取消训练任务 |
-| GET | `/api/ml-models/training/{trainingId}` | 获取训练任务详情 |
-| GET | `/api/ml-models/{id}/training` | 模型训练历史 |
-| POST | `/api/ml-models/{id}/deploy` | 部署模型 |
-| POST | `/api/ml-models/predictions` | 记录一条预测 |
-| POST | `/api/ml-models/predictions/{predictionId}/complete` | 标记预测完成 |
-| POST | `/api/ml-models/predictions/{predictionId}/fail` | 标记预测失败 |
-| POST | `/api/ml-models/predictions/{predictionId}/feedback` | 添加预测反馈 |
-| GET | `/api/ml-models/predictions/{predictionId}` | 获取单条预测记录 |
-| GET | `/api/ml-models/{id}/predictions` | 预测历史 |
-| GET | `/api/ml-models/{id}/predictions/range` | 按时间范围查预测 |
-| GET | `/api/ml-models/{id}/stats` | 模型统计 |
-| GET | `/api/ml-models/stats/global` | 全局 ML 统计 |
-| GET | `/api/ml-models/{id}/drift` | 漂移检测报告 |
+| POST | `/api/ml-models` | Create a model |
+| GET | `/api/ml-models/{id}` | Get model details |
+| GET | `/api/ml-models/game/{gameId}` | List models by game |
+| GET | `/api/ml-models/deployed` | List of deployed models |
+| PUT | `/api/ml-models/{id}` | Update model configuration |
+| DELETE | `/api/ml-models/{id}` | Delete a model |
+| POST | `/api/ml-models/{id}/archive` | Archive a model |
+| POST | `/api/ml-models/{id}/training` | Create a training job |
+| POST | `/api/ml-models/training/{trainingId}/start` | Start a training job |
+| PUT | `/api/ml-models/training/{trainingId}/progress` | Write back training progress |
+| POST | `/api/ml-models/training/{trainingId}/complete` | Mark training complete |
+| POST | `/api/ml-models/training/{trainingId}/fail` | Mark training failed |
+| POST | `/api/ml-models/training/{trainingId}/cancel` | Cancel a training job |
+| GET | `/api/ml-models/training/{trainingId}` | Get training job details |
+| GET | `/api/ml-models/{id}/training` | Model training history |
+| POST | `/api/ml-models/{id}/deploy` | Deploy a model |
+| POST | `/api/ml-models/predictions` | Record a prediction |
+| POST | `/api/ml-models/predictions/{predictionId}/complete` | Mark prediction complete |
+| POST | `/api/ml-models/predictions/{predictionId}/fail` | Mark prediction failed |
+| POST | `/api/ml-models/predictions/{predictionId}/feedback` | Add prediction feedback |
+| GET | `/api/ml-models/predictions/{predictionId}` | Get a single prediction record |
+| GET | `/api/ml-models/{id}/predictions` | Prediction history |
+| GET | `/api/ml-models/{id}/predictions/range` | Query predictions by time range |
+| GET | `/api/ml-models/{id}/stats` | Model statistics |
+| GET | `/api/ml-models/stats/global` | Global ML statistics |
+| GET | `/api/ml-models/{id}/drift` | Drift detection report |
 
-没有 `GET /api/ml-models`（无全量列表）、`/{id}/train`、`/{id}/predict` 这三个端点——训练任务走 `/training` 子资源，打分走 `/api/prediction-metrics` 批量链路。
+There is no `GET /api/ml-models` (no full list), `/{id}/train`, or `/{id}/predict` endpoints — training jobs go through the `/training` subresource, and scoring goes through the `/api/prediction-metrics` batch pipeline.
 
-## 模型类型
+## Model Types
 
-`CLASSIFICATION`、`REGRESSION`、`CLUSTERING`、`ANOMALY_DETECTION`、`RECOMMENDATION`、`TIME_SERIES`、`NLP`、`CUSTOM`。`framework` 是自由字符串（如 `scikit-learn`）。
+`CLASSIFICATION`, `REGRESSION`, `CLUSTERING`, `ANOMALY_DETECTION`, `RECOMMENDATION`, `TIME_SERIES`, `NLP`, `CUSTOM`. `framework` is a free-form string (e.g. `scikit-learn`).
 
-## 模型状态
+## Model Statuses
 
-`DRAFT`、`TRAINING`、`EVALUATING`、`DEPLOYED`、`STAGING`、`ARCHIVED`、`FAILED`。
+`DRAFT`, `TRAINING`, `EVALUATING`, `DEPLOYED`, `STAGING`, `ARCHIVED`, `FAILED`.
 
-## 创建模型
+## Create a Model
 
 ```http
 POST /api/ml-models
@@ -61,7 +61,7 @@ Authorization: Bearer {token}
 }
 ```
 
-**响应:**
+**Response:**
 ```json
 {
   "id": "ml_abc123",
@@ -74,18 +74,18 @@ Authorization: Bearer {token}
 }
 ```
 
-## 训练
+## Training
 
-两条路径：手动（`POST /api/ml-models/{id}/training` 建任务，`POST /api/ml-models/training/{trainingId}/start` 启动）和定时（`MlRetrainScheduler` 每日 04:20 自动重训，开关默认关闭，`oddsmaker.ml.retrain.*` 可配）。数据源优先 ClickHouse 真实数据，不可用时按 `allow-synthetic` 开关回落合成数据。产物（feature_names + coefficients + intercept 的 JSON）经 `POST /api/ml-artifacts` 注册，校验通过后打分链路优先模型分（`path=model`），缺失或不匹配时回落启发式（`path=heuristic`）。已注册产物可查：`GET /api/ml-artifacts/game/{gameId}` 列已注册版本（可选 `modelType` 过滤），`GET /api/ml-artifacts/game/{gameId}/active` 取该类型当前生效版本（未注册返回 404）。
+Two paths: manual (create a job via `POST /api/ml-models/{id}/training`, start it via `POST /api/ml-models/training/{trainingId}/start`) and scheduled (the `MlRetrainScheduler` retrains automatically daily at 04:20, the switch is off by default, configurable via `oddsmaker.ml.retrain.*`). The data source prefers real ClickHouse data, falling back to synthetic data via the `allow-synthetic` switch when unavailable. The output (a JSON with feature_names + coefficients + intercept) is registered via `POST /api/ml-artifacts`; after validation passes, the scoring pipeline prefers the model score (`path=model`), falling back to heuristics (`path=heuristic`) when missing or mismatched. Registered outputs can be queried: `GET /api/ml-artifacts/game/{gameId}` lists registered versions (optional `modelType` filter), and `GET /api/ml-artifacts/game/{gameId}/active` fetches the currently effective version for that type (returns 404 if none registered).
 
-## 打分与预测
+## Scoring and Prediction
 
-实时单条 `predict` 端点没有。打分是批量的：`PredictionMetricsService` 按 feature_names 从 ClickHouse 取特征，点积 + sigmoid（pltv 为 D7 收入 × 乘数），结果回写 ClickHouse `predictions` 表（TTL 30 天）。`/api/prediction-metrics` 下按 churn / risk-score / pltv / propensity 四类提供触发与 refresh 端点，`GET /api/ml-models/{id}/predictions` 查历史。
+There is no real-time single-record `predict` endpoint. Scoring is batch-based: `PredictionMetricsService` fetches features from ClickHouse by feature_names, computes a dot product + sigmoid (for pltv, D7 revenue × multiplier), and writes the results back to the ClickHouse `predictions` table (TTL 30 days). Under `/api/prediction-metrics`, trigger and refresh endpoints are provided for the four types churn / risk-score / pltv / propensity; `GET /api/ml-models/{id}/predictions` queries history.
 
-## 模型监控
+## Model Monitoring
 
-`GET /api/ml-models/{id}/drift` 返回窗口内的漂移报告；`/{id}/stats` 输出预测量与反馈统计。
+`GET /api/ml-models/{id}/drift` returns the drift report within the window; `/{id}/stats` outputs prediction volume and feedback statistics.
 
-## A/B 测试
+## A/B Testing
 
-模型级 A/B 测试通过 `POST /api/ml-models/{id}/ab-test` 配置、`DELETE` 停止。
+Model-level A/B testing is configured via `POST /api/ml-models/{id}/ab-test` and stopped via `DELETE`.

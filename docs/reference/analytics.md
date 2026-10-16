@@ -1,18 +1,18 @@
 # Analytics API
 
-> 🌐 Language: **中文** · English → [analytics.en.md](analytics.en.md)
+> 🌐 Language: **English** · 中文 → [analytics.zh.md](analytics.zh.md)
 
-分析 API 覆盖收入、广告、会话、性能和社交五类，均按 gameId 出数。
+The analytics API covers five categories — revenue, ads, sessions, performance, and social — all reported by gameId.
 
-## 基础 URL
+## Base URL
 
 ```
 http://localhost:8085/api/analytics
 ```
 
-## 认证
+## Authentication
 
-所有端点需要 Bearer Token 认证：
+All endpoints require Bearer Token authentication:
 
 ```http
 Authorization: Bearer {token}
@@ -20,34 +20,34 @@ Authorization: Bearer {token}
 
 ---
 
-## 一、收入分析
+## 1. Revenue Analytics
 
-### 1.1 收入概览
+### 1.1 Revenue Overview
 
-**端点:** `GET /revenue/{gameId}/overview`
+**Endpoint:** `GET /revenue/{gameId}/overview`
 
-**参数:**
-| 参数 | 类型 | 必填 | 说明 |
+**Parameters:**
+| Parameter | Type | Required | Description |
 |------|------|------|------|
-| `gameId` | string | 是 | 游戏 ID |
-| `startDate` | date | 是 | 开始日期 (YYYY-MM-DD) |
-| `endDate` | date | 是 | 结束日期 (YYYY-MM-DD) |
+| `gameId` | string | Yes | Game ID |
+| `startDate` | date | Yes | Start date (YYYY-MM-DD) |
+| `endDate` | date | Yes | End date (YYYY-MM-DD) |
 
-**响应字段:**
-| 字段 | 类型 | 说明 |
+**Response fields:**
+| Field | Type | Description |
 |------|------|------|
-| `totalRevenue` | number | 总收入 |
-| `iapRevenue` | number | 应用内购买收入 |
-| `adRevenue` | number | 广告收入 |
-| `subscriptionRevenue` | number | 订阅收入 |
-| `days` | number | 统计天数 |
+| `totalRevenue` | number | Total revenue |
+| `iapRevenue` | number | In-app purchase revenue |
+| `adRevenue` | number | Ad revenue |
+| `subscriptionRevenue` | number | Subscription revenue |
+| `days` | number | Number of days counted |
 
-**示例:**
+**Example:**
 ```http
 GET /api/analytics/revenue/game_123/overview?startDate=2024-01-01&endDate=2024-01-31
 ```
 
-**响应:**
+**Response:**
 ```json
 {
   "totalRevenue": 125000.50,
@@ -60,232 +60,232 @@ GET /api/analytics/revenue/game_123/overview?startDate=2024-01-01&endDate=2024-0
 
 ---
 
-### 1.2 ARPU/ARPPU 趋势
+### 1.2 ARPU/ARPPU Trends
 
-**端点:** `GET /revenue/{gameId}/arpu`
+**Endpoint:** `GET /revenue/{gameId}/arpu`
 
-**响应字段:**
-| 字段 | 类型 | 说明 |
+**Response fields:**
+| Field | Type | Description |
 |------|------|------|
-| `date` | date | 日期 |
-| `arpu` | number | 每用户平均收入 (Average Revenue Per User) |
-| `arppu` | number | 每付费用户平均收入 (Average Revenue Per Paying User) |
-| `payingUsers` | number | 付费用户数 |
-| `totalUsers` | number | 总用户数 |
+| `date` | date | Date |
+| `arpu` | number | Average Revenue Per User |
+| `arppu` | number | Average Revenue Per Paying User |
+| `payingUsers` | number | Number of paying users |
+| `totalUsers` | number | Total number of users |
 
-**指标含义:**
-- **ARPU** = 总收入 / 总用户数
-  - 健康值：因游戏类型而异
-  
-- **ARPPU** = 总收入 / 付费用户数
-  - 通常 ARPPU > ARPU * 10
+**Metric meaning:**
+- **ARPU** = Total revenue / Total users
+  - Healthy value: varies by game genre
+
+- **ARPPU** = Total revenue / Number of paying users
+  - Usually ARPPU > ARPU * 10
 
 ---
 
-### 1.3 按平台收入分布
+### 1.3 Revenue Distribution by Platform
 
-**端点:** `GET /revenue/{gameId}/by-platform`
+**Endpoint:** `GET /revenue/{gameId}/by-platform`
 
-**响应字段:**
-| 字段 | 类型 | 说明 |
+**Response fields:**
+| Field | Type | Description |
 |------|------|------|
-| `platform` | string | 平台 (ANDROID/IOS/WEB) |
-| `revenue` | number | 该平台收入 |
-| `arpu` | number | 该平台 ARPU |
-| `arppu` | number | 该平台 ARPPU |
+| `platform` | string | Platform (ANDROID/IOS/WEB) |
+| `revenue` | number | Revenue for that platform |
+| `arpu` | number | ARPU for that platform |
+| `arppu` | number | ARPPU for that platform |
 
 ---
 
-## 二、广告分析
+## 2. Ads Analytics
 
-### 2.1 广告性能概览
+### 2.1 Ad Performance Overview
 
-**端点:** `GET /ads/{gameId}/overview`
+**Endpoint:** `GET /ads/{gameId}/overview`
 
-**响应字段:**
-| 字段 | 类型 | 说明 |
+**Response fields:**
+| Field | Type | Description |
 |------|------|------|
-| `totalRevenue` | number | 广告总收入 |
-| `totalImpressions` | number | 总展示次数 |
-| `avgEcpm` | number | 平均 eCPM (每千次展示收入) |
-| `avgFillRate` | number | 平均填充率 |
-| `networkCount` | number | 广告网络数量 |
+| `totalRevenue` | number | Total ad revenue |
+| `totalImpressions` | number | Total impressions |
+| `avgEcpm` | number | Average eCPM (revenue per thousand impressions) |
+| `avgFillRate` | number | Average fill rate |
+| `networkCount` | number | Number of ad networks |
 
-**指标含义:**
-- **eCPM** = (广告收入 / 展示次数) * 1000
-  - 健康值：$10-$50 (因地区和广告类型而异)
+**Metric meaning:**
+- **eCPM** = (Ad revenue / Impressions) * 1000
+  - Healthy value: $10-$50 (varies by region and ad type)
 
-- **填充率** = 填充次数 / 请求次数
-  - 健康值：> 90%
+- **Fill rate** = Filled count / Request count
+  - Healthy value: > 90%
 
 ---
 
-### 2.2 按广告网络性能
+### 2.2 Performance by Ad Network
 
-**端点:** `GET /ads/{gameId}/by-network`
+**Endpoint:** `GET /ads/{gameId}/by-network`
 
-**响应字段:**
-| 字段 | 类型 | 说明 |
+**Response fields:**
+| Field | Type | Description |
 |------|------|------|
-| `network` | string | 广告网络 (ADMOB/UNITY_ADS/...) |
-| `revenue` | number | 该网络收入 |
-| `impressions` | number | 该网络展示次数 |
-| `ecpm` | number | 该网络 eCPM |
-| `fillRate` | number | 该网络填充率 |
+| `network` | string | Ad network (ADMOB/UNITY_ADS/...) |
+| `revenue` | number | Revenue for that network |
+| `impressions` | number | Impressions for that network |
+| `ecpm` | number | eCPM for that network |
+| `fillRate` | number | Fill rate for that network |
 
 ---
 
-## 三、会话分析
+## 3. Session Analytics
 
-### 3.1 会话概览
+### 3.1 Session Overview
 
-**端点:** `GET /sessions/{gameId}/overview`
+**Endpoint:** `GET /sessions/{gameId}/overview`
 
-**响应字段:**
-| 字段 | 类型 | 说明 |
+**Response fields:**
+| Field | Type | Description |
 |------|------|------|
-| `avgSessionDuration` | number | 平均会话时长 (毫秒) |
-| `avgEventsPerSession` | number | 平均每会话事件数 |
-| `avgBounceRate` | number | 平均跳出率 |
-| `days` | number | 统计天数 |
+| `avgSessionDuration` | number | Average session duration (milliseconds) |
+| `avgEventsPerSession` | number | Average number of events per session |
+| `avgBounceRate` | number | Average bounce rate |
+| `days` | number | Number of days counted |
 
-**指标含义:**
-- **会话时长** - 用户单次游戏时长
-  - 健康值：> 5 分钟 (休闲游戏), > 30 分钟 (重度游戏)
+**Metric meaning:**
+- **Session duration** - How long a user plays in a single session
+  - Healthy value: > 5 minutes (casual games), > 30 minutes (hardcore games)
 
-- **会话深度** - 每会话事件数
-  - 健康值：> 10 个事件
+- **Session depth** - Number of events per session
+  - Healthy value: > 10 events
 
-- **跳出率** - 只有 1 个事件的会话占比
-  - 健康值：< 30%
+- **Bounce rate** - Share of sessions with only 1 event
+  - Healthy value: < 30%
 
 ---
 
-### 3.2 会话趋势
+### 3.2 Session Trends
 
-**端点:** `GET /sessions/{gameId}/trends`
+**Endpoint:** `GET /sessions/{gameId}/trends`
 
-**响应字段:**
-| 字段 | 类型 | 说明 |
+**Response fields:**
+| Field | Type | Description |
 |------|------|------|
-| `date` | date | 日期 |
-| `avgDuration` | number | 当日平均会话时长 |
-| `avgEvents` | number | 当日平均事件数 |
-| `bounceRate` | number | 当日跳出率 |
+| `date` | date | Date |
+| `avgDuration` | number | Average session duration for the day |
+| `avgEvents` | number | Average number of events for the day |
+| `bounceRate` | number | Bounce rate for the day |
 
 ---
 
-## 四、性能监控
+## 4. Performance Monitoring
 
-### 4.1 性能概览
+### 4.1 Performance Overview
 
-**端点:** `GET /performance/{gameId}/overview`
+**Endpoint:** `GET /performance/{gameId}/overview`
 
-**参数:**
-| 参数 | 类型 | 必填 | 说明 |
+**Parameters:**
+| Parameter | Type | Required | Description |
 |------|------|------|------|
-| `gameId` | string | 是 | 游戏 ID |
-| `startDate` | datetime | 是 | 开始时间 (ISO 8601) |
-| `endDate` | datetime | 是 | 结束时间 (ISO 8601) |
+| `gameId` | string | Yes | Game ID |
+| `startDate` | datetime | Yes | Start time (ISO 8601) |
+| `endDate` | datetime | Yes | End time (ISO 8601) |
 
-**响应字段:**
-| 字段 | 类型 | 说明 |
+**Response fields:**
+| Field | Type | Description |
 |------|------|------|
-| `FPS` | object | 帧率统计 |
-| `LAG` | object | 卡顿统计 |
-| `CRASH` | object | 崩溃统计 |
-| `MEMORY` | object | 内存统计 |
-| `LOAD_TIME` | object | 加载时间统计 |
+| `FPS` | object | Frame rate statistics |
+| `LAG` | object | Lag statistics |
+| `CRASH` | object | Crash statistics |
+| `MEMORY` | object | Memory statistics |
+| `LOAD_TIME` | object | Load time statistics |
 
-**每个指标包含:**
-- `avgValue` - 平均值
-`count` - 事件数量
+**Each metric contains:**
+- `avgValue` - Average value
+`count` - Number of events
 
-**指标含义:**
-- **FPS (帧率)** - 游戏流畅度
-  - 健康值：> 30 FPS (移动端), > 60 FPS (PC)
-  - 警告值：< 20 FPS
+**Metric meaning:**
+- **FPS (frame rate)** - Game smoothness
+  - Healthy value: > 30 FPS (mobile), > 60 FPS (PC)
+  - Warning value: < 20 FPS
 
-- **LAG (卡顿)** - 画面停顿时长 (毫秒)
-  - 健康值：< 100ms
-  - 警告值：> 500ms
+- **LAG (stutter)** - Duration of screen freezes (milliseconds)
+  - Healthy value: < 100ms
+  - Warning value: > 500ms
 
-- **CRASH (崩溃)** - 应用崩溃次数
-  - 健康值：< 0.1% 会话
-  - 警告值：> 1% 会话
+- **CRASH (crash)** - Number of app crashes
+  - Healthy value: < 0.1% of sessions
+  - Warning value: > 1% of sessions
 
-- **MEMORY (内存)** - 内存使用量 (MB)
-  - 健康值：< 500MB (移动端)
-  - 警告值：> 1GB
+- **MEMORY (memory)** - Memory usage (MB)
+  - Healthy value: < 500MB (mobile)
+  - Warning value: > 1GB
 
 ---
 
-### 4.2 崩溃分组
+### 4.2 Crash Grouping
 
-**端点:** `GET /performance/{gameId}/crashes`
+**Endpoint:** `GET /performance/{gameId}/crashes`
 
-**响应字段:**
-| 字段 | 类型 | 说明 |
+**Response fields:**
+| Field | Type | Description |
 |------|------|------|
-| `crashHash` | string | 崩溃哈希 (用于分组) |
-| `count` | number | 崩溃次数 |
-| `firstSeen` | datetime | 首次出现时间 |
-| `lastSeen` | datetime | 最后出现时间 |
+| `crashHash` | string | Crash hash (used for grouping) |
+| `count` | number | Number of crashes |
+| `firstSeen` | datetime | First seen time |
+| `lastSeen` | datetime | Last seen time |
 
 ---
 
-## 五、社交分析
+## 5. Social Analytics
 
-### 5.1 社交概览
+### 5.1 Social Overview
 
-**端点:** `GET /social/{gameId}/overview`
+**Endpoint:** `GET /social/{gameId}/overview`
 
-**响应字段:**
-| 字段 | 类型 | 说明 |
+**Response fields:**
+| Field | Type | Description |
 |------|------|------|
-| `totalFriendships` | number | 总好友关系数 |
-| `totalGuilds` | number | 总公会数 |
-| `avgViralCoefficient` | number | 平均病毒系数 |
-| `days` | number | 统计天数 |
+| `totalFriendships` | number | Total number of friendships |
+| `totalGuilds` | number | Total number of guilds |
+| `avgViralCoefficient` | number | Average viral coefficient |
+| `days` | number | Number of days counted |
 
-**指标含义:**
-- **病毒系数** - 每个用户平均邀请的新用户数
-  - > 1 表示用户自发增长
-  - 健康值：> 0.5
+**Metric meaning:**
+- **Viral coefficient** - Average number of new users invited per user
+  - > 1 indicates organic user growth
+  - Healthy value: > 0.5
 
 ---
 
-### 5.2 社交对留存的影响
+### 5.2 Social Impact on Retention
 
-**端点:** `GET /social/{gameId}/retention-impact`
+**Endpoint:** `GET /social/{gameId}/retention-impact`
 
-**响应字段:**
-| 字段 | 类型 | 说明 |
+**Response fields:**
+| Field | Type | Description |
 |------|------|------|
-| `socialUsersD7Retention` | number | 社交用户 7 日留存率 |
-| `nonSocialUsersD7Retention` | number | 非社交用户 7 日留存率 |
-| `retentionLift` | number | 社交带来的留存提升 |
+| `socialUsersD7Retention` | number | D7 retention rate of social users |
+| `nonSocialUsersD7Retention` | number | D7 retention rate of non-social users |
+| `retentionLift` | number | Retention lift brought by social features |
 
 ---
 
-## 最佳实践
+## Best Practices
 
-### 1. 数据采集
-- 确保事件正确上报
-- 使用标准事件类型
-- 包含必要的维度信息
+### 1. Data Collection
+- Ensure events are reported correctly
+- Use standard event types
+- Include the necessary dimension information
 
-### 2. 分析周期
-- 每日查看关键指标
-- 每周分析趋势
-- 每月深度分析
+### 2. Analysis Cycle
+- Review key metrics daily
+- Analyze trends weekly
+- Perform in-depth analysis monthly
 
-### 3. 告警设置
-- 设置关键指标阈值
-- 监控异常波动
-- 及时响应问题
+### 3. Alert Settings
+- Set thresholds for key metrics
+- Monitor abnormal fluctuations
+- Respond to issues promptly
 
-### 4. 行动建议
-- 基于数据做决策
-- A/B 测试验证假设
-- 持续优化迭代
+### 4. Action Recommendations
+- Make decisions based on data
+- Validate hypotheses with A/B tests
+- Continuously optimize and iterate

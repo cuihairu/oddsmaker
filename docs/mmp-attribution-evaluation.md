@@ -1,78 +1,78 @@
-# MMP 归因接入评估（P7-5 调研报告）
+# MMP Attribution Integration Evaluation (P7-5 Research Report)
 
-> 🌐 Language: **中文** · English → [mmp-attribution-evaluation.en.md](mmp-attribution-evaluation.en.md)
+> 🌐 Language: **English** · 中文 → [mmp-attribution-evaluation.zh.md](mmp-attribution-evaluation.zh.md)
 
-> 对应 `docs/competitive-analysis.md` 差距矩阵第 5 项「归因/买量（MMP 集成、CPI/ROAS）」。
-> 结论先行：**技术可行、路径清晰，但强依赖外部 MMP 账号与套餐权限——建议立项（P8）但以真实账号可用性为前置条件**，本文档给出建表草案与推荐接入路径。
+> Corresponds to item 5 "Attribution / UA (MMP integration, CPI/ROAS)" in the gap matrix of `docs/competitive-analysis.md`.
+> Conclusion first: **Technically feasible, path is clear, but it depends heavily on an external MMP account and the right plan tier — recommend initiating the project (P8) with actual account availability as a precondition**. This document provides the table-creation draft and the recommended integration path.
 
-## 1. 背景
+## 1. Background
 
-竞品分析（2026-09）将 MMP 归因列为差距第 5 名：价值 3/5（买量型工作室 5/5）、成本 4/5，标注"先调研后立项"。本仓库当前状态：
+The competitive analysis (2026-09) ranked MMP attribution as the 5th gap: value 3/5 (5/5 for UA-type studios), cost 4/5, annotated as "research first, then decide whether to initiate." Current state of this repository:
 
-- **已有**：`events` 表的 `attribution Map(String,String)` 兜底字段、`ad_network / ad_placement / ad_format / ad_impression_id` 四个回退维度列、在线报表按 `attribution.channel` 回退 `platform` 的渠道聚合。
-- **缺失**：MMP 侧原始归因数据（安装归因、归因的 in-app 事件、广告花费）没有接入通道，无法回答"哪个渠道来的用户、花了多少钱、回收了多少"。当前 `attribution` 字段只承载游戏服自己打上来的渠道标签，与 MMP 的归因判定（最后一次点击/展示匹配）无关。
+- **Already have**: the `attribution Map(String,String)` fallback field on the `events` table, the four fallback dimension columns `ad_network / ad_placement / ad_format / ad_impression_id`, and online reporting that aggregates channels by falling back from `attribution.channel` to `platform`.
+- **Missing**: there is no ingestion channel for raw MMP-side attribution data (install attribution, attributed in-app events, ad spend), so we cannot answer "which channels brought the users, how much was spent, how much was recovered." The current `attribution` field only carries the channel tags that the game server tags itself, which is unrelated to MMP attribution decisions (last-click / impression matching).
 
-## 2. 主流 MMP 数据源调研
+## 2. Research on Mainstream MMP Data Sources
 
-调研了 AppsFlyer、Adjust 两家头部与 Airbridge 一家后起（Branch/Singular 模式与 Adjust 类似，不再展开）。
+We investigated the two leaders AppsFlyer and Adjust, plus the newcomer Airbridge (Branch/Singular follow the same pattern as Adjust and are not expanded here).
 
 ### 2.1 AppsFlyer
 
-> **结论：**四通道齐备——Push API 实时推 + Data Locker 批式最全（高阶套餐），Pull API 适合补数、postbacks 用于对账。
+> **Conclusion:** all four channels are available — Push API for real-time push + Data Locker for the most complete batch delivery (higher-tier plan), Pull API suitable for backfill, and postbacks for reconciliation.
 
-| 机制 | 形态 | 延迟 | 内容 | 备注 |
+| Mechanism | Form | Latency | Content | Notes |
 |---|---|---|---|---|
-| **Push API** | 实时推流到你的 HTTPS 端点 | 秒级 | 安装 + in-app 事件归因原始数据（含 SKAN） | 需自建接收端点，处理签名/重试/幂等 |
-| **Data Locker** | 定时写到**你自己的** S3/GCS 桶 | 小时/日级分目录 | installs、in-app events、uninstall、SKAN 等 30+ 数据集 CSV | 原始数据最全的批式通道，高阶套餐功能 |
-| **Raw Data Pull API V2** | 拉取式查询 API | 按需 | 安装/事件原始明细（带 token 鉴权） | 适合补数，不适合做主链路 |
-| **Postbacks by date API** | 拉取式 | 按需 | 按日期的归因 postback 明细 | 对账用 |
+| **Push API** | Real-time streaming push to your HTTPS endpoint | Second-level | Raw install + in-app event attribution data (including SKAN) | Requires building your own receiving endpoint; handle signing / retry / idempotency |
+| **Data Locker** | Scheduled writes to **your own** S3/GCS bucket | Hourly / daily subdirectories | CSV datasets: installs, in-app events, uninstalls, SKAN, etc. (30+ datasets) | The batch channel with the most complete raw data; a higher-tier plan feature |
+| **Raw Data Pull API V2** | Pull-style query API | On demand | Raw install / event detail records (token-authenticated) | Suitable for backfill, not for the main pipeline |
+| **Postbacks by date API** | Pull-style | On demand | Attribution postback details by date | For reconciliation |
 
 ### 2.2 Adjust
 
-> **结论：**与 AppsFlyer 同构——实时 callbacks + 定时 CSV 上传双形态；S2S 是反向通道，说明同账号可双向。
+> **Conclusion:** structurally isomorphic to AppsFlyer — real-time callbacks + scheduled CSV uploads in two forms; S2S is the reverse channel, indicating the same account can go bidirectionally.
 
-| 机制 | 形态 | 延迟 | 内容 | 备注 |
+| Mechanism | Form | Latency | Content | Notes |
 |---|---|---|---|---|
-| **Real-time callbacks**（global callbacks） | 事件发生时回调你的 HTTPS 端点 | 实时 | 安装、会话、事件归因占位符（`{ad_network}`、`{campaign}` 等） | URL 模板化配置，需自建接收端 |
-| **CSV uploads / Cloud storage upload** | 定时 CSV 上传到你的 S3/GCS/Azure | 小时/日级 | 原始数据报表（installs、events 等，列可配置） | help.adjust.com "Raw data export" 章节；Live/Pause 控制 |
-| **S2S（server-to-server）** | 反向通道：你的服务向 Adjust 发事件 | 实时 | 自有服务端事件上报 | 与接入归因数据方向相反，但说明同账号可做双向 |
+| **Real-time callbacks** (global callbacks) | Callbacks to your HTTPS endpoint when an event occurs | Real-time | Install, session, and event attribution placeholders (`{ad_network}`, `{campaign}`, etc.) | URL template configuration; requires building your own receiving endpoint |
+| **CSV uploads / Cloud storage upload** | Scheduled CSV uploads to your S3/GCS/Azure | Hourly / daily | Raw data reports (installs, events, etc., with configurable columns) | help.adjust.com "Raw data export" section; Live/Pause control |
+| **S2S (server-to-server)** | Reverse channel: your service sends events to Adjust | Real-time | Reporting your own server-side events | Opposite direction from integrating attribution data, but shows the same account can do both ways |
 
 ### 2.3 Airbridge
 
-- **Cloud storage export**：定时把原始数据导出到 AWS S3 / Google Cloud Storage，模式与上两家一致。
+- **Cloud storage export**: periodically exports raw data to AWS S3 / Google Cloud Storage, same pattern as the two above.
 
-### 2.4 共性结论
+### 2.4 Common Conclusions
 
-1. **所有主流 MMP 都支持两种交付形态**：实时 Webhook（Push API / real-time callbacks）与定时落你自己的云存储（Data Locker / CSV uploads / cloud storage export）。
-2. 原始数据（非聚合报表）通道普遍**锁在高阶付费套餐**——外部成本主要是 MMP 侧订阅，不是开发量。
-3. 数据对齐键是 MMP 的 app 标识（`app_id` / app token）+ 设备 ID（IDFA/GAID 或其 hash），需要一张 **MMP app ↔ `game_id + environment` 映射配置**才能落进 oddsmaker 的隔离契约。
-4. 广告花费（cost）通常不在安装原始数据里，而在 MMP 的 campaign 报表 API——CPI/ROAS 完整链路需要额外接一个报表拉取 job。
+1. **All mainstream MMPs support two delivery forms**: real-time Webhook (Push API / real-time callbacks) and scheduled delivery to your own cloud storage (Data Locker / CSV uploads / cloud storage export).
+2. Raw data (not aggregated reports) channels are generally **locked behind higher-tier paid plans** — the external cost is mainly the MMP-side subscription, not development effort.
+3. The data alignment key is the MMP app identifier (`app_id` / app token) plus the device ID (IDFA/GAID or its hash). A **MMP app ↔ `game_id + environment` mapping configuration** is needed before data can land within oddsmaker's isolation contract.
+4. Ad spend (cost) is typically not in the raw install data but in the MMP's campaign reporting API — a complete CPI/ROAS pipeline requires an additional report-pulling job.
 
-## 3. 接入路径对比（oddsmaker 视角）
+## 3. Integration Path Comparison (from the oddsmaker perspective)
 
-### 方案 A：实时 Webhook [自建接收端点]
+### Option A: Real-time Webhook [self-built receiving endpoint]
 
-MMP Push API / callbacks 打到 Gateway 或 control 新增 ingestion 端点。
+MMP Push API / callbacks hit a new ingestion endpoint on the Gateway or control service.
 
-- 优点：秒级新鲜度，可实时反哺风控（渠道作弊识别）。
-- 缺点：需处理签名验证、重放、幂等、限流；MMP 侧重试语义各家不一；端点暴露面 +1。与 P0 安全修复（Gateway 收敛前置校验）方向有张力。
+- Pros: second-level freshness; can feed fraud detection in real time (channel fraud identification).
+- Cons: must handle signature verification, replay, idempotency, and rate limiting; retry semantics differ across MMPs; +1 to the exposed endpoint surface. Tensions with the P0 security fix (Gateway consolidated pre-validation) direction.
 
-### 方案 B（推荐）：定时云存储导出 [加载 job → ClickHouse]
+### Option B (recommended): Scheduled cloud storage export [load job → ClickHouse]
 
-MMP 定时写 S3/GCS（Data Locker / CSV uploads），运维用**与 P7-4 导出目录相同的对象存储同步机制**把文件落到 oddsmaker 侧，新增一个定时加载 job 解析入库。
+The MMP periodically writes to S3/GCS (Data Locker / CSV uploads); ops uses **the same object-storage sync mechanism as the P7-4 export directory** to bring the files to the oddsmaker side; add a scheduled load job to parse and ingest.
 
-- 优点：与现有架构对称（P7-4 已建立"导出目录 + manifest + 运维同步"的归档模式，反向读同一目录体系即可）；批式可重放、可对账；无需暴露新公网端点；解析失败可修后重跑。
-- 缺点：小时级延迟（买量分析场景完全够用）；依赖运维的对象存储同步任务。
+- Pros: symmetric with the existing architecture (P7-4 already established the "export directory + manifest + ops sync" archive pattern; reading the same directory scheme in reverse works); batch is replayable and reconcilable; no new public endpoint; parse failures can be fixed and re-run.
+- Cons: hourly latency (entirely sufficient for UA analysis scenarios); depends on the ops object-storage sync job.
 
-### 方案 C：MMP S2S postback 冒充渠道打 Gateway
+### Option C: MMP S2S postback masquerading as a channel event hitting the Gateway
 
-把 MMP postback 当作一种 in-app 事件直接走 SDK 事件通道。
+Treat the MMP postback as an in-app event and route it directly through the SDK event channel.
 
-- 不推荐：污染自有事件契约（`event_type` 语义混乱），MMP postback 的归因字段塞不进 `attribution Map` 的规范，且失去独立表结构的演进空间。
+- Not recommended: pollutes the own event contract (ambiguous `event_type` semantics), MMP postback attribution fields cannot fit the `attribution Map` spec, and it loses the room to evolve an independent table structure.
 
-**结论：以方案 B 为主路径立项；若未来需要实时反作弊，再补方案 A 作为增量。**
+**Conclusion: initiate the project with Option B as the primary path; if real-time anti-fraud is needed later, add Option A as an increment.**
 
-## 4. 建表草案（ClickHouse）
+## 4. Table-creation Draft (ClickHouse)
 
 ```sql
 -- MMP 安装归因（方案 B 主表）
@@ -111,47 +111,47 @@ ORDER BY (game_id, environment, mmp_app_id, subject, install_time);
 -- 归因 in-app 事件（可选二期）：结构同上，event_name/revenue 两列替换 campaign 侧列
 ```
 
-配套（Postgres，control 侧）：
+Companion (Postgres, control side):
 
-- `mmp_connections` 表：`game_id + environment` ↔ `mmp + mmp_app_id` 映射、文件路径模式、字段映射版本、启停。权限沿用 `export:read` / 新增 `mmp:manage`。
-- 加载 job：扫描目录 → 按 manifest/文件名解析 → 批次幂等（`ingest_batch` 去重）→ 失败告警。
+- `mmp_connections` table: `game_id + environment` ↔ `mmp + mmp_app_id` mapping, file path patterns, field mapping version, enable/disable. Permissions reuse `export:read` / add new `mmp:manage`.
+- Load job: scan directory → parse by manifest/filename → batch idempotency (dedup on `ingest_batch`) → failure alert.
 
-## 5. 成本与工作量评估
+## 5. Cost and Effort Estimate
 
-> **结论：**唯一硬门槛是外部 MMP 账号的原始数据导出权限；方案 B 最小可运行集约 5–7 人日，CPI/ROAS 二期再加 4–6 人日。
+> **Conclusion:** the only hard gate is the external MMP account's raw data export permission; the minimum viable set for Option B is about 5–7 person-days, and CPI/ROAS phase 2 adds another 4–6 person-days.
 
-| 项 | 评估 |
+| Item | Estimate |
 |---|---|
-| 外部依赖 | **重**：需要真实 MMP 账号 + 原始数据导出套餐（Data Locker/CSV uploads 均非免费档）；无账号则整条链路无法验证 |
-| 开发量（方案 B 最小可运行集） | 约 5–7 人日：DDL + `mmp_connections` CRUD + 加载 job（CSV/JSON 各一解析器）+ 渠道安装分布报表 1 张 |
-| 二期（CPI/ROAS） | +4–6 人日：campaign 花费报表 API 拉取 + 归因收入 join；需 MMP 报表 API 权限 |
-| 风险 | MMP 字段各家且版本多变（AppsFlyer/Adjust 列名不同）——解析器必须按 `mmp` 维度隔离 + `raw` Map 兜底 |
+| External dependency | **Heavy**: requires a real MMP account + raw data export plan (neither Data Locker nor CSV uploads are free-tier); without an account, the whole pipeline cannot be validated |
+| Development effort (Option B minimum viable set) | ~5–7 person-days: DDL + `mmp_connections` CRUD + load job (one parser each for CSV/JSON) + one channel install distribution report |
+| Phase 2 (CPI/ROAS) | +4–6 person-days: campaign spend report API pull + attributed revenue join; requires MMP report API permission |
+| Risk | MMP fields vary across vendors and versions (AppsFlyer/Adjust have different column names) — parsers must be isolated by the `mmp` dimension + `raw` Map fallback |
 
-## 6. Go / No-Go 建议
+## 6. Go / No-Go Recommendation
 
-**有条件立项（进 P8 路线图）**：
+**Conditional initiation (into the P8 roadmap):**
 
-- 触发条件：拿到任一 MMP 的原始数据导出权限（Data Locker 或 CSV uploads 任一即可启动）。
-- 启动范围：方案 B 最小可运行集 + 安装归因渠道分布报表；CPI/ROAS 等花费数据接入放二期。
-- 明确不做（与竞品分析 §4 一致）：广告平台直连（Facebook/Google Ads API 直接拉数）、MMP 聚合看板复刻、移动归因 SDK 自行开发。
-- 在触发条件达成前，P7 系列到此收口；后续优先级回归补测试覆盖与运营工具打磨。
+- Trigger condition: obtain raw data export permission from any MMP (either Data Locker or CSV uploads is sufficient to start).
+- Startup scope: Option B minimum viable set + install attribution channel distribution report; CPI/ROAS and other spend data integration goes to phase 2.
+- Explicitly not doing (consistent with competitive analysis §4): direct ad platform integration (pulling data directly from Facebook/Google Ads APIs), MMP aggregated dashboard replication, self-developed mobile attribution SDK.
+- Before the trigger condition is met, the P7 series closes here; subsequent priority returns to filling in test coverage and polishing ops tooling.
 
-## 7. 可参考分析（逐条判定与落点）
+## 7. Referenceable Analysis (item-by-item judgment and landing point)
 
-> **结论：**路径已定——方案 B 主路径 + 有条件立项（P8），等任一 MMP 原始数据导出权限解锁；3 条可参考（落点均已到表/job 级）、1 条远期可借鉴、2 条不适用。
+> **Conclusion:** the path is set — Option B as the primary path + conditional initiation (P8), waiting for any MMP raw data export permission to unlock; 3 referenceable items (landing points all at the table/job level), 1 item for long-term reference, and 2 items not applicable.
 
-| 判定 | 条目 | 为什么 | 本仓落点 |
+| Judgment | Item | Why | Landing point in this repo |
 |------|------|--------|----------|
-| 可参考 | 方案 B：定时云存储导出 → 加载 job（§3） | 与 P7-4 已建立的「导出目录 + manifest + 运维同步」机制对称，批式可重放可对账，无新增公网端点 | P8 解锁后按 §4 DDL 建 `attribution_installs` + 加载 job；todo.md 边界「P8 MMP 归因接入保持暂停」即为该项跟踪位 |
-| 可参考 | MMP app ↔ `game_id + environment` 映射配置（§2.4.3） | 数据对齐键必须落进本仓隔离契约，否则渠道数据游离在 game/environment 边界外 | control 侧 `mmp_connections` 表（§4 配套）：映射、文件路径模式、字段映射版本、启停；权限复用 `export:read` / 新增 `mmp:manage` |
-| 可参考 | 建表草案的幂等设计：`ingest_batch` 去重 + `raw` Map 兜底（§4） | MMP 字段各家且版本多变，批次幂等让解析失败可修后重放，raw 兜底吸收列名漂移 | `schema/sql/clickhouse` 新表 DDL；批次口径与既有导出 manifest 对齐，`media_source` 归一化到 `events.ad_network` 口径 |
-| 可借鉴 | 方案 A：实时 Webhook（Push API / callbacks，§3） | 秒级新鲜度可反哺渠道作弊风控（假量识别） | 远期增量：确需实时反作弊时再开 ingestion 端点；与 P0 安全方向（Gateway 收敛前置校验）的张力需先评审，不随 P8 首发 |
-| 不适用 | 方案 C：postback 冒充渠道事件走 Gateway（§3） | 污染 `event_type` 契约，MMP 归因字段塞不进 `attribution Map` 规范 | 不做（§3 结论） |
-| 不适用 | 广告平台直连 / MMP 聚合看板复刻 / 自研归因 SDK（§6） | 超出分析平台职责，与竞品分析 §4 明确不做清单一致 | 不做（§6） |
+| Referenceable | Option B: scheduled cloud storage export → load job (§3) | Symmetric with the "export directory + manifest + ops sync" mechanism already established in P7-4; batch is replayable and reconcilable; no new public endpoint | After P8 unlocks, create `attribution_installs` + load job per the §4 DDL; the todo.md boundary "P8 MMP attribution integration stays paused" is the tracking slot for this item |
+| Referenceable | MMP app ↔ `game_id + environment` mapping configuration (§2.4.3) | The data alignment key must land within this repo's isolation contract, otherwise channel data floats outside the game/environment boundary | Control-side `mmp_connections` table (§4 companion): mapping, file path patterns, field mapping version, enable/disable; permissions reuse `export:read` / add new `mmp:manage` |
+| Referenceable | Idempotency design in the table draft: `ingest_batch` dedup + `raw` Map fallback (§4) | MMP fields vary across vendors and versions; batch idempotency lets parse failures be fixed and replayed; the raw fallback absorbs column-name drift | New table DDL in `schema/sql/clickhouse`; batch definition aligns with the existing export manifest; `media_source` normalizes to the `events.ad_network` definition |
+| Worth borrowing | Option A: real-time Webhook (Push API / callbacks, §3) | Second-level freshness can feed channel fraud risk control (fake volume detection) | Long-term increment: open an ingestion endpoint only when real-time anti-fraud is genuinely needed; the tension with the P0 security direction (Gateway consolidated pre-validation) needs review first, not part of the P8 launch |
+| Not applicable | Option C: postback masquerading as a channel event via the Gateway (§3) | Pollutes the `event_type` contract; MMP attribution fields cannot fit the `attribution Map` spec | Not doing (per §3 conclusion) |
+| Not applicable | Direct ad platform integration / MMP aggregated dashboard replication / self-developed attribution SDK (§6) | Beyond the analytics platform's responsibilities; consistent with the competitive analysis §4 explicit do-not-do list | Not doing (§6) |
 
-## 8. 参考资料
+## 8. References
 
-- AppsFlyer dev docs：Push API、Data Locker、Raw Data Pull API V2、Postbacks by date API（dev.appsflyer.com）
-- Adjust help center：Raw data export → Cloud storage upload（help.adjust.com）；S2S 与 callbacks（dev.adjust.com）
-- Airbridge docs：Cloud storage export（S3/GCS 定时导出）
-- 本仓库：`docs/competitive-analysis.md`（差距矩阵与不跟进清单）、`schema/sql/clickhouse/schema.sql`（events 表现有归因字段）
+- AppsFlyer dev docs: Push API, Data Locker, Raw Data Pull API V2, Postbacks by date API (dev.appsflyer.com)
+- Adjust help center: Raw data export → Cloud storage upload (help.adjust.com); S2S and callbacks (dev.adjust.com)
+- Airbridge docs: Cloud storage export (scheduled S3/GCS export)
+- This repository: `docs/competitive-analysis.md` (gap matrix and do-not-follow list), `schema/sql/clickhouse/schema.sql` (existing attribution fields on the events table)

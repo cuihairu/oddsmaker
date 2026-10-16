@@ -1,232 +1,232 @@
-# 游戏分析场景覆盖度分析
+# Gaming Analytics Scenario Coverage Analysis
 
-> 🌐 Language: **中文** · English → [gaming-scenarios.en.md](gaming-scenarios.en.md)
+> 🌐 Language: **English** · 中文 → [gaming-scenarios.zh.md](gaming-scenarios.zh.md)
 
-本文档分析 Oddsmaker 平台对游戏分析场景的覆盖程度和自由度。
+This document analyzes the coverage and flexibility of the Oddsmaker platform's gaming analytics scenarios.
 
-## 总体评估
+## Overall Assessment
 
-六个核心场景与五个扩展场景在下方逐项列出功能点与实现状态。缺口集中在自定义指标、仪表板构建器与自定义聚合（见自由度评估），以及 A/B 测试的 MAB 自动调优、序贯检验。
-
----
-
-## 一、已覆盖的核心场景
-
-### 1.1 事件采集
-
-**覆盖度：5/5 项**
-
-| 功能 | 状态 | 说明 |
-|------|------|------|
-| 多平台 SDK | ✅ | Web、Android、iOS、Unity、Server（HMAC 签名） |
-| 批量/实时模式 | ✅ | 灵活的事件上报方式 |
-| 事件 Schema | ✅ | 标准事件 + 自定义属性 |
-| 数据校验 | ✅ | Tracking Plan 校验 |
-| PII 处理 | ✅ | 脱敏、掩码、丢弃策略 |
-
-**支持的事件类型：**
-- `session` - 会话事件
-- `user` - 用户属性
-- `business` - 商业事件（付费、广告）
-- `resource` - 资源事件（虚拟货币）
-- `progression` - 进度事件（关卡）
-- `design` - 设计事件
-- `error` - 错误事件
-- `ad` - 广告事件
-- `risk` - 风控事件
-
-### 1.2 留存分析
-
-**覆盖度：5/5 项**
-
-| 功能 | 状态 | 说明 |
-|------|------|------|
-| N-Day 留存 | ✅ | D1/D3/D7/D14/D30/D60/D90 |
-| Rolling 留存 | ✅ | 滚动留存计算 |
-| 自定义窗口 | ✅ | 灵活的留存窗口配置 |
-| 维度下钻 | ✅ | 按平台、渠道、版本等维度 |
-| Cohort 分组 | ✅ | 按注册日期分组 |
-
-### 1.3 漏斗分析
-
-**覆盖度：5/5 项**
-
-| 功能 | 状态 | 说明 |
-|------|------|------|
-| N 步漏斗 | ✅ | 任意步骤数 |
-| 时间窗口 | ✅ | 步骤间时间限制 |
-| 有序/无序 | ✅ | 严格顺序或宽松匹配 |
-| 维度下钻 | ✅ | 按用户属性分析 |
-| 转化率计算 | ✅ | 总转化率 + 步骤转化率 |
-
-**典型漏斗场景：**
-- 新手引导漏斗（注册 → 创建角色 → 完成教程）
-- 付费漏斗（浏览商品 → 点击购买 → 完成支付）
-- 关卡漏斗（开始关卡 → 完成关卡 → 获得奖励）
-
-### 1.4 A/B 测试分析
-
-**覆盖度：8/8 项**（MAB 自动调优、序贯检验未实现）
-
-| 功能 | 状态 | 说明 |
-|------|------|------|
-| 实验配置 | ✅ | 变体、权重、目标事件 |
-| 用户分流 | ✅ | 一致性哈希分流 |
-| 曝光追踪 | ✅ | 实验曝光事件 |
-| 转化率对比 | ✅ | 各变体转化率 |
-| 统计显著性 | ✅ | p-value 计算 |
-| SRM 检测 | ✅ | 样本比例不匹配检测 |
-| Uplift 分析 | ✅ | B vs A 提升度 |
-| 置信区间 | ✅ | 95% 置信区间 |
-
-**待增强：**
-- 多臂老虎机（MAB）自动调优
-- 序贯检验
-
-### 1.5 风险控制
-
-**覆盖度：7/7 项**
-
-| 功能 | 状态 | 说明 |
-|------|------|------|
-| 规则引擎 | ✅ | THRESHOLD/FREQUENCY/PATTERN/VELOCITY/RATIO/ANOMALY/MACHINE_LEARNING/FEATURE 规则；黑名单走 BlockList、重放走网关 ReplayGuard |
-| 实时评估 | ✅ | Flink 流处理 |
-| 风险评分 | ✅ | 0-100 分评分 |
-| 自动封禁 | ✅ | 可配置封禁时长 |
-| 审核队列 | ✅ | 人工审核流程 |
-| Webhook 通知 | ✅ | 实时告警 |
-| 风控大屏 | ✅ | 风险趋势、命中率 |
-
-**典型风控规则：**
-- 高频支付检测
-- 重复收据校验
-- 异常登录检测
-- 虚拟货币异常增长
-- 广告 reward 异常
-
-### 1.6 用户分群
-
-**覆盖度：4/4 项**
-
-| 功能 | 状态 | 说明 |
-|------|------|------|
-| Cohort 分析 | ✅ | 按注册日期分组 |
-| LTV 计算 | ✅ | 累计/预测 LTV |
-| 付费分群 | ✅ | 付费/非付费用户 |
-| 活跃度分群 | ✅ | 活跃/沉默/流失 |
+Six core scenarios and five extended scenarios are itemized below with their feature points and implementation status. The gaps are concentrated in custom metrics, the dashboard builder, and custom aggregations (see the flexibility assessment), as well as MAB auto-tuning and sequential testing for A/B experiments.
 
 ---
 
-## 二、需要增强的场景
+## I. Core Scenarios Covered
 
-### 2.1 收入分析
+### 1.1 Event Collection
 
-**当前状态：✅ 已实现**
+**Coverage: 5/5 items**
 
-| 功能 | 状态 | API 端点 |
+| Feature | Status | Description |
+|------|------|------|
+| Multi-platform SDK | ✅ | Web, Android, iOS, Unity, Server (HMAC signature) |
+| Batch/realtime modes | ✅ | Flexible event reporting methods |
+| Event Schema | ✅ | Standard events + custom properties |
+| Data validation | ✅ | Tracking Plan validation |
+| PII handling | ✅ | Desensitization, masking, dropping strategies |
+
+**Supported event types:**
+- `session` - session events
+- `user` - user attributes
+- `business` - business events (payments, ads)
+- `resource` - resource events (virtual currency)
+- `progression` - progression events (levels)
+- `design` - design events
+- `error` - error events
+- `ad` - ad events
+- `risk` - risk control events
+
+### 1.2 Retention Analysis
+
+**Coverage: 5/5 items**
+
+| Feature | Status | Description |
+|------|------|------|
+| N-Day retention | ✅ | D1/D3/D7/D14/D30/D60/D90 |
+| Rolling retention | ✅ | Rolling retention computation |
+| Custom windows | ✅ | Flexible retention window configuration |
+| Dimension drill-down | ✅ | By platform, channel, version, and other dimensions |
+| Cohort grouping | ✅ | Grouped by registration date |
+
+### 1.3 Funnel Analysis
+
+**Coverage: 5/5 items**
+
+| Feature | Status | Description |
+|------|------|------|
+| N-step funnels | ✅ | Any number of steps |
+| Time windows | ✅ | Time limits between steps |
+| Ordered/unordered | ✅ | Strict sequence or loose matching |
+| Dimension drill-down | ✅ | Analyze by user attributes |
+| Conversion rate calculation | ✅ | Overall conversion rate + per-step conversion rate |
+
+**Typical funnel scenarios:**
+- Onboarding funnel (register → create character → complete tutorial)
+- Payment funnel (browse items → click buy → complete payment)
+- Level funnel (start level → complete level → get reward)
+
+### 1.4 A/B Testing Analysis
+
+**Coverage: 8/8 items** (MAB auto-tuning and sequential testing not yet implemented)
+
+| Feature | Status | Description |
+|------|------|------|
+| Experiment configuration | ✅ | Variants, weights, target events |
+| User bucketing | ✅ | Consistent hashing bucketing |
+| Exposure tracking | ✅ | Experiment exposure events |
+| Conversion rate comparison | ✅ | Conversion rate per variant |
+| Statistical significance | ✅ | p-value calculation |
+| SRM detection | ✅ | Sample ratio mismatch detection |
+| Uplift analysis | ✅ | B vs A uplift |
+| Confidence intervals | ✅ | 95% confidence interval |
+
+**To be enhanced:**
+- Multi-armed bandit (MAB) auto-tuning
+- Sequential testing
+
+### 1.5 Risk Control
+
+**Coverage: 7/7 items**
+
+| Feature | Status | Description |
+|------|------|------|
+| Rule engine | ✅ | THRESHOLD/FREQUENCY/PATTERN/VELOCITY/RATIO/ANOMALY/MACHINE_LEARNING/FEATURE rules; blacklists go through BlockList, replays go through the gateway ReplayGuard |
+| Real-time evaluation | ✅ | Flink stream processing |
+| Risk scoring | ✅ | 0-100 point scoring |
+| Automatic bans | ✅ | Configurable ban duration |
+| Review queue | ✅ | Manual review process |
+| Webhook notifications | ✅ | Real-time alerts |
+| Risk dashboard | ✅ | Risk trends, hit rates |
+
+**Typical risk control rules:**
+- High-frequency payment detection
+- Duplicate receipt validation
+- Anomalous login detection
+- Anomalous virtual currency growth
+- Abnormal ad reward
+
+### 1.6 User Segmentation
+
+**Coverage: 4/4 items**
+
+| Feature | Status | Description |
+|------|------|------|
+| Cohort analysis | ✅ | Grouped by registration date |
+| LTV calculation | ✅ | Cumulative/predicted LTV |
+| Payer segmentation | ✅ | Payers/non-payers |
+| Activity segmentation | ✅ | Active/dormant/churned |
+
+---
+
+## II. Scenarios to Be Enhanced
+
+### 2.1 Revenue Analysis
+
+**Current status: ✅ Implemented**
+
+| Feature | Status | API Endpoint |
 |------|------|----------|
 | ARPU/ARPPU | ✅ | `/api/analytics/revenue/{gameId}/arpu` |
-| 收入趋势 | ✅ | `/api/analytics/revenue/{gameId}/overview` |
-| 按平台分布 | ✅ | `/api/analytics/revenue/{gameId}/by-platform` |
-| IAP/广告/订阅收入 | ✅ | 收入类型分类统计 |
+| Revenue trends | ✅ | `/api/analytics/revenue/{gameId}/overview` |
+| Distribution by platform | ✅ | `/api/analytics/revenue/{gameId}/by-platform` |
+| IAP/ad/subscription revenue | ✅ | Categorized revenue statistics |
 
-### 2.2 广告分析
+### 2.2 Ad Analysis
 
-**当前状态：✅ 已实现**
+**Current status: ✅ Implemented**
 
-| 功能 | 状态 | API 端点 |
+| Feature | Status | API Endpoint |
 |------|------|----------|
 | eCPM | ✅ | `/api/analytics/ads/{gameId}/overview` |
-| 填充率 | ✅ | 按广告网络统计 |
-| 点击率 (CTR) | ✅ | 按广告格式统计 |
-| 广告网络对比 | ✅ | `/api/analytics/ads/{gameId}/by-network` |
+| Fill rate | ✅ | Statistics by ad network |
+| Click-through rate (CTR) | ✅ | Statistics by ad format |
+| Ad network comparison | ✅ | `/api/analytics/ads/{gameId}/by-network` |
 
-### 2.3 会话分析
+### 2.3 Session Analysis
 
-**当前状态：✅ 已实现**
+**Current status: ✅ Implemented**
 
-| 功能 | 状态 | API 端点 |
+| Feature | Status | API Endpoint |
 |------|------|----------|
-| 会话时长分布 | ✅ | P50/P95/P99 统计 |
-| 会话深度 | ✅ | 每会话事件数 |
-| 跳出率 | ✅ | `/api/analytics/sessions/{gameId}/overview` |
-| 会话质量评分 | ✅ | 高/中/低质量分布 |
+| Session duration distribution | ✅ | P50/P95/P99 statistics |
+| Session depth | ✅ | Events per session |
+| Bounce rate | ✅ | `/api/analytics/sessions/{gameId}/overview` |
+| Session quality scoring | ✅ | High/medium/low quality distribution |
 
-### 2.4 性能监控
+### 2.4 Performance Monitoring
 
-**当前状态：✅ 已实现**
+**Current status: ✅ Implemented**
 
-| 功能 | 状态 | API 端点 |
+| Feature | Status | API Endpoint |
 |------|------|----------|
-| 帧率监控 | ✅ | `/api/analytics/performance/{gameId}/overview` |
-| 卡顿检测 | ✅ | LAG 指标 |
-| 崩溃分析 | ✅ | `/api/analytics/performance/{gameId}/crashes` |
-| 内存监控 | ✅ | MEMORY 指标 |
+| Frame rate monitoring | ✅ | `/api/analytics/performance/{gameId}/overview` |
+| Jank detection | ✅ | LAG metric |
+| Crash analysis | ✅ | `/api/analytics/performance/{gameId}/crashes` |
+| Memory monitoring | ✅ | MEMORY metric |
 
-### 2.5 社交分析
+### 2.5 Social Analysis
 
-**当前状态：✅ 已实现**
+**Current status: ✅ Implemented**
 
-| 功能 | 状态 | API 端点 |
+| Feature | Status | API Endpoint |
 |------|------|----------|
-| 好友系统 | ✅ | `/api/analytics/social/{gameId}/overview` |
-| 公会分析 | ✅ | 公会数量、规模 |
-| 病毒系数 | ✅ | 邀请转化率 |
-| 社交留存影响 | ✅ | `/api/analytics/social/{gameId}/retention-impact` |
+| Friends system | ✅ | `/api/analytics/social/{gameId}/overview` |
+| Guild analysis | ✅ | Guild count, size |
+| Viral coefficient | ✅ | Invite conversion rate |
+| Social retention impact | ✅ | `/api/analytics/social/{gameId}/retention-impact` |
 
 ---
 
-## 三、自由度评估
+## III. Flexibility Assessment
 
-### 3.1 高自由度
+### 3.1 High Flexibility
 
-| 功能 | 说明 |
+| Feature | Description |
 |------|------|
-| 事件 Schema | 支持自定义属性，灵活扩展 |
-| 风控规则 | 可配置规则引擎，支持复杂条件 |
-| 报告构建 | 可视化报告构建器 |
-| 采样率 | 可调整事件采样比例 |
-| 数据保留 | 可配置数据保留时长 |
+| Event Schema | Supports custom properties, flexible extension |
+| Risk control rules | Configurable rule engine, supports complex conditions |
+| Report building | Visual report builder |
+| Sampling rate | Adjustable event sampling ratio |
+| Data retention | Configurable data retention period |
 
-### 3.2 中等自由度
+### 3.2 Medium Flexibility
 
-| 功能 | 说明 |
+| Feature | Description |
 |------|------|
-| 分析维度 | 固定维度，可通过 props 扩展 |
-| 漏斗步骤 | 有限制，但满足大部分场景 |
-| 留存窗口 | 预定义窗口 + 自定义窗口 |
+| Analysis dimensions | Fixed dimensions, extensible via props |
+| Funnel steps | Limited, but sufficient for most scenarios |
+| Retention windows | Predefined windows + custom windows |
 
-### 3.3 需要改进
+### 3.3 Needs Improvement
 
-| 功能 | 说明 |
+| Feature | Description |
 |------|------|
-| 自定义指标 | 缺少自定义指标定义 |
-| 自定义仪表板 | 已落地：控制台 `/analytics/dashboards`（`/api/games/{gameId}/dashboards` 全量 CRUD） |
-| 自定义聚合 | 缺少自定义聚合函数 |
+| Custom metrics | Lacks custom metric definitions |
+| Custom dashboards | Delivered: console `/analytics/dashboards` (full CRUD via `/api/games/{gameId}/dashboards`) |
+| Custom aggregations | Lacks custom aggregation functions |
 
 ---
 
-## 四、场景覆盖矩阵
+## IV. Scenario Coverage Matrix
 
-| 场景 | 优先级 | 状态 |
+| Scenario | Priority | Status |
 |------|--------|------|
-| 事件采集 | P0 | ✅ 完成 |
-| 留存分析 | P0 | ✅ 完成 |
-| 漏斗分析 | P0 | ✅ 完成 |
-| A/B 测试 | P0 | ✅ 完成 |
-| 风险控制 | P0 | ✅ 完成 |
-| 用户分群 | P1 | ✅ 完成 |
-| 收入分析 | P1 | ✅ 完成 |
-| 广告分析 | P2 | ✅ 完成 |
-| 会话分析 | P2 | ✅ 完成 |
-| 性能监控 | P2 | ✅ 完成 |
-| 社交分析 | P3 | ✅ 完成 |
-| 自定义报告 | P1 | ✅ 完成（报表 API + `/analytics/dashboards` 可视化仪表板） |
+| Event collection | P0 | ✅ Complete |
+| Retention analysis | P0 | ✅ Complete |
+| Funnel analysis | P0 | ✅ Complete |
+| A/B testing | P0 | ✅ Complete |
+| Risk control | P0 | ✅ Complete |
+| User segmentation | P1 | ✅ Complete |
+| Revenue analysis | P1 | ✅ Complete |
+| Ad analysis | P2 | ✅ Complete |
+| Session analysis | P2 | ✅ Complete |
+| Performance monitoring | P2 | ✅ Complete |
+| Social analysis | P3 | ✅ Complete |
+| Custom reports | P1 | ✅ Complete (report APIs + `/analytics/dashboards` visual dashboards) |
 
 ---
 
-## 五、总结
+## V. Summary
 
-已完成：事件采集、留存、漏斗、A/B 测试、风控、分群等核心场景；收入、广告、会话、性能、社交分析 API；多游戏架构与开发者工具。
+Completed: core scenarios such as event collection, retention, funnels, A/B testing, risk control, and segmentation; revenue, ad, session, performance, and social analytics APIs; multi-game architecture and developer tools.
 
-未实现：自定义指标定义、自定义聚合函数、MAB 自动调优、序贯检验。
+Not implemented: custom metric definitions, custom aggregation functions, MAB auto-tuning, sequential testing.

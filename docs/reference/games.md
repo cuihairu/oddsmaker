@@ -1,53 +1,53 @@
 # Games API
 
-> 🌐 Language: **中文** · English → [games.en.md](games.en.md)
+> 🌐 Language: **English** · 中文 → [games.zh.md](games.zh.md)
 
-游戏管理 API，用于创建和管理游戏产品。
+Game management API for creating and managing game products.
 
-## 端点列表
+## Endpoint List
 
-| 方法 | 端点 | 说明 |
+| Method | Endpoint | Description |
 |------|------|------|
-| POST | `/api/games` | 创建游戏 |
-| GET | `/api/games` | 获取游戏列表 |
-| GET | `/api/games/{gameId}` | 获取游戏详情 |
-| PUT | `/api/games/{gameId}` | 更新游戏 |
-| DELETE | `/api/games/{gameId}` | 删除游戏 |
-| POST | `/api/games/{gameId}/publish` | 发布游戏 |
-| POST | `/api/games/{gameId}/unpublish` | 取消发布 |
+| POST | `/api/games` | Create a game |
+| GET | `/api/games` | Get the game list |
+| GET | `/api/games/{gameId}` | Get game details |
+| PUT | `/api/games/{gameId}` | Update a game |
+| DELETE | `/api/games/{gameId}` | Delete a game |
+| POST | `/api/games/{gameId}/publish` | Publish a game |
+| POST | `/api/games/{gameId}/unpublish` | Unpublish a game |
 
-## 游戏类型
+## Game Genres
 
-| 类型 | 说明 |
+| Genre | Description |
 |------|------|
-| `RPG` | 角色扮演 |
-| `STRATEGY` | 策略 |
-| `ACTION` | 动作 |
-| `PUZZLE` | 解谜 |
-| `CASUAL` | 休闲 |
-| `SIMULATION` | 模拟 |
-| `SPORTS` | 体育 |
-| `RACING` | 竞速 |
-| `SHOOTER` | 射击 |
-| `MMORPG` | 大型多人在线角色扮演 |
-| `MOBA` | 多人在线战斗竞技 |
-| `BATTLE_ROYALE` | 大逃杀 |
-| `OTHER` | 其他 |
+| `RPG` | Role-playing |
+| `STRATEGY` | Strategy |
+| `ACTION` | Action |
+| `PUZZLE` | Puzzle |
+| `CASUAL` | Casual |
+| `SIMULATION` | Simulation |
+| `SPORTS` | Sports |
+| `RACING` | Racing |
+| `SHOOTER` | Shooter |
+| `MMORPG` | Massively multiplayer online role-playing |
+| `MOBA` | Multiplayer online battle arena |
+| `BATTLE_ROYALE` | Battle royale |
+| `OTHER` | Other |
 
-## 游戏状态
+## Game Statuses
 
-| 状态 | 说明 |
+| Status | Description |
 |------|------|
-| `DEVELOPMENT` | 开发中 |
-| `TESTING` | 测试中 |
-| `LIVE` | 已上线 |
-| `PUBLISHED` | 已发布（V0.4.1 起种子游戏的默认状态） |
-| `MAINTENANCE` | 维护中 |
-| `DISCONTINUED` | 已停服 |
+| `DEVELOPMENT` | In development |
+| `TESTING` | In testing |
+| `LIVE` | Live |
+| `PUBLISHED` | Published (default status for seed games since V0.4.1) |
+| `MAINTENANCE` | Under maintenance |
+| `DISCONTINUED` | Discontinued |
 
-## 创建游戏
+## Create a Game
 
-`platforms` 取值是 `WEB` / `MOBILE` / `PC` / `CONSOLE` / `VR` / `AR`（没有 ANDROID/IOS）。时区字段名是 `defaultTimezone`（IANA 标识）。创建成功后会自动建 `dev` / `staging` / `prod` 三个环境。
+`platforms` values are `WEB` / `MOBILE` / `PC` / `CONSOLE` / `VR` / `AR` (no ANDROID/IOS). The timezone field is named `defaultTimezone` (IANA identifier). On successful creation, three environments — `dev` / `staging` / `prod` — are created automatically.
 
 ```http
 POST /api/games
@@ -63,7 +63,7 @@ Authorization: Bearer {token}
 }
 ```
 
-**响应:**
+**Response:**
 ```json
 {
   "id": "game_abc123",
@@ -77,21 +77,21 @@ Authorization: Bearer {token}
 }
 ```
 
-## 获取游戏列表
+## Get the Game List
 
 ```http
 GET /api/games?page=0&size=20&sort=name
 Authorization: Bearer {token}
 ```
 
-## 获取游戏详情
+## Get Game Details
 
 ```http
 GET /api/games/{gameId}
 Authorization: Bearer {token}
 ```
 
-## 更新游戏
+## Update a Game
 
 ```http
 PUT /api/games/{gameId}
@@ -104,11 +104,11 @@ Authorization: Bearer {token}
 }
 ```
 
-## 删除游戏
+## Delete a Game
 
 ```http
 DELETE /api/games/{gameId}
 Authorization: Bearer {token}
 ```
 
-只有非 LIVE 状态的游戏才能删除。
+Only games not in LIVE status can be deleted.

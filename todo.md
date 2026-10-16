@@ -4,7 +4,7 @@
 
 ## 开放需求
 
-- [ ] docs 英文 locale 正文语言缺口（P2，PATROL016 巡检发现，未开工）：英文 locale 目录下有 14 页正文仍是中文——`docs/reference/{analytics,authentication,environments,experiments,games,gaming-scenarios,ml-models,risk}.md`、`docs/analysis/resource-event-design.md`、`docs/operations/{index,startup}.md`、`docs/release-notes/{README,v0.2.0}.md`、`docs/research/mature-products-survey.md`（英文站点读者会看到中文正文）。难点：`docs/<path>` 与 `docs/zh/<path>` 同名文件并非互译而是各自独立文档（reference/{index,analytics,gaming-scenarios,api-reference} 差异 164/198/738 行），就地改英文前须先代决「哪份为正本」并决定中文正本的落位（`docs/zh/` 同名已占位）。本轮只做配对、未动这些页
+- [x] docs 英文 locale 正文语言缺口（P2，PATROL016 巡检发现，P1016AM 完成）：英文 locale 下 18 页正文仍是中文（子目录 14 + 根目录 4：competitive-analysis、mmp-attribution-evaluation、决策记录、审计-文档一致性）→ 与其已有 `.en.md` 译版**互换**（基名改英文、中文原件移同目录 `.zh.md`），零新增翻译。正本裁断**已代决**（P1016AM）：英文 locale 槽位以英文为正本、中文归 `.zh.md`；`docs/zh/**` 分叉文档一律不动（理由/影响面/推翻方式见 docs/决策记录.md）。验收：全仓 EN locale 页正文无中文残留（仅余厂商专名 `research/mature-products-survey.md` 与文件名引用 `审计-文档一致性.md` 两类允许项，均代码块/专名规则内）；每个基名页都有 `.zh.md` 兄弟（`index.md` 与 `zh/index.md` 为跨 locale 首页配对）；36 文件互换后切换器双向对称、`pnpm docs:build` 绿
 
 - [x] docs 子目录双语配对（P2，2026-10-16 执行单登记，PATROL016 完成）：52 个 .md 全配——51 个新增兄弟文件（中文源 45 个补 `.en.md`、英文源 6 个补 `.zh.md`）+ `zh/index.md` 已随根目录轮配对；51 个源文件各插 1 行切换器。配对方式**已代决**（PATROL016）：同目录兄弟文件而非 locale 镜像（locale 同名文件非互译，差异 164/198/738 行，见 docs/决策记录.md）。验收：59 对全部通过结构计数一致（行数/标题/表格/围栏）+ 代码块逐字节相同 + 切换器第 3 行且双向对称；英文侧正文无中文残留（仅切换器「中文」二字、代码块内原样注释、厂商专名如 友盟+/神策）；`pnpm docs:build` 绿。顺带按对账规则修 06 §4.1 笔误（「未携带废弃字段」→「携带废弃字段」，与 §3.3.3 及 schema `additionalProperties:false` 对齐，中英同批）
 

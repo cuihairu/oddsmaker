@@ -1,6 +1,6 @@
 # Operations Guide
 
-> 🌐 Language: **中文** · English → [index.en.md](index.en.md)
+> 🌐 Language: **English** · 中文 → [index.zh.md](index.zh.md)
 
 Welcome to the Oddsmaker Operations Guide. This section provides documentation for deploying, monitoring, and maintaining the Oddsmaker platform.
 
@@ -18,7 +18,7 @@ This guide covers:
 
 ## Quick Links
 
-- [Startup Guide (Tested)](/operations/startup) - 本机从零拉起全栈的实测步骤与踩坑记录
+- [Startup Guide (Tested)](/operations/startup) - Tested steps and pitfalls for bringing up the full stack from scratch on a local machine
 - [Incident Response](/operations/incident-response) - Handle incidents
 - [Troubleshooting](/operations/troubleshooting) - Debug issues
 
@@ -41,9 +41,9 @@ curl -s http://127.0.0.1:28085/actuator/health   # control
 podman compose down
 ```
 
-> 分体 dev 模式（`make infra-up`）只起中间件不含 postgres，
-> `make gateway/control` 的 bootRun 需自备本地 PG，否则请用根 compose。坑位清单见
-> [Startup Guide](/operations/startup)。
+> The split dev mode (`make infra-up`) only starts the middleware and does not include postgres;
+> the bootRun of `make gateway/control` requires a local PG of your own, otherwise use the root compose. See the
+> [Startup Guide](/operations/startup) for the list of pitfalls.
 
 ### Kubernetes (Production)
 
@@ -131,9 +131,9 @@ Critical alerts include:
 
 ### Backup Schedule
 
-> 仓库已交付配置：postgres WAL 归档（`archive_mode=on` + `wal_archive_timeout=30s` + 30 天就地留存清理，归档走独立卷/PVC）、Redis 快照 + AOF（`save 60 10000/300 10/900 1` + `appendfsync everysec`）、ClickHouse 全量/增量脚本（`deploy/backup/clickhouse-backup.sh`，90 天留存）、pg_dump 全量与 30 天留存（`deploy/backup/postgres-backup.sh` + `deploy/k8s/backup-cronjob.yaml`）。
+> Configuration delivered in the repository: postgres WAL archiving (`archive_mode=on` + `wal_archive_timeout=30s` + 30-day in-place retention cleanup, archiving goes to a dedicated volume/PVC), Redis snapshots + AOF (`save 60 10000/300 10/900 1` + `appendfsync everysec`), ClickHouse full/incremental scripts (`deploy/backup/clickhouse-backup.sh`, 90-day retention), pg_dump full backups with 30-day retention (`deploy/backup/postgres-backup.sh` + `deploy/k8s/backup-cronjob.yaml`).
 >
-> S3 离站副本需运行环境中存在 aws CLI。k8s CronJob 镜像 `postgres:16-alpine` 不含该 CLI，脚本会判存后打 WARN 跳过（备份仍落本地并照常清理留存），不会中断作业——离站副本请在基础镜像装 aws-cli，或改由外部备份控制器接管。
+> The S3 off-site copy requires the aws CLI to exist in the runtime environment. The k8s CronJob image `postgres:16-alpine` does not include that CLI, so the script detects its presence and skips with a WARN (the backup still lands locally and retention cleanup proceeds as usual), without interrupting the job — for the off-site copy, install aws-cli in the base image, or hand it over to an external backup controller.
 
 - **PostgreSQL**: Daily full backup, continuous WAL archiving
 - **Redis**: RDB snapshots every 15 minutes
@@ -141,7 +141,7 @@ Critical alerts include:
 
 ### Recovery Objectives
 
-> 目标 RPO/RTO（配置已入库：postgres WAL 归档满足 RPO 5 分钟；待部署环境验证）。
+> Target RPO/RTO (configuration is in the repo: postgres WAL archiving meets an RPO of 5 minutes; pending verification in the deployment environment).
 
 | Component | RPO | RTO |
 |-----------|-----|-----|
@@ -151,16 +151,16 @@ Critical alerts include:
 
 ## Security Checklist
 
-> 2026-10 收尾核验：`[x]` = 仓库已交付且运行时/配置面可证；`[ ]` 附仓库现状证据如实保留（环境执行项与未交付项不假勾）。
+> 2026-10 final verification: `[x]` = delivered in the repository and provable at runtime/configuration level; `[ ]` keeps the current repository evidence as-is (environment-execution items and undelivered items are not falsely checked).
 
-- [x] Enable HTTPS — 已交付：控制面与网关 ingress 均配 TLS + ssl-redirect（`deploy/k8s/control-service.yaml`、`deploy/k8s/gateway-service.yaml`，证书 secret 由运维注入；网关入口 `ingest.oddsmaker.local`）。本机 compose 为 HTTP（本地/dev 预期），平台级 HTTPS 随 k8s 清单生效
-- [x] Configure CORS — 已交付：Spring Security `SecurityConfig#corsConfigurationSource`（白名单源/方法/请求头/凭证，注册 `/api/**`）
-- [ ] Set up firewall rules — 部署环境执行项（仓库无对应配置面，如实保留）
-- [x] Enable audit logging — 已交付：`audit_log` 落库 + `GET /api/audit-logs` 查询（策略/密钥/权限/风控动作全记录）
-- [x] Configure rate limiting — 已交付：控制面 ingress `rate-limit 100/min` 注解随仓（`deploy/k8s/control-service.yaml`）+ 网关公网事件入口 `/v1/batch` 应用内限流（`RateLimitFilter`：per-apiKey `rpm` 与 per-IP `ipRpm`，策略级值可覆盖、匿名回退桶，超限 429 + `Retry-After`；e9ebbac，`GatewayFiltersCoverageTest` 5 例 + `RateLimitAndPolicyTest` 5 例绿，网关模块 237 例 0 失败）
-- [x] Set up MFA for admin users — 已交付：登录链路接入 MFA 校验（`AuthController` 密码验证后查 `isUserMFAEnabled`，未带码返回 `{mfaRequired:true}` 挑战、带码经 `verifyMFA` 校验，失败 401 + LOGIN_FAILED 审计；前端 `LoginView` 弹验证码输入重发）。`/api/security/mfa/*` 配置端点与 `SecurityPolicyEntity.mfaRequired` 策略字段均已建
-- [x] Rotate secrets regularly — 已交付：API Key 自动轮换执行端（`V0.9.27` 补 `last_rotated_at` 时间轴；`ControlService.rotateDueApiKeys` 每小时扫描 ACTIVE 且 `auto_rotate=TRUE` 的 key，到期换发 `sk_` 密钥、`pk_` 标识不动，`rotation_days` 空/≤0 回落 90 天，轮换写审计日志；`PUT /api-keys/{key}` 读写 `autoRotate`/`rotationDays`）。密钥值轮换动作已随仓；具体周期由 `rotation_days` 与调度周期配置
-- [x] Monitor security events — 已交付：风控大屏 `/api/risk-metrics`（风险趋势/命中/处置状态）+ 审计日志查询；告警规则接入属监控栈（见 Monitoring Stack）
+- [x] Enable HTTPS — Delivered: both the control-plane and gateway ingresses are configured with TLS + ssl-redirect (`deploy/k8s/control-service.yaml`, `deploy/k8s/gateway-service.yaml`; the certificate secret is injected by ops; the gateway entry point is `ingest.oddsmaker.local`). Local compose is HTTP (expected for local/dev); platform-level HTTPS takes effect with the k8s manifests
+- [x] Configure CORS — Delivered: Spring Security `SecurityConfig#corsConfigurationSource` (whitelisted origins/methods/headers/credentials, registered for `/api/**`)
+- [ ] Set up firewall rules — An item to execute in the deployment environment (no corresponding configuration surface in the repository; kept as-is)
+- [x] Enable audit logging — Delivered: `audit_log` persisted to the database + `GET /api/audit-logs` query (fully records policy/key/permission/risk-control actions)
+- [x] Configure rate limiting — Delivered: the control-plane ingress `rate-limit 100/min` annotation is in the repo (`deploy/k8s/control-service.yaml`) + in-app rate limiting at the gateway public event entry `/v1/batch` (`RateLimitFilter`: per-apiKey `rpm` and per-IP `ipRpm`, policy-level values can override, anonymous fallback bucket, over-limit returns 429 + `Retry-After`; e9ebbac, `GatewayFiltersCoverageTest` 5 cases + `RateLimitAndPolicyTest` 5 cases green, gateway module 237 cases 0 failures)
+- [x] Set up MFA for admin users — Delivered: the login flow is wired to MFA verification (`AuthController` checks `isUserMFAEnabled` after password verification; without a code it returns a `{mfaRequired:true}` challenge, with a code it verifies via `verifyMFA`, and failure returns 401 + LOGIN_FAILED audit; the frontend `LoginView` pops up a verification-code input for resend). The `/api/security/mfa/*` configuration endpoints and the `SecurityPolicyEntity.mfaRequired` policy field are both in place
+- [x] Rotate secrets regularly — Delivered: the API Key auto-rotation executor (`V0.9.27` adds the `last_rotated_at` timeline; `ControlService.rotateDueApiKeys` scans every hour for keys that are ACTIVE and `auto_rotate=TRUE`, issues a new `sk_` secret when due while the `pk_` identifier stays unchanged, falls back to 90 days when `rotation_days` is empty/≤0, and writes an audit log on rotation; `PUT /api-keys/{key}` reads and writes `autoRotate`/`rotationDays`). The key-value rotation action is in the repo; the specific period is configured by `rotation_days` and the scheduling period
+- [x] Monitor security events — Delivered: risk-control dashboard `/api/risk-metrics` (risk trends/hits/handling status) + audit log queries; alert rule integration belongs to the monitoring stack (see Monitoring Stack)
 
 ## On-Call Handbook
 

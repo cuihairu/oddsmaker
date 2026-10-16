@@ -1,170 +1,170 @@
-# Oddsmaker 竞品对比与功能差距分析
+# Oddsmaker Competitive Comparison and Feature Gap Analysis
 
-> 🌐 Language: **中文** · English → [competitive-analysis.en.md](competitive-analysis.en.md)
-> 调研时间：2026-09 ｜ 方法：网络搜索 + 各产品官方文档（Unity docs.unity.com / firebase.google.com / gameanalytics.com / learn.microsoft.com PlayFab / posthog.com）
-> 结论用途：更新 `todo.md` 路线图优先级（新增 P7 差距收敛批次），并驱动首个落地功能（P7-1 实时事件检视器）。
+> 🌐 Language: **English** · 中文 → [competitive-analysis.zh.md](competitive-analysis.zh.md)
+> Research date: 2026-09 ｜ Method: web search + official documentation of each product (Unity docs.unity.com / firebase.google.com / gameanalytics.com / learn.microsoft.com PlayFab / posthog.com)
+> Use of the conclusions: update `todo.md` roadmap priorities (adding the P7 gap-closure batch) and drive the first landed feature (P7-1 live event inspector).
 
-## 1. 调研对象
+## 1. Research Subjects
 
-> **结论：**5 家覆盖商业巨头（Unity/Google/Microsoft）、垂直免费工具（GameAnalytics）、开源新势力（PostHog）三种形态，与 Oddsmaker 逐能力对齐；差距结论直接驱动了 P7 批次（现均已闭环，见 §6 状态）。
+> **Conclusion:** The five products cover three forms — commercial giants (Unity/Google/Microsoft), a vertical free tool (GameAnalytics), and an open-source newcomer (PostHog) — and were aligned against Oddsmaker capability by capability; the gap conclusions directly drove the P7 batch (all now closed; see the status in §6).
 
-选取 5 个同领域成熟产品，覆盖商业巨头（Unity/Google/Microsoft）、垂直免费工具（GameAnalytics）、开源新势力（PostHog）三种形态：
+Five mature products in the same domain were selected, covering three forms: commercial giants (Unity/Google/Microsoft), a vertical free tool (GameAnalytics), and an open-source newcomer (PostHog):
 
-| 产品 | 厂商 | 形态 | 定位 | 与本项目的关系 |
+| Product | Vendor | Form | Positioning | Relationship to this project |
 |------|------|------|------|----------------|
-| Unity Gaming Services (Analytics + Remote Config + Cloud Diagnostics) | Unity | 商业 SaaS | Unity 内置的游戏分析与运营后端 | 事件模型、漏斗、崩溃、远程配置的全链路对标 |
-| Firebase (Analytics + Crashlytics + Remote Config + A/B Testing) | Google | 商业 SaaS | 移动/游戏通用分析与实验平台 | 实验发布-评估流程、DebugView、App Check 设备完整性对标 |
-| GameAnalytics | GameAnalytics (Moboku) | 免费 SaaS（增值付费） | 游戏原生产品分析标准件 | 事件分类法（本项目 P3 事件类型化的蓝本）、实时视图、基准 |
-| PlayFab | Microsoft | 商业 SaaS | 游戏后端 + LiveOps + 分析全家桶 | LiveOps 面（公告/邮件/兑换/定向投放）的对标 |
-| PostHog | PostHog | 开源（可自托管） | 产品分析 + 实验 + 回放一体化 | 开源形态与自托管诉求的直接对标；flags/实验一体化设计 |
+| Unity Gaming Services (Analytics + Remote Config + Cloud Diagnostics) | Unity | Commercial SaaS | Unity's built-in game analytics and operations backend | Full-chain benchmarking target for event models, funnels, crashes, and remote config |
+| Firebase (Analytics + Crashlytics + Remote Config + A/B Testing) | Google | Commercial SaaS | General-purpose analytics and experimentation platform for mobile/games | Benchmarking target for the experiment release-evaluation flow, DebugView, and App Check device integrity |
+| GameAnalytics | GameAnalytics (Moboku) | Free SaaS (freemium) | The standard component for game-native product analytics | Event taxonomy (the blueprint for this project's P3 event typing), real-time views, benchmarks |
+| PlayFab | Microsoft | Commercial SaaS | Game backend + LiveOps + all-in-one analytics suite | Benchmarking target for the LiveOps surface (announcements/email/redemption/targeted delivery) |
+| PostHog | PostHog | Open source (self-hostable) | Product analytics + experimentation + replay in one | Direct benchmark for the open-source form and the self-hosting demand; flags/experimentation integrated design |
 
-来源（主要）：
-- Unity：docs.unity.com（Analytics funnels 定义、Standard Events、Remote Config 文档，2026-09 更新）
-- Firebase：firebase.google.com/docs（A/B Testing 教程、Remote Config for Unity pathway、App Check/Play Integrity）
-- GameAnalytics：2026 移动游戏变现工具栈评测（undrads.com 2026-09）、2026 留存基准报告（gamegrowthadvisor.com，D1 22% / 11,600 款游戏样本）、LinkedIn 官方（A/B + Remote Config 能力）
-- PlayFab：learn.microsoft.com（2026-07 仍在更新文档；个别子功能有 deprecation 记录，服务整体在运营；无整体退役公告）
-- PostHog：posthog.com（2026-02 feature flag 工具对比：flags 与分析/实验一体化为第一卖点）
+Sources (primary):
+- Unity: docs.unity.com (Analytics funnels definition, Standard Events, Remote Config documentation, updated 2026-09)
+- Firebase: firebase.google.com/docs (A/B Testing tutorial, Remote Config for Unity pathway, App Check/Play Integrity)
+- GameAnalytics: 2026 mobile game monetization tool stack review (undrads.com 2026-09), 2026 retention benchmark report (gamegrowthadvisor.com, D1 22% / 11,600-game sample), official LinkedIn (A/B + Remote Config capabilities)
+- PlayFab: learn.microsoft.com (documentation still updated as of 2026-07; some sub-features have deprecation records while the service as a whole remains in operation; no overall retirement announcement)
+- PostHog: posthog.com (2026-02 feature flag tool comparison: flags integrated with analytics/experimentation as the first selling point)
 
-## 2. 功能对比矩阵
+## 2. Feature Comparison Matrix
 
-图例：✅ 完整 ｜ 🟡 部分/雏形 ｜ ❌ 无 ｜ N/A 不适用（单公司部署形态下无意义）
+Legend: ✅ Full ｜ 🟡 Partial/prototype ｜ ❌ None ｜ N/A Not applicable (meaningless under a single-company deployment form)
 
-> 注：本矩阵是 2026-09 调研快照，Oddsmaker 列反映当时状态；P7 批次（2026-10-04 闭环）已补齐其中多项，逐项现状见 §6 可参考分析，以该节与 todo.md 为准。
+> Note: This matrix is the 2026-09 research snapshot, and the Oddsmaker column reflects the state at that time; the P7 batch (closed 2026-10-04) has since filled in many of the items. For the current status of each item see the reference analysis in §6, and that section plus todo.md prevails.
 
-### 2.1 数据接入与治理
+### 2.1 Data Ingestion and Governance
 
-> **结论：**接入与治理是本仓长板——Schema 治理与 PII 策略领先五家，数据保留分级仅 PostHog 对等。
+> **Conclusion:** Ingestion and governance are this repo's strong suit — Schema governance and the PII policy lead all five, and only PostHog is on par on data retention tiering.
 
-| 能力 | Oddsmaker | Unity UGS | Firebase | GameAnalytics | PlayFab | PostHog |
+| Capability | Oddsmaker | Unity UGS | Firebase | GameAnalytics | PlayFab | PostHog |
 |------|-----------|-----------|----------|---------------|---------|---------|
-| 多端 SDK（Web/Android/iOS/Unity/Server） | ✅（5 端，含 Server HMAC） | ✅（Unity 生态为主） | ✅ | ✅ | ✅ | ✅（Web/Mobile 为主） |
-| 事件 Schema 治理 / Tracking Plan | ✅（JSON Schema + Tracking Plan + 属性白名单 + cardinality 上限） | 🟡（标准事件+校验） | 🟡（建议性事件） | 🟡（标准事件强约束） | ❌ | 🟡（data management） |
-| PII 策略（mask/drop/allow、IP 粗化） | ✅（策略可按环境覆盖） | ❌ | 🟡 | ❌ | ❌ | 🟡 |
-| 环境隔离（dev/staging/prod 数据边界） | ✅（game_id+environment 全链路） | 🟡 | ✅（project 维度） | 🟡 | ✅（title 维度） | ✅（project 维度） |
-| 数据保留分级/分区 | ✅（按环境策略 + toYYYYMM 分区） | ❌（平台托管） | 🟡 | ❌ | ❌ | ✅ |
+| Multi-platform SDK (Web/Android/iOS/Unity/Server) | ✅ (5 platforms, including Server HMAC) | ✅ (mainly the Unity ecosystem) | ✅ | ✅ | ✅ | ✅ (mainly Web/Mobile) |
+| Event Schema governance / Tracking Plan | ✅ (JSON Schema + Tracking Plan + property whitelist + cardinality limits) | 🟡 (Standard Events + validation) | 🟡 (advisory events) | 🟡 (strict Standard Events constraints) | ❌ | 🟡 (data management) |
+| PII policy (mask/drop/allow, IP coarsening) | ✅ (policy can be overridden per environment) | ❌ | 🟡 | ❌ | ❌ | 🟡 |
+| Environment isolation (dev/staging/prod data boundary) | ✅ (game_id+environment across the whole chain) | 🟡 | ✅ (project dimension) | 🟡 | ✅ (title dimension) | ✅ (project dimension) |
+| Data retention tiering/partitioning | ✅ (per-environment policy + toYYYYMM partitioning) | ❌ (platform-hosted) | 🟡 | ❌ | ❌ | ✅ |
 
-### 2.2 分析能力
+### 2.2 Analytics Capabilities
 
-> **结论：**实时/留存/漏斗/商业化主流面已对齐五家；真正的缺口曾只有可复用分群（现已落地），行业基准因单公司形态不适用。
+> **Conclusion:** The mainstream surfaces — real-time/retention/funnel/monetization — are already aligned with all five; the only real gap used to be reusable segmentation (now landed), and industry benchmarks do not apply under the single-company form.
 
-| 能力 | Oddsmaker | Unity UGS | Firebase | GameAnalytics | PlayFab | PostHog |
+| Capability | Oddsmaker | Unity UGS | Firebase | GameAnalytics | PlayFab | PostHog |
 |------|-----------|-----------|----------|---------------|---------|---------|
-| 实时看板（DAU/在线/分钟趋势） | ✅ | ✅ | ✅（Realtime） | ✅（Real-time Overview） | 🟡 | ✅（Live） |
-| 留存（N-Day + Rolling，cohort 趋势） | ✅ | ✅ | 🟡 | ✅ | 🟡 | ✅ |
-| 漏斗（有序/无序/时间窗） | ✅ | ✅ | 🟡（funnel 探索） | ✅ | 🟡 | ✅ |
-| 可复用用户分群（Segment 定义一次、处处过滤） | ❌（仅平台/版本/渠道维度切分） | ✅ | ✅（Audiences） | ✅ | ✅（Segments） | ✅ |
-| 商业化（IAP/广告/LTV/pLTV） | ✅ | 🟡 | ✅ | ✅ | 🟡 | 🟡 |
-| 流失预测 | ✅（启发式可解释） | ❌ | 🟡（GA predictive audiences） | ❌ | ❌ | ❌ |
-| 行业基准（Benchmark） | N/A（单公司无跨公司数据池） | 🟡 | ❌ | ✅（11,600+ 游戏样本） | ❌ | ❌ |
-| 归因/买量（MMP 集成、CPI/ROAS） | ❌（仅 attribution.channel 字段回退维度） | 🟡 | ✅（with Google Ads） | 🟡 | ❌ | 🟡 |
+| Real-time dashboards (DAU/online/minute trends) | ✅ | ✅ | ✅ (Realtime) | ✅ (Real-time Overview) | 🟡 | ✅ (Live) |
+| Retention (N-Day + Rolling, cohort trends) | ✅ | ✅ | 🟡 | ✅ | 🟡 | ✅ |
+| Funnels (ordered/unordered/time-window) | ✅ | ✅ | 🟡 (funnel exploration) | ✅ | 🟡 | ✅ |
+| Reusable user segmentation (define a Segment once, filter everywhere) | ❌ (only platform/version/channel dimension slicing) | ✅ | ✅ (Audiences) | ✅ | ✅ (Segments) | ✅ |
+| Monetization (IAP/ads/LTV/pLTV) | ✅ | 🟡 | ✅ | ✅ | 🟡 | 🟡 |
+| Churn prediction | ✅ (heuristic and explainable) | ❌ | 🟡 (GA predictive audiences) | ❌ | ❌ | ❌ |
+| Industry benchmarks (Benchmark) | N/A (no cross-company data pool under a single company) | 🟡 | ❌ | ✅ (11,600+ game sample) | ❌ | ❌ |
+| Attribution/user acquisition (MMP integration, CPI/ROAS) | ❌ (only the attribution.channel field as a fallback dimension) | 🟡 | ✅ (with Google Ads) | 🟡 | ❌ | 🟡 |
 
-### 2.3 实验与配置下发
+### 2.3 Experimentation and Config Delivery
 
-> **结论：**实验三件套（A/B + Remote Config + Flags）本仓全 ✅，反超 GA（付费档）与 Firebase 的 flags 弱项。
+> **Conclusion:** The experimentation trio (A/B + Remote Config + Flags) is all ✅ in this repo, overtaking GA (paid tier) and Firebase's weak flags item.
 
-| 能力 | Oddsmaker | Unity UGS | Firebase | GameAnalytics | PlayFab | PostHog |
+| Capability | Oddsmaker | Unity UGS | Firebase | GameAnalytics | PlayFab | PostHog |
 |------|-----------|-----------|----------|---------------|---------|---------|
-| A/B 实验（分流+统计检验+SRM） | ✅（FNV-1a hash32 确定性分桶、z/t 检验、卡方 SRM） | ✅（Game Overrides） | ✅ | 🟡（付费档） | ✅（Experiments） | ✅ |
-| Remote Config（环境覆盖+增量拉取） | ✅ | ✅ | ✅ | 🟡 | ✅（Title Data） | ✅ |
-| Feature Flags（百分比放量/advance） | ✅ | 🟡（借 Remote Config） | 🟡 | ❌ | 🟡 | ✅（强项） |
+| A/B experiments (traffic split + statistical test + SRM) | ✅ (FNV-1a hash32 deterministic bucketing, z/t tests, chi-square SRM) | ✅ (Game Overrides) | ✅ | 🟡 (paid tier) | ✅ (Experiments) | ✅ |
+| Remote Config (environment overrides + incremental pull) | ✅ | ✅ | ✅ | 🟡 | ✅ (Title Data) | ✅ |
+| Feature Flags (percentage rollout/advance) | ✅ | 🟡 (via Remote Config) | 🟡 | ❌ | 🟡 | ✅ (a strength) |
 
-### 2.4 稳定性与风控
+### 2.4 Stability and Risk Control
 
-> **结论：**实时风控是全表唯一的「无人区」——五家均无完整实时行为风控，这是本仓的差异化长板而非补丁。
+> **Conclusion:** Real-time risk control is the only "no-man's land" in the whole table — none of the five has complete real-time behavioral risk control; this is this repo's differentiated strong suit, not a patch.
 
-| 能力 | Oddsmaker | Unity UGS | Firebase | GameAnalytics | PlayFab | PostHog |
+| Capability | Oddsmaker | Unity UGS | Firebase | GameAnalytics | PlayFab | PostHog |
 |------|-----------|-----------|----------|---------------|---------|---------|
-| Crash/Error 上报与聚合 | ✅（指纹规范化+符号化规则+版本崩溃率） | ✅（Cloud Diagnostics） | ✅（Crashlytics） | 🟡（error 事件） | 🟡 | 🟡 |
-| 实时风控规则（THRESHOLD/FREQUENCY/PATTERN/VELOCITY/RATIO/ANOMALY/MACHINE_LEARNING/FEATURE + 黑名单 + 重放防护） | ✅（内建主链路，Gateway 前置 + Flink 实时） | ❌ | 🟡（仅 App Check 设备完整性，非行为风控） | ❌ | 🟡（封禁/审计，无实时规则） | ❌ |
-| 风险评分与处置（block/review/mark/throttle + Webhook） | ✅ | ❌ | ❌ | ❌ | 🟡（人工 moderation） | ❌ |
+| Crash/Error reporting and aggregation | ✅ (fingerprint normalization + symbolication rules + per-version crash rate) | ✅ (Cloud Diagnostics) | ✅ (Crashlytics) | 🟡 (error events) | 🟡 | 🟡 |
+| Real-time risk control rules (THRESHOLD/FREQUENCY/PATTERN/VELOCITY/RATIO/ANOMALY/MACHINE_LEARNING/FEATURE + blacklist + replay protection) | ✅ (built into the main pipeline, front-loaded at the Gateway + Flink real-time) | ❌ | 🟡 (only App Check device integrity, not behavioral risk control) | ❌ | 🟡 (bans/audit, no real-time rules) | ❌ |
+| Risk scoring and disposition (block/review/mark/throttle + Webhook) | ✅ | ❌ | ❌ | ❌ | 🟡 (manual moderation) | ❌ |
 
-### 2.5 LiveOps 与玩家运营
+### 2.5 LiveOps and Player Operations
 
-> **结论：**公告/邮件/兑换已齐，缺口只在按分群定向触达——分群（Segments）落地后即可接线，属「已有基建的最后一块」。
+> **Conclusion:** Announcements/email/redemption are all in place; the only gap is targeted delivery by segment — it can be wired up as soon as segmentation (Segments) lands, making it "the last piece of the existing infrastructure".
 
-| 能力 | Oddsmaker | Unity UGS | Firebase | GameAnalytics | PlayFab | PostHog |
+| Capability | Oddsmaker | Unity UGS | Firebase | GameAnalytics | PlayFab | PostHog |
 |------|-----------|-----------|----------|---------------|---------|---------|
-| 公告/邮件/兑换码 | ✅ | 🟡 | ❌ | ❌ | ✅ | ❌ |
-| 玩家档案查询/导出/删除（GDPR） | ✅（跨表打包导出+审计） | 🟡 | 🟡 | 🟡 | ✅ | ✅ |
-| 定向触达（按分群投放） | 🟡（公告可定时，未接分群） | ❌ | ✅（Audience 定向） | ❌ | ✅（Segments+Offers） | 🟡 |
+| Announcements/email/redemption codes | ✅ | 🟡 | ❌ | ❌ | ✅ | ❌ |
+| Player profile query/export/deletion (GDPR) | ✅ (cross-table packaged export + audit) | 🟡 | 🟡 | 🟡 | ✅ | ✅ |
+| Targeted delivery (delivery by segment) | 🟡 (announcements can be scheduled, not yet wired to segments) | ❌ | ✅ (Audience targeting) | ❌ | ✅ (Segments+Offers) | 🟡 |
 
-### 2.6 工程体验（接入与调试）
+### 2.6 Engineering Experience (Integration and Debugging)
 
-> **结论：**差距最大的两格——实时事件检视与自由仪表盘——现均已补齐（Live Inspector / Dashboards）；原始数据出口仍弱于 BigQuery/HogQL 一档，靠 `/raw-export` 先垫。
+> **Conclusion:** The two cells with the biggest gaps — live event inspection and free-form dashboards — are now both filled in (Live Inspector / Dashboards); the raw data exit is still one tier weaker than BigQuery/HogQL and is bridged by `/raw-export` for now.
 
-| 能力 | Oddsmaker | Unity UGS | Firebase | GameAnalytics | PlayFab | PostHog |
+| Capability | Oddsmaker | Unity UGS | Firebase | GameAnalytics | PlayFab | PostHog |
 |------|-----------|-----------|----------|---------------|---------|---------|
-| 实时事件检视（Live/Debug View：看到每条事件到达与否及拒绝原因） | ❌ | 🟡 | ✅（DebugView/StreamView） | ✅（Real-time 事件流） | 🟡 | ✅（Live events） |
-| 自定义仪表盘（widget 组合） | 🟡（Report 有雏形，非自由组合） | 🟡 | ✅ | 🟡 | 🟡 | ✅ |
-| 原始数据导出/SQL 访问 | 🟡（玩家级导出+报表 CSV；无全量原始导出/SQL） | 🟡 | ✅（BigQuery） | 🟡 | 🟡（PlayFab Explorer） | ✅（HogQL/Warehouse） |
-| 指标告警（阈值+通知） | ✅ | 🟡 | ✅ | ❌ | 🟡 | ✅ |
-| 权限/审计（RBAC + 审计日志） | ✅（scope 化 RBAC + 全量审计） | 🟡 | 🟡 | ❌ | ✅ | ✅ |
+| Live event inspection (Live/Debug View: see whether each event arrived and the rejection reason) | ❌ | 🟡 | ✅ (DebugView/StreamView) | ✅ (Real-time event stream) | 🟡 | ✅ (Live events) |
+| Custom dashboards (widget composition) | 🟡 (Report is a prototype, not free composition) | 🟡 | ✅ | 🟡 | 🟡 | ✅ |
+| Raw data export/SQL access | 🟡 (player-level export + report CSV; no full raw export/SQL) | 🟡 | ✅ (BigQuery) | 🟡 | 🟡 (PlayFab Explorer) | ✅ (HogQL/Warehouse) |
+| Metric alerting (threshold + notification) | ✅ | 🟡 | ✅ | ❌ | 🟡 | ✅ |
+| Permissions/audit (RBAC + audit log) | ✅ (scoped RBAC + full audit) | 🟡 | 🟡 | ❌ | ✅ | ✅ |
 
-## 3. 差距结论：缺失的关键功能（按用户价值排序）
+## 3. Gap Conclusion: Missing Key Features (Ordered by User Value)
 
-1. **实时事件检视器（Live Inspector / Debug View）** —— 价值 5/5 成本 1/5
-   接入期第一痛点：SDK 接入后"我的事件到底到没到、为什么被拒"。竞品标配（Firebase DebugView、GA Real-time、PostHog Live）。本项目所有拒绝原因（invalid_schema/api_key_scope_mismatch/pii_blocked/invalid_timestamp/采样/去重/封禁）目前只进 DLQ 与响应体，无处可视化。落地为 Gateway 内存环形缓冲 + 检视 API + 控制台页面。
-2. **可复用用户分群（Segments）** —— 价值 4.5/5 成本 3/5
-   竞品全有，且是定向触达（Firebase Audiences、PlayFab Offers）的基础设施。定义（属性+行为条件）→ 物化（ClickHouse 主体集合）→ 注入留存/漏斗/财务/在线报表过滤 + LiveOps 定向投放。注意与现有留存 CohortService 区分（那是留存口径 cohort 计算，非用户分群）。
-3. **自定义仪表盘 widget 化** —— 价值 3.5/5 成本 2/5
-   Report 模块已有雏形；补 widget 卡片（图/表/KPI）自由组合与保存，追赶全部竞品的 Dashboard Builder。
-4. **全量原始数据导出（S3/对象存储 定期导出）** —— 价值 3/5 成本 2/5
-   对标 Firebase BigQuery。归档 infra 已在架构图中（Object Storage/Archive），补按日分区导出任务即可，是 BI 下钻（Superset/Metabase）的喂料通道。
-5. **归因/买量分析（MMP 集成）** —— 价值 3/5（买量型工作室 5/5）成本 4/5
-   依赖外部 MMP（AppsFlyer/Adjust）数据源接入与建表，外部依赖重，放中期评估。
+1. **Live event inspector (Live Inspector / Debug View)** — value 5/5, cost 1/5
+   The number-one pain point of the integration period: after wiring up the SDK, "did my events actually arrive, and why were they rejected?". A standard feature among competitors (Firebase DebugView, GA Real-time, PostHog Live). All rejection reasons in this project (invalid_schema/api_key_scope_mismatch/pii_blocked/invalid_timestamp/sampling/dedup/ban) currently go only into the DLQ and the response body, with nowhere to visualize them. Landed as a Gateway in-memory ring buffer + inspection API + console page.
+2. **Reusable user segmentation (Segments)** — value 4.5/5, cost 3/5
+   Every competitor has it, and it is the infrastructure for targeted delivery (Firebase Audiences, PlayFab Offers). Definition (attribute + behavioral conditions) → materialization (ClickHouse subject set) → injection into retention/funnel/revenue/online report filtering + LiveOps targeted delivery. Note the distinction from the existing retention CohortService (that is retention-caliber cohort computation, not user segmentation).
+3. **Widget-based custom dashboards** — value 3.5/5, cost 2/5
+   The Report module already has a prototype; add widget cards (chart/table/KPI) with free composition and saving, catching up with all competitors' Dashboard Builder.
+4. **Full raw data export (scheduled export to S3/object storage)** — value 3/5, cost 2/5
+   Benchmarked against Firebase BigQuery. The archive infra is already in the architecture diagram (Object Storage/Archive); just add a daily-partitioned export job — the feeding channel for BI drill-down (Superset/Metabase).
+5. **Attribution/user acquisition analysis (MMP integration)** — value 3/5 (5/5 for user-acquisition-driven studios), cost 4/5
+   Depends on external MMP (AppsFlyer/Adjust) data source integration and table creation; the external dependency is heavy, so it is scheduled for mid-term evaluation.
 
-## 4. 明确不跟进的功能及理由
+## 4. Explicitly Not Pursued Features and Reasons
 
-> **结论：**6 项不跟进各挡一条硬边界——成本数量级（Replay）、数据边界（Benchmark）、产品正交（游戏后端/推送/广告直连）、模式边界（多租户）。
+> **Conclusion:** The 6 not-pursued items each guard a hard boundary — cost order of magnitude (Replay), data boundary (Benchmark), product orthogonality (game backend/push/ad-platform direct connection), and model boundary (multi-tenancy).
 
-| 功能 | 来源竞品 | 不跟进理由 |
+| Feature | Source competitor | Reason for not pursuing |
 |------|----------|------------|
-| Session Replay（会话回放） | PostHog | 需要客户端渲染级录制 SDK，存储成本高一个数量级；与"分析+风控"定位的边际收益低；隐私面扩大（PII 治理承诺反噬） |
-| 行业基准 Benchmark | GameAnalytics | 单公司部署是产品边界（README 定位），无跨公司数据池；做匿名数据联盟违背数据治理卖点 |
-| 游戏后端（排行榜/成就/多人服务器/经济系统） | PlayFab、Unity UGS | 与"分析+风控+LiveOps 触达"正交；游戏服属于客户域，本项目以 Webhook/集成面协作即可 |
-| 推送通知通道（FCM/APNs 自建） | Firebase | 需厂商账号体系与推送基建；触达已由公告+邮件+Webhook 覆盖，后续可作为 Integration 扩展点开放而非自建 |
-| 广告平台直连优化（bidding/ROAS 自动化） | Firebase(Google Ads) | 超出分析平台职责；买量决策留给 MMP/BI |
-| 多租户 SaaS 化 | （本项目历史包袱） | 已在 todo.md 暂停项明确：单公司多游戏是产品边界 |
+| Session Replay | PostHog | Requires a client-side rendering-level recording SDK, with storage cost an order of magnitude higher; the marginal benefit for the "analytics + risk control" positioning is low; it widens the privacy surface (backfiring on the PII governance commitment) |
+| Industry benchmark Benchmark | GameAnalytics | Single-company deployment is a product boundary (README positioning), with no cross-company data pool; building an anonymous data consortium would betray the data governance selling point |
+| Game backend (leaderboards/achievements/multiplayer servers/economy systems) | PlayFab, Unity UGS | Orthogonal to "analytics + risk control + LiveOps reach"; game servers belong to the customer's domain, and this project can simply collaborate via the Webhook/integration surface |
+| Push notification channel (self-built FCM/APNs) | Firebase | Requires vendor account systems and push infrastructure; reach is already covered by announcements + email + Webhook, and later it can be opened as an Integration extension point rather than self-built |
+| Ad-platform direct-connection optimization (bidding/ROAS automation) | Firebase(Google Ads) | Beyond the responsibilities of an analytics platform; user-acquisition decisions are left to MMP/BI |
+| Multi-tenant SaaS-ification | (this project's historical baggage) | Already clarified in the todo.md parked items: single company with multiple games is the product boundary |
 
-## 5. 设计启发（来自竞品）
+## 5. Design Insights (From Competitors)
 
-1. **接入体验决定平台信任**（Firebase DebugView / GA Real-time）：数据"黑盒感"是自建分析平台被弃用的首因 → Live Inspector 列入 P7-1 最高优先级。
-2. **Flags 与实验同源**（PostHog 2026 卖点）：flag 是实验的载体、实验是 flag 的度量。本项目 Feature Flags / Remote Config / Experiments 三件套能力齐全但入口分散，中期应收敛为统一"交付面"（一个实体三种角色），短期不动。
-3. **标准事件分类法是行业通用语言**（GA 七大类）：本项目 P3 九类（+experiment/risk）与之一致并有风控扩展，保持并继续在 Tracking Plan 中做强约束——这是相对 PostHog 等通用工具的领域优势。
-4. **风控是差异化长板而非补丁**（对照五竞品均无完整实时行为风控）：继续深挖（评分/处置/证据链已有），不因追赶分析面而稀释。
-5. **Segment 是运营效率的乘数**（Firebase Audiences / PlayFab Segments）：一次定义、处处可用（报表过滤+定向触达），是 LiveOps 从"广播"升级到"精准"的前提 → P7-2。
-6. **数据出口开放性**（BigQuery/HogQL）：自托管客户终将要求原始数据自主权 → 全量导出（P7-4）优先于花哨报表。
+1. **Integration experience determines platform trust** (Firebase DebugView / GA Real-time): the "black box" feel of data is the top reason self-built analytics platforms get abandoned → Live Inspector was listed as the top priority P7-1.
+2. **Flags and experiments share the same origin** (PostHog's 2026 selling point): a flag is the carrier of an experiment, and an experiment is the measurement of a flag. This project's Feature Flags / Remote Config / Experiments trio is fully capable but has scattered entry points; in the mid-term they should converge into a unified "delivery surface" (one entity, three roles), with no change in the short term.
+3. **The standard event taxonomy is the industry's common language** (GA's seven categories): this project's P3 nine categories (+experiment/risk) are consistent with it and extend it with risk control; keep it and continue enforcing it as strong constraints in the Tracking Plan — this is the domain advantage over general-purpose tools like PostHog.
+4. **Risk control is a differentiated strong suit, not a patch** (by contrast, none of the five competitors has complete real-time behavioral risk control): keep digging deeper (scoring/disposition/evidence chain already exist), and do not dilute it to chase the analytics surface.
+5. **Segments are a multiplier of operational efficiency** (Firebase Audiences / PlayFab Segments): define once, use everywhere (report filtering + targeted delivery) — the prerequisite for LiveOps upgrading from "broadcast" to "precision" → P7-2.
+6. **Openness of the data exit** (BigQuery/HogQL): self-hosted customers will eventually demand sovereignty over their raw data → full export (P7-4) takes priority over fancy reports.
 
-## 6. 可参考分析（逐条判定与落点）
+## 6. Reference Analysis (Item-by-Item Verdicts and Landing Points)
 
-> **结论：**五项差距四项已闭环（旧 P7 清单 2026-10-04 归档），MMP 归因按 P8 暂停等外部账号；设计启发 6 条中 4 条已承接为落地能力，其余 2 条为中期候选。
+> **Conclusion:** Four of the five gaps are closed (the old P7 list was archived on 2026-10-04), and MMP attribution is parked under P8 pending external accounts; of the 6 design insights, 4 have been taken up as landed capabilities, and the remaining 2 are mid-term candidates.
 
-| 判定 | 条目 | 为什么 | 本仓落点 |
+| Verdict | Item | Why | Landing point in this repo |
 |------|------|--------|----------|
-| 可参考 | 实时事件检视器（§3.1） | 接入期第一痛点，五家中四家标配 | 已落地：Gateway 检视缓冲 + `/v1/inspector/recent` + 控制台 Live Inspector 页（`/analytics/inspector`，P7-1） |
-| 可参考 | 可复用用户分群（§3.2） | 全竞品标配，定向触达的前提设施 | 已落地：`/analytics/segments`（定义→物化→报表过滤，P7-2），并作实验 Audience 引用（B8 字段化） |
-| 可参考 | 仪表盘 widget 化（§3.3） | 全竞品 Dashboard Builder | 已落地：`/analytics/dashboards`（P7-3） |
-| 可参考 | 全量原始数据导出（§3.4） | 对标 BigQuery 的数据自主权诉求 | 已落地：`/raw-export`（P7-4），对象存储按日分区导出目录机制同时支撑 P8 的反向读取 |
-| 可参考 | MMP 归因接入（§3.5） | 买量型工作室刚需，但外部依赖重 | P8 暂停（前置：任一 MMP 原始数据导出权限），接入路径定稿见 `mmp-attribution-evaluation.md` |
-| 可参考 | 标准事件分类法（§5.3） | GA 八大类是行业通用语言，本仓九类并带风控扩展 | 保持：B7 EventSchema 一等资源化 + Tracking Plan 强约束——这是相对通用工具的领域优势 |
-| 可借鉴 | Flags 与实验同源（PostHog，§5.2） | flag 是实验的载体、实验是 flag 的度量 | FeatureFlagsView + ExperimentsView 已分立可用；收敛为统一「交付面」列中期候选（短期不动） |
-| 可借鉴 | 风控长板继续深挖（§5.4） | 对照五家均无完整实时行为风控 | 保持：B5 特征层（事件→特征→规则）+ B6 RiskScore 与 RiskCase 状态机 |
-| 可借鉴 | 数据出口开放性（§5.6） | 自托管客户终将要求原始数据自主权 | 已有 `/raw-export`；更深的 SQL 访问（HogQL 级）列远期，BI 下钻先走导出通道 |
-| 不适用 | Session Replay（§4） | 客户端录制 SDK，存储高一个量级、隐私面反噬 PII 治理承诺 | 不做（§4 第一行） |
-| 不适用 | 行业基准 Benchmark（§4） | 单公司部署是产品边界，无跨公司数据池 | 不做（§4 第二行） |
-| 不适用 | 游戏后端 / 自建推送通道 / 广告平台直连（§4） | 产品正交或超出分析平台职责 | 以 Webhook/Integration 面协作（§4 第三~五行） |
-| 不适用 | 多租户 SaaS 化（§4） | 单公司多游戏是产品边界 | 不做（todo.md 暂停项） |
+| Worth referencing | Live event inspector (§3.1) | The number-one pain point of the integration period; standard in four of the five | Landed: Gateway inspection buffer + `/v1/inspector/recent` + console Live Inspector page (`/analytics/inspector`, P7-1) |
+| Worth referencing | Reusable user segmentation (§3.2) | Standard across all competitors; the prerequisite infrastructure for targeted delivery | Landed: `/analytics/segments` (definition → materialization → report filtering, P7-2), also referenced as the experiment Audience (B8 field-ization) |
+| Worth referencing | Widget-based dashboards (§3.3) | All competitors' Dashboard Builder | Landed: `/analytics/dashboards` (P7-3) |
+| Worth referencing | Full raw data export (§3.4) | The data-sovereignty demand benchmarked against BigQuery | Landed: `/raw-export` (P7-4); the object storage daily-partitioned export directory mechanism also supports P8's reverse reading |
+| Worth referencing | MMP attribution integration (§3.5) | A hard requirement for user-acquisition-driven studios, but with a heavy external dependency | Parked under P8 (prerequisite: raw data export permission from any one MMP); the finalized integration path is in `mmp-attribution-evaluation.md` |
+| Worth referencing | Standard event taxonomy (§5.3) | GA's eight categories are the industry's common language; this repo has nine categories with risk control extensions | Keep: B7 EventSchema as a first-class resource + Tracking Plan strong constraints — the domain advantage over general-purpose tools |
+| Worth borrowing | Flags and experiments share the same origin (PostHog, §5.2) | A flag is the carrier of an experiment, and an experiment is the measurement of a flag | FeatureFlagsView + ExperimentsView are already separate and usable; converging into a unified "delivery surface" is a mid-term candidate (no change in the short term) |
+| Worth borrowing | Keep deepening the risk control strong suit (§5.4) | By contrast, none of the five has complete real-time behavioral risk control | Keep: B5 feature layer (event → feature → rule) + B6 RiskScore and RiskCase state machines |
+| Worth borrowing | Openness of the data exit (§5.6) | Self-hosted customers will eventually demand sovereignty over their raw data | `/raw-export` already exists; deeper SQL access (HogQL-level) is long-term, and BI drill-down goes through the export channel first |
+| Not applicable | Session Replay (§4) | Client-side recording SDK, storage an order of magnitude higher, and the privacy surface backfiring on the PII governance commitment | Not doing it (§4 row 1) |
+| Not applicable | Industry benchmark Benchmark (§4) | Single-company deployment is a product boundary, with no cross-company data pool | Not doing it (§4 row 2) |
+| Not applicable | Game backend / self-built push channel / ad-platform direct connection (§4) | Product-orthogonal or beyond the responsibilities of an analytics platform | Collaborate via the Webhook/Integration surfaces (§4 rows 3–5) |
+| Not applicable | Multi-tenant SaaS-ification (§4) | Single company with multiple games is the product boundary | Not doing it (todo.md parked item) |
 
-## 7. 路线图衔接
+## 7. Roadmap Connection
 
-> 状态（2026-10-08）：P7-1~P7-4 已全部落地并随旧清单（P0~P7 共 80 项）于 2026-10-04 归档闭环；P7-5 演进为 P8 暂停项（前置未达成）。下文为立项时的原始排期，仅作历史脉络。
+> Status (2026-10-08): P7-1~P7-4 have all landed and were closed out with the old list (80 items across P0~P7) archived on 2026-10-04; P7-5 evolved into the parked P8 item (prerequisite unmet). The text below is the original schedule at initiation, kept only as historical context.
 
-新增 `todo.md` **P7 竞品差距收敛**批次：
+New `todo.md` **P7 competitive gap closure** batch:
 
-- P7-1 实时事件检视器（本次落地）：Gateway 检视缓冲 + `/v1/inspector/recent` + Control 代理 API + 控制台 Live Inspector 页
-- P7-2 可复用用户分群（定义→物化→报表注入→LiveOps 定向）
-- P7-3 仪表盘 widget 化
-- P7-4 全量原始数据导出（对象存储按日分区）
-- P7-5 MMP 归因接入评估（先调研后立项）
+- P7-1 live event inspector (landed in this round): Gateway inspection buffer + `/v1/inspector/recent` + Control proxy API + console Live Inspector page
+- P7-2 reusable user segmentation (definition → materialization → report injection → LiveOps targeting)
+- P7-3 widget-based dashboards
+- P7-4 full raw data export (object storage, daily-partitioned)
+- P7-5 MMP attribution integration evaluation (research first, then project initiation)
 
-优先级依据：用户价值 × 实现成本 ÷ 外部依赖，见 §3 排序。
+Priority basis: user value × implementation cost ÷ external dependency; see the ordering in §3.

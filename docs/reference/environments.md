@@ -1,30 +1,30 @@
 # Environments API
 
-> 🌐 Language: **中文** · English → [environments.en.md](environments.en.md)
+> 🌐 Language: **English** · 中文 → [environments.zh.md](environments.zh.md)
 
-环境管理 API，用于管理游戏的不同部署环境（dev、staging、prod）。
+Environment management API, used to manage the different deployment environments of a game (dev, staging, prod).
 
-## 端点列表
+## Endpoint List
 
-| 方法 | 端点 | 说明 |
+| Method | Endpoint | Description |
 |------|------|------|
-| POST | `/api/games/{gameId}/environments` | 创建环境 |
-| GET | `/api/games/{gameId}/environments` | 获取环境列表 |
-| GET | `/api/games/{gameId}/environments/{environmentName}` | 获取环境详情 |
-| PUT | `/api/games/{gameId}/environments/{environmentName}` | 更新环境 |
-| DELETE | `/api/games/{gameId}/environments/{environmentName}` | 删除环境 |
+| POST | `/api/games/{gameId}/environments` | Create environment |
+| GET | `/api/games/{gameId}/environments` | Get environment list |
+| GET | `/api/games/{gameId}/environments/{environmentName}` | Get environment details |
+| PUT | `/api/games/{gameId}/environments/{environmentName}` | Update environment |
+| DELETE | `/api/games/{gameId}/environments/{environmentName}` | Delete environment |
 
-## 环境类型
+## Environment Types
 
-| 类型 | 说明 |
+| Type | Description |
 |------|------|
-| `DEVELOPMENT` | 开发环境 |
-| `TESTING` | 测试环境 |
-| `STAGING` | 预发布环境 |
-| `PRODUCTION` | 生产环境 |
-| `LOADTEST` | 压测环境 |
+| `DEVELOPMENT` | Development environment |
+| `TESTING` | Testing environment |
+| `STAGING` | Staging environment |
+| `PRODUCTION` | Production environment |
+| `LOADTEST` | Load-test environment |
 
-## 创建环境
+## Create Environment
 
 ```http
 POST /api/games/{gameId}/environments
@@ -39,7 +39,7 @@ Authorization: Bearer {token}
 }
 ```
 
-**响应:**
+**Response:**
 ```json
 {
   "id": "env_game_demo_prod",
@@ -51,14 +51,14 @@ Authorization: Bearer {token}
 }
 ```
 
-## 获取环境列表
+## Get Environment List
 
 ```http
 GET /api/games/{gameId}/environments
 Authorization: Bearer {token}
 ```
 
-**响应:**
+**Response:**
 ```json
 [
   {
@@ -74,18 +74,18 @@ Authorization: Bearer {token}
 ]
 ```
 
-## 环境配置
+## Environment Configuration
 
-环境级配置有启用状态、采样开关、采样率（经 Control 内部接口下发，网关对非 active 环境返回 503 `environment_unavailable`，采样按 device_id 确定性分桶，同设备事件同进同出）。
+Environment-level configuration includes the enabled state, sampling switch, and sampling rate (delivered via the Control internal interface; the gateway returns 503 `environment_unavailable` for non-active environments; sampling uses deterministic bucketing by device_id, so events from the same device go in and out together).
 
-Key 级配置挂在 API Key 上，与 Key 所属环境绑定：PII 策略、props 白名单、限流（`rpm`/`ipRpm`）。数据保留由环境级 `dataRetentionDays` 决定：`RetentionEnforcementService` 按 `env.dataRetentionDays ?? game.dataRetentionDays ?? 默认值` 取值，并落到 ClickHouse TTL。
+Key-level configuration hangs on the API Key and is bound to the environment the Key belongs to: PII policy, props whitelist, rate limiting (`rpm`/`ipRpm`). Data retention is determined by the environment-level `dataRetentionDays`: `RetentionEnforcementService` takes the value as `env.dataRetentionDays ?? game.dataRetentionDays ?? default`, and applies it to the ClickHouse TTL.
 
-## 推荐环境
+## Recommended Environments
 
-| 环境 | 用途 |
+| Environment | Purpose |
 |------|------|
-| `dev` | 开发测试 |
-| `staging` | 预发布验证 |
-| `prod` | 正式上线 |
+| `dev` | Development and testing |
+| `staging` | Staging verification |
+| `prod` | Official launch |
 
-创建游戏时这三个环境会自动建好。
+These three environments are created automatically when a game is created.

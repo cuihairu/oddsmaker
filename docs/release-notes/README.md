@@ -1,9 +1,9 @@
-# 发布记录索引
+# Release Notes Index
 
-> 🌐 Language: **中文** · English → [README.en.md](README.en.md)
+> 🌐 Language: **English** · 中文 → [README.zh.md](README.zh.md)
 
-当前发布记录：
-- [v0.1.0.md](v0.1.0.md): 首个发布版本说明
-- [v0.2.0.md](v0.2.0.md): P7 竞品差距收敛——Live Inspector / 用户分群 / 自定义仪表盘 / 原始数据导出 / Crash-风控分群贯通（含 retention_daily 主体维度重建迁移）
+Current release notes:
+- [v0.1.0.md](v0.1.0.md): Release notes for the first release
+- [v0.2.0.md](v0.2.0.md): P7 competitive gap convergence — Live Inspector / user segments / custom dashboards / raw data export / Crash-risk segment linkage (includes the retention_daily subject dimension rebuild migration)
 
-后续新版本的发布说明统一放在本目录。
+Release notes for subsequent versions are placed in this directory.

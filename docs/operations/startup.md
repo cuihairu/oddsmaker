@@ -1,19 +1,19 @@
-# 启动指南（本机实测路径）
+# Startup Guide (Locally Tested Path)
 
-> 🌐 Language: **中文** · English → [startup.en.md](startup.en.md)
+> 🌐 Language: **English** · 中文 → [startup.zh.md](startup.zh.md)
 
-> 本文按 2026-09-23 在一台 Linux 主机（podman + docker 垫片）上从零拉起全栈的**实测步骤**整理，
-> 不是照抄 README 的理想路径。踩过的坑与修过的雷一并记录，后来者照抄即可。
+> This document is organized from the **tested steps** of bringing up the full stack from scratch on a Linux host (podman + docker shim) on 2026-09-23,
+> not an ideal path copied from the README. The pitfalls hit and the landmines fixed are recorded along the way so that those who follow can simply copy them.
 
-## 一句话路径
+## One-line Path
 
 ```text
 podman API socket → 根 docker-compose.yml 全量 up → 健康端点双绿
 ```
 
-**整栈用根目录 `docker-compose.yml`，不要用 `make infra-up` 的分体 dev 模式**（见下方“已知问题”）。
+**Use the root `docker-compose.yml` for the whole stack; do not use the split dev mode of `make infra-up`** (see "Known Issues" below).
 
-## 0. 前置（一次性）
+## 0. Prerequisites (one-time)
 
 ```bash
 # 1) compose 外部 provider 走 docker API，podman 必须开 socket（用户态，无需 sudo）
@@ -25,14 +25,14 @@ ls -l /run/user/1000/podman/podman.sock   # 确认存在
 #    apicurio 在 quay.io、JRE 基础镜像在 docker.io，两个都实测断过。
 ```
 
-## 1. 启动
+## 1. Start
 
 ```bash
 cd <repo>
 podman compose up -d --build          # 首次要构建 control/gateway 镜像，较久
 ```
 
-## 2. 健康检查
+## 2. Health Check
 
 ```bash
 for p in 28080 28085; do curl -s http://127.0.0.1:$p/actuator/health; done
@@ -40,18 +40,18 @@ for p in 28080 28085; do curl -s http://127.0.0.1:$p/actuator/health; done
 podman ps --format '{{.Names}}\t{{.Status}}' | grep oddsmaker   # 期望 15 个 Up
 ```
 
-## 3. 访问地址（按本机实测 IP）
+## 3. Access Addresses (based on the locally tested IP)
 
-| 服务 | 地址 | 说明 |
+| Service | Address | Description |
 |---|---|---|
-| gateway | http://192.168.5.188:28080/actuator/health | 容器 8080 偏移发布 |
-| control | http://192.168.5.188:28085/actuator/health | 容器 8085 偏移发布 |
-| superset | http://192.168.5.188:8088 | BI 看板 |
-| clickhouse HTTP | http://192.168.5.188:28123 | 容器 8123 |
+| gateway | http://192.168.5.188:28080/actuator/health | Container 8080 published with an offset |
+| control | http://192.168.5.188:28085/actuator/health | Container 8085 published with an offset |
+| superset | http://192.168.5.188:8088 | BI dashboard |
+| clickhouse HTTP | http://192.168.5.188:28123 | Container 8123 |
 
-（端口偏移约定见根 `docker-compose.yml`；IP 变了用 `hostname -I` 自查。）
+(For the port-offset convention, see the root `docker-compose.yml`; if the IP changes, check it yourself with `hostname -I`.)
 
-## 常用操作
+## Common Operations
 
 ```bash
 podman compose logs -f control-service        # 跟日志
@@ -59,33 +59,33 @@ podman compose up -d --build control-service  # 单服务改码重建
 podman compose down                           # 整栈下线（数据卷保留）
 ```
 
-## 已知问题（本次首跑修复记录）
+## Known Issues (fixes from this first run)
 
-根 compose 这条链**此前从未被完整跑通**，逐层剥了四颗雷，全部已修入 main
-（上游提交，本仓浅克隆不可校验 hash）：
+This chain of the root compose **had never been fully run before**; four landmines were peeled off layer by layer, all fixed into main
+(upstream commits; the shallow clone of this repo cannot verify the hashes):
 
-1. **`V0.9.8` 权限种子非幂等**：`game.read/user.read/audit.read/system.read` 四 code 在
-   `V0.2.3` 已落库（`perm_*` 样式 id），裸 INSERT 撞 `permissions_code_key`。
-   修复：迁移前置换 id（`session_replication_role` 临时降 FK）并同步 `role_permissions`
-   绑定，INSERT 清单剔除四行，绑定段加 `ON CONFLICT DO NOTHING`。
-2. **`V0.9.11` 改 varchar 撞视图**：`v_user_permissions` 的 `_RETURN` 规则依赖 `users.id`。
-   修复：迁移内 `pg_get_viewdef` 存临时表 → `DROP VIEW` → 12 条 `ALTER` → 重建。
-3. **`ClickHouseClient` 双构造器**：生产构造器（`@Value` 三参）与测试构造器（`JdbcTemplate`）
-   并存且无 `@Autowired`，Spring 找无参构造失败。修复：标注生产构造器。
-4. **`WebhookService.asyncExecutor` 注入歧义**：Boot 同时注册 `applicationTaskExecutor` 与
-   `taskScheduler`，`Executor` 类型二义（`required=false` 只容忍缺失不容忍歧义）。
-   修复：`@Qualifier("applicationTaskExecutor")`。
+1. **`V0.9.8` permission seed not idempotent**: the four codes `game.read/user.read/audit.read/system.read` were
+   already in the database in `V0.2.3` (with `perm_*`-style ids), and a bare INSERT collided with `permissions_code_key`.
+   Fix: swap the ids before the migration (`session_replication_role` temporarily lowers FKs) and sync the `role_permissions`
+   bindings, remove the four rows from the INSERT list, and add `ON CONFLICT DO NOTHING` to the binding section.
+2. **`V0.9.11` varchar change hit a view**: the `_RETURN` rule of `v_user_permissions` depends on `users.id`.
+   Fix: inside the migration, store `pg_get_viewdef` to a temp table → `DROP VIEW` → 12 `ALTER` statements → recreate.
+3. **`ClickHouseClient` dual constructors**: the production constructor (`@Value`, three params) and the test constructor (`JdbcTemplate`)
+   coexisted with no `@Autowired`, so Spring failed to find a no-arg constructor. Fix: annotate the production constructor.
+4. **`WebhookService.asyncExecutor` injection ambiguity**: Boot registers both `applicationTaskExecutor` and
+   `taskScheduler`, making the `Executor` type ambiguous (`required=false` only tolerates absence, not ambiguity).
+   Fix: `@Qualifier("applicationTaskExecutor")`.
 
-### Makefile 分体模式的坑
+### Pitfalls of the Makefile Split Mode
 
-- `make infra-up` 曾引用 infra compose 里**不存在的 `zookeeper`**（已删，见 Makefile 修复）。
-- infra compose **没有 postgres**，而 `make gateway` / `make control` 的 bootRun 走
-  `localhost:5432` → 在本机会连库失败。dev 分体模式要先自备同名同账号的本地 PG
-  （`oddsmaker/oddsmaker`，库 `oddsmaker`），否则请直接用根 compose 全量模式。
-- 本机没有 docker，`~/.local/bin/docker` 是 `exec podman "$@"` 垫片，
-  compose 插件为 `~/.docker/cli-plugins/docker-compose`（真实 release 版本，先查 tags 再装）。
+- `make infra-up` once referenced a **nonexistent `zookeeper`** in the infra compose (removed; see the Makefile fix).
+- The infra compose **has no postgres**, while the bootRun of `make gateway` / `make control` goes to
+  `localhost:5432` → it will fail to connect to the database locally. The dev split mode requires a local PG of your own with the same name and account
+  (`oddsmaker/oddsmaker`, database `oddsmaker`), otherwise use the root compose full mode directly.
+- There is no docker on this machine; `~/.local/bin/docker` is a `exec podman "$@"` shim,
+  and the compose plugin is `~/.docker/cli-plugins/docker-compose` (a real release version; check the tags before installing).
 
-## 验证一条迁移的固定姿势（防再踩雷）
+## A Fixed Way to Validate a Migration (to avoid hitting landmines again)
 
 ```bash
 (echo "BEGIN;"; cat <sql迁移文件>; echo "ROLLBACK;") \

@@ -1,70 +1,70 @@
 # Risk API
 
-> 🌐 Language: **中文** · English → [risk.en.md](risk.en.md)
+> 🌐 Language: **English** · 中文 → [risk.zh.md](risk.zh.md)
 
-风控管理 API，用于风险规则、案例管理和实时风险评估。
+Risk control management API for risk rules, case management, and real-time risk assessment.
 
-## 端点列表
+## Endpoint List
 
-| 方法 | 端点 | 说明 | 权限 |
+| Method | Endpoint | Description | Permission |
 |------|------|------|------|
-| POST | `/api/risk-rules` | 创建风控规则 | `risk_rule:create` |
-| GET | `/api/risk-rules` | 获取规则列表（分页，支持 gameId/status 等条件） | `risk_rule:read`（带 gameId 时校验） |
-| GET | `/api/risk-rules/{id}` | 获取规则详情 | `risk_rule:read` |
-| PUT | `/api/risk-rules/{id}` | 更新规则 | `risk_rule:update` |
-| DELETE | `/api/risk-rules/{id}` | 删除规则 | `risk_rule:delete` |
-| POST | `/api/risk-rules/{id}/enable` | 启用规则 | `risk_rule:update` |
-| POST | `/api/risk-rules/{id}/disable` | 停用规则 | `risk_rule:update` |
+| POST | `/api/risk-rules` | Create a risk rule | `risk_rule:create` |
+| GET | `/api/risk-rules` | Get the rule list (paginated, supports conditions such as gameId/status) | `risk_rule:read` (validated when gameId is present) |
+| GET | `/api/risk-rules/{id}` | Get rule details | `risk_rule:read` |
+| PUT | `/api/risk-rules/{id}` | Update a rule | `risk_rule:update` |
+| DELETE | `/api/risk-rules/{id}` | Delete a rule | `risk_rule:delete` |
+| POST | `/api/risk-rules/{id}/enable` | Enable a rule | `risk_rule:update` |
+| POST | `/api/risk-rules/{id}/disable` | Disable a rule | `risk_rule:update` |
 
-风控案例（RiskCase）没有独立的创建/删除 API——案例由风控链路自动创建。查询与处置入口：
+Risk cases (RiskCase) have no independent create/delete API — cases are created automatically by the risk pipeline. Query and disposition entry points:
 
-| 方法 | 端点 | 说明 |
+| Method | Endpoint | Description |
 |------|------|------|
-| GET | `/api/games/{gameId}/risk-cases` | 案例列表（`status`/`riskLevel` 过滤；`ruleId`/`disposition` 为策略实验室样本下钻过滤——在最近 2000 条案例窗口内内存过滤后截断，`limit` 默认 100、上限 500，最新在前） |
-| GET | `/api/games/{gameId}/risk-cases/{caseId}` | 案例详情（证据/上下文 JSON 解析为对象，解析失败回传原文；`subjectRiskScore` 主体累计分快照——按案例目标读 CH `risk_scores` 最新一条，未落分或 CH 不可用降级为 null，不阻断回看） |
-| POST | `/api/games/{gameId}/risk-cases/{caseId}/unblock` | 人工解除封禁（误杀处置；须 `BLOCK` 已执行且未解除，联动释放由本案例创建的黑名单记录） |
-| GET | `/api/games/{gameId}/risk-lab/rule-stats` | 策略实验室规则复盘聚合：每规则一行（案例数、误杀/确认违规/证据不足/未复盘分桶、误杀率分母=已处置、平均复盘时长、最近案例），零案例规则也出行；聚合在最近 5000 条案例内进行 |
-| POST | `/api/games/{gameId}/risk-lab/replay` | 策略实验室试算回放（dry-run）：body `{samples:[{eventId?,amount?,features?}],ruleIds?}`，1~500 条即传即算不落库；THRESHOLD 严格大于阈值、FEATURE 条件全 AND（缺值 fail-closed）逐事件试算，语义对齐线上纯函数；FREQUENCY/VELOCITY/RATIO/DUPLICATE_RECEIPT/AD_REWARD/PATTERN 标 `needsStreaming` 跳过、ANOMALY/MACHINE_LEARNING 标 `notCovered`、条件非法标 `invalid`；同 ruleType 线上只生效 riskScore 最高者（`effectiveHits` 收敛，`matchedRuleIds` 保留逐规则原始命中） |
-| GET | `/api/games/{gameId}/risk-lab/sample-sets` | 策略实验室样本集列表（仅元信息：name/sampleCount/createdAt 等，不含样本内容） |
-| POST | `/api/games/{gameId}/risk-lab/sample-sets` | 新建样本集：body `{name,description?,samples}`，name 同游戏唯一，samples 1~500 条走试算回放同款校验（留档即不可改，删除重建），create/delete 审计；鉴权 `risk:manage` |
-| GET | `/api/games/{gameId}/risk-lab/sample-sets/{id}` | 样本集详情（含解析后的 `samples`，供载入回放） |
-| DELETE | `/api/games/{gameId}/risk-lab/sample-sets/{id}` | 删除样本集（审计）；需替换时删除重建；鉴权 `risk:manage` |
-| GET | `/api/games/{gameId}/risk-scores?subjectType=&subjectId=` | 主体累计风险分最新快照（B6 边界闭合）：读 CH `risk_scores`（`ORDER BY updated_at DESC LIMIT 1`，ReplacingMergeTree 合并前后都正确），`reasons` 解析为 `[{ruleId,contribution}]`；未落过分返回 `found:false`；CH 未配置抛 `CH_UNAVAILABLE`；鉴权 `game:read` |
-| GET | `/api/risk-dashboard/recent-cases/{gameId}` | 最近案例列表 |
-| GET/POST | `/api/review-queue/...` | 人工审核流（分配、认领、完成、升级） |
-| POST | `/api/block-lists/{blockId}/unblock` | 按封禁记录解除（案例触发的封禁也在黑名单表里） |
+| GET | `/api/games/{gameId}/risk-cases` | Case list (`status`/`riskLevel` filters; `ruleId`/`disposition` are strategy-lab sample drill-down filters — filtered in memory and truncated within the window of the most recent 2000 cases, `limit` defaults to 100 with a max of 500, newest first) |
+| GET | `/api/games/{gameId}/risk-cases/{caseId}` | Case details (evidence/context JSON parsed into an object; on parse failure the raw text is returned; `subjectRiskScore` is a snapshot of the subject's cumulative score — reads the latest row of CH `risk_scores` for the case's target; downgrades to null if not yet scored or CH is unavailable, without blocking review) |
+| POST | `/api/games/{gameId}/risk-cases/{caseId}/unblock` | Manual unblock (false-positive disposition; requires `BLOCK` already executed and not yet released; linkedly releases the blocklist records created by this case) |
+| GET | `/api/games/{gameId}/risk-lab/rule-stats` | Strategy lab rule review aggregation: one row per rule (case count, false-positive/confirmed-fraud/insufficient-evidence/not-reviewed buckets, false-positive rate with denominator = dispositioned, average review duration, most recent case); rules with zero cases also produce a row; aggregation runs within the most recent 5000 cases |
+| POST | `/api/games/{gameId}/risk-lab/replay` | Strategy lab dry-run replay: body `{samples:[{eventId?,amount?,features?}],ruleIds?}`, 1–500 samples scored immediately without persistence; THRESHOLD is strict greater-than threshold, FEATURE conditions are all-AND (fail-closed on missing values), scored per event with semantics aligned to the online pure function; FREQUENCY/VELOCITY/RATIO/DUPLICATE_RECEIPT/AD_REWARD/PATTERN are marked `needsStreaming` and skipped, ANOMALY/MACHINE_LEARNING are marked `notCovered`, and invalid conditions are marked `invalid`; within the same ruleType only the online rule with the highest riskScore is effective (`effectiveHits` converges, `matchedRuleIds` retains the per-rule raw hits) |
+| GET | `/api/games/{gameId}/risk-lab/sample-sets` | Strategy lab sample set list (metadata only: name/sampleCount/createdAt etc., no sample contents) |
+| POST | `/api/games/{gameId}/risk-lab/sample-sets` | Create a sample set: body `{name,description?,samples}`, name unique per game, samples 1–500 validated the same way as dry-run replay (immutable once archived — delete and recreate), create/delete audited; authorization `risk:manage` |
+| GET | `/api/games/{gameId}/risk-lab/sample-sets/{id}` | Sample set details (includes parsed `samples`, for loading into replay) |
+| DELETE | `/api/games/{gameId}/risk-lab/sample-sets/{id}` | Delete a sample set (audited); delete and recreate when replacing; authorization `risk:manage` |
+| GET | `/api/games/{gameId}/risk-scores?subjectType=&subjectId=` | Latest snapshot of the subject's cumulative risk score (B6 boundary closed): reads CH `risk_scores` (`ORDER BY updated_at DESC LIMIT 1`, correct both before and after ReplacingMergeTree merges), `reasons` parsed as `[{ruleId,contribution}]`; returns `found:false` if never scored; throws `CH_UNAVAILABLE` if CH is not configured; authorization `game:read` |
+| GET | `/api/risk-dashboard/recent-cases/{gameId}` | Recent case list |
+| GET/POST | `/api/review-queue/...` | Manual review flow (assign, claim, complete, escalate) |
+| POST | `/api/block-lists/{blockId}/unblock` | Unblock by block record ID (case-triggered blocks are also in the blocklist table) |
 
-案例回看控制台页为 `/risk-cases`（列表过滤 + 详情弹层 + 误杀解除；详情含主体累计分行——目标主体在 CH `risk_scores` 的最新累计分、规则贡献条数与快照时间，未落分不显示该行），列表/详情鉴权 `game:read`，解除封禁鉴权 `risk:manage`。策略实验室控制台页为 `/risk-lab`（规则复盘聚合 + 点规则行下钻案例样本，处置 chips 过滤；试算回放面板支持样本 JSON 批量 dry-run 打分，「样本集」区命名留档当前样本、载入回填后改规则重试算对比），页面鉴权 `game:read`，样本集写入/删除 `risk:manage`。
+The case review console page is `/risk-cases` (list filtering + detail dialog + false-positive unblock; details include a subject cumulative score row — the target subject's latest cumulative score in CH `risk_scores`, the number of rule contributions, and the snapshot time; the row is hidden if not yet scored), with list/detail authorization `game:read` and unblock authorization `risk:manage`. The strategy lab console page is `/risk-lab` (rule review aggregation + click a rule row to drill down into case samples, disposition chips filter; the dry-run replay panel supports batch dry-run scoring of sample JSON, and the "sample sets" section archives the current samples by name, then loads and fills back in to change rules and compare replay results), with page authorization `game:read` and sample set write/delete `risk:manage`.
 
-## 规则类别（category）
+## Rule Categories (category)
 
-| 类别 | 说明 |
+| Category | Description |
 |------|------|
-| `PAYMENT` | 支付风险 |
-| `BEHAVIOR` | 行为异常 |
-| `ACCOUNT` | 账号风险 |
-| `DEVICE` | 设备聚集 |
-| `NETWORK` | 网络/IP 异常 |
-| `AUTOMATION` | 脚本与外挂 |
-| `COLLUSION` | 团伙作弊 |
-| `ECONOMY` | 经济系统异常 |
+| `PAYMENT` | Payment risk |
+| `BEHAVIOR` | Behavioral anomaly |
+| `ACCOUNT` | Account risk |
+| `DEVICE` | Device clustering |
+| `NETWORK` | Network/IP anomaly |
+| `AUTOMATION` | Scripts and cheats |
+| `COLLUSION` | Organized fraud |
+| `ECONOMY` | Economy system anomaly |
 
-规则类型（ruleType）7 类：`THRESHOLD`、`FREQUENCY`、`PATTERN`、`VELOCITY`、`RATIO`、`ANOMALY`、`MACHINE_LEARNING`。
+Rule types (ruleType), 7 kinds: `THRESHOLD`, `FREQUENCY`, `PATTERN`, `VELOCITY`, `RATIO`, `ANOMALY`, `MACHINE_LEARNING`.
 
-## 风险等级
+## Risk Levels
 
-| 等级 | 说明 |
+| Level | Description |
 |------|------|
-| `LOW` | 低风险 |
-| `MEDIUM` | 中风险 |
-| `HIGH` | 高风险 |
-| `CRITICAL` | 严重风险 |
+| `LOW` | Low risk |
+| `MEDIUM` | Medium risk |
+| `HIGH` | High risk |
+| `CRITICAL` | Critical risk |
 
-等级不直接决定处置动作；处置由规则的 `actionType`、`riskScore`、`triggerThreshold` 等字段决定。
+The level does not directly determine the disposition action; disposition is determined by the rule's `actionType`, `riskScore`, `triggerThreshold`, and other fields.
 
-## 创建风控规则
+## Create a Risk Rule
 
-请求体是 `RiskRuleEntity` 的字段，注意 `ruleConditions` 是 JSON 字符串（不是嵌套对象），`category`/`riskLevel`/`actionType` 是枚举大写：
+The request body uses `RiskRuleEntity` fields. Note that `ruleConditions` is a JSON string (not a nested object), and `category`/`riskLevel`/`actionType` are uppercase enums:
 
 ```http
 POST /api/risk-rules
@@ -83,7 +83,7 @@ Authorization: Bearer {token}
 }
 ```
 
-**响应:**
+**Response:**
 ```json
 {
   "id": "rule_abc123",
@@ -98,9 +98,9 @@ Authorization: Bearer {token}
 }
 ```
 
-## 风控案例
+## Risk Cases
 
-案例由风控链路写入 `risk_cases`，关键字段：
+Cases are written to `risk_cases` by the risk pipeline, with these key fields:
 
 ```json
 {
@@ -120,11 +120,11 @@ Authorization: Bearer {token}
 }
 ```
 
-`targetType` 取值 `user_id` / `device_id` / `player_id` / `ip`；`status` 为判定状态（`OPEN → REVIEW|ALERT|MARK → THROTTLE|BLOCK → RESOLVED` 分层前向，OPEN 不直达 RESOLVED）；`executionStatus` 取值 `PENDING` / `EXECUTED` / `FAILED` / `CANCELLED` / `APPEALED`。`caseNumber` 由风控链路生成，格式为 `CASE_` + 毫秒时间戳（epoch millis，如 `CASE_1730000000000`）。
+`targetType` takes `user_id` / `device_id` / `player_id` / `ip`; `status` is the decision status (hierarchical forward progression `OPEN → REVIEW|ALERT|MARK → THROTTLE|BLOCK → RESOLVED`, OPEN does not jump directly to RESOLVED); `executionStatus` takes `PENDING` / `EXECUTED` / `FAILED` / `CANCELLED` / `APPEALED`. `caseNumber` is generated by the risk pipeline, formatted as `CASE_` + a millisecond timestamp (epoch millis, e.g. `CASE_1730000000000`).
 
-## 解除封禁
+## Unblock
 
-解封有两条路径：按封禁记录 ID 走黑名单接口；按案例走 `POST /api/games/{gameId}/risk-cases/{caseId}/unblock`（案例侧会联动释放由该案例创建、仍活跃的黑名单记录，并记录案例维度审计日志）。按封禁记录 ID：
+There are two unblock paths: by block record ID via the blocklist API; by case via `POST /api/games/{gameId}/risk-cases/{caseId}/unblock` (on the case side, still-active blocklist records created by that case are released in a linked action, and a case-level audit log is recorded). By block record ID:
 
 ```http
 POST /api/block-lists/{blockId}/unblock
@@ -136,10 +136,10 @@ Authorization: Bearer {token}
 }
 ```
 
-## 实时风险评估
+## Real-Time Risk Assessment
 
-风险评估由 Flink risk-job 实时执行：消费事件流，按 Control 下发的规则（60 秒拉取一次）匹配，命中后写 `risk_events` / `risk_scores`（主体累计分，评估侧单写）到 ClickHouse，并把事件发回 Control（Kafka `oddsmaker.risk_events`）；Control 的 RiskEventConsumer 按判定状态机落 `risk_cases`（Decision 先于 Action：非法流转的处置动作被拒绝），并联动黑名单、审核队列与 Webhook，处置归档 `risk_actions`。BLOCK 级动作要求输入事件 `trust_level=HIGH`（risk-job 与 Control 两侧同语义双门槛，非 HIGH fail-closed 降级 REVIEW）。
+Risk assessment is executed in real time by the Flink risk-job: it consumes the event stream and matches against the rules pushed by Control (pulled every 60 seconds). On a hit, it writes `risk_events` / `risk_scores` (subject cumulative score, single-writer on the assessment side) to ClickHouse and sends the event back to Control (Kafka `oddsmaker.risk_events`); Control's RiskEventConsumer writes `risk_cases` according to the decision state machine (Decision precedes Action: disposition actions for illegal transitions are rejected), and links the blocklist, review queue, and Webhook, archiving dispositions to `risk_actions`. BLOCK-level actions require the input event to have `trust_level=HIGH` (a dual-gate with identical semantics on both the risk-job and Control sides; non-HIGH fails closed and downgrades to REVIEW).
 
-## 风控大屏
+## Risk Dashboard
 
-`/api/risk-dashboard` 下按 `gameId` 提供趋势、规则命中、封禁统计、高风险目标、最近案例、审核队列统计等只读聚合，另有 `/api/risk-metrics` 输出按严重度、动作类型的分布。
+Under `/api/risk-dashboard`, read-only aggregations are provided by `gameId` for trends, rule hits, block statistics, high-risk targets, recent cases, and review queue statistics, plus `/api/risk-metrics` outputs distributions by severity and action type.
