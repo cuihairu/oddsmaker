@@ -18,12 +18,14 @@
   - 复核留痕（2026-10-15）：仓内 debezium/Kafka Connect 检索零信号（命中全为文档 + `DimensionSyncJobTest` 一处方法名）；演示栈无 Kafka、无 gateway
   - 复核留痕（2026-10-16）：解锁条件仍不成立——`grep -rl "binlog" deploy/` 零命中；`kafka.connect|connect-api|debezium` 全仓零命中（仅 `DimensionSyncJobTest` 一处方法名）；演示栈 3 容器（control/postgres/redis）无 Kafka。三项解锁件（游戏方 binlog、Kafka Connect、CDC 事件格式与目标表映射）仍为外部输入缺失，维持卡点
   - 复核留痕（2026-10-16 PATROL016）：无变化——`binlog` 在 `deploy/` 仍零命中；`kafka.connect|connect-api|debezium` 全仓仍仅 `DimensionSyncJobTest` 一处方法名；本机无任何 oddsmaker 容器在跑。三项解锁件仍为外部输入缺失，维持卡点
+  - 复核留痕（2026-10-16 R2PATROL）：无变化——`grep -rl binlog deploy/` 仍零命中；`kafka.connect|connect-api|debezium` 全仓仍仅文档 + `DimensionSyncJobTest` 一处方法名。demo 栈今有 3 容器在跑（control/postgres/redis，均 healthy、已 3 天），但仍无 Kafka、无 CDC 事件格式与目标表映射文件，三项解锁件仍为外部输入缺失，维持卡点
 - [ ] ML 异常检测进评估批次：任一触发条件成立即开工——指标历史可回看 7 天以上且 7d/28d 分位基线可算；单游戏阈值告警规则月均调整 3 次以上；告警误杀率超 30% 持续 2 周
   - **卡点类型**：触发条件未成立——条件 (a) 非等待可解，需先补部署面
   - **解锁条件**：四项触发条件任一达标；其中条件 (a) 需先有**带网关流量的部署面**，并自指标开始落库起算满 **7 天**（7d/28d 分位基线方可算）
   - 复核留痕（2026-10-15）：演示库 health_metrics / data_quality_metrics / metric_alert_rules 三表皆 0 行、最早指标日期为无；health_metrics 无产线写入方（`collectMetric` 仅模拟开关路径、默认关），data_quality_metrics 需网关真实流量而演示栈无 gateway
   - 复核留痕（2026-10-16）：解锁条件仍不成立——演示栈实跑 3 容器（control/postgres/redis，无 gateway、无 Kafka），指标历史全空：health_metrics/performance_metrics/ml_model_metrics/metric_alert_rules 皆 0 行、health_metrics 最早日期为无（data_quality_rules=3、health_checks=4 为规则定义与服务探活，非指标历史）；更正 10-15 留痕表名笔误：库中无 data_quality_metrics 表，结论不变。无网关流量部署面则指标不落库，条件 (a) 的 7 天起算无从开始，维持卡点
   - 复核留痕（2026-10-16 PATROL016）：无变化——本机无 oddsmaker 容器在跑（部署面未起，指标历史无从新增），四项触发条件仍无一达标，维持卡点
+  - 复核留痕（2026-10-16 R2PATROL）：解锁条件仍不成立，但前提有更新——demo 栈今有 3 容器在跑（control/postgres/redis，均 healthy、已 3 天），指标表仍全空：health_metrics / performance_metrics / ml_model_metrics / metric_alert_rules 皆 0 行（health_metrics 0 行故无 collected_at 区间），`data_quality_metrics` 表中无此表（与 10-15 更正一致）。本机唯一 gateway 容器 `spawn-api-gateway-1` 属无关 compose 项目 `spawn`（2026-10-12 创建），非 oddsmaker 网关，不构成「带网关流量的部署面」；无 Kafka。条件 (a) 的 7 天起算无从开始，维持卡点
 
 ## 已完成需求
 
