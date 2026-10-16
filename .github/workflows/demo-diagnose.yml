@@ -1,8 +1,10 @@
-# 演示站点只读诊断腿：手动 workflow_dispatch 触发，跑在 runner-docker 部署机上。
+# 演示站点只读诊断腿：手动 workflow_dispatch 触发，两条腿并行——
+#   1. diagnose：跑在 runner-docker 部署机上，按 deploy/demo/README §3 回源自查配方在本机取证据；
+#   2. foreign-vantage：跑在 GitHub-hosted runner（境外数据中心），以 CF 同类视点探测源站公网 IP，
+#      区分「CF 面板 origin 记录指错」与「源站对境外 IP 入站拦截（安全组/防火墙）」。
 #
-# 用途：公网 https://oddsmaker.cuihairu.site/ 报 502 时，按 deploy/demo/README §3 的
-# 回源自查配方在本机取证据，区分故障在源站（nginx 服务/配置/证书/compose 栈）
-# 还是 CF↔源站链路（DNS A 记录、防火墙/安全组、CF SSL 模式）。
+# 用途：公网 https://oddsmaker.cuihairu.site/ 报 502 时取证据，区分故障在源站
+# （nginx 服务/配置/证书/compose 栈）还是 CF↔源站链路（DNS A 记录、防火墙/安全组、CF SSL 模式）。
 # 只读红线：不改任何文件、不重启任何服务、不 echo 任何密钥；全部探针容忍失败，
 # 本工作流恒为绿（诊断取证，不是门禁），结论看运行日志。
 #
@@ -71,3 +73,22 @@ jobs:
           curl -4 -sS -m 8 https://api.ipify.org 2>&1 || true; echo
           echo "== journalctl -u nginx last 20 (需 sudo/诊断组权限，无则跳过) =="
           sudo -n journalctl -u nginx -n 20 --no-pager 2>&1 | tail -20 || true
+
+  # 境外视点：GitHub-hosted runner 在境外数据中心，与 Cloudflare 边缘同类入站路径。
+  # 源站公网 IP 若变（Aliyun EIP 重绑定），此处同步更新 ORIGIN 值。
+  foreign-vantage:
+    name: Origin reachability from abroad
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Probe origin IP directly (CF vantage class)
+        run: |
+          ORIGIN=106.14.216.177
+          echo "== http :80 with Host header (SPA /) =="
+          curl -sS -m 10 -o /dev/null -w '%{http_code}\n' -H "Host: oddsmaker.cuihairu.site" "http://$ORIGIN/" 2>&1 || true
+          echo "== https :443 self-signed-tolerant (SPA /) =="
+          curl -ksS -m 10 -o /dev/null -w '%{http_code}\n' --resolve "oddsmaker.cuihairu.site:443:$ORIGIN" https://oddsmaker.cuihairu.site/ 2>&1 || true
+          echo "== control: cockpit via same origin IP (grey-cloud healthy site) =="
+          curl -sS -m 10 -o /dev/null -w '%{http_code}\n' -H "Host: cockpit.cuihairu.site" "http://$ORIGIN/" 2>&1 || true
+          echo "== control: public oddsmaker via CF (expected 502 while blocked) =="
+          curl -sS -m 10 -o /dev/null -w '%{http_code}\n' https://oddsmaker.cuihairu.site/ 2>&1 || true
