@@ -94,6 +94,9 @@ curl -k -I --resolve oddsmaker.cuihairu.site:443:<部署机IP> https://oddsmaker
   等于回滚空转），回滚成功也判本次失败（让变更可见）。
 - 上游 `Nightly Build` 失败时 `deploy` job 会被跳过，此时 `no-deploy` 哨兵 job 显式判红：
   **本工作流绿 = 真的部署过且健康**，不会出现「什么都没部署却报 success」的假绿。
+- 排障腿（2026-10-17 起）：`.github/workflows/demo-diagnose.yml`，手动派发、只读取证
+  （主机/栈/nginx/回源自查 §3 配方/公网出口 IP），恒绿不是门禁，结论看运行日志；
+  公网 502 而源站直连 200 时先跑它（2026-10-17 首例：502 定位为 CF 回源配置，见 todo.md）。
 
 runner 注册（部署机上一次性）：
 
