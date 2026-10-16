@@ -19,6 +19,10 @@
   - 复核留痕（2026-10-16）：解锁条件仍不成立——`grep -rl "binlog" deploy/` 零命中；`kafka.connect|connect-api|debezium` 全仓零命中（仅 `DimensionSyncJobTest` 一处方法名）；演示栈 3 容器（control/postgres/redis）无 Kafka。三项解锁件（游戏方 binlog、Kafka Connect、CDC 事件格式与目标表映射）仍为外部输入缺失，维持卡点
   - 复核留痕（2026-10-16 PATROL016）：无变化——`binlog` 在 `deploy/` 仍零命中；`kafka.connect|connect-api|debezium` 全仓仍仅 `DimensionSyncJobTest` 一处方法名；本机无任何 oddsmaker 容器在跑。三项解锁件仍为外部输入缺失，维持卡点
   - 复核留痕（2026-10-16 R2PATROL）：无变化——`grep -rl binlog deploy/` 仍零命中；`kafka.connect|connect-api|debezium` 全仓仍仅文档 + `DimensionSyncJobTest` 一处方法名。demo 栈今有 3 容器在跑（control/postgres/redis，均 healthy、已 3 天），但仍无 Kafka、无 CDC 事件格式与目标表映射文件，三项解锁件仍为外部输入缺失，维持卡点
+- [ ] Demo 站公网 502（交付面故障，PATROL1017 发现）：部署机 compose 栈健康，但公网 `https://oddsmaker.cuihairu.site/` 经 Cloudflare 持续 502，交付面实际不可用
+  - **卡点类型**：外部访问缺失——故障在 CF↔origin/nginx 层（远程部署机 `runner-docker` 上），本席位无 SSH/凭据不可达；deploy workflow 健康门只探 `127.0.0.1:38085`，CI 绿灯看不见该层
+  - **解锁条件**：部署机上门检修 nginx（`systemctl status nginx` + `journalctl -u nginx`）与 Cloudflare 回源链（DNS 指向 / SSL 模式 / 源站 80/443 对 CF IP 放行）；CF 侧配置属用户侧操作（见边界「CF DNS 域名切换属用户侧操作，本仓不动」）
+  - 复核留痕（2026-10-17 PATROL1017）：发现——公网 `GET /` 与 `/api/*` 均 `error code: 502`（http:80 同样 502；非 521/522，说明 CF 侧拿到的是无效源站响应而非连接拒绝，故障面在源站 nginx/证书/回源配置）；而 Deploy Demo run 38844622658（R1025 rerun）与手动触发 38931937869 均 success、on-box `curl 127.0.0.1:38085/actuator/health`=UP、镜像已滚至 digest sha256:a99f2c9a…，手动重部署后 60s 再探仍 502 ×3。已证本机非部署机（无 `/opt/oddsmaker`；本机 `oddsmaker-demo-*` 为本地测试遗留栈），无部署机访问通道，维持卡点
 - [ ] ML 异常检测进评估批次：任一触发条件成立即开工——指标历史可回看 7 天以上且 7d/28d 分位基线可算；单游戏阈值告警规则月均调整 3 次以上；告警误杀率超 30% 持续 2 周
   - **卡点类型**：触发条件未成立——条件 (a) 非等待可解，需先补部署面
   - **解锁条件**：四项触发条件任一达标；其中条件 (a) 需先有**带网关流量的部署面**，并自指标开始落库起算满 **7 天**（7d/28d 分位基线方可算）
