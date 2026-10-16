@@ -1,5 +1,7 @@
 # 06 - Oddsmaker 2.0 重构计划书（Code Agent 可执行版）
 
+> 🌐 Language: **中文** · English → [06-od2-restructure-plan.en.md](06-od2-restructure-plan.en.md)
+
 > **身份**：本文是把 04-redesign（新架构）与 05-roadmap（实施路线）收束成一份**可直接交给 Code Agent 分批执行**的契约：
 > 领域模型、模块边界、数据契约一次性定死，后续按 §8 批次逐批执行，每批附验收标准与门禁。
 > 依据材料：本文 + `04-redesign.md` + `05-roadmap.md` + 根目录 `todo.md`（80/80 全部勾销即当时状态）。
@@ -133,7 +135,7 @@ system       → User / Role / AuditLog / Webhook / RateLimit / Security / Flink
 
 ### 4.1 事件 v1（现状，不可变基座）
 
-`schema/json/oddsmaker-event-schema.json`：`$id` 定位、约 50 顶层属性、`props` 自由扩展区、`required` 含 `event_id/event_name/ts_client/game_id/environment` 等。Gateway `JsonSchemaValidator` + `PropsPolicy` 执行校验；未携带废弃字段的事件按 `invalid_schema` 拒。
+`schema/json/oddsmaker-event-schema.json`：`$id` 定位、约 50 顶层属性、`props` 自由扩展区、`required` 含 `event_id/event_name/ts_client/game_id/environment` 等。Gateway `JsonSchemaValidator` + `PropsPolicy` 执行校验；携带废弃字段的事件按 `invalid_schema` 拒。
 
 ### 4.2 事件 v2 增量（B4）
 

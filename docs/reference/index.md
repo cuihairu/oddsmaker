@@ -1,5 +1,7 @@
 # API Reference
 
+> 🌐 Language: **English** · 中文 → [index.zh.md](index.zh.md)
+
 Welcome to the Oddsmaker API Reference. This section provides detailed documentation for all API endpoints.
 
 ## Base URL

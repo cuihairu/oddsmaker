@@ -1,5 +1,7 @@
 # 02 - 设计问题清单
 
+> 🌐 Language: **中文** · English → [02-design-issues.en.md](02-design-issues.en.md)
+
 按严重程度分级：P0 必须立即修正，P1 影响核心能力，P2 属于增强项。
 
 ## P0-1 目标架构不应继续做多租户

@@ -1,5 +1,7 @@
 # Authentication
 
+> 🌐 Language: **中文** · English → [authentication.en.md](authentication.en.md)
+
 控制服务的认证、令牌与权限模型。
 
 ## 认证方式

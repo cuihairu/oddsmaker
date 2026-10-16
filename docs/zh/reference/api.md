@@ -1,5 +1,7 @@
 # Oddsmaker 采集 API
 
+> 🌐 Language: **中文** · English → [api.en.md](api.en.md)
+
 路径：`POST /v1/batch`
 
 ## Headers

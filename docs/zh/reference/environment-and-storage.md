@@ -1,5 +1,7 @@
 # Environment 与 Storage Profile 设计
 
+> 🌐 Language: **中文** · English → [environment-and-storage.en.md](environment-and-storage.en.md)
+
 Oddsmaker 的目标不是做一个”看起来很高级”的多租户 SaaS，而是为**单个游戏公司**提供一套真实可运维的多游戏分析与风控平台。
 
 这意味着模型必须同时满足三件事：

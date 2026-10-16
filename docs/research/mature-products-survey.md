@@ -1,5 +1,7 @@
 # 成熟数据分析与风控产品调研（功能、交互、SDK）
 
+> 🌐 Language: **中文** · English → [mature-products-survey.en.md](mature-products-survey.en.md)
+
 > 调研时间：2026-10 ｜ 方法：各产品官方文档与官网产品页 + GitHub 仓库（协议与开源状态）+ 开发者中心下载页，页面截图为 2026-10-08 抓取，出处见 §8
 > 覆盖 14 家：分析类 10 家（GameAnalytics、Unity Analytics、Adjust、AppsFlyer、Firebase Analytics、Amplitude、友盟+、TalkingData、神策、GrowingIO），风控类 4 家（数美、网易易盾、阿里云风险识别、顶象）
 > 结论用途：补充 `docs/competitive-analysis.md`（5 家竞品的能力差距矩阵）与 `docs/mmp-attribution-evaluation.md`（MMP 数据通道）没有展开的两块：**界面交互的具体做法**和**SDK 落地形态（接入方式、上报协议、端覆盖、开源情况）**

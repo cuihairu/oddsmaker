@@ -1,5 +1,7 @@
 # Risk API
 
+> 🌐 Language: **中文** · English → [risk.en.md](risk.en.md)
+
 风控管理 API，用于风险规则、案例管理和实时风险评估。
 
 ## 端点列表

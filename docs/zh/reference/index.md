@@ -1,5 +1,7 @@
 # 中文参考
 
+> 🌐 Language: **中文** · English → [index.en.md](index.en.md)
+
 本节整理中文 API 与游戏分析场景文档。
 
 ## 架构与接口

@@ -1,5 +1,7 @@
 # Oddsmaker 资源事件设计
 
+> 🌐 Language: **中文** · English → [resource-event-design.en.md](resource-event-design.en.md)
+
 ## 结论
 
 Oddsmaker 采用 **资源流水事实模型**：

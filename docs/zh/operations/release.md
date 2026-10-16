@@ -1,5 +1,7 @@
 # Release 指南（30 分钟拉起演示 + 生产清单）
 
+> 🌐 Language: **中文** · English → [release.en.md](release.en.md)
+
 快速演示（≈10–30 分钟）
 1) 依赖
 - Docker + docker compose

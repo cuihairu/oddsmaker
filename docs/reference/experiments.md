@@ -1,5 +1,7 @@
 # Experiments API
 
+> 🌐 Language: **中文** · English → [experiments.en.md](experiments.en.md)
+
 A/B 测试分析 API，用于分析实验数据和转化率。
 
 ## 端点列表

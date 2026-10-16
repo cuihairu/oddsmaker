@@ -1,5 +1,7 @@
 # 启动指南（本机实测路径）
 
+> 🌐 Language: **中文** · English → [startup.en.md](startup.en.md)
+
 > 本文按 2026-09-23 在一台 Linux 主机（podman + docker 垫片）上从零拉起全栈的**实测步骤**整理，
 > 不是照抄 README 的理想路径。踩过的坑与修过的雷一并记录，后来者照抄即可。
 

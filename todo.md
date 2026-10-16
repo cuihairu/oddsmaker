@@ -4,7 +4,7 @@
 
 ## 开放需求
 
-- [ ] docs 子目录双语配对（P2，2026-10-16 执行单登记，下一轮做）：52 个 .md 待处理——docs/reference 10、docs/zh 32、docs/operations 4、docs/release-notes 3、docs/analysis 1、docs/guide 1、docs/research 1。口径同本轮：每页补对应语言版（中文→英文，英文→`.zh.md`）+ 两份顶部第 3 行内语言切换器；英文页正文不得混入中文正文（切换器行除外）；1000 行以上长页只加切换器并注明「该文档暂无译版」，不硬造劣质翻译；命令/路径/代码块/专有名词原样保留
+- [x] docs 子目录双语配对（P2，2026-10-16 执行单登记，PATROL016 完成）：52 个 .md 全配——51 个新增兄弟文件（中文源 45 个补 `.en.md`、英文源 6 个补 `.zh.md`）+ `zh/index.md` 已随根目录轮配对；51 个源文件各插 1 行切换器。配对方式**已代决**（PATROL016）：同目录兄弟文件而非 locale 镜像（locale 同名文件非互译，差异 164/198/738 行，见 docs/决策记录.md）。验收：59 对全部通过结构计数一致（行数/标题/表格/围栏）+ 代码块逐字节相同 + 切换器第 3 行且双向对称；英文侧正文无中文残留（仅切换器「中文」二字、代码块内原样注释、厂商专名如 友盟+/神策）；`pnpm docs:build` 绿。顺带按对账规则修 06 §4.1 笔误（「未携带废弃字段」→「携带废弃字段」，与 §3.3.3 及 schema `additionalProperties:false` 对齐，中英同批）
 
 > R1015F 代决（用户可推翻）：以下两条维持卡点、不重启；2026-10-11 parked 拍板项（provider+token_ref、HarmonyOS SDK）维持 parked。
 
@@ -13,11 +13,13 @@
   - **解锁条件**：游戏方开 binlog + 部署 Kafka Connect + 提供 CDC 事件格式与目标表映射（三者齐备即开工）
   - 复核留痕（2026-10-15）：仓内 debezium/Kafka Connect 检索零信号（命中全为文档 + `DimensionSyncJobTest` 一处方法名）；演示栈无 Kafka、无 gateway
   - 复核留痕（2026-10-16）：解锁条件仍不成立——`grep -rl "binlog" deploy/` 零命中；`kafka.connect|connect-api|debezium` 全仓零命中（仅 `DimensionSyncJobTest` 一处方法名）；演示栈 3 容器（control/postgres/redis）无 Kafka。三项解锁件（游戏方 binlog、Kafka Connect、CDC 事件格式与目标表映射）仍为外部输入缺失，维持卡点
+  - 复核留痕（2026-10-16 PATROL016）：无变化——`binlog` 在 `deploy/` 仍零命中；`kafka.connect|connect-api|debezium` 全仓仍仅 `DimensionSyncJobTest` 一处方法名；本机无任何 oddsmaker 容器在跑。三项解锁件仍为外部输入缺失，维持卡点
 - [ ] ML 异常检测进评估批次：任一触发条件成立即开工——指标历史可回看 7 天以上且 7d/28d 分位基线可算；单游戏阈值告警规则月均调整 3 次以上；告警误杀率超 30% 持续 2 周
   - **卡点类型**：触发条件未成立——条件 (a) 非等待可解，需先补部署面
   - **解锁条件**：四项触发条件任一达标；其中条件 (a) 需先有**带网关流量的部署面**，并自指标开始落库起算满 **7 天**（7d/28d 分位基线方可算）
   - 复核留痕（2026-10-15）：演示库 health_metrics / data_quality_metrics / metric_alert_rules 三表皆 0 行、最早指标日期为无；health_metrics 无产线写入方（`collectMetric` 仅模拟开关路径、默认关），data_quality_metrics 需网关真实流量而演示栈无 gateway
   - 复核留痕（2026-10-16）：解锁条件仍不成立——演示栈实跑 3 容器（control/postgres/redis，无 gateway、无 Kafka），指标历史全空：health_metrics/performance_metrics/ml_model_metrics/metric_alert_rules 皆 0 行、health_metrics 最早日期为无（data_quality_rules=3、health_checks=4 为规则定义与服务探活，非指标历史）；更正 10-15 留痕表名笔误：库中无 data_quality_metrics 表，结论不变。无网关流量部署面则指标不落库，条件 (a) 的 7 天起算无从开始，维持卡点
+  - 复核留痕（2026-10-16 PATROL016）：无变化——本机无 oddsmaker 容器在跑（部署面未起，指标历史无从新增），四项触发条件仍无一达标，维持卡点
 
 ## 已完成需求
 

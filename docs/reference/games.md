@@ -1,5 +1,7 @@
 # Games API
 
+> 🌐 Language: **中文** · English → [games.en.md](games.en.md)
+
 游戏管理 API，用于创建和管理游戏产品。
 
 ## 端点列表
