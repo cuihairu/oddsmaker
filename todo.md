@@ -20,6 +20,7 @@
   - 复核留痕（2026-10-16 PATROL016）：无变化——`binlog` 在 `deploy/` 仍零命中；`kafka.connect|connect-api|debezium` 全仓仍仅 `DimensionSyncJobTest` 一处方法名；本机无任何 oddsmaker 容器在跑。三项解锁件仍为外部输入缺失，维持卡点
   - 复核留痕（2026-10-16 R2PATROL）：无变化——`grep -rl binlog deploy/` 仍零命中；`kafka.connect|connect-api|debezium` 全仓仍仅文档 + `DimensionSyncJobTest` 一处方法名。demo 栈今有 3 容器在跑（control/postgres/redis，均 healthy、已 3 天），但仍无 Kafka、无 CDC 事件格式与目标表映射文件，三项解锁件仍为外部输入缺失，维持卡点
   - 复核留痕（2026-10-18 PATROL1018A）：无变化——`grep -rl binlog deploy/` 零命中；`kafka.connect|connect-api|debezium` 全仓仍仅 `DimensionSyncJobTest` 一处方法名；`deploy/demo/docker-compose.yml` 服务面（postgres/redis/control-service）无 Kafka、无 CDC 组件。三项解锁件仍为外部输入缺失，维持卡点
+  - 复核留痕（2026-10-18 PATROL1018B）：无变化——`grep -rl binlog deploy/` 零命中；`kafka.connect|connect-api|debezium` 全仓仍仅 `DimensionSyncJobTest` 一处方法名（1018A 同日复核，期间无新提交）。三项解锁件仍为外部输入缺失，维持卡点
 - [ ] Demo 站公网 502（交付面故障，PATROL1017 发现）：源站全链路已证健康（on-box 与公网直连均 200），502 定位为 Cloudflare 回源配置（用户侧 CF 面板/Aliyun 安全组），源站与仓内无可修项
   - **卡点类型**：用户侧配置缺失——CF 回源链（CF 面板内 origin A 记录指向 / SSL 模式 / Aliyun 安全组对 CF 边缘 IP 段的入站放行）不正确，须 CF/Aliyun 控制台凭据才能动，仓内与部署机均无可操作项
   - **解锁条件**：用户在 CF 面板把 `oddsmaker.cuihairu.site` 的 origin A 记录指到部署机现公网 IP `106.14.216.177`（保持橙云代理）——这是唯一剩余解锁动作：安全组/境外拦截假说已被境外视点探针排除（见 PATROL1017C 留痕），LE 证书有效至 2027-01-01、80/443 双栈从境内与境外实测均 200，无第二分支。CF 侧操作属用户侧（见边界「CF DNS 域名切换属用户侧操作，本仓不动」）
@@ -27,6 +28,7 @@
   - 诊断留痕（2026-10-17 PATROL1017B）：故障定位完成，源站无罪——① 上轮「无部署机访问通道」结论修正：部署机上 self-hosted runner 本身就是受控通道，新增只读诊断工作流 `.github/workflows/demo-diagnose.yml`（拍板见决策记录 PATROL1017B）上机取证：nginx active、:80/:443 双栈监听、compose 栈 3 容器 healthy、control 直连 UP、README §3 回源自查 :80 带 Host=200、:443=200、LE 证书 CN=oddsmaker.cuihairu.site 有效至 2027-01-01；② 本席公网直连源站 IP `106.14.216.177` 带 Host 同法 :80=200、:443=200（对照组 cockpit :80=301 同样健康）；③ 兄弟域名 DNS 姿态给出分野：cockpit/wingman 灰云直解 `106.14.216.177` 公网 200，coding 灰云直解但 502（其 vhost 自身上游死，独立问题、非本仓范围），唯 oddsmaker 橙云走 CF 代理且 502。对照 README §3 判别式「CF 报 502 而这里 200，就是 DNS 或 SSL 模式没配对」：源站与仓内零可修项，剩余动作用户侧 CF 面板/Aliyun 控制台，维持卡点待用户操作
   - 诊断留痕（2026-10-17 PATROL1017C）：解锁分支收敛为一——demo-diagnose 增第二条腿 `foreign-vantage`（GitHub-hosted runner，境外 DC，与 CF 边缘同类入站路径；run 38949053623 双 job 绿）直探源站 `106.14.216.177`：:80 带 Host=**200**、:443=**200**、cockpit 对照=301，同 run 公网经 CF 仍 502。「安全组拦截境外/CF IP 段」假说排除——源站对境外入站完全开放，且此前 CF origin 若指向本 IP 本应通。剩余唯一原因：**CF 面板内 oddsmaker 的 origin 记录指错**（大概率沿用部署机旧 IP），解锁动作收敛为用户在 CF 面板改一条 A 记录指向 `106.14.216.177`
   - 复核留痕（2026-10-18 PATROL1018A）：无变化——公网经 CF `GET /` 与 `/actuator/health` 仍 502（http:80 与 https:443 双栈同 502），唯一解锁动作（用户在 CF 面板把 origin A 记录改指 `106.14.216.177`）仍待用户操作，源站与仓内无可修项，维持卡点
+  - 复核留痕（2026-10-18 PATROL1018B）：无变化且源站今日再证健康——demo-diagnose run 39052955219 双腿绿：上机腿（ali）compose 3 容器 healthy、control 直连 UP、nginx active、:80 带 Host=200、:443=200、证书 CN=oddsmaker.cuihairu.site 有效至 2027-01-01（日志中 `nginx -t` 报 cockpit 证书 Permission denied 系 runner 非 root 取证噪音，nginx 服务本身 active 正常出 200）；境外腿（GitHub runner，与 CF 边缘同类入站）直探 `106.14.216.177` :80=200、:443=200、cockpit 对照=301、同视点公网经 CF 仍 502。CF origin 记录指错为唯一剩余原因今日复现成立，解锁动作不变（用户改 CF origin A 记录），维持卡点
 - [ ] ML 异常检测进评估批次：任一触发条件成立即开工——指标历史可回看 7 天以上且 7d/28d 分位基线可算；单游戏阈值告警规则月均调整 3 次以上；告警误杀率超 30% 持续 2 周
   - **卡点类型**：触发条件未成立——条件 (a) 非等待可解，需先补部署面
   - **解锁条件**：四项触发条件任一达标；其中条件 (a) 需先有**带网关流量的部署面**，并自指标开始落库起算满 **7 天**（7d/28d 分位基线方可算）
@@ -35,6 +37,7 @@
   - 复核留痕（2026-10-16 PATROL016）：无变化——本机无 oddsmaker 容器在跑（部署面未起，指标历史无从新增），四项触发条件仍无一达标，维持卡点
   - 复核留痕（2026-10-16 R2PATROL）：解锁条件仍不成立，但前提有更新——demo 栈今有 3 容器在跑（control/postgres/redis，均 healthy、已 3 天），指标表仍全空：health_metrics / performance_metrics / ml_model_metrics / metric_alert_rules 皆 0 行（health_metrics 0 行故无 collected_at 区间），`data_quality_metrics` 表中无此表（与 10-15 更正一致）。本机唯一 gateway 容器 `spawn-api-gateway-1` 属无关 compose 项目 `spawn`（2026-10-12 创建），非 oddsmaker 网关，不构成「带网关流量的部署面」；无 Kafka。条件 (a) 的 7 天起算无从开始，维持卡点
   - 复核留痕（2026-10-18 PATROL1018A）：无变化——`deploy/demo/docker-compose.yml` 服务面（postgres/redis/control-service）无 gateway，本机运行栈 3 容器（control/postgres/redis）均 healthy；指标表 health_metrics / performance_metrics / ml_model_metrics / metric_alert_rules 皆 0 行、health_metrics 最早 collected_at 为无。条件 (a) 无部署面故 7 天起算无从开始，四项触发条件仍无一达标，维持卡点
+  - 复核留痕（2026-10-18 PATROL1018B）：无变化——demo compose 服务面仍无 gateway；指标表 health_metrics / performance_metrics / ml_model_metrics / metric_alert_rules 皆 0 行（1018A 同日复核，期间无新提交）。维持卡点
 
 ## 已完成需求
 
