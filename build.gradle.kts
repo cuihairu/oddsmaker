@@ -8,7 +8,10 @@ allprojects {
   version = "0.1.0"
 
   repositories {
-    maven("https://maven.aliyun.com/repository/public")
+    // aliyun 仅本地 CN 网络用（GitHub runner 对其 504，2026-10-19 实证）；CI 直连官方源
+    if (System.getenv("CI") == null) {
+      maven("https://maven.aliyun.com/repository/public")
+    }
     mavenCentral()
     maven("https://packages.confluent.io/maven")
   }
