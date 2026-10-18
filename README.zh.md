@@ -134,7 +134,7 @@ event_id     = 单事件唯一 ID
 
 - `services/gateway-service/`：采集入口、协议校验、限流、PII、前置风控
 - `services/control-service/`：游戏、环境、密钥、策略、实验、风控管理
-- `jobs/flink/`：富化、去重、会话、留存、漏斗、风控、维度同步等流式作业
+- `jobs/flink/`：7 个作业模块——events-enrich（校验、按 game/environment/event 三元组去重、富化）、sessions、retention、funnels（一个 fatJar 同时跑 FunnelsJob 与 ConfigurableFunnelsJob）、risk、identity-merge、dimension-sync
 - `agents/`：`dimension-sync-agent`——游戏方内网部署的维度同步器（零仓库内依赖）
 - `ml/`：`oddsmaker-ml` 训练管线——churn / pltv / risk / propensity 四类可训练模型（Python，含启发式基线对照）
 - `libs/`：公共模型、鉴权、Kafka、可观测性组件
@@ -273,6 +273,6 @@ bash scripts/run_flink.sh
 - 架构目标固定为“单公司、多游戏、多环境、风控内建”
 - Git remote：`https://github.com/cuihairu/oddsmaker.git`
 
-已交付的能力：采集网关（`/v1/batch` + 事件契约 v2）、控制面（游戏/环境/密钥/权限 8 角色/实验/风控规则）、7 个 Flink 作业（enrich/sessions/retention/funnels/risk/dimension/identity-merge）、维度同步 Agent（5 类 source）、5 端 SDK、4 类 ML 模型训练与批量打分、Web 控制台。
+已交付的能力：采集网关（`/v1/batch` + 事件契约 v2）、控制面（游戏/环境/密钥/权限 8 角色/实验/风控规则）、7 个 Flink 作业模块——6 个 fatJar（enrich/sessions/retention/funnels/risk/identity-merge；生产 compose 因 funnels fatJar 双跑而起 7 个作业容器）加 dimension-sync（同时以工作室侧 Agent 形态交付，5 类 source）——5 端 SDK、4 类 ML 模型训练与批量打分、Web 控制台。
 
 2.0 重构 B1–B10 批次已全部验收，含事件契约 v2 增量、Server SDK、网关权威回填与自抬拒绝、风控 Feature 层（`risk_features` + FEATURE 规则取值三段解耦）、RiskScore/Decision 状态机、EventSchema 一等资源化、实验平台形式化、运行模式矩阵、数据质量与共享特征；后续工作按 `todo.md` 推进。

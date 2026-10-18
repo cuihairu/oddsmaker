@@ -134,7 +134,7 @@ Events, partitions, queries, experiments, and risk rules all use `game_id + envi
 
 - `services/gateway-service/`: ingestion entry point, protocol validation, rate limiting, PII, and pre-ingest risk control
 - `services/control-service/`: games, environments, keys, policies, experiments, and risk management
-- `jobs/flink/`: streaming jobs for enrichment, deduplication, sessions, retention, funnels, risk detection, dimension synchronization, and more
+- `jobs/flink/`: seven job modules — events-enrich (validation, dedup by game/environment/event id, enrichment), sessions, retention, funnels (one fatJar runs both FunnelsJob and ConfigurableFunnelsJob), risk, identity-merge, dimension-sync
 - `agents/`: `dimension-sync-agent` — a dimension synchronizer deployed inside the game studio's intranet (zero in-repo dependencies)
 - `ml/`: the `oddsmaker-ml` training pipeline — four trainable model families (churn / pltv / risk / propensity) in Python, with heuristic baselines for comparison
 - `libs/`: shared models, authentication, Kafka, and observability components
@@ -273,6 +273,6 @@ The current version is `v0.2.0 (unreleased)`; the repository's positioning and n
 - The architecture goal is fixed as "single company, multiple games, multiple environments, built-in risk control"
 - Git remote: `https://github.com/cuihairu/oddsmaker.git`
 
-Delivered capabilities: ingestion gateway (`/v1/batch` + event contract v2), control plane (games / environments / keys / 8-role permissions / experiments / risk rules), seven Flink jobs (enrich/sessions/retention/funnels/risk/dimension/identity-merge), the dimension-sync agent (five source types), SDKs for five platforms, training and batch scoring for four ML model families, and the web console.
+Delivered capabilities: ingestion gateway (`/v1/batch` + event contract v2), control plane (games / environments / keys / 8-role permissions / experiments / risk rules), seven Flink job modules — six fatJars (enrich / sessions / retention / funnels / risk / identity-merge; the production compose runs seven job containers because the funnels fatJar double-runs) plus dimension-sync, which also ships as the in-studio agent (five source types) — SDKs for five platforms, training and batch scoring for four ML model families, and the web console.
 
 Restructure 2.0 batches B1–B10 have all been accepted, including event contract v2 increments, Server SDK, gateway authoritative backfill with self-raised rejection, the risk feature layer (`risk_features` with three-stage decoupling of FEATURE rule values), the RiskScore/Decision state machine, EventSchema as a first-class resource, experiment platform formalization, the runtime mode matrix, and data quality with a shared feature store; further work proceeds batch by batch per `todo.md`.

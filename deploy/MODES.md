@@ -88,6 +88,15 @@ docker compose --project-directory . -f infra/docker-compose.yml up -d
 - Flink 作业依赖宿主先构建 jar（`./gradlew build` → `cp jobs/flink/*/build/libs/*-all.jar
   deploy-rt/jars/`）；官方 flink 镜像无 Java 21 变体，故用 temurin:21-jre 直跑（根 compose
   头注已说明）。
+- **Flink 运行边界（审计 DEPLOY-002）**：7 个作业容器是 `java -jar/-cp` 的 local executor
+  形态（非 Flink 集群），作业内虽启用 checkpointing（30s AT_LEAST_ONCE），但状态仅存于
+  进程内、无外置状态后端；容器未配置 restart 策略，作业异常退出即保持失败直到人工处理；
+  无集群调度、无作业级自动恢复、无水平扩容。集群化（Standalone Session / K8s Operator +
+  外置 checkpoint 存储）为独立后续工作，不并入本矩阵声明。
+- **作业计数口径（审计 DOC-001）**：`jobs/flink/` 源 7 模块（6 fatJar + dimension-sync）；
+  根 compose 起 7 个作业容器（dimension-sync 不在 compose，funnels fatJar 双跑
+  FunnelsJob 与 ConfigurableFunnelsJob 两主类）；nightly 分发包 6 fatJar + dimension-sync
+  agent。三处数字各异但各有依据，引用时先说口径再报数。
 - 观测面由 infra 件提供（otel-collector → Prometheus → Grafana），业务服务本身未配置
   otel exporter 接线时，观测面只收 infra 自身暴露的指标——接线属生产化改造，不在本矩阵声明内。
 - PostgreSQL 备份归档走 `deploy/backup/`（脚本 + S3）或 K8s `backup-cronjob`。

@@ -513,19 +513,24 @@ If you want, I can:
 | 审核条目 | 核验结果 | 证据 file:line |
 |---|---|---|
 | SEC-001 docker-compose.yml 存在默认密码/Token | **属实**（compose 面；k8s 面干净） | `docker-compose.yml:30,141,190,197`（POSTGRES/CLICKHOUSE_PASSWORD=oddsmaker）、`:200-201,246-247`（dev-admin-token/dev-internal-token/dev-secret）、`:565-567`（superset 占位/admin）；k8s 走 secretRef（`deploy/k8s/gateway-service.yaml:85-86`、`deploy/k8s/backup-cronjob.yaml:111-112,164-165`）；fail-closed 校验缺失待整改 |
-| DATA-001 事件幂等键与去重边界不统一 | **属实** | `ReplayGuard.java:86-88` `mark(eventId)` 仅按裸 event_id 去重、键无 game_id/environment；调用方 `BatchController.java:200` 直传 `event.eventId`——跨游戏/跨环境同 event_id 会互相抑制，下游重复语义未核 |
+| DATA-001 事件幂等键与去重边界不统一 | **属实** | `ReplayGuard.java:86-88` `mark(eventId)` 仅按裸 event_id 去重、键无 game_id/environment；调用方 `BatchController.java:200` 直传 `event.eventId`——跨游戏/跨环境同 event_id 会互相抑制；下游 `EventsEnrichJob.java:112` keyBy 同为裸 `event_id`（7 天 TTL 去重，跨游戏同号误入 DLQ） |
 | DEPLOY-001 Control 与 Gateway 发布契约不一致 | **属实** | `release.yaml:172` 仅 set image `deployment/oddsmaker-control`；`:178` 健康检查 `https://control.oddsmaker.local`（.local 仅同网 runner 可解析）；`deploy/k8s/gateway-service.yaml` 存在但发布流程不更新 gateway |
 | DR-001 异地备份与恢复闭环未验证 | **部分属实**（降级系既有拍板） | `deploy/backup/postgres-backup.sh:96-101` 与 `deploy/k8s/backup-cronjob.yaml:34-37`：aws 缺失 WARN 跳过离站、任务仍 exit 0——a0c1b9f 有意降级（防 set -e 整条掐断留存清理）；缺口=离站失败仅日志 WARN、无告警/非零退出；隔离环境恢复演练未做过 |
 | OBS-001 业务指标/告警未接通 | **部分属实** | control 已暴露 prometheus 端点（`application.yaml:171-177`）+ Prometheus 抓 8 job（`prometheus.yaml:21-78`：control/PG/Redis/Kafka/CH/Flink/node）+ 告警 7 条（`oddsmaker-alerts.yml:6-67`）；缺口：gateway 无抓取 job、真实流量下业务指标与告警触发未验证（demo 面无监控栈） |
 | ML-001 ML 能力真实运行状态不明 | **已有结论**（与账本一致） | 训练管线在 CI（`ci.yaml:83-84` ml-tests，68 例）；在线异常检测已 BLOCKED（`todo.md` ML 条——指标表 0 行、无部署面）；训练完成≠在线检测上线，账本口径已满足本条要求 |
+| DATA-002 分析接口就绪状态与链路不一致 | **属实**（语义面，整改=对外契约变更待拍板） | `FunnelResultsService.java:18,49-51`：available 反映「CH 可达且查询成功」而非「分析链路在产数据」——Standard 档无 Flink（`docker-compose.quickstart.yml:3`）时空数据仍 available=true；降级口径也不一：`CohortService.java:301` CH 未配置直接抛错 vs FunnelResults 返回 available=false。改接口语义牵动 web 控制台/SDK/e2e，挂账待拍板 |
+| DEPLOY-002 Production Flink 运行边界未声明 | **属实**（文档缺口，本轮已补） | `docker-compose.yml:7`（local executor 形态头注）+ 7 作业容器 `java -jar/-cp` 直跑（`:298,342,380,418,455,503,545`）；全 compose 无 restart 策略、7 模块 checkpointing 均进程内（`jobs/flink/*/src/main` enableCheckpointing）。形态有记录、能力边界无声明——已补入 `deploy/MODES.md` Production 节 |
+| DOC-001 Flink 作业数量/口径不一致 | **属实**（本轮已统一） | 三套口径并存：`jobs/flink/` 源 7 模块、根 compose 7 容器（dimension-sync 不在 compose、funnels fatJar 双跑 FunnelsJob/ConfigurableFunnelsJob——`docker-compose.yml:418,455-456`）、nightly 6 fatJar+dimension-sync agent（`README.md:217`）；`README.md:276`「seven jobs」列名与运行面不一致。已按口径重写 README:137/276（中英）并在 MODES.md 定义三口径 |
 
 ## 落地跟踪
 
-- [x] 核对上表六条，填证据（2026-10-18 本仓复核：6/6 已填结论+file:line；SEC-001/DATA-001/DEPLOY-001 属实，DR-001/OBS-001 部分属实，ML-001 与账本 BLOCKED 一致）
+- [x] 核对上表六条，填证据（2026-10-18 本仓复核：6/6 已填结论+file:line；SEC-001/DATA-001/DEPLOY-001 属实，DR-001/OBS-001 部分属实，ML-001 与账本 BLOCKED 一致。同日补核 DATA-002/DEPLOY-002/DOC-001 三条并填证据；GOV-001 待用户拍板、SITE-001 与账本 502 条同源去重）
 - [x] SEC-001 移除生产默认凭据（fail-closed 校验）（2026-10-18 整改：根 compose + infra compose 全部凭据改 `${VAR:?}` 必填；control-service 新增 `ProductionSecretsValidator`（`ODDSMAKER_REQUIRE_PRODUCTION_SECRETS=true` 时启动校验非空白且非开发默认值，不合规拒绝启动）；quickstart/demo 开发档不动；`deploy/MODES.md` Production 节补 .env 必填变量清单与 `--project-directory .` 起动方式；`docker compose config -q` 双向实证：缺变量 exit 15 报错点名、全设 pass）
-- [x] DATA-001 幂等键统一（2026-10-18 整改：`ReplayGuard.consumeEventId` 改为 `consumeEventId(gameId, environment, eventId)`，幂等键=逻辑事件身份三元组，长度前缀编码（hex 长度定界）杜绝裸拼接/分隔符撞键；调用方 `BatchController.java:200` 改传三元组；回归测试覆盖跨游戏/跨环境不互斥 + 含分隔符组件不撞键）
-- [ ] DATA-002 就绪状态
-- [ ] DEPLOY-001 / DEPLOY-002 发布契约与运行边界
+- [x] DATA-001 幂等键统一（2026-10-18 整改：入口 `ReplayGuard.consumeEventId` 改为 `consumeEventId(gameId, environment, eventId)`，幂等键=逻辑事件身份三元组，长度前缀编码（hex 长度定界）杜绝裸拼接/分隔符撞键，调用方 `BatchController.java:200` 同步；下游 `EventsEnrichJob.java` 去重 keyBy 原为裸 `event_id`（同款缺陷），改命名方法 `dedupKey` 三元组编码同口径；其余 Flink 作业 keyBy 均为命名复合键、无裸 event_id；回归测试覆盖跨游戏/跨环境不互斥 + 分隔符敌意输入不撞键，gateway 全量 239 绿、enrich 49 绿）
+- [ ] DATA-002 就绪状态（属实，整改=对外契约变更：统一 available 语义/区分采集-分析-风控三态牵动 web 控制台/SDK/e2e，待拍板后另立批次）
+- [ ] DEPLOY-001 发布契约（属实，涉发版面：release workflow 改动需用户确认后动）
+- [x] DEPLOY-002 运行边界声明（2026-10-18：MODES.md Production 节补 local executor 形态能力边界——无集群调度/自动恢复/水平扩容、checkpoint 仅进程内、无 restart 策略；集群化改造单列后续，不与本矩阵混同）
 - [x] DR-001 备份离站失败可见性（脚本面，2026-10-18 整改：`postgres-backup.sh`/`backup-cronjob.yaml` 内嵌脚本/`clickhouse-backup.sh` 离站状态显式化——缺 aws CLI 或上传失败时本地备份+留存清理照常完成（a0c1b9f 降级意图保留），但结尾 exit 2 非静默失败（exit 0=本地+离站全成，1=本地校验失败，2=离站缺失），webhook 通知同步报 ❌；`BackupScriptTest` 10 例覆盖三态，control-service 全量绿）。**剩余外部件**：隔离环境恢复演练未做过（需真实对象存储凭据+隔离环境，属外部条件）；RPO/RTO 业务目标待用户拍板（审计亦要求缺目标记待决策、不编造）
 - [ ] DR-001 恢复演练闭环（外部件：隔离环境 + 对象存储凭据）
-- [ ] OBS-001 / DOC-001 / GOV-001 / ML-001 / SITE-001
+- [ ] OBS-001（缺口：gateway 抓取 job + 真实流量告警验证）/ GOV-001（账本收敛待用户拍板）/ SITE-001（与账本 502 条同源，等 CF 改源）/ ML-001（与账本 ML 条同源，已 BLOCKED）
+- [x] DOC-001 作业口径统一（2026-10-18：`README.md:137,276`+`README.zh.md:137,276` 重写——7 模块=6 fatJar+dimension-sync（兼 agent 形态）、compose 7 容器（funnels 双跑、dimension-sync 不在 compose）；`deploy/MODES.md` 新增「作业计数口径」定义三口径；`README.md:217` 六 fatJar+agent 表述与该口径对齐核实无误）

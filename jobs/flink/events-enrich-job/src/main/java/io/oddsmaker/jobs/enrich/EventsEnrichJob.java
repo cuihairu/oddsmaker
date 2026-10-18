@@ -107,9 +107,9 @@ public class EventsEnrichJob {
         // 基础校验（必填字段）+ 填充 ts_server
         SingleOutputStreamOperator<RawEvent> validated = stream.process(new ValidateFunction(DLQ));
 
-        // 去重（按 event_id，7 天 TTL）
+        // 去重（键=game_id+environment+event_id，7 天 TTL；与网关 ReplayGuard 幂等键同口径）
         DataStream<RawEvent> deduped = validated
-                .keyBy(r -> r.event_id)
+                .keyBy(EventsEnrichJob::dedupKey)
                 .process(new DedupFunction(DLQ));
 
         // Optional enrichers（真对象在算子端懒初始化）
@@ -392,7 +392,19 @@ public class EventsEnrichJob {
         public String revenue_currency;
     }
 
-    // 去重函数：按 event_id 维度，7天 TTL；重复事件输出到 DLQ 侧输出
+    /**
+     * 去重键 = 逻辑事件身份 game_id + environment + event_id（审计 DATA-001 下游面）：
+     * 跨游戏/跨环境的同号 event_id 是不同事件，不得互相吸收。编码用「长度前缀 + 原文」
+     * （与网关 ReplayGuard.eventKey 同口径），任意内容（含分隔符本身）都不产生键冲突。
+     * 前置 ValidateFunction 已保证三字段非空。
+     */
+    static String dedupKey(RawEvent r) {
+        return Integer.toHexString(r.game_id.length()) + ":" + r.game_id
+                + Integer.toHexString(r.environment.length()) + ":" + r.environment
+                + r.event_id;
+    }
+
+    // 去重函数：按逻辑事件身份维度，7天 TTL；重复事件输出到 DLQ 侧输出
     public static class DedupFunction extends KeyedProcessFunction<String, RawEvent, RawEvent> {
         private final OutputTag<String> dlq;
         private transient ValueState<Long> seenTs;

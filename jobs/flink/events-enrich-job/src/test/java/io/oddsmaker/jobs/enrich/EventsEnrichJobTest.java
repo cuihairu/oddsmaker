@@ -1,6 +1,7 @@
 package io.oddsmaker.jobs.enrich;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import org.apache.flink.streaming.api.CheckpointingMode;
 import org.apache.flink.api.common.restartstrategy.RestartStrategies;
 import org.apache.flink.api.common.eventtime.TimestampAssigner;
@@ -252,6 +253,36 @@ class EventsEnrichJobTest {
         assertEquals(1, out.size());
         assertEquals(1, dlq.size());
         assertTrue(dlq.get(0).contains("duplicate"));
+    }
+
+    @Test
+    @DisplayName("去重键=game_id+environment+event_id（长度前缀编码）：跨游戏/跨环境同号不撞键")
+    void dedupKeyIsCompositeAndUnambiguous() {
+        RawEvent base = validEvent();
+        base.event_id = "evt-1";
+        RawEvent otherGame = validEvent();
+        otherGame.event_id = "evt-1";
+        otherGame.game_id = "game-b";
+        RawEvent otherEnv = validEvent();
+        otherEnv.event_id = "evt-1";
+        otherEnv.environment = "dev";
+
+        assertEquals(EventsEnrichJob.dedupKey(base), EventsEnrichJob.dedupKey(base));
+        assertNotEquals(EventsEnrichJob.dedupKey(base), EventsEnrichJob.dedupKey(otherGame),
+                "跨游戏同号 event_id 是不同事件，不得撞去重键");
+        assertNotEquals(EventsEnrichJob.dedupKey(base), EventsEnrichJob.dedupKey(otherEnv),
+                "跨环境同号 event_id 是不同事件，不得撞去重键");
+
+        // 分隔符敌意输入：长度前缀定界，组件含分隔符也不得撞键（与网关 ReplayGuard 同口径）
+        RawEvent hostileA = validEvent();
+        hostileA.game_id = "a\u0000b";
+        hostileA.environment = "c";
+        hostileA.event_id = "d";
+        RawEvent hostileB = validEvent();
+        hostileB.game_id = "a";
+        hostileB.environment = "b\u0000c";
+        hostileB.event_id = "d";
+        assertNotEquals(EventsEnrichJob.dedupKey(hostileA), EventsEnrichJob.dedupKey(hostileB));
     }
 
     /** Proxy RuntimeContext：getState 返回注入状态，其余按返回类型给默认值。 */

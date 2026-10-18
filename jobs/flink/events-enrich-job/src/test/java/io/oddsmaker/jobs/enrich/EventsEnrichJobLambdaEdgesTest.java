@@ -14,8 +14,10 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.when;
 
 /**
- * INSTR 收口：buildPipeline 内联 lambda（keyBy/map）的方法体——pipeline DSL 不经
+ * INSTR 收口：buildPipeline 内联 lambda（map）的方法体——pipeline DSL 不经
  * Flink 执行不可达，反射直调合成方法；以及 Enrichers.ensureInit 的 uaa 构建失败侧。
+ * （keyBy 原为内联 lambda，DATA-001 整改后改为命名方法 EventsEnrichJob.dedupKey，
+ * 可直接单测，见 EventsEnrichJobTest#dedupKeyIsCompositeAndUnambiguous。）
  */
 @DisplayName("pipeline lambda 直调与 uaa 初始化失败侧")
 class EventsEnrichJobLambdaEdgesTest {
@@ -27,16 +29,6 @@ class EventsEnrichJobLambdaEdgesTest {
                 && Arrays.equals(m.getParameterTypes(), paramTypes))
             .findFirst()
             .orElseThrow(() -> new AssertionError("未找到合成方法 " + prefix));
-    }
-
-    @Test
-    @DisplayName("keyBy lambda：返回 event_id（合成方法体直调）")
-    void keyByLambdaBody() throws Exception {
-        Method keyBy = synthetic("lambda$buildPipeline$", RawEvent.class);
-        keyBy.setAccessible(true);
-        RawEvent e = new RawEvent();
-        e.event_id = "evt-42";
-        assertEquals("evt-42", keyBy.invoke(null, e));
     }
 
     @Test
