@@ -27,7 +27,8 @@ services:
       TZ: UTC
       POSTGRES_DB: oddsmaker
       POSTGRES_USER: oddsmaker
-      POSTGRES_PASSWORD: oddsmaker
+      # 生产档 fail-closed：口令必须来自 .env，缺失即拒绝启动（审计 SEC-001）
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?请在 .env 设置 POSTGRES_PASSWORD}
     # WAL 归档：PITR 前置（deploy/backup/backup-strategy.md §PostgreSQL）
     # archive_command 建目录 + 写归档卷 + 就地 30 天留存清理（单段归档后同一次 shell 内完成，
     # 不依赖第二个 pod 挂载 RWO 卷）；wal_archive_timeout=30s 保证 RPO ≤ 5 分钟
@@ -138,7 +139,7 @@ services:
     environment:
       TZ: UTC
       CLICKHOUSE_USER: oddsmaker
-      CLICKHOUSE_PASSWORD: oddsmaker
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?请在 .env 设置 CLICKHOUSE_PASSWORD}
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
     ports:
       - "28123:8123"
@@ -187,18 +188,20 @@ services:
       TZ: UTC
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/oddsmaker
       SPRING_DATASOURCE_USERNAME: oddsmaker
-      SPRING_DATASOURCE_PASSWORD: oddsmaker
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?请在 .env 设置 POSTGRES_PASSWORD}
       SPRING_JPA_HIBERNATE_DDL_AUTO: validate
       SPRING_FLYWAY_ENABLED: "true"
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       CLICKHOUSE_URL: jdbc:clickhouse://clickhouse:8123/default
       CLICKHOUSE_USER: oddsmaker
-      CLICKHOUSE_PASSWORD: oddsmaker
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?请在 .env 设置 CLICKHOUSE_PASSWORD}
       SPRING_DATA_REDIS_HOST: redis
       SPRING_REDIS_HOST: redis
-      ODDSMAKER_ADMIN_TOKEN: dev-admin-token
-      ODDSMAKER_INTERNAL_TOKEN: dev-internal-token
+      ODDSMAKER_ADMIN_TOKEN: ${ODDSMAKER_ADMIN_TOKEN:?请在 .env 设置 ODDSMAKER_ADMIN_TOKEN}
+      ODDSMAKER_INTERNAL_TOKEN: ${ODDSMAKER_INTERNAL_TOKEN:?请在 .env 设置 ODDSMAKER_INTERNAL_TOKEN}
+      # 双保险：容器内控制面启动时再校验一遍凭据非开发默认值（ProductionSecretsValidator）
+      ODDSMAKER_REQUIRE_PRODUCTION_SECRETS: "true"
       # 告警邮件通道（可选）：不设置时邮件投递自动跳过
       SPRING_MAIL_HOST: ${SPRING_MAIL_HOST:-}
       SPRING_MAIL_PORT: ${SPRING_MAIL_PORT:-587}
@@ -243,8 +246,9 @@ services:
       ODDSMAKER_KAFKA_BOOTSTRAP: kafka:9092
       ODDSMAKER_KAFKA_REGISTRY_URL: http://apicurio:8080/apis/registry/v2
       ODDSMAKER_CONTROL_URL: http://control-service:8085
-      ODDSMAKER_CONTROL_INTERNAL_TOKEN: dev-internal-token
-      ODDSMAKER_AUTH_KEYS_DEVKEY: dev-secret
+      # 与控制面 ODDSMAKER_INTERNAL_TOKEN 同源同值，服务间调用才认得
+      ODDSMAKER_CONTROL_INTERNAL_TOKEN: ${ODDSMAKER_INTERNAL_TOKEN:?请在 .env 设置 ODDSMAKER_INTERNAL_TOKEN}
+      ODDSMAKER_AUTH_KEYS_DEVKEY: ${ODDSMAKER_AUTH_KEYS_DEVKEY:?请在 .env 设置 ODDSMAKER_AUTH_KEYS_DEVKEY}
       ODDSMAKER_KAFKA_TOPIC_EVENTS: oddsmaker.events_raw
       ODDSMAKER_KAFKA_TOPIC_RISK: oddsmaker.risk_events
     depends_on:
@@ -562,9 +566,9 @@ services:
     ports:
       - "8088:8088"
     environment:
-      SUPERSET_SECRET_KEY: "superset-secret-key-change-in-production"
+      SUPERSET_SECRET_KEY: ${SUPERSET_SECRET_KEY:?请在 .env 设置 SUPERSET_SECRET_KEY}
       ADMIN_USERNAME: admin
-      ADMIN_PASSWORD: admin
+      ADMIN_PASSWORD: ${SUPERSET_ADMIN_PASSWORD:?请在 .env 设置 SUPERSET_ADMIN_PASSWORD}
       ADMIN_FIRST_NAME: Admin
       ADMIN_LAST_NAME: User
       ADMIN_EMAIL: admin@oddsmaker.local

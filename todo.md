@@ -10,8 +10,8 @@
 
 - [x] docs 子目录双语配对（P2，2026-10-16 执行单登记，PATROL016 完成）：52 个 .md 全配——51 个新增兄弟文件（中文源 45 个补 `.en.md`、英文源 6 个补 `.zh.md`）+ `zh/index.md` 已随根目录轮配对；51 个源文件各插 1 行切换器。配对方式**已代决**（PATROL016）：同目录兄弟文件而非 locale 镜像（locale 同名文件非互译，差异 164/198/738 行，见 docs/决策记录.md）。验收：59 对全部通过结构计数一致（行数/标题/表格/围栏）+ 代码块逐字节相同 + 切换器第 3 行且双向对称；英文侧正文无中文残留（仅切换器「中文」二字、代码块内原样注释、厂商专名如 友盟+/神策）；`pnpm docs:build` 绿。顺带按对账规则修 06 §4.1 笔误（「未携带废弃字段」→「携带废弃字段」，与 §3.3.3 及 schema `additionalProperties:false` 对齐，中英同批）
 
-- [ ] 外部生产审计核验与整改（P0 起，`docs/review/review-2026-10-18-production-audit.md`，2026-10-18 他席落地，PATROL1018 补登记并完成首轮核验）：审计 11 条发现，主表 6 条已按文档纪律核对并填证据——SEC-001（compose 硬编码 dev 凭据、无 fail-closed）/ DATA-001（幂等键裸 event_id 跨游戏互斥）/ DEPLOY-001（发布只更 control + .local 健康检查）属实，DR-001 / OBS-001 部分属实，ML-001 与账本 BLOCKED 一致；其余 5 条（DATA-002/DEPLOY-002/DOC-001/GOV-001/SITE-001）待核
-  - **下一步**：按审计推荐顺序开工 SEC-001（生产凭据 fail-closed 校验，先补测试再改）
+- [ ] 外部生产审计核验与整改（P0 起，`docs/review/review-2026-10-18-production-audit.md`，2026-10-18 他席落地，PATROL1018 补登记并完成首轮核验）：审计 11 条发现，主表 6 条已按文档纪律核对并填证据——SEC-001（compose 硬编码 dev 凭据、无 fail-closed）/ DATA-001（幂等键裸 event_id 跨游戏互斥）/ DEPLOY-001（发布只更 control + .local 健康检查）属实，DR-001 / OBS-001 部分属实，ML-001 与账本 BLOCKED 一致；其余 5 条（DATA-002/DEPLOY-002/DOC-001/GOV-001/SITE-001）待核。**SEC-001 已整改完成**（PATROL1018E：根 compose + infra compose 凭据全改 `${VAR:?}` 必填、control-service 增 `ProductionSecretsValidator` 双保险、`deploy/MODES.md` 补 Production .env 必填清单；全量门禁 2050 绿 + compose config 双向实证）
+  - **下一步**：按审计推荐顺序开工 DATA-001（幂等键 = game_id + event_id，先补测试再改）
   - **同源去重**：SITE-001 与账本 502 条同源（勿双记）；ML-001 与账本 ML 条同源（已 BLOCKED）
   - **卡点**：GOV-001（收敛 todo.md 结构）待用户拍板——账本结构是巡检自动化的读取面，agent 不得单方重构
 

@@ -64,6 +64,27 @@ schema 没有事件数据。控制面分析类接口此时 `available=true` 但�
 全组件档。事件链路完整：gateway → Kafka → Flink ×7 → ClickHouse（events/enrich 产出到
 session/funnel/retention/risk_scores 等分析表），控制面快照与 Superset/Grafana 看板有数可看。
 
+**凭据 fail-closed（审计 SEC-001）**：两件套不含任何硬编码口令，全部凭据必须由仓库根
+`.env` 提供（可从任何强随机源生成），缺失任一项 `docker compose` 直接拒绝启动并在报错里
+点名缺失变量；本地开发请走 Standard 档（quickstart compose，保留开发默认值）。必需变量：
+
+- `POSTGRES_PASSWORD`（postgres + control-service 数据源）
+- `CLICKHOUSE_PASSWORD`（clickhouse + control-service）
+- `ODDSMAKER_ADMIN_TOKEN` / `ODDSMAKER_INTERNAL_TOKEN` / `ODDSMAKER_AUTH_KEYS_DEVKEY`
+- `SUPERSET_SECRET_KEY` / `SUPERSET_ADMIN_PASSWORD` / `GRAFANA_ADMIN_PASSWORD`
+
+双保险：根 compose 给 control-service 注入 `ODDSMAKER_REQUIRE_PRODUCTION_SECRETS=true`，
+容器内 `ProductionSecretsValidator` 启动时再校验一遍——凭据空白或仍为开发默认值
+（admin / dev-admin-token / dev-internal-token / oddsmaker 等）直接中止启动。
+infra 件与根件共用根目录 `.env`，注意必须带 `--project-directory .` 起动：
+
+```bash
+docker compose config -q                 # 根件预检：缺变量即报错点名
+docker compose up -d
+docker compose --project-directory . -f infra/docker-compose.yml config -q
+docker compose --project-directory . -f infra/docker-compose.yml up -d
+```
+
 - Flink 作业依赖宿主先构建 jar（`./gradlew build` → `cp jobs/flink/*/build/libs/*-all.jar
   deploy-rt/jars/`）；官方 flink 镜像无 Java 21 变体，故用 temurin:21-jre 直跑（根 compose
   头注已说明）。

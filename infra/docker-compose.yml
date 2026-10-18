@@ -40,7 +40,8 @@ services:
     container_name: infra-clickhouse
     environment:
       CLICKHOUSE_USER: oddsmaker
-      CLICKHOUSE_PASSWORD: oddsmaker
+      # 生产档 fail-closed：口令必须来自 .env，缺失即拒绝启动（审计 SEC-001）
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?请在 .env 设置 CLICKHOUSE_PASSWORD}
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
     ports: ["29123:8123", "29100:9000"]
     volumes:
@@ -71,7 +72,8 @@ services:
     container_name: infra-superset
     ports: ["18088:8088"]
     environment:
-      - SUPERSET_SECRET_KEY=pit
+      # 生产档 fail-closed：密钥必须来自 .env，缺失即拒绝启动（审计 SEC-001）
+      - SUPERSET_SECRET_KEY=${SUPERSET_SECRET_KEY:?请在 .env 设置 SUPERSET_SECRET_KEY}
     depends_on: [clickhouse]
     volumes:
       - superset_data:/app/superset_home
@@ -98,7 +100,8 @@ services:
     ports: ["13000:3000"]
     environment:
       - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin
+      # 生产档 fail-closed：口令必须来自 .env，缺失即拒绝启动（审计 SEC-001）
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?请在 .env 设置 GRAFANA_ADMIN_PASSWORD}
     depends_on: [prometheus]
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro

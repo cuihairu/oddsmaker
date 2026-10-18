@@ -91,6 +91,9 @@ oddsmaker:
 
   # 安全配置
   security:
+    # 生产凭据 fail-closed 开关（审计 SEC-001）：true 时启动即校验 admin/internal
+    # token、JWT 密钥、数据库口令非空白且非开发默认值，不合规直接拒绝启动
+    require-production-secrets: ${ODDSMAKER_REQUIRE_PRODUCTION_SECRETS:false}
     jwt:
       secret: ${JWT_SECRET:oddsmaker-jwt-secret-key-change-in-production}
       expiration: 86400000             # 24小时 (毫秒)
