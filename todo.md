@@ -31,6 +31,7 @@
   - 复核留痕（2026-10-18 第十巡 patrol-sweep）：无变化，证据同上轮。维持卡点
   - 复核留痕（2026-10-18 第十一巡）：无变化，证据同上轮。维持卡点
   - 复核留痕（2026-10-18 第十二巡 PATROL1018A）：无变化，证据同上轮。维持卡点
+  - 复核留痕（2026-10-18 第十三巡 PATROL1018）：无变化，证据同上轮。维持卡点
 - [ ] Demo 站公网 502（交付面故障，PATROL1017 发现）：源站全链路已证健康（on-box 与公网直连均 200），502 定位为 Cloudflare 回源配置（用户侧 CF 面板/Aliyun 安全组），源站与仓内无可修项
   - **卡点类型**：用户侧配置缺失——CF 回源链（CF 面板内 origin A 记录指向 / SSL 模式 / Aliyun 安全组对 CF 边缘 IP 段的入站放行）不正确，须 CF/Aliyun 控制台凭据才能动，仓内与部署机均无可操作项
   - **解锁条件**：用户在 CF 面板把 `oddsmaker.cuihairu.site` 的 origin A 记录指到部署机现公网 IP `106.14.216.177`（保持橙云代理）——这是唯一剩余解锁动作：安全组/境外拦截假说已被境外视点探针排除（见 PATROL1017C 留痕），LE 证书有效至 2027-01-01、80/443 双栈从境内与境外实测均 200，无第二分支。CF 侧操作属用户侧（见边界「CF DNS 域名切换属用户侧操作，本仓不动」）
@@ -49,6 +50,7 @@
   - 复核留痕（2026-10-18 第十巡 patrol-sweep）：无变化——公网仍 502。维持卡点
   - 复核留痕（2026-10-18 第十一巡）：无变化——公网仍 502。维持卡点
   - 复核留痕（2026-10-18 第十二巡 PATROL1018A）：无变化——公网仍 502。维持卡点
+  - 复核留痕（2026-10-18 第十三巡 PATROL1018）：无变化——公网仍 502。维持卡点
 - [ ] ML 异常检测进评估批次：任一触发条件成立即开工——指标历史可回看 7 天以上且 7d/28d 分位基线可算；单游戏阈值告警规则月均调整 3 次以上；告警误杀率超 30% 持续 2 周
   - **卡点类型**：触发条件未成立——条件 (a) 非等待可解，需先补部署面
   - **解锁条件**：四项触发条件任一达标；其中条件 (a) 需先有**带网关流量的部署面**，并自指标开始落库起算满 **7 天**（7d/28d 分位基线方可算）
@@ -68,6 +70,7 @@
   - 复核留痕（2026-10-18 第十巡 patrol-sweep）：无变化，证据同上轮。维持卡点
   - 复核留痕（2026-10-18 第十一巡）：无变化，证据同上轮。维持卡点
   - 复核留痕（2026-10-18 第十二巡 PATROL1018A）：无变化，证据同上轮。维持卡点
+  - 复核留痕（2026-10-18 第十三巡 PATROL1018）：无变化，证据同上轮。维持卡点
 
 ## 已完成需求
 
@@ -123,6 +126,7 @@
 - [x] Nightly Full Test Suite 口径补齐：nightly job 1 名为 Full Test Suite 却缺 ml（68 例）与 Web SDK 三套两腿，补齐与 ci.yaml 四腿同口径；顺带 web/ 步骤误标 "Web SDK" 命名对正为 Web Console。首轮 CI 冷树揪出 test:hash 依赖构建产物（先 test 后无 build 报 ERR_MODULE_NOT_FOUND，本机暖树残留掩盖），补 Build 步对齐 ci.yaml build→test 顺序（eaab3f5 + 351b690，YAML 解析过；本机全量：gradle 2736 例 / web 202 例+build / ml 68 例 / SDK 冷树复现+暖树三套，均 0 失败）
 - [x] 文档一致性审计台账回填：`docs/审计-文档一致性.md` 的 D8（事件分类常量标「未排期」）与 F11（Web SDK 游戏事件 helper 标「待补」）两条「已修」记录被后续批次打反——e8d870d 已落地 `AuditEventType`、1009ecb 已补 `game-events.ts` 并经桶文件导出；两行修法列改「先标 X；2026-10-15 已落地」，表头加 2026-10-15 现状更新块（a0f3408，纯文档，`pnpm docs:build` 绿 36.98s）
 - [x] 审计 API 事件分类出参对账：e8d870d 的派生 `getEventType()` 随实体直出（`AuditLogController` 返回 `Page<AuditLogEntity>`，无 DTO 隔离层）成为对外契约，但既无边界测试、zh 参考文档端点表亦缺 7 条（status/game/failed/auth/sensitive/search/cleanup 及权限列）——补 `AuditLogEntityJsonTest` 钉序列化契约（轮换行出 API_KEY_ROTATED、风控/其余分流），control.md 审计段补全 14 GET + 1 DELETE 与 audit:read/sensitive/manage 权限列、加 eventType 五类+OTHER 判定表（c778133，control-service 170 suite/2021 例 0 失败，docs:build 绿 33.66s）
+- [x] docs 站点首页浏览器语言自动跳转（P2，他席提交 67d3cd8 落地、本轮 PATROL1018 第十三巡补登账本并复核）：`docs/index.md` 增 VitePress `<script setup lang="ts">` 块——仅站点根路径（`/oddsmaker/`）生效，localStorage 手动选择优先于 `navigator.languages` 的 `zh` 前缀判定（跳 `/oddsmaker/zh/`），点击内链时记回手动选择；VitePress 无此能力、GitHub Pages 不支持 `_redirects`，故在首页内联。验收：28 新增行零标题/零表格行/零围栏（结构语法命中 0），首页配对计数不受影响（index 20 标题/4 围栏、zh/index 19/2，插入前后一致）；含 `typeof window === 'undefined'` SSR 守卫；`pnpm docs:build` 绿 39.18s。注：commit 标题写 feat: 但改动面仅 docs/index.md 一处，无产品代码变更
 
 ## 边界（决定不做，勿再提）
 
