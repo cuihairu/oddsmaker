@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -19,8 +20,8 @@ class ReplayGuardRotationTest {
         ReplayGuard guard = new ReplayGuard(600_000, 200_000, 86_400_000);
         assertTrue(guard.consumeSignature("sig-1"));
         assertFalse(guard.consumeSignature("sig-1"));
-        assertTrue(guard.consumeEventId("evt-1"));
-        assertFalse(guard.consumeEventId("evt-1"));
+        assertTrue(guard.consumeEventId("game-a", "prod", "evt-1"));
+        assertFalse(guard.consumeEventId("game-a", "prod", "evt-1"));
     }
 
     @Test
@@ -34,8 +35,8 @@ class ReplayGuardRotationTest {
         // 已见 key 同样 false
         assertFalse(guard.consumeSignature("sig-1"));
         // event_ids 是独立的一代：不受签名代容量影响，但自身容量同样为 1
-        assertTrue(guard.consumeEventId("evt-1"));
-        assertFalse(guard.consumeEventId("evt-2"));
+        assertTrue(guard.consumeEventId("game-a", "prod", "evt-1"));
+        assertFalse(guard.consumeEventId("game-a", "prod", "evt-2"));
     }
 
     @Test
@@ -43,11 +44,11 @@ class ReplayGuardRotationTest {
     void rotatesGenerationsAfterTtl() throws InterruptedException {
         ReplayGuard guard = new ReplayGuard(1, 100, 86_400_000);
         assertTrue(guard.consumeSignature("sig-1"));
-        assertTrue(guard.consumeEventId("evt-1"));
+        assertTrue(guard.consumeEventId("game-a", "prod", "evt-1"));
         Thread.sleep(5); // 过期
         // 轮换后新代：同 key 再次视为新签名/新事件
         assertTrue(guard.consumeSignature("sig-1"));
-        assertTrue(guard.consumeEventId("evt-1"));
+        assertTrue(guard.consumeEventId("game-a", "prod", "evt-1"));
     }
 
     @Test
@@ -59,4 +60,26 @@ class ReplayGuardRotationTest {
         assertTrue(guard.isTimestampPlausible(now - 1_000, now));
         assertTrue(guard.isTimestampPlausible(now + 1_000, now));
         assertFalse(guard.isTimestampPlausible(now - 2_000, now));    }
+
+    @Test
+    @DisplayName("幂等键=game_id+environment+event_id：跨游戏/跨环境同号 event_id 不互斥")
+    void sameEventIdAcrossGamesAndEnvironmentsStaysIndependent() {
+        ReplayGuard guard = new ReplayGuard(600_000, 200_000, 86_400_000);
+        assertTrue(guard.consumeEventId("game-a", "prod", "evt-1"));
+        assertTrue(guard.consumeEventId("game-b", "prod", "evt-1"));   // 跨游戏同号是不同事件
+        assertTrue(guard.consumeEventId("game-a", "dev", "evt-1"));    // 跨环境同号是不同事件
+        assertFalse(guard.consumeEventId("game-a", "prod", "evt-1")); // 同一身份第二次才去重
+    }
+
+    @Test
+    @DisplayName("幂等键编码无歧义：组件含分隔符/长度边界字符不产生键冲突")
+    void eventKeyEncodingIsUnambiguous() {
+        // (gameId="a\u0000b", env="c", evt="d") 与 (gameId="a", env="b\u0000c", evt="d")
+        // 裸拼接/分隔符编码会撞键；长度前缀必须把边界定死
+        String k1 = ReplayGuard.eventKey("a\u0000b", "c", "d");
+        String k2 = ReplayGuard.eventKey("a", "b\u0000c", "d");
+        assertNotEquals(k1, k2);
+        assertEquals(ReplayGuard.eventKey("game-a", "prod", "evt-1"),
+                ReplayGuard.eventKey("game-a", "prod", "evt-1"));
+    }
 }

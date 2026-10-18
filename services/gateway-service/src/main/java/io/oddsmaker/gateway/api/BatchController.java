@@ -197,7 +197,7 @@ public class BatchController {
                 }
                 // 风控前置：event_id 幂等吸收——schema 合法后才占用幂等位，
                 // SDK 重试导致的重复事件静默去重（计入 duplicates，不重复发布、不进 DLQ）
-                if (!replayGuard.consumeEventId(event.eventId)) {
+                if (!replayGuard.consumeEventId(event.gameId, event.environment, event.eventId)) {
                     resp.duplicates++;
                     resp.accepted.add(event.eventId);
                     // 幂等吸收计入 duplicates 且占 accepted 位（恒等式 received = accepted + Σrejected + sampled_out）

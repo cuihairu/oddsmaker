@@ -523,7 +523,8 @@ If you want, I can:
 
 - [x] 核对上表六条，填证据（2026-10-18 本仓复核：6/6 已填结论+file:line；SEC-001/DATA-001/DEPLOY-001 属实，DR-001/OBS-001 部分属实，ML-001 与账本 BLOCKED 一致）
 - [x] SEC-001 移除生产默认凭据（fail-closed 校验）（2026-10-18 整改：根 compose + infra compose 全部凭据改 `${VAR:?}` 必填；control-service 新增 `ProductionSecretsValidator`（`ODDSMAKER_REQUIRE_PRODUCTION_SECRETS=true` 时启动校验非空白且非开发默认值，不合规拒绝启动）；quickstart/demo 开发档不动；`deploy/MODES.md` Production 节补 .env 必填变量清单与 `--project-directory .` 起动方式；`docker compose config -q` 双向实证：缺变量 exit 15 报错点名、全设 pass）
-- [ ] DATA-001 / DATA-002 幂等与就绪状态
+- [x] DATA-001 幂等键统一（2026-10-18 整改：`ReplayGuard.consumeEventId` 改为 `consumeEventId(gameId, environment, eventId)`，幂等键=逻辑事件身份三元组，长度前缀编码（hex 长度定界）杜绝裸拼接/分隔符撞键；调用方 `BatchController.java:200` 改传三元组；回归测试覆盖跨游戏/跨环境不互斥 + 含分隔符组件不撞键）
+- [ ] DATA-002 就绪状态
 - [ ] DEPLOY-001 / DEPLOY-002 发布契约与运行边界
 - [ ] DR-001 备份与恢复验证
 - [ ] OBS-001 / DOC-001 / GOV-001 / ML-001 / SITE-001

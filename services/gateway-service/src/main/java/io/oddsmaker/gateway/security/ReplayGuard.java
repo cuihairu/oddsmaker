@@ -13,8 +13,8 @@ import java.util.concurrent.locks.ReentrantLock;
  * 风控前置：重放防护。
  *
  * 1. 签名重放：同一 HMAC 签名在时间窗内只允许出现一次，重复直接拒绝；
- * 2. event_id 幂等吸收：SDK 重试导致的重复 event_id 静默吸收（不重复发布），
- *    防止重试风暴放大写入量。
+ * 2. event_id 幂等吸收：SDK 重试导致的重复事件（game_id+environment+event_id）静默
+ *    吸收（不重复发布），防止重试风暴放大写入量。
  *
  * 本地分代缓存：current 写入、previous 只读，TTL 到期整体轮换，容量恒定防 OOM。
  * 多实例部署时窗口为单实例局部，完整方案需接入共享 Redis。
@@ -81,10 +81,21 @@ public class ReplayGuard {
     }
 
     /**
-     * 记录 event_id；返回 false 表示近期已接收（重试/重放）。
+     * 记录事件幂等位；返回 false 表示近期已接收（重试/重放）。
+     *
+     * 幂等键是逻辑事件身份 game_id + environment + event_id（审计 DATA-001）：
+     * 跨游戏/跨环境的同号 event_id 属不同事件，不得互相抑制。键编码用长度前缀而非
+     * 裸拼接或分隔符，任意内容（含分隔符本身）都不产生键冲突。
      */
-    public boolean consumeEventId(String eventId) {
-        return rotateIfNeeded(eventIds).mark(eventId);
+    public boolean consumeEventId(String gameId, String environment, String eventId) {
+        return rotateIfNeeded(eventIds).mark(eventKey(gameId, environment, eventId));
+    }
+
+    /** 长度前缀编码：hex(gameId.length):gameId + hex(environment.length):environment + eventId。 */
+    static String eventKey(String gameId, String environment, String eventId) {
+        return Integer.toHexString(gameId.length()) + ":" + gameId
+                + Integer.toHexString(environment.length()) + ":" + environment
+                + eventId;
     }
 
     /**
