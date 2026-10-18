@@ -47,14 +47,18 @@ class WalArchiveConfigTest {
                 "deploy/k8s/postgres.yaml args 缺 " + guc));
     }
 
+    /**
+     * 功能面（deploy/ 下 yml/yaml 编排与根 compose）禁绝错名；.md 文档允许在散文/史述里
+     * 提及错名，配置块用正向钉（strategyDocConfigBlockCarriesValidGuc）。
+     */
     @Test
-    void bogusWalArchiveTimeoutNowhereInDeploySurface() throws IOException {
+    void bogusWalArchiveTimeoutNowhereInDeployConfigs() throws IOException {
         try (Stream<Path> files = Files.walk(REPO.resolve("deploy"))) {
             List<Path> hits = files
                     .filter(Files::isRegularFile)
                     .filter(p -> {
                         String name = p.toString();
-                        return name.endsWith(".yml") || name.endsWith(".yaml") || name.endsWith(".md");
+                        return name.endsWith(".yml") || name.endsWith(".yaml");
                     })
                     .filter(WalArchiveConfigTest::containsBogus)
                     .toList();
@@ -62,6 +66,13 @@ class WalArchiveConfigTest {
         }
         assertFalse(read("docker-compose.yml").contains("wal_archive_timeout"),
                 "docker-compose.yml 不应含错名 wal_archive_timeout");
+    }
+
+    @Test
+    void strategyDocConfigBlockCarriesValidGuc() throws IOException {
+        // backup-strategy.md §PostgreSQL 配置块是 copy-paste 源，正向钉参数名
+        assertTrue(read("deploy/backup/backup-strategy.md").contains("archive_timeout = 30s"),
+                "backup-strategy.md 配置块应写 archive_timeout = 30s");
     }
 
     @Test
