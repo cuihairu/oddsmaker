@@ -60,7 +60,9 @@ class BackupScriptTest {
      * 无凭证失败被 set -e 带走）。故 PATH 只留桩 bin，把用到的工具逐个链进来。
      */
     private static final List<String> SANDBOX_TOOLS =
-            List.of("date", "tee", "mkdir", "find", "du", "cut", "rm", "tar", "gzip");
+            List.of("date", "tee", "mkdir", "find", "du", "cut", "rm", "tar", "gzip",
+                    // clickhouse-backup.sh 的 list 管线（list local | awk | sort | tail）新增依赖
+                    "awk", "sort", "tail");
 
     /** 把宿主 coreutils 符号链接进桩 bin；宿主缺工具时立即报清晰错误，不做静默降级。 */
     private static void linkSystemTools(Path binDir) throws IOException {

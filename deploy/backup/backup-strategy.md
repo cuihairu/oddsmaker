@@ -102,12 +102,27 @@ k8s 编排（`deploy/k8s/backup-cronjob.yaml`）经 `redis-cli --rdb <file>` 网
 # Full backup（周日 03:00 UTC）
 clickhouse-backup.sh full
 
-# Incremental backup（每日 03:00 UTC；自动 diff-from 最近一次 full，无 full 时回退 full）
+# Incremental backup（每日 03:00 UTC；增量在远程上传面构建：upload --diff-from=最近一次 full，
+# 无 full 或未配 S3_BUCKET 时退化为全量并显式打日志）
 clickhouse-backup.sh incremental
 
 # 配置项：CLICKHOUSE_HOST / CLICKHOUSE_PORT / CLICKHOUSE_USER / CLICKHOUSE_PASSWORD
-#         BACKUP_DIR（默认 /backup/clickhouse）/ RETENTION_DAYS（默认 90）/ S3_BUCKET（可选上传）
+#         BACKUP_DIR（默认 /var/lib/clickhouse/backup，须与 CH 数据卷对齐——工具把本地备份
+#         固定落 CH 数据目录的 backup/ 下，不读任何备份目录配置，此变量只服务于留存清理）
+#         RETENTION_DAYS（默认 90）/ S3_BUCKET（可选上传）
+#         S3_ENDPOINT / S3_ACCESS_KEY / S3_SECRET_KEY / S3_FORCE_PATH_STYLE /
+#         S3_REGION / S3_STORAGE_CLASS 直透工具 config
 ```
+
+> **clickhouse-backup 2.8.x 契约**（2026-10-19 恢复演练首次真实执行实证，此前脚本从未跑过）：
+> 连接信息没有 CLI 参数（`--host/--port/--user/--password` 一律 flag provided but not defined），
+> 只认环境变量 `clickhouse.host/port/username/password`——键名是 **username** 非 user，脚本已做
+> `CLICKHOUSE_USER` → `CLICKHOUSE_USERNAME` 桥接；`create` 没有 `--diff-from`，增量只存在于
+> 远程上传面；`upload` 没有 `--storage-class`。部署形态：工具经硬链接 CH 数据 parts 生成备份，
+> 必须与 CH 数据卷**同路径挂载**运行（CH 容器内或共享数据卷的 sidecar），不是纯网络客户端——
+> 只共享网络命名空间会 FATAL「disk default path /var/lib/clickhouse/ is not exists locally」。
+> 排程现状：`deploy/k8s/backup-cronjob.yaml` 只有 PostgreSQL（两档）与 Redis 腿，ClickHouse
+> 排程未接线——上表 Schedule 为目标口径，接线属部署面事项（接线时按上述同路径挂载约束配 sidecar）。
 
 ### Kafka
 
@@ -188,8 +203,13 @@ clickhouse-backup.sh incremental
 
 2. If data corruption, restore from backup:
    ```bash
-   clickhouse-backup restore latest_full
-   clickhouse-backup restore latest_incremental
+   # 恢复链 = 先全量后增量（增量依赖全量链）；`latest_full`/`latest_incremental`
+   # 不是 2.8.x 合法备份名（实测 FTL: open .../latest_full/metadata.json: no such file）
+   clickhouse-backup restore_remote full_YYYYMMDD
+   clickhouse-backup restore_remote incremental_YYYYMMDD
+
+   # 本地备份目录已有同名档时（与 CH 数据卷同路径挂载的运行面）：
+   clickhouse-backup restore full_YYYYMMDD
    ```
 
 3. Verify data integrity:
@@ -290,9 +310,19 @@ velero restore create --from-backup oddsmaker-daily-backup-20240101020000
 > `archive_timeout`），生产 postgres 带错名启动直接 FATAL crash 循环——39e2a1c 入库
 > 以来从未被真实执行过，本演练为首次执行面。已全仓修正（compose/k8s/文档 6 处）并加
 > `WalArchiveConfigTest` 钉测试（compose/k8s GUC 集一致 + 错名禁绝）。
-> **未覆盖（维持环境执行项）**：ClickHouse 恢复腿（本机无 CH 环境 + Altinity CLI）、
-> 离站副本恢复（需真实对象存储凭据）、全栈 RTO/RPO 实测——清单 6 项仍如实保留未勾，
-> 待完整备份链路环境执行后勾选。
+> ④ **ClickHouse 腿**（同日，clickhouse/clickhouse-server:24.8 + Altinity clickhouse-backup
+> 2.8.1 真二进制 + moto 作 S3 兼容端点）：`clickhouse-backup.sh` 原稿入库以来从未被执行，
+> 演练实证其全部调用面与 2.8.x 不符（连接类 CLI 参数 / create --diff-from /
+> upload --storage-class 三处 flag provided but not defined + BACKUP_DIR 与工具真实落点
+> 错位致留存清理扫空目录）——已按实证契约重写并加 `ClickhouseBackupCliContractTest` 8 例
+> 钉测试（先红后绿）。修复后全链闭环：full（exit 0）→ S3 上传 → R2 数据 → incremental
+> （`upload --diff-from=full_*`，exit 0）→ R3 数据（备份后写入）→ 全新 CH 容器
+> `restore_remote` 全量+增量两步 → **12000 行 = R1+R2 精确恢复、R3 的 500 行精确排除**、
+> sessions 3000 一致；死端点实证离站失败面：本地备份完好 + 留存清理照常 + **exit 2**
+> 非静默。文档对账同步修正：`restore latest_full` 非合法 2.8.x 备份名（实测 FTL），
+> 恢复命令改 `restore_remote <name>`。**未覆盖（维持环境执行项）**：真实对象存储凭据
+> 的离站恢复（moto 已证机制面，生产凭据待配）、全栈 RTO/RPO 实测——清单 6 项仍如实
+> 保留未勾，待完整备份链路环境执行后勾选。
 
 - [ ] Backup restoration successful
 - [ ] Data integrity verified
