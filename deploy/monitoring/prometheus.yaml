@@ -34,6 +34,19 @@ scrape_configs:
           component: 'control-service'
           environment: 'production'
 
+  # Oddsmaker Gateway Service（k8s 面 Service oddsmaker-gateway:80 → 容器 8080；
+  # actuator 与业务同端口。审计 OBS-001 补缺：入口层原先无抓取 job）
+  - job_name: 'oddsmaker-gateway'
+    metrics_path: '/actuator/prometheus'
+    scrape_interval: 10s
+    scrape_timeout: 5s
+    static_configs:
+      - targets: ['oddsmaker-gateway:80']
+        labels:
+          app: 'oddsmaker-gateway'
+          component: 'gateway-service'
+          environment: 'production'
+
   # PostgreSQL Exporter
   - job_name: 'postgres'
     static_configs:

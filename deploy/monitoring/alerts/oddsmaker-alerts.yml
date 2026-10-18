@@ -13,6 +13,17 @@ groups:
           summary: "Oddsmaker Control Service is down"
           description: "The Oddsmaker Control Service has been down for more than 1 minute."
 
+      # Gateway availability（审计 OBS-001 补缺：入口层原先无抓取 job 与存活告警）
+      - alert: OddsmakerGatewayServiceDown
+        expr: up{job="oddsmaker-gateway"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: gateway-service
+        annotations:
+          summary: "Oddsmaker Gateway Service is down"
+          description: "The Oddsmaker Gateway Service (ingestion entry) has been down for more than 1 minute."
+
       # High error rate
       - alert: HighErrorRate
         expr: |
