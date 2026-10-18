@@ -512,16 +512,16 @@ If you want, I can:
 
 | 审核条目 | 核验结果 | 证据 file:line |
 |---|---|---|
-| SEC-001 docker-compose.yml 存在默认密码/Token | 待核 | |
-| DATA-001 事件幂等键与去重边界不统一 | 待核 | |
-| DEPLOY-001 Control 与 Gateway 发布契约不一致 | 待核 | |
-| DR-001 异地备份与恢复闭环未验证 | 待核 | |
-| OBS-001 业务指标/告警未接通 | 待核 | |
-| ML-001 ML 能力真实运行状态不明 | 待核 | |
+| SEC-001 docker-compose.yml 存在默认密码/Token | **属实**（compose 面；k8s 面干净） | `docker-compose.yml:30,141,190,197`（POSTGRES/CLICKHOUSE_PASSWORD=oddsmaker）、`:200-201,246-247`（dev-admin-token/dev-internal-token/dev-secret）、`:565-567`（superset 占位/admin）；k8s 走 secretRef（`deploy/k8s/gateway-service.yaml:85-86`、`deploy/k8s/backup-cronjob.yaml:111-112,164-165`）；fail-closed 校验缺失待整改 |
+| DATA-001 事件幂等键与去重边界不统一 | **属实** | `ReplayGuard.java:86-88` `mark(eventId)` 仅按裸 event_id 去重、键无 game_id/environment；调用方 `BatchController.java:200` 直传 `event.eventId`——跨游戏/跨环境同 event_id 会互相抑制，下游重复语义未核 |
+| DEPLOY-001 Control 与 Gateway 发布契约不一致 | **属实** | `release.yaml:172` 仅 set image `deployment/oddsmaker-control`；`:178` 健康检查 `https://control.oddsmaker.local`（.local 仅同网 runner 可解析）；`deploy/k8s/gateway-service.yaml` 存在但发布流程不更新 gateway |
+| DR-001 异地备份与恢复闭环未验证 | **部分属实**（降级系既有拍板） | `deploy/backup/postgres-backup.sh:96-101` 与 `deploy/k8s/backup-cronjob.yaml:34-37`：aws 缺失 WARN 跳过离站、任务仍 exit 0——a0c1b9f 有意降级（防 set -e 整条掐断留存清理）；缺口=离站失败仅日志 WARN、无告警/非零退出；隔离环境恢复演练未做过 |
+| OBS-001 业务指标/告警未接通 | **部分属实** | control 已暴露 prometheus 端点（`application.yaml:171-177`）+ Prometheus 抓 8 job（`prometheus.yaml:21-78`：control/PG/Redis/Kafka/CH/Flink/node）+ 告警 7 条（`oddsmaker-alerts.yml:6-67`）；缺口：gateway 无抓取 job、真实流量下业务指标与告警触发未验证（demo 面无监控栈） |
+| ML-001 ML 能力真实运行状态不明 | **已有结论**（与账本一致） | 训练管线在 CI（`ci.yaml:83-84` ml-tests，68 例）；在线异常检测已 BLOCKED（`todo.md` ML 条——指标表 0 行、无部署面）；训练完成≠在线检测上线，账本口径已满足本条要求 |
 
 ## 落地跟踪
 
-- [ ] 核对上表六条，填证据
+- [x] 核对上表六条，填证据（2026-10-18 本仓复核：6/6 已填结论+file:line；SEC-001/DATA-001/DEPLOY-001 属实，DR-001/OBS-001 部分属实，ML-001 与账本 BLOCKED 一致）
 - [ ] SEC-001 移除生产默认凭据（fail-closed 校验）
 - [ ] DATA-001 / DATA-002 幂等与就绪状态
 - [ ] DEPLOY-001 / DEPLOY-002 发布契约与运行边界
