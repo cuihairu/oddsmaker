@@ -97,8 +97,14 @@ docker compose --project-directory . -f infra/docker-compose.yml up -d
   根 compose 起 7 个作业容器（dimension-sync 不在 compose，funnels fatJar 双跑
   FunnelsJob 与 ConfigurableFunnelsJob 两主类）；nightly 分发包 6 fatJar + dimension-sync
   agent。三处数字各异但各有依据，引用时先说口径再报数。
-- 观测面由 infra 件提供（otel-collector → Prometheus → Grafana），业务服务本身未配置
-  otel exporter 接线时，观测面只收 infra 自身暴露的指标——接线属生产化改造，不在本矩阵声明内。
+- 观测面由 infra 件提供（otel-collector → Prometheus → Grafana）。业务指标接线（审计
+  OBS-001 接线面）：infra Prometheus 经 `host.docker.internal`（host-gateway，需
+  Docker ≥ 20.10）抓根 compose 业务栈已发布的宿主端口——control `host.docker.internal:28085`
+  与 gateway `host.docker.internal:28080` 的 `/actuator/prometheus`（actuator 与业务同
+  端口；配置在 `infra/prometheus.yml`，prometheus 容器带对应 `extra_hosts`）。与业务栈
+  分属两个 compose project，不共享网络、互不重启。前置：业务栈在跑，否则两 job 抓取
+  target down（不影响 infra 自身指标）。真机抓取验证未做（需 Production 宿主机实测
+  `up{job="oddsmaker-control"}`），属外部条件；k8s 面抓取配置见 `deploy/monitoring/`。
 - PostgreSQL 备份归档走 `deploy/backup/`（脚本 + S3）或 K8s `backup-cronjob`。
 
 ## 不入档的编排

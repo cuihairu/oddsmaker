@@ -4,3 +4,24 @@ scrape_configs:
   - job_name: 'otel-collector'
     static_configs:
       - targets: ['otel-collector:9464']
+
+  # 业务服务指标（审计 OBS-001 接线面）：本档 prometheus 与业务栈（仓库根 compose）分属
+  # 两个 compose project，不共享网络；经 host.docker.internal(host-gateway) 抓根 compose
+  # 已发布的宿主端口（control 28085→8085、gateway 28080→8080，actuator 与业务同端口，
+  # management.endpoints.web.exposure 均含 prometheus）。
+  # 前置：根 compose 业务栈在跑。docker < 20.10 无 host-gateway 映射，需升级。
+  - job_name: 'oddsmaker-control'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['host.docker.internal:28085']
+        labels:
+          app: 'oddsmaker-control'
+          component: 'control-service'
+
+  - job_name: 'oddsmaker-gateway'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['host.docker.internal:28080']
+        labels:
+          app: 'oddsmaker-gateway'
+          component: 'gateway-service'

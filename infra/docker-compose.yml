@@ -91,6 +91,9 @@ services:
     container_name: infra-prometheus
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    # 经宿主网关抓业务栈（根 compose）已发布的 28085/28080 宿主端口（审计 OBS-001 接线面）
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports: ["9090:9090"]
     depends_on: [otel-collector]
 
