@@ -13,18 +13,24 @@ import java.sql.Timestamp;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.contains;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * ClickHouse 客户端：未配置降级、query/update/execute 转发与时间参数规范化（Timestamp/LocalDateTime/LocalDate）。
+ * ClickHouse 客户端：未配置降级、query/update/execute 转发与时间参数规范化（Timestamp/LocalDateTime/LocalDate），
+ * analysisLastEventAt 就绪度查询（渲染/空值/环境过滤/失败降级）。
  */
 @ExtendWith(MockitoExtension.class)
 @DisplayName("ClickHouse 客户端测试")
@@ -90,5 +96,41 @@ class ClickHouseClientTest {
         ClickHouseClient client = new ClickHouseClient(jdbc);
         when(jdbc.queryForList(anyString(), any(Object[].class))).thenReturn(List.of());
         assertTrue(client.query("SELECT 1").isEmpty());
+    }
+
+    @Test
+    @DisplayName("analysisLastEventAt：Timestamp/LocalDateTime → ISO-8601 UTC，无行/NULL → null")
+    void analysisLastEventAtRendersIsoUtc() {
+        ClickHouseClient client = new ClickHouseClient(jdbc);
+        Timestamp ts = Timestamp.from(LocalDateTime.of(2026, 10, 18, 8, 30, 0).toInstant(java.time.ZoneOffset.UTC));
+        LocalDateTime ldt = LocalDateTime.of(2026, 10, 18, 8, 30, 5);
+        when(jdbc.queryForList(anyString(), any(Object[].class))).thenReturn(
+                List.of(Map.of("last_event_at", ts)),
+                List.of(Map.of("last_event_at", ldt)),
+                List.of(),
+                List.of(java.util.Collections.singletonMap("last_event_at", null)));
+
+        assertEquals("2026-10-18T08:30:00Z", client.analysisLastEventAt("g", null));
+        assertEquals("2026-10-18T08:30:05Z", client.analysisLastEventAt("g", null));
+        assertNull(client.analysisLastEventAt("g", null));
+        assertNull(client.analysisLastEventAt("g", null));
+    }
+
+    @Test
+    @DisplayName("analysisLastEventAt：环境过滤绑定；查询异常→null；未配置→null")
+    void analysisLastEventAtEnvFilterAndFailure() {
+        ClickHouseClient client = new ClickHouseClient(jdbc);
+        when(jdbc.queryForList(anyString(), any(Object[].class))).thenReturn(List.of());
+
+        client.analysisLastEventAt("g", "prod");
+        verify(jdbc).queryForList(contains("AND environment = ?"), eq("g"), eq("prod"));
+
+        client.analysisLastEventAt("g", "  ");
+        verify(jdbc).queryForList(argThat(sql -> sql != null && !sql.contains("environment = ?")), eq("g"));
+
+        when(jdbc.queryForList(anyString(), any(Object[].class))).thenThrow(new RuntimeException("CH down"));
+        assertNull(client.analysisLastEventAt("g", null));
+
+        assertNull(new ClickHouseClient((JdbcTemplate) null).analysisLastEventAt("g", null));
     }
 }

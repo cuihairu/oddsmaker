@@ -16,6 +16,8 @@ import java.util.Map;
  * 此处聚合窗口内每步 users 并按步重算转化率（行级 conversion_rate 恒 100 不可聚合）。
  * 口径：users = 按日去重用户数的跨日累加（同一用户跨天窗口内重复计入）。
  * ClickHouse 未配置时统一返回 available=false 的空数据。
+ * available 只反映「CH 可达且查询成功」；analysisLastEventAt（可用时携带，ISO-8601 UTC）
+ * 反映分析链路最近一次落数（events.max(ts_server)，null=从未产出），供调用方区分两者。
  */
 @Service
 public class FunnelResultsService {
@@ -51,6 +53,10 @@ public class FunnelResultsService {
             resp.put("available", false);
             return resp;
         }
+        // 分析就绪度（审计 DATA-002）：available 只反映 CH 可达，analysisLastEventAt 反映分析链路
+        // 最近一次落数（events.max(ts_server)；null=分析管道从未产出或就绪度查询失败）。
+        // 增量字段，available 语义不变，向后兼容。
+        resp.put("analysisLastEventAt", client.analysisLastEventAt(gameId, environment));
 
         LocalDate since = LocalDate.now(ZoneOffset.UTC).minusDays(d);
         String sql = "SELECT step, anyLast(step_name) AS step_name, sum(users) AS users "

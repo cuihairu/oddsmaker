@@ -13,7 +13,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * ClickHouse 访问入口（风控处置归档 + 大屏指标查询）。
+ * ClickHouse 访问入口（风控处置归档 + 大屏指标查询 + 分析就绪度）。
  * 未配置 oddsmaker.clickhouse.url 时 isAvailable()=false，调用方按不可用降级，
  * 不影响处置主链路。
  */
@@ -59,6 +59,47 @@ public class ClickHouseClient {
 
     public <T> T execute(ConnectionCallback<T> action) {
         return jdbc.execute(action);
+    }
+
+    /**
+     * 分析就绪度：events 表最近一条事件的 ts_server（ISO-8601 UTC）。
+     * null = 无数据/查询失败/未配置——调用方以此区分「CH 可达」与「分析链路在产数据」。
+     * events 按 (game_id, environment, event_date) 分区，谓词裁剪后 max(ts_server) 为廉价查询；
+     * 查询失败只记 warn 返回 null，不向调用方抛异常（就绪度不得破坏主查询链路）。
+     */
+    public String analysisLastEventAt(String gameId, String environment) {
+        if (jdbc == null) {
+            return null;
+        }
+        boolean envFilter = environment != null && !environment.isBlank();
+        String sql = "SELECT max(ts_server) AS last_event_at FROM events WHERE game_id = ?"
+                + (envFilter ? " AND environment = ?" : "");
+        try {
+            List<Map<String, Object>> rows = envFilter
+                    ? query(sql, gameId, environment)
+                    : query(sql, gameId);
+            if (rows.isEmpty()) {
+                return null;
+            }
+            return renderIsoUtc(rows.get(0).get("last_event_at"));
+        } catch (RuntimeException e) {
+            logger.warn("analysisLastEventAt query failed (gameId={}): {}", gameId, e.toString());
+            return null;
+        }
+    }
+
+    /** DateTime64 取值 → ISO-8601 UTC：驱动可能给 Timestamp/LocalDateTime/字符串，其余原样透传。 */
+    private static String renderIsoUtc(Object v) {
+        if (v == null) {
+            return null;
+        }
+        if (v instanceof java.util.Date d) {
+            return d.toInstant().toString();
+        }
+        if (v instanceof java.time.LocalDateTime ldt) {
+            return ldt.toInstant(java.time.ZoneOffset.UTC).toString();
+        }
+        return v.toString();
     }
 
     /**

@@ -23,7 +23,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * 可配置漏斗结果服务测试：CH 降级、聚合组装（总体/逐步转化/流失）、环境过滤、归属校验。
+ * 可配置漏斗结果服务测试：CH 降级、聚合组装（总体/逐步转化/流失）、环境过滤、归属校验、
+ * 分析就绪度 analysisLastEventAt（可用时携带、降级省略、失败不破坏主链路）。
  */
 @ExtendWith(MockitoExtension.class)
 @DisplayName("可配置漏斗结果服务测试")
@@ -62,7 +63,41 @@ class FunnelResultsServiceTest {
         assertEquals(Boolean.FALSE, resp.get("available"));
         assertEquals("signup-funnel", resp.get("funnelName"));
         assertEquals("SEQUENTIAL", resp.get("funnelType"));
+        // 降级面保持零额外查询：就绪度字段整体省略，不查 freshness
+        assertFalse(resp.containsKey("analysisLastEventAt"));
         verify(client, never()).query(anyString(), any(Object[].class));
+        verify(client, never()).analysisLastEventAt(any(), any());
+    }
+
+    @Test
+    @DisplayName("可用时带分析就绪度：analysisLastEventAt 按 game+environment 取自 events 表")
+    void includesAnalysisFreshness() {
+        when(funnelConfigService.findById("f1")).thenReturn(funnel("f1", "g"));
+        when(client.isAvailable()).thenReturn(true);
+        when(client.query(anyString(), any(Object[].class))).thenReturn(List.of());
+        when(client.analysisLastEventAt("g", "prod")).thenReturn("2026-10-18T08:00:00Z");
+
+        Map<String, Object> resp = service.results("f1", "g", "prod", 30);
+
+        assertEquals(Boolean.TRUE, resp.get("available"));
+        assertEquals("2026-10-18T08:00:00Z", resp.get("analysisLastEventAt"));
+        verify(client).analysisLastEventAt("g", "prod");
+    }
+
+    @Test
+    @DisplayName("就绪度查询失败 → 字段 null，主查询链路不受影响")
+    void freshnessFailureDoesNotBreakMainQuery() {
+        when(funnelConfigService.findById("f1")).thenReturn(funnel("f1", "g"));
+        when(client.isAvailable()).thenReturn(true);
+        when(client.analysisLastEventAt("g", null)).thenReturn(null);
+        when(client.query(anyString(), any(Object[].class))).thenReturn(List.of(
+                Map.of("step", 1, "step_name", "Install", "users", 100L)));
+
+        Map<String, Object> resp = service.results("f1", "g", null, 30);
+
+        assertEquals(Boolean.TRUE, resp.get("available"));
+        assertNull(resp.get("analysisLastEventAt"));
+        assertFalse(((List<?>) resp.get("steps")).isEmpty());
     }
 
     @Test
