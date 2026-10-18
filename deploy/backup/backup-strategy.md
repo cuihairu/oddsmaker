@@ -145,6 +145,11 @@ clickhouse-backup.sh incremental
    SELECT max(created_at) FROM audit_logs;
    ```
 
+> CronJob 实际产物是 `postgres-backup.sh` 的 `pg_dump --format=custom` 备份（非
+> pg_basebackup），恢复用 `pg_restore`。已验证的完整流程见下方
+> 「2026-10-19 本地恢复演练」——备份→新空库 `pg_restore --no-owner --no-privileges`→
+> 逐表行数与源库一致→应用 `ddl-auto=validate` 启动健康 UP，全程隔离容器内完成。
+
 ### Scenario 2: Redis Failure
 
 **Detection**: Health check failure, cache miss rate increase
@@ -263,6 +268,18 @@ velero restore create --from-backup oddsmaker-daily-backup-20240101020000
 ### Test Checklist
 
 > 2026-10 收尾核验：演练为环境执行项——本机栈未起、WAL 归档 / clickhouse-backup / 对象存储备份链路未部署（仓库侧交付物 = 本策略文档 + `postgres-backup.sh`），6 项需在具备完整备份链路的环境按上方演练计划执行后据实勾选，如实保留未勾。
+>
+> **2026-10-19 本地恢复演练（R1019，PG + Redis 两腿已执行）**：本机隔离容器内闭环——
+> ① PG：产线脚本本体在 `postgres:16-alpine` 容器内对 demo 库全量备份（exit 0，424K
+> custom 格式，自带 `pg_restore --list` 校验过）→ 全新空 PG16 容器 `pg_restore` 灌入 →
+> **102/102 表逐表行数与源库完全一致**（flyway 历史 53/53 success 双库一致，真实数据面
+> 含 permissions 102 行等）→ control-service `bootRun` 直连恢复库（`ddl-auto=validate`）
+> 32s 启动、`/actuator/health` UP、日志零 ERROR——应用连接与 schema 接受实证；
+> ② Redis：k8s CronJob 同款机制（`redis-cli --rdb` 网络流式导出，redis:7-alpine）→
+> 新容器加载 dump.rdb → **43/43 键恢复**，string/hash/list/set 抽验逐键一致。
+> **未覆盖（维持环境执行项）**：ClickHouse 恢复腿（本机无 CH 环境 + Altinity CLI）、
+> 离站副本恢复（需真实对象存储凭据）、全栈 RTO/RPO 实测——清单 6 项仍如实保留未勾，
+> 待完整备份链路环境执行后勾选。
 
 - [ ] Backup restoration successful
 - [ ] Data integrity verified
