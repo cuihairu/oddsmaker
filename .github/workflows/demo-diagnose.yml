@@ -74,6 +74,19 @@ jobs:
           echo "== journalctl -u nginx last 20 (需 sudo/诊断组权限，无则跳过) =="
           sudo -n journalctl -u nginx -n 20 --no-pager 2>&1 | tail -20 || true
 
+      # 观测面取证（审计 OBS-001 接线面真机验证 + ML-001 触发条件 a 的量尺，2026-10-18 补）：
+      # up 各 job 明细看业务抓取是否在产；prometheus_tsdb_head_min_time（epoch ms）即
+      # 指标历史可回看起点——ML 条件 a「历史 ≥7 天 / 28d 分位基线可算」按此读数判定。
+      # infra 栈未跑或端口不通时输出为空/失败，均属合法取证结果（容忍失败红线不变）。
+      - name: Prometheus scrape face and history depth
+        run: |
+          echo "== infra prometheus container =="
+          docker ps --filter name=infra-prometheus --format '{{.Names}} {{.Status}}' || true
+          echo "== up (all scrape jobs; expect oddsmaker-control/gateway = 1 after infra redeploy) =="
+          curl -sS -m 5 'http://127.0.0.1:9090/api/v1/query?query=up' || true; echo
+          echo "== prometheus_tsdb_head_min_time (epoch ms, 指标历史回看起点) =="
+          curl -sS -m 5 'http://127.0.0.1:9090/api/v1/query?query=prometheus_tsdb_head_min_time' || true; echo
+
   # 境外视点：GitHub-hosted runner 在境外数据中心，与 Cloudflare 边缘同类入站路径。
   # 源站公网 IP 若变（Aliyun EIP 重绑定），此处同步更新 ORIGIN 值。
   foreign-vantage:

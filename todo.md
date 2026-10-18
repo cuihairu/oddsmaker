@@ -10,7 +10,7 @@
 
 - [x] docs 子目录双语配对（P2，2026-10-16 执行单登记，PATROL016 完成）：52 个 .md 全配——51 个新增兄弟文件（中文源 45 个补 `.en.md`、英文源 6 个补 `.zh.md`）+ `zh/index.md` 已随根目录轮配对；51 个源文件各插 1 行切换器。配对方式**已代决**（PATROL016）：同目录兄弟文件而非 locale 镜像（locale 同名文件非互译，差异 164/198/738 行，见 docs/决策记录.md）。验收：59 对全部通过结构计数一致（行数/标题/表格/围栏）+ 代码块逐字节相同 + 切换器第 3 行且双向对称；英文侧正文无中文残留（仅切换器「中文」二字、代码块内原样注释、厂商专名如 友盟+/神策）；`pnpm docs:build` 绿。顺带按对账规则修 06 §4.1 笔误（「未携带废弃字段」→「携带废弃字段」，与 §3.3.3 及 schema `additionalProperties:false` 对齐，中英同批）
 
-- [ ] 外部生产审计核验与整改（P0 起，`docs/review/review-2026-10-18-production-audit.md`，2026-10-18 他席落地，PATROL1018 补登记并完成首轮核验）：审计 11 条发现，主表 6 条已按文档纪律核对并填证据——SEC-001（compose 硬编码 dev 凭据、无 fail-closed）/ DATA-001（幂等键裸 event_id 跨游戏互斥）/ DEPLOY-001（发布只更 control + .local 健康检查）属实，DR-001 / OBS-001 部分属实，ML-001 与账本 BLOCKED 一致；其余 5 条（DATA-002/DEPLOY-002/DOC-001/GOV-001/SITE-001）待核。**SEC-001 已整改完成**（PATROL1018E：根 compose + infra compose 凭据全改 `${VAR:?}` 必填、control-service 增 `ProductionSecretsValidator` 双保险、`deploy/MODES.md` 补 Production .env 必填清单；全量门禁 2050 绿 + compose config 双向实证）
+- [ ] 外部生产审计核验与整改（P0 起，`docs/review/review-2026-10-18-production-audit.md`，2026-10-18 他席落地，PATROL1018 补登记并完成首轮核验）：审计 11 条发现，全部核验完毕（2026-10-18 终态，证据见 `docs/review/review-2026-10-18-production-audit.md` 核验结论表 11 行）——SEC-001（compose 硬编码 dev 凭据、无 fail-closed）/ DATA-001（幂等键裸 event_id 跨游戏互斥）/ DEPLOY-001（发布只更 control + .local 健康检查）属实，DR-001 / OBS-001 部分属实，ML-001 与账本 BLOCKED 一致；DATA-002/DEPLOY-002/DOC-001/GOV-001/SITE-001 首轮补核完毕（属实归属见表）。**SEC-001 已整改完成**（PATROL1018E：根 compose + infra compose 凭据全改 `${VAR:?}` 必填、control-service 增 `ProductionSecretsValidator` 双保险、`deploy/MODES.md` 补 Production .env 必填清单；全量门禁 2050 绿 + compose config 双向实证）
   - **下一步**：待拍板两项（DEPLOY-001 发布契约=发版面 / GOV-001 账本收敛=巡检读取面）；外部待验证：OBS-001 真机抓取（Production 宿主机 up=1 实测）+ 真实流量告警触发；已完成（追加）：DATA-002 统一读口【已代决=独立端点替代逐出参散播】（新增 GET /api/games/{gameId}/readiness → available + analysisLastEventAt，game:read 鉴权，不发明阈值；fan-out 否决记入审计台账；测试先行 5 例，control-service 全量 2063 绿）。已完成：PATROL1018E 单 = SEC-001、DATA-001 全链路（gateway+enrich 三元组去重）、DR-001 脚本面（exit 2 非静默）、DEPLOY-002（MODES.md 运行边界）、DOC-001（README 中英+MODES.md 三口径）、OBS-001 文件面（gateway 抓取 job+down 告警）；2026-10-18 后续巡检 = DATA-002 增量面【已代决】（漏斗结果新增 analysisLastEventAt=events.max(ts_server)，available 语义不变向后兼容；CohortService 抛错保留——显式 calculate fail-loud 与读路径降级语义不同）、OBS-001 接线面文件【已代决=host-gateway 解耦】（infra prometheus 经宿主网关抓 28085/28080 actuator，不共享网络不改根 compose，promtool+compose config 双绿，MODES.md 同步改写）。审计 11 条全部核验完毕，仓内可动的整改面已清
   - **同源去重**：SITE-001 与账本 502 条同源（勿双记）；ML-001 与账本 ML 条同源（已 BLOCKED）
   - **卡点**：GOV-001（收敛 todo.md 结构）待用户拍板——账本结构是巡检自动化的读取面，agent 不得单方重构
@@ -46,7 +46,7 @@
   - 复核留痕（2026-10-18 第二十巡）：无变化，证据同上轮。维持卡点
   - 复核留痕（2026-10-18 第二十一巡 PATROL1018F）：无变化，证据同上轮。维持卡点
   - 复核留痕（2026-10-18 第二十二巡）：无变化，证据同上轮。维持卡点
-- [ ] Demo 站公网 502（交付面故障，PATROL1017 发现）：源站全链路已证健康（on-box 与公网直连均 200），502 定位为 Cloudflare 回源配置（用户侧 CF 面板/Aliyun 安全组），源站与仓内无可修项
+- [ ] Demo 站公网 502（交付面故障，PATROL1017 发现；2026-10-18 复核：公网仍 502，控制探针 cloudflare/github 200，源站侧状态未变）：源站全链路已证健康（on-box 与公网直连均 200），502 定位为 Cloudflare 回源配置（用户侧 CF 面板/Aliyun 安全组），源站与仓内无可修项；复核通道 = Demo Diagnose workflow_dispatch（只读取证，demo-diagnose.yml）
   - **卡点类型**：用户侧配置缺失——CF 回源链（CF 面板内 origin A 记录指向 / SSL 模式 / Aliyun 安全组对 CF 边缘 IP 段的入站放行）不正确，须 CF/Aliyun 控制台凭据才能动，仓内与部署机均无可操作项
   - **解锁条件**：用户在 CF 面板把 `oddsmaker.cuihairu.site` 的 origin A 记录指到部署机现公网 IP `106.14.216.177`（保持橙云代理）——这是唯一剩余解锁动作：安全组/境外拦截假说已被境外视点探针排除（见 PATROL1017C 留痕），LE 证书有效至 2027-01-01、80/443 双栈从境内与境外实测均 200，无第二分支。CF 侧操作属用户侧（见边界「CF DNS 域名切换属用户侧操作，本仓不动」）
   - 复核留痕（2026-10-17 PATROL1017）：发现——公网 `GET /` 与 `/api/*` 均 `error code: 502`（http:80 同样 502；非 521/522，说明 CF 侧拿到的是无效源站响应而非连接拒绝，故障面在源站 nginx/证书/回源配置）；而 Deploy Demo run 38844622658（R1025 rerun）与手动触发 38931937869 均 success、on-box `curl 127.0.0.1:38085/actuator/health`=UP、镜像已滚至 digest sha256:a99f2c9a…，手动重部署后 60s 再探仍 502 ×3。已证本机非部署机（无 `/opt/oddsmaker`；本机 `oddsmaker-demo-*` 为本地测试遗留栈），当时结论「无部署机访问通道」
@@ -74,7 +74,7 @@
   - 复核留痕（2026-10-18 第二十巡）：无变化——公网仍 502。维持卡点
   - 复核留痕（2026-10-18 第二十一巡 PATROL1018F）：无变化——公网仍 502（另发现 Deploy Demo run 39091500095 于 checkout 腿挂，属 self-hosted runner 连 github.com 抖动同族，已 rerun --failed 处置，部署腿未发生）。维持卡点
   - 复核留痕（2026-10-18 第二十二巡）：无变化——公网仍 502；上轮 checkout flake 经 rerun 已愈（run 39091500095 双 job success），无遗留。维持卡点
-- [ ] ML 异常检测进评估批次：任一触发条件成立即开工——指标历史可回看 7 天以上且 7d/28d 分位基线可算；单游戏阈值告警规则月均调整 3 次以上；告警误杀率超 30% 持续 2 周
+- [ ] ML 异常检测进评估批次：任一触发条件成立即开工——指标历史可回看 7 天以上且 7d/28d 分位基线可算；单游戏阈值告警规则月均调整 3 次以上；告警误杀率超 30% 持续 2 周。**条件 a 时钟（2026-10-18 记）**：业务指标接线 2026-10-18 落地（ffb4dc1，infra prometheus host-gateway 抓 control/gateway）且需 infra 栈在 Production 机重拉后才开始积累 → 条件 a 最早 2026-10-25（7 天）/2026-11-15（28d 分位基线）方可成立；读数通道 = Demo Diagnose 的 prometheus_tsdb_head_min_time 取证腿（demo-diagnose.yml）。条件 b/c 无取证通道（规则调整次数与误杀率现无记录面），不可测不可判，不编造
   - **卡点类型**：触发条件未成立——条件 (a) 非等待可解，需先补部署面
   - **解锁条件**：四项触发条件任一达标；其中条件 (a) 需先有**带网关流量的部署面**，并自指标开始落库起算满 **7 天**（7d/28d 分位基线方可算）
   - 复核留痕（2026-10-15）：演示库 health_metrics / data_quality_metrics / metric_alert_rules 三表皆 0 行、最早指标日期为无；health_metrics 无产线写入方（`collectMetric` 仅模拟开关路径、默认关），data_quality_metrics 需网关真实流量而演示栈无 gateway
