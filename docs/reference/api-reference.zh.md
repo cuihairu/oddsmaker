@@ -30,6 +30,7 @@ x-admin-token: YOUR_ADMIN_TOKEN
 | DELETE | `/api/games/{gameId}` | 删除或归档游戏 |
 | POST | `/api/games/{gameId}/publish` | 将游戏转为上线状态 |
 | POST | `/api/games/{gameId}/unpublish` | 将上线游戏转为维护状态 |
+| GET | `/api/games/{gameId}/readiness` | 分析就绪度：`available`（ClickHouse 可达）+ `analysisLastEventAt`（ISO-8601 UTC，采集→分析链路最近一次落数；`null`=从未产出）。可选 `environment` 过滤 |
 
 ### 环境
 

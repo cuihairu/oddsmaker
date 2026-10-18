@@ -30,6 +30,7 @@ x-admin-token: YOUR_ADMIN_TOKEN
 | DELETE | `/api/games/{gameId}` | Delete or archive a game |
 | POST | `/api/games/{gameId}/publish` | Move a game to live status |
 | POST | `/api/games/{gameId}/unpublish` | Move a live game to maintenance |
+| GET | `/api/games/{gameId}/readiness` | Analysis readiness: `available` (ClickHouse reachable) + `analysisLastEventAt` (ISO-8601 UTC, last event landed by the ingest→analysis chain; `null` = never produced). Optional `environment` query filter |
 
 ### Environments
 
