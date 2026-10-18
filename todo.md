@@ -46,6 +46,7 @@
   - 复核留痕（2026-10-18 第二十巡）：无变化，证据同上轮。维持卡点
   - 复核留痕（2026-10-18 第二十一巡 PATROL1018F）：无变化，证据同上轮。维持卡点
   - 复核留痕（2026-10-18 第二十二巡）：无变化，证据同上轮。维持卡点
+  - 复核留痕（2026-10-19 第二十三巡 r1019）：无变化——HEAD=11e9025 与 origin 同步、期间零新提交；`grep -rl binlog deploy/` 仍零命中；`debezium` 全仓仍仅 `DimensionSyncJobTest` 一处方法名、`kafka.connect|connect-api` 零命中。三项解锁件仍为外部输入缺失，维持卡点
 - [ ] Demo 站公网 502（交付面故障，PATROL1017 发现；2026-10-18 复核：公网仍 502，控制探针 cloudflare/github 200，源站侧状态未变）：源站全链路已证健康（on-box 与公网直连均 200），502 定位为 Cloudflare 回源配置（用户侧 CF 面板/Aliyun 安全组），源站与仓内无可修项；复核通道 = Demo Diagnose workflow_dispatch（只读取证，demo-diagnose.yml）；2026-10-18 run 39136336862 境外腿：源站 IP 直连 :80/:443 均 200、同 IP cockpit 301、经 CF 502——源站健康结论再度实证，卡点仍在用户侧 CF 回源
   - **卡点类型**：用户侧配置缺失——CF 回源链（CF 面板内 origin A 记录指向 / SSL 模式 / Aliyun 安全组对 CF 边缘 IP 段的入站放行）不正确，须 CF/Aliyun 控制台凭据才能动，仓内与部署机均无可操作项
   - **解锁条件**：用户在 CF 面板把 `oddsmaker.cuihairu.site` 的 origin A 记录指到部署机现公网 IP `106.14.216.177`（保持橙云代理）——这是唯一剩余解锁动作：安全组/境外拦截假说已被境外视点探针排除（见 PATROL1017C 留痕），LE 证书有效至 2027-01-01、80/443 双栈从境内与境外实测均 200，无第二分支。CF 侧操作属用户侧（见边界「CF DNS 域名切换属用户侧操作，本仓不动」）
@@ -74,6 +75,7 @@
   - 复核留痕（2026-10-18 第二十巡）：无变化——公网仍 502。维持卡点
   - 复核留痕（2026-10-18 第二十一巡 PATROL1018F）：无变化——公网仍 502（另发现 Deploy Demo run 39091500095 于 checkout 腿挂，属 self-hosted runner 连 github.com 抖动同族，已 rerun --failed 处置，部署腿未发生）。维持卡点
   - 复核留痕（2026-10-18 第二十二巡）：无变化——公网仍 502；上轮 checkout flake 经 rerun 已愈（run 39091500095 双 job success），无遗留。维持卡点
+  - 复核留痕（2026-10-19 第二十三巡 r1019）：无变化——本巡直测公网 https/http 双栈仍 502（2026-10-19T00:40+08）；CI 面无故障：定时 nightly 10-18 UTC success（run 39090477048，10-16/17/18 三连绿）、Deploy Demo 最新 success（run 39137531232）、源站证据仍有效（run 39136336862，期间零新提交）。维持卡点，解锁动作不变（用户 CF 面板 origin A 记录→106.14.216.177）
 - [ ] ML 异常检测进评估批次：任一触发条件成立即开工——指标历史可回看 7 天以上且 7d/28d 分位基线可算；单游戏阈值告警规则月均调整 3 次以上；告警误杀率超 30% 持续 2 周。**条件 a 时钟（2026-10-18 记）**：业务指标接线 2026-10-18 落地（ffb4dc1，infra prometheus host-gateway 抓 control/gateway），但 Demo Diagnose 实测（run 39136336862，2026-10-18T14:31Z）：Production/Demo 机上 infra 栈未部署（无 infra-prometheus 容器，127.0.0.1:9090 拒连；机上仅 demo 三件套 control/postgres/redis）→ 指标积累尚未开始，条件 a 最早成立于「infra 栈部署后 +7 天」（7 天）/「+28 天」（28d 分位基线）；读数通道 = Demo Diagnose 的 prometheus_tsdb_head_min_time 取证腿（demo-diagnose.yml）。条件 b/c 无取证通道（规则调整次数与误杀率现无记录面），不可测不可判，不编造
   - **卡点类型**：触发条件未成立——条件 (a) 非等待可解，需先补部署面
   - **解锁条件**：四项触发条件任一达标；其中条件 (a) 需先有**带网关流量的部署面**，并自指标开始落库起算满 **7 天**（7d/28d 分位基线方可算）
@@ -103,6 +105,7 @@
   - 复核留痕（2026-10-18 第二十巡）：无变化，证据同上轮。维持卡点
   - 复核留痕（2026-10-18 第二十一巡 PATROL1018F）：无变化，证据同上轮。维持卡点
   - 复核留痕（2026-10-18 第二十二巡）：无变化，证据同上轮。维持卡点
+  - 复核留痕（2026-10-19 第二十三巡 r1019）：无变化——demo compose 服务面仍无 gateway（仅 postgres/redis/control-service）；本地 demo 库 health_metrics/performance_metrics/ml_model_metrics/metric_alert_rules 仍 0 行；infra 栈未见部署（上轮证据 run 39136336862 有效，期间零新提交）。条件 (a) 时钟未起，四项触发条件仍无一达标，维持卡点
 
 ## 已完成需求
 
