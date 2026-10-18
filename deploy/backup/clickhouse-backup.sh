@@ -60,10 +60,18 @@ fi
 
 # Upload to S3 (if configured)
 # 注意 set -e：上传失败不得中止——留存清理在其后，中止会让备份目录无界增长。
+# 离站状态显式化（审计 DR-001）：本地成功 ≠ 离站成功，结尾按状态以 exit 2 报离站失败。
+OFFSITE_STATUS="skipped"
+OFFSITE_REASON=""
 if [ -n "$S3_BUCKET" ]; then
     log "Uploading $BACKUP_NAME to s3://$S3_BUCKET/clickhouse/"
-    clickhouse-backup $CH_FLAGS upload "$BACKUP_NAME" --storage-class STANDARD_IA \
-        || log "WARN: S3 上传失败（备份保留在本地 $BACKUP_DIR/$BACKUP_NAME）"
+    if clickhouse-backup $CH_FLAGS upload "$BACKUP_NAME" --storage-class STANDARD_IA; then
+        OFFSITE_STATUS="uploaded"
+    else
+        OFFSITE_STATUS="failed"
+        OFFSITE_REASON="s3 upload error"
+        log "ERROR: S3 上传失败，离站副本缺失（本地备份保留在 $BACKUP_DIR/$BACKUP_NAME）"
+    fi
 fi
 
 # Retention: delete local backups older than RETENTION_DAYS
@@ -74,5 +82,10 @@ find "$BACKUP_DIR" -maxdepth 1 -type d \( -name "full_*" -o -name "incremental_*
         rm -rf "$d"
     fi
 done
+
+if [ "$OFFSITE_STATUS" = "failed" ]; then
+    log "ClickHouse backup finished with OFFSITE FAILURE ($OFFSITE_REASON)：本地备份完好，离站副本缺失"
+    exit 2
+fi
 
 log "ClickHouse backup completed: $BACKUP_NAME"

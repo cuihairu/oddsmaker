@@ -31,7 +31,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * {@code postgres:16-alpine} 内无 aws CLI（实测 command -v aws 为空）。若上传分支不先判存在，
  * {@code aws: not found} 会让 set -e 直接中止——S3 离站副本从未产生，且其后的
  * {@code find -mtime -delete} 留存清理同样不执行，备份 PVC 无界增长直到写满。
- * 本测试要求：缺 aws 时脚本仍退出 0、留存清理照常跑、且就地把缺口喊出来。
+ * 本测试要求（审计 DR-001 后契约）：缺 aws / 上传失败时本地备份与留存清理照常完成，
+ * 但结尾以 exit 2 显式失败——离站缺口不得只留在日志里静默成功；上传成功才 exit 0。
  *
  * <p>沙箱 PATH 刻意只留桩 bin（宿主 coreutils 由 {@code linkSystemTools} 按需符号链接，
  * 见 {@link #SANDBOX_TOOLS}）。GH-hosted runner 预装 aws CLI，早年把整段宿主目录挂进 PATH
@@ -157,7 +158,7 @@ class BackupScriptTest {
     }
 
     @Test
-    @DisplayName("CronJob backup.sh: 镜像无 aws CLI 时不因 set -e 中止，留存清理照常执行")
+    @DisplayName("CronJob backup.sh: 镜像无 aws CLI 时留存清理照常执行，但结尾以 exit 2 报离站失败")
     void cronJobScriptSurvivesMissingAwsCli() throws Exception {
         Path root = freshDir("cronjob-backup");
         Path bin = Files.createDirectories(root.resolve("bin"));
@@ -174,8 +175,9 @@ class BackupScriptTest {
 
         Run run = runScript(script, bin, backupDir);
 
-        assertEquals(0, run.exitCode(),
-                "缺 aws 时脚本应成功退出（备份已落盘，离站上传为可选降级）；实际输出：\n" + run.stdout());
+        assertEquals(2, run.exitCode(),
+                "缺 aws 时离站副本缺失必须以 exit 2 显式失败（exit 0=静默成功不可接受），"
+                        + "同时备份已落盘、留存清理照常；实际输出：\n" + run.stdout());
         assertFalse(Files.exists(stale),
                 "超期备份未被清理——set -e 在上传分支中止导致留存清理永不执行，备份 PVC 会无界增长");
         try (var list = Files.list(backupDir)) {
@@ -194,6 +196,50 @@ class BackupScriptTest {
         assertTrue(sh.contains("BACKUP_DIR=\"${BACKUP_DIR:-/backup}\""),
                 "BACKUP_DIR 需形如 BACKUP_DIR=\"${BACKUP_DIR:-/backup}\" 以便沙箱测试；当前：\n"
                         + sh.lines().filter(l -> l.contains("BACKUP_DIR")).toList());
+    }
+
+    @Test
+    @DisplayName("CronJob backup.sh: 离站上传成功时 exit 0（本地成功+离站成功才是成功）")
+    void cronJobScriptExitsZeroWhenOffsiteSucceeds() throws Exception {
+        Path root = freshDir("cronjob-backup-ok");
+        Path bin = Files.createDirectories(root.resolve("bin"));
+        Path backupDir = Files.createDirectories(root.resolve("backup"));
+        linkSystemTools(bin);
+        writeStub(bin, "pg_dump", "#!/bin/bash\nfor a in \"$@\"; do case \"$a\" in --file=*) : > \"${a#--file=}\";; esac; done\nexit 0\n");
+        writeStub(bin, "pg_restore", "#!/bin/bash\nexit 0\n");
+        Path trace = root.resolve("aws-trace.log");
+        Files.writeString(trace, "", StandardCharsets.UTF_8);
+        writeStub(bin, "aws", "#!/bin/bash\necho \"aws $@\" >> " + trace + "\nexit 0\n");
+
+        Path script = root.resolve("backup.sh");
+        Files.writeString(script, embeddedCronJobScript(), StandardCharsets.UTF_8);
+        Run run = runScript(script, bin, backupDir);
+
+        assertEquals(0, run.exitCode(),
+                "S3 上传成功应 exit 0；实际输出：\n" + run.stdout());
+        assertTrue(Files.readString(trace).contains("s3://oddsmaker-backups/postgres/"),
+                "aws 桩未被调用或参数不对——离站上传应真实执行；trace:\n" + Files.readString(trace));
+    }
+
+    @Test
+    @DisplayName("CronJob backup.sh: 离站上传失败时留存清理照常 + exit 2 非静默失败")
+    void cronJobScriptFailsWhenUploadFails() throws Exception {
+        Path root = freshDir("cronjob-backup-uploadfail");
+        Path bin = Files.createDirectories(root.resolve("bin"));
+        Path backupDir = Files.createDirectories(root.resolve("backup"));
+        linkSystemTools(bin);
+        writeStub(bin, "pg_dump", "#!/bin/bash\nfor a in \"$@\"; do case \"$a\" in --file=*) : > \"${a#--file=}\";; esac; done\nexit 0\n");
+        writeStub(bin, "pg_restore", "#!/bin/bash\nexit 0\n");
+        writeStub(bin, "aws", "#!/bin/bash\necho 'upload failed: no credentials' >&2\nexit 1\n");
+
+        Path stale = agedBackup(backupDir, "postgres_20200101_000000.sql.gz", 40);
+        Path script = root.resolve("backup.sh");
+        Files.writeString(script, embeddedCronJobScript(), StandardCharsets.UTF_8);
+        Run run = runScript(script, bin, backupDir);
+
+        assertEquals(2, run.exitCode(),
+                "上传失败必须 exit 2（不得静默成功、也不得把留存清理连带掐断）；实际输出：\n" + run.stdout());
+        assertFalse(Files.exists(stale), "上传失败不得中止留存清理（备份 PVC 无界增长回归）");
     }
 
     // ===== deploy/backup/postgres-backup.sh =====
@@ -227,7 +273,8 @@ class BackupScriptTest {
         assertTrue(p.waitFor(60, TimeUnit.SECONDS), "postgres-backup.sh timed out");
         String text = Files.readString(out);
 
-        assertEquals(0, p.exitValue(), "缺 aws 时应成功退出；实际输出：\n" + text);
+        assertEquals(2, p.exitValue(),
+                "缺 aws 时离站副本缺失必须非 0 退出（exit 2），不得静默成功；实际输出：\n" + text);
         assertFalse(Files.exists(stale), "超期备份未被清理——上传分支中止吞掉了留存清理");
     }
 
@@ -255,6 +302,34 @@ class BackupScriptTest {
         assertTrue(p.waitFor(60, TimeUnit.SECONDS), "postgres-backup.sh timed out");
 
         assertFalse(p.exitValue() == 0, "校验失败必须非 0 退出，否则损坏备份会被当作成功并进入留存/上传链路");
+    }
+
+    @Test
+    @DisplayName("postgres-backup.sh: 离站上传成功时 exit 0")
+    void standaloneScriptExitsZeroWhenOffsiteSucceeds() throws Exception {
+        Path root = freshDir("standalone-backup-ok");
+        Path bin = Files.createDirectories(root.resolve("bin"));
+        Path backupDir = Files.createDirectories(root.resolve("backup"));
+        linkSystemTools(bin);
+        writeStub(bin, "pg_dump", "#!/bin/bash\nfor a in \"$@\"; do case \"$a\" in --file=*) : > \"${a#--file=}\";; esac; done\nexit 0\n");
+        writeStub(bin, "pg_restore", "#!/bin/bash\nexit 0\n");
+        writeStub(bin, "aws", "#!/bin/bash\nexit 0\n");
+
+        Path script = REPO.resolve("deploy/backup/postgres-backup.sh");
+        Map<String, String> env = new HashMap<>(sandboxEnv(bin, backupDir));
+        env.put("LOG_FILE", root.resolve("backup.log").toAbsolutePath().toString());
+
+        ProcessBuilder pb = new ProcessBuilder(List.of("/bin/bash", script.toAbsolutePath().toString()));
+        pb.environment().clear();
+        pb.environment().putAll(env);
+        pb.redirectErrorStream(true);
+        Path out = Files.createTempFile("standalone-ok-out", ".log");
+        pb.redirectOutput(out.toFile());
+        Process p = pb.start();
+        assertTrue(p.waitFor(60, TimeUnit.SECONDS), "postgres-backup.sh timed out");
+
+        assertEquals(0, p.exitValue(),
+                "本地校验通过且 S3 上传成功应 exit 0；实际输出：\n" + Files.readString(out));
     }
 
     /** 造一个 mtime 落在 N 天前的目录。 */
@@ -320,6 +395,50 @@ class BackupScriptTest {
         String traced = Files.readString(trace);
         assertTrue(traced.contains("create"), "备份本体未执行；桩未命中 create 子命令");
         assertTrue(traced.contains("upload"), "配了 S3_BUCKET 应仍尝试上传（离站副本是既有能力，不因本轮加固而移除）");
+    }
+
+    @Test
+    @DisplayName("clickhouse-backup.sh: 离站上传失败时留存清理照常 + exit 2 非静默失败")
+    void clickHouseScriptFailsWhenOffsiteUploadFails() throws Exception {
+        Path root = freshDir("ch-backup-uploadfail");
+        Path bin = Files.createDirectories(root.resolve("bin"));
+        Path backupDir = Files.createDirectories(root.resolve("backup"));
+        linkSystemTools(bin);
+        // clickhouse-backup 桩：create 成功、upload 失败（离站缺口路径）
+        writeStub(bin, "clickhouse-backup", "#!/bin/bash\n"
+                + "sub=\"\"\n"
+                + "for a in \"$@\"; do case \"$a\" in create|upload|list) sub=\"$a\"; break ;; esac; done\n"
+                + "case \"$sub\" in\n"
+                + "  upload) echo 'upload failed:NoSuchUpload' >&2; exit 1 ;;\n"
+                + "esac\n"
+                + "exit 0\n");
+
+        Path stale = agedDir(backupDir, "full_20200101_000000", 120);
+        Path fresh = agedDir(backupDir, "full_20990101_000000", 1);
+
+        Path script = REPO.resolve("deploy/backup/clickhouse-backup.sh");
+        Map<String, String> env = new HashMap<>();
+        env.put("PATH", bin.toAbsolutePath().toString());
+        env.put("BACKUP_DIR", backupDir.toAbsolutePath().toString());
+        env.put("RETENTION_DAYS", "90");
+        env.put("CLICKHOUSE_HOST", "localhost");
+        env.put("S3_BUCKET", "oddsmaker-backups");
+
+        ProcessBuilder pb = new ProcessBuilder(List.of("/bin/bash", script.toAbsolutePath().toString(), "full"));
+        pb.environment().clear();
+        pb.environment().putAll(env);
+        pb.directory(root.toFile());
+        pb.redirectErrorStream(true);
+        Path out = Files.createTempFile("ch-fail-out", ".log");
+        pb.redirectOutput(out.toFile());
+        Process p = pb.start();
+        assertTrue(p.waitFor(60, TimeUnit.SECONDS), "clickhouse-backup.sh timed out");
+        String text = Files.readString(out);
+
+        assertEquals(2, p.exitValue(),
+                "上传失败必须 exit 2 非静默失败（exit 0=离站缺口只留在日志里）；实际输出：\n" + text);
+        assertFalse(Files.exists(stale), "上传失败不得中止留存清理（备份目录无界增长回归）");
+        assertTrue(Files.exists(fresh), "未超期备份目录被误删");
     }
 
     @Test

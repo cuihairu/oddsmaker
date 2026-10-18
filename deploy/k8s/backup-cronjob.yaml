@@ -30,16 +30,33 @@ data:
     # Upload to S3 (if configured)。本 CronJob 镜像是 postgres:16-alpine，**不含 aws CLI**，
     # 故先判存在再传：否则 aws: not found 会被上面的 set -e 当成失败中止，
     # 连带下面的留存清理永不执行，备份 PVC 无界增长直到写满。
+    # 离站状态显式化（审计 DR-001）：上传失败不中止清理（a0c1b9f 意图保留），
+    # 但结尾 exit 2——离站缺口不得静默成功。0=本地+离站全成；1=本地校验失败；2=离站缺失。
+    OFFSITE_STATUS="skipped"
+    OFFSITE_REASON=""
     if [ -n "$S3_BUCKET" ]; then
       if command -v aws > /dev/null 2>&1; then
-        aws s3 cp "$BACKUP_FILE" s3://$S3_BUCKET/postgres/ --storage-class STANDARD_IA
+        if aws s3 cp "$BACKUP_FILE" s3://$S3_BUCKET/postgres/ --storage-class STANDARD_IA; then
+          OFFSITE_STATUS="uploaded"
+        else
+          OFFSITE_STATUS="failed"
+          OFFSITE_REASON="s3 upload error"
+          echo "ERROR: S3 上传失败，离站副本缺失（本地备份保留在 $BACKUP_FILE）" >&2
+        fi
       else
-        echo "WARN: S3_BUCKET=$S3_BUCKET 已配置但镜像内无 aws CLI，跳过离站副本（备份已落本地 $BACKUP_FILE）" >&2
+        OFFSITE_STATUS="failed"
+        OFFSITE_REASON="aws CLI missing"
+        echo "ERROR: S3_BUCKET=$S3_BUCKET 已配置但镜像内无 aws CLI，离站副本缺失（本地备份保留在 $BACKUP_FILE）" >&2
       fi
     fi
 
     # Clean up old backups（清理置于上传之后但不受上传成败牵连）
     find "$BACKUP_DIR" -name "*.sql.gz" -type f -mtime +$RETENTION_DAYS -delete
+
+    if [ "$OFFSITE_STATUS" = "failed" ]; then
+      echo "Backup finished with OFFSITE FAILURE ($OFFSITE_REASON): $BACKUP_FILE" >&2
+      exit 2
+    fi
 
     echo "Backup completed: $BACKUP_FILE"
 

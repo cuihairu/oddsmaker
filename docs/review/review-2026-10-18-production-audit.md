@@ -526,5 +526,6 @@ If you want, I can:
 - [x] DATA-001 幂等键统一（2026-10-18 整改：`ReplayGuard.consumeEventId` 改为 `consumeEventId(gameId, environment, eventId)`，幂等键=逻辑事件身份三元组，长度前缀编码（hex 长度定界）杜绝裸拼接/分隔符撞键；调用方 `BatchController.java:200` 改传三元组；回归测试覆盖跨游戏/跨环境不互斥 + 含分隔符组件不撞键）
 - [ ] DATA-002 就绪状态
 - [ ] DEPLOY-001 / DEPLOY-002 发布契约与运行边界
-- [ ] DR-001 备份与恢复验证
+- [x] DR-001 备份离站失败可见性（脚本面，2026-10-18 整改：`postgres-backup.sh`/`backup-cronjob.yaml` 内嵌脚本/`clickhouse-backup.sh` 离站状态显式化——缺 aws CLI 或上传失败时本地备份+留存清理照常完成（a0c1b9f 降级意图保留），但结尾 exit 2 非静默失败（exit 0=本地+离站全成，1=本地校验失败，2=离站缺失），webhook 通知同步报 ❌；`BackupScriptTest` 10 例覆盖三态，control-service 全量绿）。**剩余外部件**：隔离环境恢复演练未做过（需真实对象存储凭据+隔离环境，属外部条件）；RPO/RTO 业务目标待用户拍板（审计亦要求缺目标记待决策、不编造）
+- [ ] DR-001 恢复演练闭环（外部件：隔离环境 + 对象存储凭据）
 - [ ] OBS-001 / DOC-001 / GOV-001 / ML-001 / SITE-001

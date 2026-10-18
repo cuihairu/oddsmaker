@@ -28,9 +28,11 @@ This document outlines the backup and disaster recovery (DR) strategy for the Od
 > k8s CronJob（`deploy/k8s/backup-cronjob.yaml`）每日 02:00 与每周日 03:00 各跑一次
 > `pg_dump --format=custom` 全量逻辑备份（30 天就地留存清理）。两个作业同一脚本、同一镜像
 > （`postgres:16-alpine`），差异仅在时段错开。**该镜像不含 aws CLI**，故脚本先判
-> `command -v aws` 再传：`S3_BUCKET` 已配置但缺 CLI 时打 WARN 跳过离站副本，而不是让
-> `set -e` 中止并连带跳过留存清理（那会让备份 PVC 无界增长直到写满）。离站副本需在基础
-> 镜像装 aws-cli，或改由外部备份控制器接管。
+> `command -v aws` 再传：`S3_BUCKET` 已配置但缺 CLI（或上传失败）时不让 `set -e` 中止
+> ——本地备份与留存清理照常完成，但结尾以 **exit 2** 显式失败（审计 DR-001：本地成功 ≠
+> 离站成功，离站缺口不得静默成功；exit 1=本地校验失败）。k8s 侧 Job 随之进入 Failed，
+> 可被 `kubectl get jobs` / 告警面看到。离站副本需在基础镜像装 aws-cli，或改由外部备份
+> 控制器接管。
 
 **Configuration** (in-repo, both compose and k8s):
 ```sql

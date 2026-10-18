@@ -92,13 +92,26 @@ fi
 # Upload to remote storage (if configured)。
 # 先判 aws 存在：缺 CLI 时 `aws: not found` 会被 set -e 当成失败，
 # 连带下面的留存清理与通知永不执行。
+# 离站状态显式化（审计 DR-001）：本地备份成功 ≠ 离站上传成功。上传失败不中止
+# 后续留存清理（a0c1b9f 意图保留），但结尾以 exit 2 报失败——离站缺口不得静默成功。
+# 退出码语义：0=本地+离站全成；1=本地备份校验失败；2=本地完好但离站副本缺失。
+OFFSITE_STATUS="skipped"   # S3_BUCKET 未配置时无离站要求
+OFFSITE_REASON=""
 if [ -n "$S3_BUCKET" ]; then
     if command -v aws > /dev/null 2>&1; then
         log "Uploading backup to S3: $S3_BUCKET"
-        aws s3 cp "$BACKUP_FILE" "s3://$S3_BUCKET/postgres/" --storage-class STANDARD_IA
-        log "S3 upload completed"
+        if aws s3 cp "$BACKUP_FILE" "s3://$S3_BUCKET/postgres/" --storage-class STANDARD_IA; then
+            OFFSITE_STATUS="uploaded"
+            log "S3 upload completed"
+        else
+            OFFSITE_STATUS="failed"
+            OFFSITE_REASON="s3 upload error"
+            log "ERROR: S3 上传失败，离站副本缺失（本地备份保留在 $BACKUP_FILE）"
+        fi
     else
-        log "WARN: S3_BUCKET=$S3_BUCKET 已配置但环境内无 aws CLI，跳过离站副本（备份已落本地 $BACKUP_FILE）"
+        OFFSITE_STATUS="failed"
+        OFFSITE_REASON="aws CLI missing"
+        log "ERROR: S3_BUCKET=$S3_BUCKET 已配置但环境内无 aws CLI，离站副本缺失（本地备份保留在 $BACKUP_FILE）"
     fi
 fi
 
@@ -111,19 +124,40 @@ log "Cleanup completed"
 TOTAL_SIZE=$(du -sh "$BACKUP_DIR" 2> /dev/null | cut -f1 || echo "unknown")
 log "Total backup storage: $TOTAL_SIZE"
 
-# Send notification (if configured)
+# Send notification (if configured)。离站失败时正文与状态同步喊出来，通知面不留「全绿」假象
 if [ -n "$WEBHOOK_URL" ]; then
-    curl -s -X POST "$WEBHOOK_URL" \
-        -H "Content-Type: application/json" \
-        -d "{
-            \"text\": \"✅ PostgreSQL backup completed\",
-            \"details\": {
-                \"type\": \"$BACKUP_TYPE\",
-                \"file\": \"$BACKUP_FILE\",
-                \"size\": \"$BACKUP_SIZE\",
-                \"database\": \"$DB_NAME\"
-            }
-        }"
+    if [ "$OFFSITE_STATUS" = "failed" ]; then
+        curl -s -X POST "$WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -d "{
+                \"text\": \"❌ PostgreSQL backup OFFSITE FAILURE ($OFFSITE_REASON)\",
+                \"details\": {
+                    \"type\": \"$BACKUP_TYPE\",
+                    \"file\": \"$BACKUP_FILE\",
+                    \"size\": \"$BACKUP_SIZE\",
+                    \"database\": \"$DB_NAME\",
+                    \"offsite\": \"$OFFSITE_STATUS: $OFFSITE_REASON\"
+                }
+            }"
+    else
+        curl -s -X POST "$WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -d "{
+                \"text\": \"✅ PostgreSQL backup completed\",
+                \"details\": {
+                    \"type\": \"$BACKUP_TYPE\",
+                    \"file\": \"$BACKUP_FILE\",
+                    \"size\": \"$BACKUP_SIZE\",
+                    \"database\": \"$DB_NAME\",
+                    \"offsite\": \"$OFFSITE_STATUS\"
+                }
+            }"
+    fi
+fi
+
+if [ "$OFFSITE_STATUS" = "failed" ]; then
+    log "Backup process finished with OFFSITE FAILURE ($OFFSITE_REASON)：本地备份完好，离站副本缺失"
+    exit 2
 fi
 
 log "Backup process completed successfully"
