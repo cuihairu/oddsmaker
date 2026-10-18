@@ -40,7 +40,7 @@ This document outlines the backup and disaster recovery (DR) strategy for the Od
 archive_mode = on
 wal_level = replica
 max_wal_senders = 3
-wal_archive_timeout = 30s      -- 保证 RPO ≤ 5 分钟
+archive_timeout = 30s          -- 保证 RPO ≤ 5 分钟
 archive_command = 'mkdir -p /var/lib/postgresql/archive \
   && cp %p /var/lib/postgresql/archive/%f \
   && find /var/lib/postgresql/archive -type f -mtime +30 -delete'
@@ -148,7 +148,11 @@ clickhouse-backup.sh incremental
 > CronJob 实际产物是 `postgres-backup.sh` 的 `pg_dump --format=custom` 备份（非
 > pg_basebackup），恢复用 `pg_restore`。已验证的完整流程见下方
 > 「2026-10-19 本地恢复演练」——备份→新空库 `pg_restore --no-owner --no-privileges`→
-> 逐表行数与源库一致→应用 `ddl-auto=validate` 启动健康 UP，全程隔离容器内完成。
+> 逐表行数与源库一致→应用 `ddl-auto=validate` 启动健康 UP，全程隔离容器内完成；
+> WAL 归档 + PITR 通路（pg_basebackup 基线 + 归档回放）同日演练通过，见下
+> 「PITR 腿」。注意 PITR 语义：`recovery_target_time` 晚于归档 WAL 内最后一条提交
+> 记录时会 FATAL「recovery ended before configured recovery target was reached」
+> （演练实证）——恢复到最新应不设 target、直接回放到归档末端提升。
 
 ### Scenario 2: Redis Failure
 
@@ -276,7 +280,16 @@ velero restore create --from-backup oddsmaker-daily-backup-20240101020000
 > 含 permissions 102 行等）→ control-service `bootRun` 直连恢复库（`ddl-auto=validate`）
 > 32s 启动、`/actuator/health` UP、日志零 ERROR——应用连接与 schema 接受实证；
 > ② Redis：k8s CronJob 同款机制（`redis-cli --rdb` 网络流式导出，redis:7-alpine）→
-> 新容器加载 dump.rdb → **43/43 键恢复**，string/hash/list/set 抽验逐键一致。
+> 新容器加载 dump.rdb → **43/43 键恢复**，string/hash/list/set 抽验逐键一致；
+> ③ **PITR 腿**（WAL 归档 + pg_basebackup 基线回放，生产 compose/k8s 同款归档配置）：
+> 源库分两批写数（R1 在基线前、R2 只存在于归档 WAL），`pg_basebackup` 基线 +
+> `archive_timeout=30s` 自动切段归档 → 恢复端 A（回放到归档末端）**20/20 行全量恢复**
+> （R2 仅经 WAL 回放重现）→ 恢复端 B（`recovery_target_time`=基线后 R2 前）日志显式
+> `recovery stopping before commit of transaction` → **10 行（R2 精确排除）**。
+> **演练揪出真缺陷**：配置原写的 `wal_archive_timeout` 不是 PostgreSQL GUC（真名
+> `archive_timeout`），生产 postgres 带错名启动直接 FATAL crash 循环——39e2a1c 入库
+> 以来从未被真实执行过，本演练为首次执行面。已全仓修正（compose/k8s/文档 6 处）并加
+> `WalArchiveConfigTest` 钉测试（compose/k8s GUC 集一致 + 错名禁绝）。
 > **未覆盖（维持环境执行项）**：ClickHouse 恢复腿（本机无 CH 环境 + Altinity CLI）、
 > 离站副本恢复（需真实对象存储凭据）、全栈 RTO/RPO 实测——清单 6 项仍如实保留未勾，
 > 待完整备份链路环境执行后勾选。

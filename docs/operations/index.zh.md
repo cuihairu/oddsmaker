@@ -131,7 +131,7 @@ Critical alerts include:
 
 ### Backup Schedule
 
-> 仓库已交付配置：postgres WAL 归档（`archive_mode=on` + `wal_archive_timeout=30s` + 30 天就地留存清理，归档走独立卷/PVC）、Redis 快照 + AOF（`save 60 10000/300 10/900 1` + `appendfsync everysec`）、ClickHouse 全量/增量脚本（`deploy/backup/clickhouse-backup.sh`，90 天留存）、pg_dump 全量与 30 天留存（`deploy/backup/postgres-backup.sh` + `deploy/k8s/backup-cronjob.yaml`）。
+> 仓库已交付配置：postgres WAL 归档（`archive_mode=on` + `archive_timeout=30s` + 30 天就地留存清理，归档走独立卷/PVC）、Redis 快照 + AOF（`save 60 10000/300 10/900 1` + `appendfsync everysec`）、ClickHouse 全量/增量脚本（`deploy/backup/clickhouse-backup.sh`，90 天留存）、pg_dump 全量与 30 天留存（`deploy/backup/postgres-backup.sh` + `deploy/k8s/backup-cronjob.yaml`）。
 >
 > S3 离站副本需运行环境中存在 aws CLI。k8s CronJob 镜像 `postgres:16-alpine` 不含该 CLI，脚本会判存后打 WARN 跳过（备份仍落本地并照常清理留存），不会中断作业——离站副本请在基础镜像装 aws-cli，或改由外部备份控制器接管。
 

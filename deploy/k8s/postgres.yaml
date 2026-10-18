@@ -66,7 +66,7 @@ spec:
               protocol: TCP
           # WAL 归档：PITR 前置（deploy/backup/backup-strategy.md §PostgreSQL）
           # archive_command 建目录 + 写归档 PVC + 就地 30 天留存清理（单段归档后同一次 shell 内完成，
-          # 不依赖第二个 pod 挂载 RWO 卷）；wal_archive_timeout=30s 保证 RPO ≤ 5 分钟
+          # 不依赖第二个 pod 挂载 RWO 卷）；archive_timeout=30s 保证 RPO ≤ 5 分钟
           args:
             - postgres
             - -c
@@ -76,7 +76,7 @@ spec:
             - -c
             - max_wal_senders=3
             - -c
-            - wal_archive_timeout=30s
+            - archive_timeout=30s
             - -c
             - "archive_command=mkdir -p /var/lib/postgresql/archive && cp %p /var/lib/postgresql/archive/%f && find /var/lib/postgresql/archive -type f -mtime +30 -delete"
           env:

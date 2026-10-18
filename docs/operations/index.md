@@ -131,7 +131,7 @@ Critical alerts include:
 
 ### Backup Schedule
 
-> Configuration delivered in the repository: postgres WAL archiving (`archive_mode=on` + `wal_archive_timeout=30s` + 30-day in-place retention cleanup, archiving goes to a dedicated volume/PVC), Redis snapshots + AOF (`save 60 10000/300 10/900 1` + `appendfsync everysec`), ClickHouse full/incremental scripts (`deploy/backup/clickhouse-backup.sh`, 90-day retention), pg_dump full backups with 30-day retention (`deploy/backup/postgres-backup.sh` + `deploy/k8s/backup-cronjob.yaml`).
+> Configuration delivered in the repository: postgres WAL archiving (`archive_mode=on` + `archive_timeout=30s` + 30-day in-place retention cleanup, archiving goes to a dedicated volume/PVC), Redis snapshots + AOF (`save 60 10000/300 10/900 1` + `appendfsync everysec`), ClickHouse full/incremental scripts (`deploy/backup/clickhouse-backup.sh`, 90-day retention), pg_dump full backups with 30-day retention (`deploy/backup/postgres-backup.sh` + `deploy/k8s/backup-cronjob.yaml`).
 >
 > The S3 off-site copy requires the aws CLI to exist in the runtime environment. The k8s CronJob image `postgres:16-alpine` does not include that CLI, so the script detects its presence and skips with a WARN (the backup still lands locally and retention cleanup proceeds as usual), without interrupting the job — for the off-site copy, install aws-cli in the base image, or hand it over to an external backup controller.
 
