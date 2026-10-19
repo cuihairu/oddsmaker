@@ -9,9 +9,12 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -21,13 +24,18 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * 健康检查 curl https://control.oddsmaker.local（ubuntu-latest runner 解析不了 .local，
  * 首次发版必挂）。同轮还发现四份被 apply 的清单内嵌 CHANGE_ME 占位 Secret——
  * 发布即用占位值覆盖产线真实凭据。钉住：双服务同批滚动、集群内健康检查、
- * 运行版本记录断言、占位 Secret 与发布流水线隔离。
+ * 运行版本记录断言、占位 Secret 与发布流水线隔离、失败自动回滚。
  */
 class ReleaseDeployContractTest {
 
     private static final Path REPO = Paths.get("..", "..").toAbsolutePath().normalize();
 
     private static final String WORKFLOW = ".github/workflows/release.yaml";
+
+    private static final String ROLLBACK_SCRIPT = "deploy/k8s/rollback-release.sh";
+
+    private static final String ROLLBACK_TRAP =
+            "trap 'bash deploy/k8s/rollback-release.sh \"$prev_control\" \"$prev_gateway\"' ERR";
 
     private static final List<String> SECRET_MANIFESTS = List.of(
             "deploy/k8s/postgres-secrets.yaml",
@@ -83,6 +91,94 @@ class ReleaseDeployContractTest {
                 "verify 步应断言 gateway 实际运行镜像 = 本次发布版本");
     }
 
+    /**
+     * 审计验收项「回滚步骤经过验证」的机制面：滚动前必须把两服务当前镜像记下来，
+     * 否则失败时无回滚目标。首次发布 deployment 尚不存在，查询失败须置空继续。
+     */
+    @Test
+    void releaseCapturesPreviousImagesBeforeRollout() throws IOException {
+        String wf = read(WORKFLOW);
+        assertTrue(wf.contains("Record running images"),
+                "滚动前须记录两服务当前运行镜像（自动回滚目标）");
+        assertTrue(wf.contains("-o jsonpath='{.spec.template.spec.containers[?(@.name==\"control-service\")].image}'"),
+                "prev_control 应按容器名精确取 control 当前镜像（容器顺序变化不得取错）");
+        assertTrue(wf.contains("-o jsonpath='{.spec.template.spec.containers[?(@.name==\"gateway-service\")].image}'"),
+                "prev_gateway 应按容器名精确取 gateway 当前镜像");
+        assertTrue(wf.contains(">> \"$GITHUB_ENV\""),
+                "prev 镜像应写入 GITHUB_ENV，供后续发布步的回滚 trap 使用");
+        assertTrue(wf.contains("2>/dev/null || true"),
+                "首次发布 deployment 不存在，prev 查询失败须置空继续而非中断发布");
+    }
+
+    /** Deploy 与 Verify 两步都要挂 ERR 回滚：滚动失败、健康断言失败、版本断言失败一律回退。 */
+    @Test
+    void deployAndVerifyStepsTrapErrToRollback() throws IOException {
+        String wf = read(WORKFLOW);
+        int traps = wf.split(Pattern.quote(ROLLBACK_TRAP), -1).length - 1;
+        assertEquals(2, traps,
+                "Deploy 与 Verify 两步都应挂 ERR trap 自动回滚（健康检查失败也必须回退，"
+                        + "否则发回坏版本却把 prod 卡在坏状态），实挂: " + traps);
+        assertTrue(wf.contains("set -euo pipefail"),
+                "发布步须显式 set -euo pipefail，否则 trap ERR 不会随管道失败触发");
+    }
+
+    /** 回滚脚本自身的契约钉：双服务对称、不用 -e（一处失败不得中止另一处）、空 prev 跳过。 */
+    @Test
+    void rollbackScriptPinsContract() throws Exception {
+        Path script = REPO.resolve(ROLLBACK_SCRIPT);
+        assertTrue(Files.exists(script), "回滚脚本缺失: " + ROLLBACK_SCRIPT);
+        String sh = Files.readString(script);
+        assertTrue(sh.contains("rollback_one oddsmaker-control control-service"),
+                "control 应有对称回滚调用（deployment 名 + 容器名）");
+        assertTrue(sh.contains("rollback_one oddsmaker-gateway gateway-service"),
+                "gateway 应有对称回滚调用（原流程只更 control，回滚也不能只回 control）");
+        assertTrue(sh.contains("kubectl rollout status"),
+                "回滚后须等 rollout status，不能 set image 完就走（半回滚状态）");
+        assertFalse(sh.contains("set -euo pipefail"),
+                "回滚脚本刻意不用 -e：一个服务回滚失败不得中止另一个服务的回退");
+        assertTrue(sh.contains("::warning::"),
+                "无 prev 镜像（首次发布）时须跳过并告警，不得对空镜像 set image");
+        Process p = new ProcessBuilder("/bin/bash", "-n", script.toAbsolutePath().toString())
+                .redirectErrorStream(true).start();
+        assertTrue(p.waitFor(30, TimeUnit.SECONDS), "bash -n 语法检查超时");
+        assertEquals(0, p.exitValue(), "bash -n 语法检查失败: " + new String(p.getInputStream().readAllBytes()));
+    }
+
+    @Test
+    void rollbackScriptSkipsEmptyPrevImagesOnFirstRelease() throws Exception {
+        Run r = runRollbackScript("", "");
+        assertEquals(0, r.exitCode, "首次发布（无 prev 镜像）应整体成功退出: " + r.output);
+        assertTrue(r.output.contains("::warning::"), "无 prev 镜像须跳过并告警: " + r.output);
+        assertFalse(r.kubectlCalls.contains("set image"),
+                "无回滚目标时不得执行 set image（空值会把容器镜像清空）: " + r.kubectlCalls);
+    }
+
+    @Test
+    void rollbackScriptRollsBothServicesBackToPreviousImages() throws Exception {
+        Run r = runRollbackScript("reg.example/oddsmaker:v0.1.0", "reg.example/oddsmaker:v0.1.0");
+        assertEquals(0, r.exitCode, "正常回滚应成功退出: " + r.output);
+        assertTrue(r.kubectlCalls.contains(
+                        "set image deployment/oddsmaker-control control-service=reg.example/oddsmaker:v0.1.0"),
+                "control 应 set image 回 prev 镜像: " + r.kubectlCalls);
+        assertTrue(r.kubectlCalls.contains(
+                        "set image deployment/oddsmaker-gateway gateway-service=reg.example/oddsmaker:v0.1.0"),
+                "gateway 应 set image 回 prev 镜像: " + r.kubectlCalls);
+        assertTrue(r.kubectlCalls.contains("rollout status deployment/oddsmaker-control"), r.kubectlCalls.toString());
+        assertTrue(r.kubectlCalls.contains("rollout status deployment/oddsmaker-gateway"), r.kubectlCalls.toString());
+    }
+
+    @Test
+    void rollbackScriptContinuesOtherServiceWhenOneRollbackFails() throws Exception {
+        Run r = runRollbackScript("reg.example/oddsmaker:FAIL_ME", "reg.example/oddsmaker:v0.0.9");
+        assertTrue(r.exitCode != 0, "有服务回滚失败须非零退出，让发布红灯: " + r.output);
+        assertTrue(r.kubectlCalls.contains(
+                        "set image deployment/oddsmaker-gateway gateway-service=reg.example/oddsmaker:v0.0.9"),
+                "control 回滚失败不得中止 gateway 的回退: " + r.kubectlCalls);
+        assertTrue(r.kubectlCalls.contains("rollout status deployment/oddsmaker-gateway"), r.kubectlCalls.toString());
+        assertFalse(r.kubectlCalls.contains("rollout status deployment/oddsmaker-control"),
+                "set image 已失败的服务不应再等 rollout status: " + r.kubectlCalls);
+    }
+
     @Test
     void workflowYamlIsWellFormed() throws IOException {
         assertYamlWellFormed(REPO.resolve(WORKFLOW), read(WORKFLOW));
@@ -119,6 +215,47 @@ class ReleaseDeployContractTest {
             assertTrue(content.contains("kind: Secret"), secretManifest + " 应是 Secret 清单");
             assertYamlWellFormed(path, content);
         }
+    }
+
+    // ===== rollback-release.sh 沙箱功能验证 =====
+
+    private record Run(int exitCode, String output, String kubectlCalls) { }
+
+    /**
+     * 桩 kubectl：记录全部调用供断言；镜像串含 FAIL_ME 即失败，用于验证
+     * 一个服务回滚失败不中止另一个（脚本刻意不用 -e 的语义）。
+     */
+    private static Path writeKubectlStub(Path binDir) throws IOException {
+        Path stub = binDir.resolve("kubectl");
+        Files.writeString(stub, """
+                #!/bin/bash
+                echo "CALL $*" >> "$KUBECTL_LOG"
+                case "$*" in *FAIL_ME*) exit 43 ;; esac
+                exit 0
+                """);
+        stub.toFile().setExecutable(true);
+        return stub;
+    }
+
+    /** 沙箱执行回滚脚本：PATH 只含桩 bin（host 无 kubectl 也不受污染），调用记录进日志文件。 */
+    private static Run runRollbackScript(String prevControl, String prevGateway) throws Exception {
+        Path script = REPO.resolve(ROLLBACK_SCRIPT);
+        assertTrue(Files.exists(script), "回滚脚本缺失: " + ROLLBACK_SCRIPT);
+        Path binDir = Files.createTempDirectory("rollback-bin");
+        writeKubectlStub(binDir);
+        Path callLog = Files.createTempFile("kubectl-log", ".txt");
+        Path out = Files.createTempFile("rollback-out", ".log");
+        ProcessBuilder pb = new ProcessBuilder(List.of(
+                "/bin/bash", script.toAbsolutePath().toString(), prevControl, prevGateway));
+        Map<String, String> env = pb.environment();
+        env.clear();
+        env.put("PATH", binDir.toAbsolutePath().toString());
+        env.put("KUBECTL_LOG", callLog.toAbsolutePath().toString());
+        pb.redirectErrorStream(true);
+        pb.redirectOutput(out.toFile());
+        Process p = pb.start();
+        assertTrue(p.waitFor(60, TimeUnit.SECONDS), "rollback script timed out");
+        return new Run(p.exitValue(), Files.readString(out), Files.readString(callLog));
     }
 
     /** 语法门：多文档清单缩进错误即解析抛错；顺便保证至少有一个文档。 */

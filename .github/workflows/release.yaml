@@ -161,12 +161,25 @@ jobs:
           mkdir -p $HOME/.kube
           echo "${{ secrets.KUBE_CONFIG_PROD }}" | base64 -d > $HOME/.kube/config
 
+      # DEPLOY-001 自动回滚前置：滚动前记录两服务当前运行镜像。首次发布时 deployment
+      # 尚不存在，查询失败置空继续（|| true）——回滚脚本对空 prev 跳过并告警。
+      - name: Record running images
+        run: |
+          set -euo pipefail
+          prev_control=$(kubectl -n oddsmaker get deployment oddsmaker-control -o jsonpath='{.spec.template.spec.containers[?(@.name=="control-service")].image}' 2>/dev/null || true)
+          prev_gateway=$(kubectl -n oddsmaker get deployment oddsmaker-gateway -o jsonpath='{.spec.template.spec.containers[?(@.name=="gateway-service")].image}' 2>/dev/null || true)
+          echo "prev_control=${prev_control}" >> "$GITHUB_ENV"
+          echo "prev_gateway=${prev_gateway}" >> "$GITHUB_ENV"
+
       # DEPLOY-001：Control 与 Gateway 同一发布契约——单镜像双服务用同一不可变版本
       # tag 同批滚动两个 deployment，防发布后版本漂移。
       # *-secrets.yaml（CHANGE_ME 占位凭据）由运维首次部署填真值后手工 apply 一次，
       # 本流水线不得 apply——再 apply 会用占位值覆盖产线真实凭据。
+      # 任何一步失败（apply/set image/rollout 超时）都触发 ERR trap 自动回滚两服务。
       - name: Deploy to production
         run: |
+          set -euo pipefail
+          trap 'bash deploy/k8s/rollback-release.sh "$prev_control" "$prev_gateway"' ERR
           VERSION=${{ needs.validate.outputs.version }}
           kubectl apply -f deploy/k8s/namespace.yaml
           kubectl apply -f deploy/k8s/postgres.yaml
@@ -184,8 +197,11 @@ jobs:
       # 8086 管理口（/app/healthcheck.sh 按 SERVICE 选口只查 8085 app 口，此处不能复用），
       # gateway 单端口 8080。随后记录两服务实际运行镜像并与发布 tag 断言一致，滚动未完成
       # 或清单漂移即 fail——发布失败不会带绿 Release job（release needs: deploy）。
+      # 健康断言失败同样触发 ERR trap 回滚：不能把 prod 卡在刚发布的坏版本上。
       - name: Verify deployment
         run: |
+          set -euo pipefail
+          trap 'bash deploy/k8s/rollback-release.sh "$prev_control" "$prev_gateway"' ERR
           VERSION=${{ needs.validate.outputs.version }}
           sleep 30
           kubectl -n oddsmaker exec deploy/oddsmaker-control -- wget -qO- --timeout=10 http://localhost:8086/actuator/health | grep -q '"status":"UP"'
