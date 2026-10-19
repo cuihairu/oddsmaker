@@ -302,7 +302,7 @@
 **执行步骤**
 
 - [x] 检查 Control、Gateway、Flink 作业和其他关键服务的指标导出方式（2026-10-20 轮次 1020b：18 条规则引用指标逐名对 control 真实 exposition 224 指标族核对，Flink=local executor 无端点有据豁免 DEPLOY-002，详见 OBS-001 接线面台账）。
-- [ ] 检查 OpenTelemetry Collector 的接收、处理和导出配置。
+- [x] 检查 OpenTelemetry Collector 的接收、处理和导出配置（2026-10-20 轮次 p1020b 读码+活体：`infra/otel-collector.yaml` 三管道齐（traces/logs→logging，metrics→logging+prometheus），otlp receiver 4317(gRPC)/4318(HTTP)、prometheus exporter 9464 与 infra prometheus `otel-collector` 抓取 job 端口对齐；0.100.0 实起 `Everything is ready`（`loglevel: info` 为该版仍容忍的弃用字段）。注：compose 档业务服务经 actuator 原生导出、不走 OTLP——collector 在本档为待接管线（idle-by-design，MODES.md 口径），非缺陷）。
 - [x] 验证 Prometheus 是否能抓取真实业务指标（2026-10-20 轮次 1020c 活体：`up{job="oddsmaker-control"/"oddsmaker-gateway"}=1`，`http_server_requests_seconds_count` 真实 status/uri 标签、真实 401/200 样本）。
 - [x] 为 Gateway 增加请求量、错误率、延迟和拒绝率指标（micrometer `http_server_requests_seconds_*` 已覆盖四项：请求量=_count、错误率=status 5xx、延迟=percentiles-histogram bucket（1020b 开启并活体验证 TYPE=histogram）、拒绝率=status 4xx（401 真实样本实证标签面）；HighErrorRate/HighLatency 两条告警即引用此族）。
 - [x] 为 Kafka 增加消费积压、消费延迟和死信队列指标（积压=`kafka_consumer_group_lag`（kafka-exporter，2026-10-20 compose 面接入）+ `KafkaHighConsumerLag` 告警；死信队列计数走 B10 数据质量五指标落库（`DataQualityService`/`DeadLetterConsumer`）可查询面；秒级消费时延（time-lag）kafka-exporter 不导出，缺此一项）。剩余：秒级时延导出。
