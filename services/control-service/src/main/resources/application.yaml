@@ -179,6 +179,14 @@ management:
     export:
       prometheus:
         enabled: true
+    # histogram_quantile 类告警（HighLatency / HighDBQueryTime）依赖 _bucket 序列；
+    # micrometer 默认只导出 summary（无 bucket），真实 exposition 无此序列时告警
+    # 永不触发（2026-10-20 对实跑 control 真实 exposition 核对实证，见审计 OBS-001）。
+    # 开启请求与连接池直方图，钉测试见 AlertRulesContractTest#bucketMetricsHavePercentileHistogramsEnabled。
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+        hikaricp.connections.usage: true
 
 # 日志配置
 logging:

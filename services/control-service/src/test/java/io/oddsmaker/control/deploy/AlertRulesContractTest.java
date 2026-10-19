@@ -13,6 +13,10 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -140,6 +144,50 @@ class AlertRulesContractTest {
         assertTrue(content.contains("../deploy/monitoring/alerts:/etc/prometheus/alerts"),
                 "infra compose 应把 deploy/monitoring/alerts 挂到 /etc/prometheus/alerts"
                         + "（与 infra/prometheus.yml 的 rule_files 相对路径对齐）");
+    }
+
+    /**
+     * histogram_quantile 类告警依赖 `_bucket` 序列；micrometer 默认只导出 summary
+     * （无 bucket），真实 exposition 无此序列告警即永不触发——2026-10-20 对实跑
+     * control 的真实 exposition 核对实证（promtool 合成序列手写 bucket 所以一直绿，
+     * 该缺口测不出来）。钉住：规则引用的每个 _bucket 族，对应业务服务的
+     * application.yaml 必须开 percentile histogram。
+     */
+    @Test
+    void bucketMetricsHavePercentileHistogramsEnabled() throws IOException {
+        Path controlYaml = REPO.resolve("services/control-service/src/main/resources/application.yaml");
+        Path gatewayYaml = REPO.resolve("services/gateway-service/src/main/resources/application.yaml");
+        // 规则里的 _bucket 族 → (直方图开关键名, 需要开该键的服务配置)
+        Map<String, String> histogramKeys = Map.of(
+                "http_server_requests_seconds_bucket", "http.server.requests",
+                "hikaricp_connections_usage_seconds_bucket", "hikaricp.connections.usage");
+        Map<String, List<Path>> requiredConfigs = Map.of(
+                "http_server_requests_seconds_bucket", List.of(controlYaml, gatewayYaml),
+                "hikaricp_connections_usage_seconds_bucket", List.of(controlYaml));
+        Set<String> families = bucketFamilies();
+        assertFalse(families.isEmpty(), "规则文件应至少引用一个 _bucket 序列（histogram_quantile 告警）");
+        for (String family : families) {
+            assertTrue(histogramKeys.containsKey(family),
+                    family + " 不在直方图清单中：新增 _bucket 告警须同时补 application.yaml "
+                            + "percentiles-histogram 开关与本测试映射");
+            for (Path config : requiredConfigs.get(family)) {
+                assertTrue(Files.exists(config), "业务服务配置缺失: " + config);
+                assertTrue(Files.readString(config).contains(histogramKeys.get(family)),
+                        config + " 未为 " + family + " 开 percentile histogram（真实 exposition "
+                                + "无 bucket 序列，histogram_quantile 告警永不触发）");
+            }
+        }
+    }
+
+    /** 规则文件里被引用的 `_bucket` 序列名（排序去重）。 */
+    private static Set<String> bucketFamilies() throws IOException {
+        Set<String> families = new TreeSet<>();
+        Matcher matcher = Pattern.compile("[a-zA-Z_][a-zA-Z0-9_]*_bucket")
+                .matcher(Files.readString(REPO.resolve(RULES)));
+        while (matcher.find()) {
+            families.add(matcher.group());
+        }
+        return families;
     }
 
     /** 按配置的 rule_files 通配在实际（或挂载等价）目录下展开，返回命中的仓内相对路径。 */

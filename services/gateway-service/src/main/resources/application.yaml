@@ -9,6 +9,14 @@ management:
     web:
       exposure:
         include: health,info,metrics,prometheus
+  metrics:
+    # histogram_quantile 类告警（HighLatency 覆盖 gateway 实例）依赖 _bucket 序列；
+    # micrometer 默认只导出 summary（无 bucket），真实 exposition 无此序列时告警
+    # 永不触发（2026-10-20 实证，见审计 OBS-001）。钉测试见
+    # AlertRulesContractTest#bucketMetricsHavePercentileHistogramsEnabled。
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
 
 oddsmaker:
   kafka:
