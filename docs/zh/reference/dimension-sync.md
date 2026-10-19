@@ -288,6 +288,29 @@ POST   /api/games/{gameId}/dimension-pulls/{id}/run  手动触发一轮拉取
 - 配 Debezium 心跳表保活，避免低频更新导致延迟堆积。
 - 注意 DDL 变更：游戏方给 `items` 表加列时，Debezium 的 schema history 会感知，转换层要能处理新字段。
 
+#### 事件格式与目标表映射（仓内预备，2026-10-19；待外部解锁后拍板）
+
+三项解锁件里「CDC 事件格式与目标表映射」是仓内可预备的一半：Debezium 信封由连接器固定，要选的是信封到 `RawDimensionChange` 的转换路径。现状约束：`dimension-sync-agent` 的 kafka 源（`source.type=kafka`）消息契约是**扁平 JSON**——控制列 `dim_type` / `resource_id` / `op` / `version_ts`（大小写不敏感，别名与缺省见 `JdbcSource.mapRow`：op 缺省 upsert、version_ts 缺省消费时刻、`item_code`/`level_id`/`id` 可作 resource_id 别名），其余列进 `attributes`；Debezium 信封是嵌套的（`payload.before` / `payload.after` / `payload.op` / `ts_ms`，delete 之后另发 tombstone 空消息）。因此**裸 Debezium topic 不能直喂该 kafka 源**：消息根是对象但没有 `resource_id` 控制列，每条都会按坏消息跳过（缺 resource_id 即丢弃、offset 照常前进）——选项 C 看似零成本，实际面是全量静默丢弃。
+
+| 选项 | 转换位置 | 仓内改动 | 优劣 |
+|---|---|---|---|
+| A 消费端原生读信封 | Oddsmaker 新增 CDC 感知源（`dimension-sync-job` 或 Agent 新 source type） | 一个新源类型 + 测试 | 游戏方零转换配置；新列自动进 `attributes`，schema 演进仓内可控；须自行处理 tombstone 与 `op` 收敛 |
+| B Kafka 侧 SMT 拍平 | 游戏方/共享集群用 Debezium SMT（`ExtractNewRecordState` 按 header op 处理 insert/update/delete，再补字段改名） | 零 | 落地最快；但字段改名无内置 SMT（需自建 transform 或约定小写列名），且转换规则漂在游戏方集群、仓内不可验证 |
+| C Agent kafka 源直读裸 topic | 无 | 零 | **不可行**（见上段：无控制列 → 全量跳过），勿按此接线 |
+
+建议（未拍板，待解锁后按游戏方配合度选）：游戏方不愿承担转换配置走 A（仓内可验证、可钉测试）；愿在 Kafka 侧收敛配置走 B，并把该 SMT 配置原文登记进本节防游戏方漂移。
+
+信封到 `RawDimensionChange` 的字段映射（A 口径；B 经 SMT 拍平后收敛为同一映射）：
+
+| Debezium 信封 | `RawDimensionChange` | 说明 |
+|---|---|---|
+| `payload.op` = `c` / `i` / `u` | `op=upsert` | 三值收敛为 upsert，与 `item_dim` 的 `ReplacingMergeTree(version_ts)` 覆盖语义一致 |
+| `payload.op` = `d`（+ tombstone） | `op=delete` | 下游当前忽略 delete（见「版本处理」节），CDC 不新增语义 |
+| `payload.after`（d 时取 `before`）各列 | 控制列 + `attributes` | 主键列→`resource_id`，业务时间戳列→`version_ts`（epoch millis 或 ISO-8601；缺失沿用既有缺省=消费时刻，不为 CDC 发明新缺省），其余按列名进 `attributes` |
+| `ts_ms` / `source.ts_ms` | 不映射 | 捕获时刻 ≠ 业务版本，不拿 binlog 延迟冒充版本序 |
+
+落地边界不变：消费端复用 `dimension-sync-job` 的维度事件入口，目标表仍是 `item_dim`/`level_dim`，CDC 只替换上游通道，不动「统一抽象」一节的中间格式与输出 schema。
+
 ## 统一抽象
 
 无论哪种方案，落地的中间格式和输出 schema 完全一致。

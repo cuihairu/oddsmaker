@@ -288,6 +288,29 @@ The game side deploys Kafka Connect + the Debezium Source Connector to write bin
 - Configure a Debezium heartbeat table to keep it alive and avoid latency buildup from low-frequency updates.
 - Note DDL changes: when the game side adds a column to the `items` table, Debezium's schema history detects it, and the transformation layer must be able to handle new fields.
 
+#### Event format and target-table mapping (in-repo prep, 2026-10-19; to be decided after external unlock)
+
+Of the three unlock items, "CDC event format and target table mapping" is the half that can be prepared inside this repo: the Debezium envelope is fixed by the connector; what must be chosen is the transformation path from that envelope to `RawDimensionChange`. Current constraint: the `dimension-sync-agent` kafka source (`source.type=kafka`) expects a **flat JSON** message — control columns `dim_type` / `resource_id` / `op` / `version_ts` (case-insensitive; aliases and defaults per `JdbcSource.mapRow`: op defaults to upsert, version_ts defaults to consumption time, `item_code`/`level_id`/`id` are accepted as resource_id aliases), everything else goes into `attributes`. The Debezium envelope is nested (`payload.before` / `payload.after` / `payload.op` / `ts_ms`, with a tombstone empty message after each delete). A **raw Debezium topic therefore cannot be fed to that kafka source directly**: the message root is an object but carries no `resource_id` control column, so every record is skipped as a bad message (missing resource_id → dropped, offset still advances) — option C looks zero-cost but in practice silently drops everything.
+
+| Option | Where the transform lives | In-repo change | Trade-offs |
+|---|---|---|---|
+| A consumer reads the envelope natively | Oddsmaker gains a CDC-aware source (in `dimension-sync-job` or a new Agent source type) | one new source type + tests | zero transform config on the game side; new columns land in `attributes` automatically, schema evolution stays verifiable in-repo; tombstone and `op` collapsing must be handled by us |
+| B flatten via Kafka-side SMT | game side / shared cluster applies a Debezium SMT (`ExtractNewRecordState` handles insert/update/delete via the header op, plus field renames) | zero | fastest to land; but no built-in SMT renames fields (needs a custom transform or a lowercase column-name convention), and the transform rules drift in the game-side cluster, unverifiable in-repo |
+| C Agent kafka source reads the raw topic | none | zero | **not viable** (see above: no control columns → everything skipped); do not wire it this way |
+
+Recommendation (not decided; choose after unlock based on game-side cooperation): if the game side will not carry transform config, take A (verifiable in-repo, pinnable with tests); if they prefer to keep config on the Kafka side, take B and register the exact SMT config in this section to guard against game-side drift.
+
+Field mapping from the envelope to `RawDimensionChange` (option A; option B converges to the same mapping after flattening):
+
+| Debezium envelope | `RawDimensionChange` | Notes |
+|---|---|---|
+| `payload.op` = `c` / `i` / `u` | `op=upsert` | three values collapse into upsert, matching the `ReplacingMergeTree(version_ts)` overwrite semantics of `item_dim` |
+| `payload.op` = `d` (+ tombstone) | `op=delete` | downstream currently ignores delete (see the "Version handling" section); CDC adds no new semantics |
+| columns of `payload.after` (`before` for d) | control columns + `attributes` | primary key column → `resource_id`; business timestamp column → `version_ts` (epoch millis or ISO-8601; if absent the existing default = consumption time applies, no new default is invented for CDC); remaining columns enter `attributes` by name |
+| `ts_ms` / `source.ts_ms` | not mapped | capture time ≠ business version; binlog latency must not impersonate version order |
+
+The landing boundary is unchanged: the consumer reuses the `dimension-sync-job` dimension event entry, the target tables remain `item_dim`/`level_dim`, and CDC only replaces the upstream channel — the intermediate format and output schema in the "Unified abstraction" section are untouched.
+
 ## Unified Abstraction
 
 Whichever approach is used, the intermediate format that lands and the output schema are completely identical.
