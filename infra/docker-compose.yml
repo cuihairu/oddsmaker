@@ -113,6 +113,34 @@ services:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
       - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
 
+  # 中间件 exporter 三件（2026-10-20 审计 OBS-001 接线面补漏，与 infra/prometheus.yml
+  # 的 postgres/redis/kafka 三 job 配对）：经 host.docker.internal 抓根 compose 已发布
+  # 的宿主端口，使 compose 生产档的存活/指标告警与 k8s 面同覆盖（flink 例外见 prometheus.yml）。
+  postgres-exporter:
+    image: quay.io/prometheuscommunity/postgres-exporter:v0.15.0
+    container_name: infra-postgres-exporter
+    environment:
+      # 根 compose 的 POSTGRES_USER=oddsmaker 是实例超级用户，pg_stat 系列可见；
+      # 口令 fail-closed 复用同一变量（SEC-001）
+      DATA_SOURCE_NAME: "postgresql://oddsmaker:${POSTGRES_PASSWORD:?请在 .env 设置 POSTGRES_PASSWORD}@host.docker.internal:25432/oddsmaker?sslmode=disable"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.61.0
+    container_name: infra-redis-exporter
+    environment:
+      REDIS_ADDR: "redis://host.docker.internal:26379"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  kafka-exporter:
+    image: danielqsj/kafka-exporter:v1.7.0
+    container_name: infra-kafka-exporter
+    command: ["--kafka.server=host.docker.internal:29092"]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
 volumes:
   clickhouse_data:
   superset_data:

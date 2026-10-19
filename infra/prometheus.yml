@@ -39,3 +39,34 @@ scrape_configs:
         labels:
           app: 'oddsmaker-gateway'
           component: 'gateway-service'
+
+  # 中间件 exporter（2026-10-20 审计 OBS-001 接线面补漏：规则引用 up{job=...} 的
+  # postgres/redis/kafka 此前在本档无抓取面，PostgresDown/RedisDown/KafkaDown 及
+  # 配套指标告警是死序列；k8s 面 job 名与此处严格一致，flink 例外见下）。
+  # exporter 容器同 compose 网络，经 host.docker.internal 抓根 compose 已发布的
+  # 宿主端口（25432→5432、26379→6379、29092→29092）。
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+        labels:
+          app: 'oddsmaker-postgres'
+          component: 'database'
+
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+        labels:
+          app: 'oddsmaker-redis'
+          component: 'cache'
+
+  - job_name: 'kafka'
+    static_configs:
+      - targets: ['kafka-exporter:9308']
+        labels:
+          app: 'oddsmaker-kafka'
+          component: 'messaging'
+
+  # flink 无本档抓取 job（根 compose 的 7 个 Flink 作业是 local executor 形态、
+  # 无 JobManager 指标端点，DEPLOY-002；FlinkJobManagerDown/FlinkJobFailed 仅
+  # k8s 面生效，集群化为独立后续工作）。钉测试
+  # AlertRulesContractTest#alertScrapeJobsDefinedInMonitoringFaces 白名单豁免。

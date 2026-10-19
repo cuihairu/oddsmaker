@@ -149,10 +149,13 @@ groups:
           summary: "Redis is down"
           description: "Redis has been down for more than 1 minute."
 
-      # High memory usage
+      # High memory usage（and 护栏：未配 maxmemory 时 max=0、used/max=+Inf，
+      # 不许把「无内存上限配置」当成高内存误报——2026-10-20 对真实 redis-exporter
+      # 活体验证揪出；无 maxmemory 属配置问题，应另行治理而非告警噪音）
       - alert: RedisHighMemoryUsage
         expr: |
           redis_memory_used_bytes / redis_memory_max_bytes > 0.85
+            and redis_memory_max_bytes > 0
         for: 5m
         labels:
           severity: warning

@@ -190,6 +190,37 @@ class AlertRulesContractTest {
         return families;
     }
 
+    /**
+     * 规则引用的每个 `up{job="..."}` 必须有对应抓取 job，否则存活告警是死序列
+     * （2026-10-20 实锤：infra 面此前只有 control/gateway/otel 三 job，compose 生产档
+     * 下 PostgresDown/RedisDown/KafkaDown 及配套指标告警永不触发）。k8s 面须全覆盖；
+     * compose 面白名单豁免 flink——根 compose 的 7 个 Flink 作业是 local executor
+     * 形态（DEPLOY-002），无 JobManager 指标端点可抓，集群化为独立后续工作。
+     */
+    @Test
+    void alertScrapeJobsDefinedInMonitoringFaces() throws IOException {
+        Matcher matcher = Pattern.compile("up\\{job=\"([a-z-]+)\"")
+                .matcher(Files.readString(REPO.resolve(RULES)));
+        Set<String> ruleJobs = new TreeSet<>();
+        while (matcher.find()) {
+            ruleJobs.add(matcher.group(1));
+        }
+        assertFalse(ruleJobs.isEmpty(), "规则应至少引用一个 up{job=...} 存活序列");
+        String k8s = Files.readString(REPO.resolve("deploy/monitoring/prometheus.yaml"));
+        String infra = Files.readString(REPO.resolve("infra/prometheus.yml"));
+        Set<String> composeFaceExceptions = Set.of("flink");
+        for (String job : ruleJobs) {
+            assertTrue(k8s.contains("job_name: '" + job + "'"),
+                    "k8s 面缺抓取 job: " + job + "（up{job=\"" + job + "\"} 是死序列）");
+            if (composeFaceExceptions.contains(job)) {
+                continue;
+            }
+            assertTrue(infra.contains("job_name: '" + job + "'"),
+                    "compose 面缺抓取 job: " + job + "（该档下告警永不触发；确属该档不抓的组件"
+                            + "须把理由写进 composeFaceExceptions）");
+        }
+    }
+
     /** 按配置的 rule_files 通配在实际（或挂载等价）目录下展开，返回命中的仓内相对路径。 */
     @SuppressWarnings("unchecked")
     private static List<String> ruleFileMatches(Path config, Path expansionRoot) throws IOException {

@@ -30,7 +30,7 @@ otel-collector/Prometheus/Grafana，端口 29xxx/18088/13000 段），两者注�
 | Control Service | ✅（38085，唯一业务服务） | ✅（38085） | ✅ 根（28085） |
 | Flink 作业 ×7（enrich / sessions / retention / funnels / configurable-funnels / identity-merge / risk） | ❌ | ❌ | ✅ 根（eclipse-temurin:21-jre 直跑 fatJar 的 local executor 形态） |
 | Superset | ❌ | ✅ 3.1.0（38088） | ✅ 根 3.1.0（8088）；infra 3.0.2（18088） |
-| otel-collector + Prometheus + Grafana | ❌ | ❌ | ✅ infra（4317/4318/9464、9090、13000；配置在 `infra/prometheus.yml`、`infra/grafana/`、`deploy/monitoring/`） |
+| otel-collector + Prometheus + Grafana | ❌ | ❌ | ✅ infra（4317/4318/9464、9090、13000；+ 中间件 exporter 三件 postgres/redis/kafka；配置在 `infra/prometheus.yml`、`infra/grafana/`、`deploy/monitoring/`） |
 | 对象存储归档 | ❌ | ❌ | 不在任何 compose：`deploy/backup/postgres-backup.sh` + `deploy/k8s/backup-cronjob.yaml`（`pg_dump` 全量 + 30 天就地留存；S3 离站需环境内备 aws CLI，k8s 基础镜像 `postgres:16-alpine` 不含——缺 CLI/上传失败时本地备份与留存清理照常，但脚本以 exit 2 显式失败，离站缺口不静默成功） |
 | K8s 形态 | — | — | `deploy/k8s/`（namespace/postgres/redis/control/gateway/backup-cronjob）+ 各自 `*-secrets.yaml`（占位凭据，首次部署手工 apply 一次，发布流水线不 apply）+ `rollback-release.sh`（发布流水线 Deploy/Verify 步 `trap ERR` 调用：失败自动回退两服务到 prev 镜像） + 发布后采集冒烟（`Smoke ingest endpoint` 步：port-forward 直击 gateway pod `/v1/batch`，无凭据/伪造 key 须 401，不符即回滚；正向冒烟需配 `SMOKE_API_KEY`/`SMOKE_API_SECRET`/`vars.SMOKE_GAME_ID`，未配则告警跳过）+ `infra/helm/` |
 
@@ -113,7 +113,16 @@ cd infra && docker compose --env-file ../.env -f docker-compose.yml up -d
   `deploy/monitoring/alerts:/etc/prometheus/alerts`；本地活体验证：18 规则加载（5 组
   health=ok）、业务栈缺位时 `OddsmakerControlServiceDown`/`OddsmakerGatewayServiceDown`
   在 `for: 1m` 走满后真实 fire（critical）、host-gateway 抓取路径解析正确（down=
-  预期缺栈）。本档无 alertmanager：规则在 prometheus 内评估、经 `/api/v1/alerts` 与
+  预期缺栈）。**中间件 exporter 三件**（2026-10-20 轮次 1020c 补漏）：规则引用
+  `up{job=...}` 的 postgres/redis/kafka 此前在本档无抓取面（死序列告警），已补
+  postgres-exporter/redis-exporter/kafka-exporter 三容器（同 compose 网络，经
+  host-gateway 抓根 compose 宿主端口 25432/26379/29092）+ 对应三 job；本地活体
+  实证三组件 up=1、pg/redis/kafka 指标族可见、对应 Down 告警静默不误报、
+  RedisHighMemoryUsage 对未配 maxmemory 的实例加 `and redis_memory_max_bytes > 0`
+  护栏不误报。例外：flink 无本档抓取 job——根 compose 的 7 个 Flink 作业是
+  local executor 形态（DEPLOY-002）、无 JobManager 指标端点，
+  FlinkJobManagerDown/FlinkJobFailed 仅 k8s 面生效。本档无 alertmanager：规则在
+  prometheus 内评估、经 `/api/v1/alerts` 与
   Grafana 观测，告警投递面在 k8s 形态（`deploy/monitoring/prometheus.yaml` 的 alerting
   段）。真机抓取验证未做（需 Production 宿主机实测 `up{job="oddsmaker-control"}`），
   属外部条件；k8s 面抓取配置见 `deploy/monitoring/`。

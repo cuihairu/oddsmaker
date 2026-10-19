@@ -411,6 +411,19 @@ tests:
         alertname: RedisHighMemoryUsage
         exp_alerts: []
 
+  # 无 maxmemory（max=0）时 used/max=+Inf，不许触发——2026-10-20 对真实 redis-exporter
+  # 活体验证揪出的误报路径（本机 redis 未设 maxmemory，alert pending）
+  - interval: 1m
+    input_series:
+      - series: 'redis_memory_used_bytes{instance="redis:6379"}'
+        values: '7000000000+0x30'
+      - series: 'redis_memory_max_bytes{instance="redis:6379"}'
+        values: '0+0x30'
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: RedisHighMemoryUsage
+        exp_alerts: []
+
   - interval: 1m
     input_series:
       - series: 'redis_evicted_keys_total{instance="redis:6379"}'
