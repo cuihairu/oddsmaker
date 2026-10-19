@@ -144,6 +144,9 @@ services:
     ports:
       - "28123:8123"
       - "29000:9000"
+      # 原生 Prometheus 指标端点（审计 OBS-001 观测面）：config.d 开启，
+      # infra Prometheus 经 host.docker.internal:29363 抓（job 名 clickhouse，与 k8s 面一致）
+      - "29363:9363"
     volumes:
       - ./schema/sql/clickhouse/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
       - ./schema/sql/clickhouse/analytics.sql:/docker-entrypoint-initdb.d/02-analytics.sql:ro
@@ -151,6 +154,8 @@ services:
       - ./schema/sql/clickhouse/ltv.sql:/docker-entrypoint-initdb.d/04-ltv.sql:ro
       - ./schema/sql/clickhouse/ml.sql:/docker-entrypoint-initdb.d/05-ml.sql:ro
       - ./schema/sql/clickhouse/crash.sql:/docker-entrypoint-initdb.d/06-crash.sql:ro
+      # 9363 指标端点开关（deploy/monitoring/clickhouse/prometheus.xml，只读挂 config.d）
+      - ./deploy/monitoring/clickhouse/prometheus.xml:/etc/clickhouse-server/config.d/prometheus.xml:ro
       - clickhouse_data:/var/lib/clickhouse
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8123/ping"]

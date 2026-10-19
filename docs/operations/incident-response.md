@@ -263,6 +263,35 @@ psql -c "SELECT client_ip, count(*) FROM audit_logs WHERE result = 'FAILURE' GRO
 4. Notify security team
 5. Preserve evidence
 
+## Alert Runbook (oddsmaker-alerts.yml)
+
+Per-alert first-response guide for the rule set shipped in `deploy/monitoring/alerts/oddsmaker-alerts.yml` (22 rules; rule names are stable IDs referenced by contract tests). Queries below work on both monitoring faces: Prometheus UI (`:9090`, compose stack) or Grafana.
+
+| Alert | Severity | Triggered when | First checks / action |
+|---|---|---|---|
+| OddsmakerControlServiceDown | critical | `up{job="oddsmaker-control"}=0` for 1m | Check control container status and logs; if intentionally stopped, expect this alert — restart or fix the failing start (see `RootComposeSecretsContractTest` for required env). |
+| OddsmakerGatewayServiceDown | critical | `up{job="oddsmaker-gateway"}=0` for 1m | Ingestion entry is down: check gateway logs; verify Kafka/Apicurio deps are up. Ingestion is rejected while down. |
+| HighErrorRate | warning | 5xx > 5% of requests for 2m | Drill down `http_server_requests_seconds_count{status=~"5.."}` by `uri`; check recent deploys and downstream health. |
+| HighLatency | warning | P95 > 2s for 2m | Compare `http_server_requests_seconds_bucket` by uri; check DB pool and downstream latency. |
+| HighMemoryUsage | warning | JVM heap > 85% max for 5m | Watch heap trend; check for leaks before restarting; `jvm_gc_pause` histogram. |
+| HighCpuUsage | warning | CPU > 90% for 5m | Identify hot threads; check for load spikes or runaway loops. |
+| DatabaseConnectionPoolExhausted | critical | Hikari active ≈ max | Find connection leaks (`hikaricp_connections_pending`); check for slow queries holding connections. |
+| HighDatabaseQueryTime | warning | Avg DB query > 1s for 5m | Look for missing indexes / long transactions in PG (`pg_stat_statements`). |
+| PostgresDown | critical | exporter `up=0` for 1m | Check postgres container + exporter. Note: exporter `up=1` only proves HTTP — verify `pg_stat` series exist to rule out auth failure. |
+| HighDatabaseConnections | warning | `pg_stat_activity_count` > 80 | Identify idle/sleeping backends (`pg_stat_activity`); terminate offenders or raise limits. |
+| DatabaseReplicationLag | warning | Replication lag > 10s | Check standby replay; `pg_stat_replication` on primary. |
+| RedisDown | critical | exporter `up=0` for 1m | Check redis container; verify sessions/cache consumers fail over gracefully. |
+| RedisHighMemoryUsage | warning | used/max > 90% (silent when maxmemory=0) | Check key growth and eviction policy; `maxmemory` unconfigured is guarded by `redis_memory_max_bytes > 0`. |
+| RedisHighEvictionRate | warning | Evictions > 100/s for 5m | Working set exceeds budget: raise maxmemory or fix TTLs. |
+| KafkaDown | critical | exporter `up=0` for 1m | Check kafka container; producers (gateway) will block/fail. |
+| KafkaHighConsumerLag | warning | Group lag > 10000 for 5m | Check consumer health (`kafka_consumergroup_*`); scale or restart the lagging consumer. |
+| FlinkJobManagerDown | critical | `up{job="flink"}=0` for 1m | k8s face only (compose local-executor jobs have no JobManager endpoint). Check JM pod/container. |
+| FlinkJobFailed | critical | JM reports failed job | Restart the job; check checkpoint state and source lag before resuming. |
+| ClickHouseDown | critical | `up{job="clickhouse"}=0` for 1m | Check CH container (compose: native metrics on `:29363`); analytics APIs degrade to `available=false` while down. |
+| ClickHouseWriteFailures | warning | Failed INSERTs > 0/s for 5m | Inspect `system.query_log` for `type='ExceptionWhileProcessing'`; check schema mismatch / disk full. |
+| ClickHouseHighQueryTime | warning | Avg query > 2s for 5m | Check `system.query_log` slow queries; look for scans on large parts, missing ORDER BY keys. |
+| ClickHouseDiskSpaceLow | warning | Free/total on default disk < 15% | Free disk or drop expired partitions; growth history in `ClickHouseAsyncMetrics_DiskUsed_default`. |
+
 ## Escalation Matrix
 
 | Severity | Initial Responder | Escalation (30 min) | Escalation (1 hour) |

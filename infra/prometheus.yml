@@ -66,6 +66,16 @@ scrape_configs:
           app: 'oddsmaker-kafka'
           component: 'messaging'
 
+  # 分析库 ClickHouse（2026-10-20 审计 OBS-001 观测面补缺）：根 compose 的 CH 以
+  # config.d 开启原生 Prometheus 端点（deploy/monitoring/clickhouse/prometheus.xml，
+  # 容器 9363 → 宿主 29363），此处经 host.docker.internal 直抓，job 名与 k8s 面一致。
+  - job_name: 'clickhouse'
+    static_configs:
+      - targets: ['host.docker.internal:29363']
+        labels:
+          app: 'oddsmaker-clickhouse'
+          component: 'analytics-db'
+
   # flink 无本档抓取 job（根 compose 的 7 个 Flink 作业是 local executor 形态、
   # 无 JobManager 指标端点，DEPLOY-002；FlinkJobManagerDown/FlinkJobFailed 仅
   # k8s 面生效，集群化为独立后续工作）。钉测试

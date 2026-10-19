@@ -1,0 +1,15 @@
+<!-- ClickHouse 原生 Prometheus 指标端点（审计 OBS-001 观测面）：
+     24.8 自带 <prometheus> 配置，容器 9363 端口导出
+     ClickHouseProfileEvents_*（含 FailedQuery/写入类事件）、ClickHouseMetrics_*（当前指标）、
+     ClickHouseAsyncMetrics_*（含磁盘用量/增长率）三族，供 infra Prometheus 抓取
+     （宿主端口 29363，job 名 clickhouse，与 k8s 面一致）。
+     仓库根 docker-compose.yml 把本文件挂到 /etc/clickhouse-server/config.d/。 -->
+<clickhouse>
+    <prometheus>
+        <port>9363</port>
+        <metrics>true</metrics>
+        <events>true</events>
+        <asynchronous_metrics>true</asynchronous_metrics>
+        <status_info>true</status_info>
+    </prometheus>
+</clickhouse>

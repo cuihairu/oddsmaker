@@ -554,3 +554,118 @@ tests:
       - eval_time: 5m
         alertname: FlinkJobFailed
         exp_alerts: []
+
+  # ===== oddsmaker-analytics-db =====
+  # 序列名对 CH 24.8 原生 /metrics 实跑核对（2026-10-20，deploy/monitoring/clickhouse/
+  # prometheus.xml 开启的 9363 端口）。速率用例取每分钟整数增量使 rate 逐秒为精确
+  # 浮点（60/min → 1/s），除法比值（平均查询耗时 = 耗时速率/查询速率）严格大于阈值、
+  # 且 $value 为可精确表示的浮点（4e+06 / 10%）。
+
+  - interval: 1m
+    input_series:
+      - series: 'up{job="clickhouse",instance="ch:9363"}'
+        values: '0+0x10'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: ClickHouseDown
+        exp_alerts:
+          - exp_labels:
+              job: clickhouse
+              instance: ch:9363
+              severity: critical
+              service: clickhouse
+            exp_annotations:
+              summary: "ClickHouse is down"
+              description: "ClickHouse has been down for more than 1 minute."
+
+  - interval: 1m
+    input_series:
+      - series: 'up{job="clickhouse",instance="ch:9363"}'
+        values: '1+0x10'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: ClickHouseDown
+        exp_alerts: []
+
+  - interval: 1m
+    input_series:
+      - series: 'ClickHouseProfileEvents_FailedInsertQuery{instance="ch:9363"}'
+        values: '0+60x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: ClickHouseWriteFailures
+        exp_alerts:
+          - exp_labels:
+              instance: ch:9363
+              severity: warning
+              service: clickhouse
+            exp_annotations:
+              summary: "ClickHouse write failures"
+              description: "Failed INSERT queries: 1 per second (over 5 minutes)."
+
+  - interval: 1m
+    input_series:
+      - series: 'ClickHouseProfileEvents_FailedInsertQuery{instance="ch:9363"}'
+        values: '0+0x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: ClickHouseWriteFailures
+        exp_alerts: []
+
+  - interval: 1m
+    input_series:
+      - series: 'ClickHouseProfileEvents_QueryTimeMicroseconds{instance="ch:9363"}'
+        values: '0+240000000x20'
+      - series: 'ClickHouseProfileEvents_Query{instance="ch:9363"}'
+        values: '0+60x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: ClickHouseHighQueryTime
+        exp_alerts:
+          - exp_labels:
+              instance: ch:9363
+              severity: warning
+              service: clickhouse
+            exp_annotations:
+              summary: "ClickHouse high query time"
+              description: "Average query time is above 2000000 microseconds (2 seconds)."
+
+  - interval: 1m
+    input_series:
+      - series: 'ClickHouseProfileEvents_QueryTimeMicroseconds{instance="ch:9363"}'
+        values: '0+0x20'
+      - series: 'ClickHouseProfileEvents_Query{instance="ch:9363"}'
+        values: '0+0x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: ClickHouseHighQueryTime
+        exp_alerts: []
+
+  - interval: 1m
+    input_series:
+      - series: 'ClickHouseAsyncMetrics_DiskAvailable_default{instance="ch:9363"}'
+        values: '10000000000+0x20'
+      - series: 'ClickHouseAsyncMetrics_DiskTotal_default{instance="ch:9363"}'
+        values: '100000000000+0x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: ClickHouseDiskSpaceLow
+        exp_alerts:
+          - exp_labels:
+              instance: ch:9363
+              severity: warning
+              service: clickhouse
+            exp_annotations:
+              summary: "ClickHouse disk space low"
+              description: "Free space on default disk below 15% (10%)."
+
+  - interval: 1m
+    input_series:
+      - series: 'ClickHouseAsyncMetrics_DiskAvailable_default{instance="ch:9363"}'
+        values: '50000000000+0x20'
+      - series: 'ClickHouseAsyncMetrics_DiskTotal_default{instance="ch:9363"}'
+        values: '100000000000+0x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: ClickHouseDiskSpaceLow
+        exp_alerts: []

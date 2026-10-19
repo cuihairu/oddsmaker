@@ -225,3 +225,59 @@ groups:
         annotations:
           summary: "Flink job failed"
           description: "A Flink job has failed."
+
+  # 分析库 ClickHouse（审计 OBS-001 观测面补缺：序列名对 24.8 原生 /metrics 逐名核对，
+  # 2026-10-20 实跑 oddsmaker-clickhouse:9363 实证——ClickHouseProfileEvents_*/Metrics_*/
+  # AsyncMetrics_* 三族）。compose 面 native 端点经根 compose 29363 端口抓取，
+  # k8s 面同 job 名（k8s 清单 target 8123 需集群侧单独核）。
+  - name: oddsmaker-analytics-db
+    rules:
+      # ClickHouse down
+      - alert: ClickHouseDown
+        expr: up{job="clickhouse"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: clickhouse
+        annotations:
+          summary: "ClickHouse is down"
+          description: "ClickHouse has been down for more than 1 minute."
+
+      # Write failures (failed INSERT queries)
+      - alert: ClickHouseWriteFailures
+        expr: |
+          rate(ClickHouseProfileEvents_FailedInsertQuery[5m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+          service: clickhouse
+        annotations:
+          summary: "ClickHouse write failures"
+          description: "Failed INSERT queries: {{ $value }} per second (over 5 minutes)."
+
+      # High average query time
+      # 平均查询耗时 = 总耗时增量 / 查询数增量（μs/queries）；Query 停流时分母为 0
+      # 结果 NaN，比较恒 false，空转系统不误报。description 不嵌 $value：双 rate 相除
+      # 带浮点噪声（4.0000000000000005e+06 之类），逐字模板断言会随实现抖动
+      - alert: ClickHouseHighQueryTime
+        expr: |
+          rate(ClickHouseProfileEvents_QueryTimeMicroseconds[5m]) / rate(ClickHouseProfileEvents_Query[5m]) > 2000000
+        for: 5m
+        labels:
+          severity: warning
+          service: clickhouse
+        annotations:
+          summary: "ClickHouse high query time"
+          description: "Average query time is above 2000000 microseconds (2 seconds)."
+
+      # Disk space low (storage growth face)
+      - alert: ClickHouseDiskSpaceLow
+        expr: |
+          ClickHouseAsyncMetrics_DiskAvailable_default / ClickHouseAsyncMetrics_DiskTotal_default < 0.15
+        for: 5m
+        labels:
+          severity: warning
+          service: clickhouse
+        annotations:
+          summary: "ClickHouse disk space low"
+          description: "Free space on default disk below 15% ({{ $value | humanizePercentage }})."
