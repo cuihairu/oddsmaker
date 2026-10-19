@@ -256,6 +256,39 @@ class EventsEnrichJobTest {
     }
 
     @Test
+    @DisplayName("去重作用域=作业 keyed state：状态丢失后同 event_id 重投将再次入 sink（残余窗口实证）")
+    void dedupScopeIsJobStateOnly() throws Exception {
+        OutputTag<String> dlqTag = new OutputTag<>("dlq", Types.STRING);
+        List<RawEvent> out = new ArrayList<>();
+        List<String> dlq = new ArrayList<>();
+        RawEvent e = validEvent();
+        Field f = EventsEnrichJob.DedupFunction.class.getDeclaredField("seenTs");
+        f.setAccessible(true);
+
+        // 同一次运行内：重投被状态识别并压掉
+        EventsEnrichJob.DedupFunction fn1 = new EventsEnrichJob.DedupFunction(dlqTag);
+        TestValueState s1 = new TestValueState();
+        f.set(fn1, s1);
+        fn1.processElement(e, keyedContext(fn1, dlq), sinkTo(out));
+        assertEquals(1, out.size());
+        assertNotNull(s1.v);
+
+        // 等价于 checkpoint 不可恢复后的重启：新实例 + 空 keyed state，同一 event_id 再投
+        EventsEnrichJob.DedupFunction fn2 = new EventsEnrichJob.DedupFunction(dlqTag);
+        TestValueState s2 = new TestValueState();
+        f.set(fn2, s2);
+        fn2.processElement(e, keyedContext(fn2, dlq), sinkTo(out));
+
+        assertEquals(2, out.size(),
+                "checkpoint 不可恢复（仓内未配置外部 state backend / HA 管理器）后 keyed state 全空，"
+                        + "同 event_id 重投将再次入 sink；CH events 为纯 MergeTree（无 dedup_token）、"
+                        + "查询层无 event 级去重补偿，重复行永久留表——该窗口是 JdbcSink at-least-once 的"
+                        + "残余风险，语义见 docs/zh/reference/environment-and-storage.md「事件投递与去重语义」");
+        assertTrue(dlq.isEmpty(), "空状态实例无从识别重复，不会走 DLQ");
+        assertNotNull(s2.v, "重投后新状态重新记账：其后窗口内的重复仍可被识别");
+    }
+
+    @Test
     @DisplayName("去重键=game_id+environment+event_id（长度前缀编码）：跨游戏/跨环境同号不撞键")
     void dedupKeyIsCompositeAndUnambiguous() {
         RawEvent base = validEvent();

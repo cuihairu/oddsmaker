@@ -282,3 +282,59 @@ Oddsmaker 的推荐模型是：
 - `storage_profile` 负责隔离强度的配置位（当前只有 `SHARED` 接线）
 
 这套模型比“只保留 game”更真实，也比“每个环境都拆独立库”更可运维。
+
+## 事件投递与去重语义（审计 DATA-001）
+
+端到端链路 Kafka `events_raw` → events-enrich-job → ClickHouse `events` 的投递语义是
+**at-least-once**——平台不承诺严格一次性，本节把残余重复窗口显式界定清楚。
+
+### 逻辑事件身份与两道去重
+
+逻辑事件身份 = `game_id + environment + event_id`，长度前缀编码（长度定界，杜绝分隔符撞键）。
+两处同口径：
+
+- 网关 `ReplayGuard`（Redis，入口幂等）——第一道，挡住采集端重发；
+- 富化作业 `DedupFunction`（Flink keyed state，7 天 TTL）——第二道，挡住 Kafka 重投与
+  重启重放。
+
+### 去重作用域
+
+作业侧去重只在算子的 **keyed state** 作用域内成立。keyed state 随 checkpoint 持久化，
+只在 checkpoint 可恢复时才跨重启保留；仓内未配置外部 state backend 或 HA 管理器，
+checkpoint 落在 JobManager 进程内。
+
+### 残余重复窗口（未消除）
+
+1. **checkpoint 不可恢复的重启**（compose local executor 形态：进程内 state backend、无 HA）
+   → 去重 state 全空，重投的同 event_id 事件会再次入表；
+2. **checkpoint 间隔窗口**（配置 `CheckpointingMode.AT_LEAST_ONCE` 时残留）→ JdbcSink 不等
+   checkpoint 完成即刷盘；若刷盘后、checkpoint 完成前作业崩溃，恢复时 offset 回退重读这批
+   事件，而去重 state 只回到上次 checkpoint（不含这批）→ 同 event_id 重复入表；
+3. **sink 无事务** → JdbcSink 批量写入 + 重试（`maxRetries=3`）在 at-least-once 语义下可能
+   重放已应用的部分行。
+
+### 存储层与查询层都不收敛重复
+
+`events` 是纯 `ENGINE = MergeTree`（ORDER BY 含 `event_id`，但无 `dedup_token`、非
+ReplacingMergeTree），分析查询也未按 event_id 做 uniq/argMax 补偿——**重复行永久留表**，
+AggregatingMergeTree 类聚合表随之重复计数。
+
+### 当前决定
+
+本批次不引入下游幂等写入：ReplacingMergeTree + `dedup_token` 需同时改造全部聚合表与读取
+查询（`dedup` 修饰符、聚合口径变更），作为后续批次的独立改造，不并入本批次。当前边界 =
+上游两道去重 + 显式声明残余窗口 + 观测，而非「重复已消除」。
+
+### 观测口径
+
+作业内被判重复的事件走 DLQ 侧输出（Kafka 文本主题，消息含 `duplicate` 标记）——DLQ 中的
+duplicate 计数是「上游去重拦截量」的直接读数。注意它只是上界信号：**第 1 类窗口下重复会
+直接入表且不留 DLQ 痕迹**，DLQ 静默不等于下游无重复。
+
+### 验证面
+
+- `EventsEnrichJobTest.dedupScopeIsJobStateOnly`：行为钉——空状态实例再投同一 event_id 会
+  二次入 sink，把「去重只在状态作用域内」固化成可执行断言；
+- `ClickhouseEventsDeliverySemanticsTest`：schema 钉（events 表无去重令牌，一旦改为分区去重
+  引擎即打红）+ 文档对账钉（本节 at-least-once / keyed state / MergeTree / 残余 四个关键
+  表述缺失即打红），防止残余风险在文档里被悄悄写成已消除。

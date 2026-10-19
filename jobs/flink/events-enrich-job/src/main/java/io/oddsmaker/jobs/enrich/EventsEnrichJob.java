@@ -79,8 +79,11 @@ public class EventsEnrichJob {
     static SingleOutputStreamOperator<EventRow> buildPipeline(StreamExecutionEnvironment env, String[] cfg) {
         // 容错语义闭环:无 checkpoint 时 KafkaSource 从不提交 offset,重启后按回退策略重新初始化,
         // 停机窗口事件全部丢失且 keyed state 全空。启用 checkpoint 后 offset 随 checkpoint 提交、
-        // state 持久恢复、重启从上次 checkpoint 续读(残余风险收敛为 JdbcSink at-least-once 的
-        // 检查点间隔窗口内重复,处理层重复由去重/聚合 state 恢复挡住);
+        // 从上次 checkpoint 续读,残余窗口收敛为 JdbcSink at-least-once 的检查点间隔内重复;
+        // 但「state 持久恢复」只在 checkpoint 可恢复时成立——仓内未配外部 state backend / HA 管理器,
+        // compose local executor 形态下容器重启 checkpoint 不可恢复、去重 state 全空,重投事件重复
+        // 入表(events 为纯 MergeTree 无 dedup_token,存储层不收敛)。完整语义与残余窗口见
+        // docs/zh/reference/environment-and-storage.md「事件投递与去重语义」;
         // 回退 LATEST 保持既有首启动语义,避免已部署环境全量重放+state 空造成全量重复
         env.enableCheckpointing(30_000L, CheckpointingMode.AT_LEAST_ONCE);
         env.setRestartStrategy(RestartStrategies.fixedDelayRestart(3, Time.seconds(10)));
