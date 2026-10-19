@@ -32,7 +32,7 @@ otel-collector/Prometheus/Grafana，端口 29xxx/18088/13000 段），两者注�
 | Superset | ❌ | ✅ 3.1.0（38088） | ✅ 根 3.1.0（8088）；infra 3.0.2（18088） |
 | otel-collector + Prometheus + Grafana | ❌ | ❌ | ✅ infra（4317/4318/9464、9090、13000；配置在 `infra/prometheus.yml`、`infra/grafana/`、`deploy/monitoring/`） |
 | 对象存储归档 | ❌ | ❌ | 不在任何 compose：`deploy/backup/postgres-backup.sh` + `deploy/k8s/backup-cronjob.yaml`（`pg_dump` 全量 + 30 天就地留存；S3 离站需环境内备 aws CLI，k8s 基础镜像 `postgres:16-alpine` 不含——缺 CLI/上传失败时本地备份与留存清理照常，但脚本以 exit 2 显式失败，离站缺口不静默成功） |
-| K8s 形态 | — | — | `deploy/k8s/`（namespace/postgres/redis/control/gateway/backup-cronjob）+ 各自 `*-secrets.yaml`（占位凭据，首次部署手工 apply 一次，发布流水线不 apply）+ `rollback-release.sh`（发布流水线 Deploy/Verify 步 `trap ERR` 调用：失败自动回退两服务到 prev 镜像）+ `infra/helm/` |
+| K8s 形态 | — | — | `deploy/k8s/`（namespace/postgres/redis/control/gateway/backup-cronjob）+ 各自 `*-secrets.yaml`（占位凭据，首次部署手工 apply 一次，发布流水线不 apply）+ `rollback-release.sh`（发布流水线 Deploy/Verify 步 `trap ERR` 调用：失败自动回退两服务到 prev 镜像） + 发布后采集冒烟（`Smoke ingest endpoint` 步：port-forward 直击 gateway pod `/v1/batch`，无凭据/伪造 key 须 401，不符即回滚；正向冒烟需配 `SMOKE_API_KEY`/`SMOKE_API_SECRET`/`vars.SMOKE_GAME_ID`，未配则告警跳过）+ `infra/helm/` |
 
 ## 各档说明
 

@@ -212,6 +212,67 @@ jobs:
           echo "$RUNNING" | grep -qx "oddsmaker-gateway=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${VERSION}"
           echo "Production deployment successful: control + gateway @ ${VERSION}"
 
+      # DEPLOY-001 执行项「部署后的验证增加真实事件采集冒烟测试」：Verify 步只证明 pod 活着、
+      # 镜像正确，不证明采集入口按契约应答——gateway 若把 /v1/batch 全 401 掉，今天的发布照样绿。
+      # 冒烟把 runner 经 kubectl port-forward 隧道打进集群，直击刚滚动的 gateway pod：
+      #   1) 无凭据 POST      → 401 {"error":"missing_api_key"}（HmacFilter 在链上且生效）
+      #   2) 伪造凭据 POST    → 401 {"error":"invalid_api_key"}（gateway→control 内部密钥查询链路通）
+      # 任一不符即采集入口损坏，ERR trap 回滚。curl 在 runner 侧（pod 内 busybox wget 对 4xx 不吐
+      # 响应体，断不了错误码）；隧道只开在本机 localhost，不经任何公网入口。伪造 key 带 run id，
+      # 避开 AuthService 对不存在 key 的负缓存。
+      #
+      # 正向冒烟（真实事件被接受进发布链路）需要一枚可写冒烟密钥：仓库不持密钥，流水线也拿不到
+      # AccessGuard 会话去发放，故 secret 门控——配好 SMOKE_API_KEY/SMOKE_API_SECRET/vars.SMOKE_GAME_ID
+      # 才跑，未配置仅 ::warning:: 跳过（不静默失败、也不从库里捞生产密钥进流水线日志）。密钥须发放
+      # 到 smoke 游戏的 dev 环境（key 级 rejectUnknownEvents 对 dev 豁免，冒烟不必先发 Schema）、
+      # 允许写、带 HMAC secret。
+      - name: Smoke ingest endpoint
+        env:
+          SMOKE_API_KEY: ${{ secrets.SMOKE_API_KEY }}
+          SMOKE_API_SECRET: ${{ secrets.SMOKE_API_SECRET }}
+          SMOKE_GAME_ID: ${{ vars.SMOKE_GAME_ID }}
+        run: |
+          set -euo pipefail
+          trap 'bash deploy/k8s/rollback-release.sh "$prev_control" "$prev_gateway"' ERR
+          kubectl -n oddsmaker port-forward deploy/oddsmaker-gateway 18080:8080 >/dev/null 2>&1 &
+          PF_PID=$!
+          trap 'kill "$PF_PID" 2>/dev/null || true' EXIT
+          for _ in $(seq 1 15); do
+            curl -sf http://localhost:18080/actuator/health >/dev/null 2>&1 && break
+            sleep 1
+          done
+          probe() {
+            local expect_code="$1" expect_error="$2" out="$3" code
+            shift 3
+            code=$(curl -s -o "$out" -w '%{http_code}' -X POST http://localhost:18080/v1/batch -H 'Content-Type: application/json' "$@" -d '{}')
+            if [ "$code" != "$expect_code" ]; then
+              echo "::error::ingest probe expected HTTP ${expect_code} (${expect_error}), got ${code}: $(cat "$out")"
+              return 1
+            fi
+            grep -q "$expect_error" "$out" || { echo "::error::ingest probe response missing '${expect_error}': $(cat "$out")"; return 1; }
+          }
+          probe 401 missing_api_key /tmp/smoke_nokey.json
+          probe 401 invalid_api_key /tmp/smoke_badkey.json -H "x-api-key: smoke-invalid-${GITHUB_RUN_ID}"
+          echo "Ingest smoke passed: unsigned and forged requests rejected by the deployed gateway"
+
+          if [ -z "${SMOKE_API_KEY:-}" ] || [ -z "${SMOKE_API_SECRET:-}" ] || [ -z "${SMOKE_GAME_ID:-}" ]; then
+            echo "::warning::positive ingest smoke skipped - set secrets.SMOKE_API_KEY/SMOKE_API_SECRET and vars.SMOKE_GAME_ID (write-capable smoke key on a smoke game, dev env) to assert real events are accepted"
+            exit 0
+          fi
+          TS=$(date +%s)
+          BODY=$(printf '{"events":[{"eventId":"smoke-%s","gameId":"%s","environment":"dev","eventType":"design","eventName":"release_smoke","deviceId":"smoke-device-%s","tsClient":%s}]}' "$TS" "$SMOKE_GAME_ID" "$TS" "$(date +%s000)")
+          SIG=$(printf '%s.%s' "$TS" "$BODY" | openssl dgst -sha256 -hmac "$SMOKE_API_SECRET" -hex | sed 's/^.* //')
+          CODE=$(curl -s -o /tmp/smoke_positive.json -w '%{http_code}' -X POST http://localhost:18080/v1/batch -H 'Content-Type: application/json' -H "x-api-key: ${SMOKE_API_KEY}" -H "x-signature: t=${TS},s=${SIG}" -d "$BODY")
+          if [ "$CODE" != "200" ]; then
+            echo "::error::positive ingest smoke expected HTTP 200, got ${CODE}: $(cat /tmp/smoke_positive.json)"
+            false
+          fi
+          if ! grep -q "smoke-${TS}" /tmp/smoke_positive.json; then
+            echo "::error::positive ingest smoke: smoke event not in accepted list: $(cat /tmp/smoke_positive.json)"
+            false
+          fi
+          echo "Positive ingest smoke passed: event smoke-${TS} accepted by the deployed gateway"
+
   # Job 5: Create GitHub Release
   release:
     name: Create GitHub Release
