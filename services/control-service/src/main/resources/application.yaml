@@ -175,6 +175,13 @@ management:
   endpoint:
     health:
       show-details: when-authorized
+  health:
+    mail:
+      # 邮件是可选通道（未配置时投递自动跳过、告警链路不受影响，见 AlertEmailService）；
+      # compose 可选占位 `${SPRING_MAIL_HOST:-}` 传出空串时 Jakarta Mail 回落 localhost:587，
+      # 指示器 DOWN 会打挂聚合健康与容器探活（2026-10-20 容器活体验证，根/quickstart 两面同踩），
+      # 故不参与聚合健康投票。钉测试见 MailHealthGatingBootTest。
+      enabled: false
   metrics:
     export:
       prometheus:

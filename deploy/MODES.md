@@ -70,7 +70,7 @@ session/funnel/retention/risk_scores 等分析表），控制面快照与 Supers
 
 - `POSTGRES_PASSWORD`（postgres + control-service 数据源）
 - `CLICKHOUSE_PASSWORD`（clickhouse + control-service）
-- `ODDSMAKER_ADMIN_TOKEN` / `ODDSMAKER_INTERNAL_TOKEN` / `ODDSMAKER_AUTH_KEYS_DEVKEY`
+- `ODDSMAKER_ADMIN_TOKEN` / `ODDSMAKER_INTERNAL_TOKEN` / `ODDSMAKER_AUTH_JWT_SECRET` / `ODDSMAKER_AUTH_KEYS_DEVKEY`
 - `SUPERSET_SECRET_KEY` / `SUPERSET_ADMIN_PASSWORD` / `GRAFANA_ADMIN_PASSWORD`
 
 双保险：根 compose 给 control-service 注入 `ODDSMAKER_REQUIRE_PRODUCTION_SECRETS=true`，
@@ -124,8 +124,13 @@ cd infra && docker compose --env-file ../.env -f docker-compose.yml up -d
   FlinkJobManagerDown/FlinkJobFailed 仅 k8s 面生效。本档无 alertmanager：规则在
   prometheus 内评估、经 `/api/v1/alerts` 与
   Grafana 观测，告警投递面在 k8s 形态（`deploy/monitoring/prometheus.yaml` 的 alerting
-  段）。真机抓取验证未做（需 Production 宿主机实测 `up{job="oddsmaker-control"}`），
-  属外部条件；k8s 面抓取配置见 `deploy/monitoring/`。
+  段）。本地双栈活体验证已闭环（2026-10-20 轮次 1020c）：根业务栈 + infra 监控栈同机起，
+  `up{job="oddsmaker-control"/"oddsmaker-gateway"}=1`、`http_server_requests_seconds_count`
+  带真实 status/uri 标签可查询、`HighDatabaseConnections` 经 82 同标签容器内 `pg_sleep`
+  故障注入真实 fire（value=82）。剩余外部条件仅 Production 宿主机真机部署后的真实生产
+  流量告警实测；k8s 面抓取配置见 `deploy/monitoring/`。注意 `up=1` 只证明 exporter/端点
+  HTTP 应答——exporter 对数据库鉴权失败时 up 仍为 1（pg_stat 系列消失即此形态，2026-10-20
+  实测踩过），验抓取面须看业务系列非只看 up。
 - PostgreSQL 备份归档走 `deploy/backup/`（脚本 + S3）或 K8s `backup-cronjob`。
 
 ## 不入档的编排
