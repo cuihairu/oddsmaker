@@ -1,5 +1,19 @@
 global:
   scrape_interval: 15s
+  # 显式写评估间隔：告警规则靠它驱动（未写则默认同 scrape_interval）
+  evaluation_interval: 15s
+
+# 告警规则（审计 OBS-001 接线面补漏：本档此前只有抓取、18 条告警从未加载）：
+# 与 k8s 面同一份规则文件；路径相对本配置文件目录解析（容器内
+# /etc/prometheus/alerts/oddsmaker-alerts.yml，由 infra/docker-compose.yml 的
+# alerts 卷挂载提供）。必须写显式文件名——单测文件 oddsmaker-alerts.test.yml
+# 与规则文件同目录，用 "alerts/*.yml" 通配会把它当规则加载致解析失败。
+# 本档没有 alertmanager 服务：规则在 prometheus 内评估，经 /api/v1/alerts 与
+# Grafana 可观测；告警投递面在 k8s 形态（deploy/monitoring/prometheus.yaml 的
+# alerting 段指向 alertmanager:9093）。
+rule_files:
+  - "alerts/oddsmaker-alerts.yml"
+
 scrape_configs:
   - job_name: 'otel-collector'
     static_configs:

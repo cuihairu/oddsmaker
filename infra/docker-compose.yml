@@ -91,6 +91,9 @@ services:
     container_name: infra-prometheus
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      # 告警规则（审计 OBS-001 接线面补漏）：与 k8s 面共用 deploy/monitoring/alerts/，
+      # 挂载点与 prometheus.yml 的 rule_files "alerts/*.yml" 相对路径对齐
+      - ./../deploy/monitoring/alerts:/etc/prometheus/alerts:ro
     # 经宿主网关抓业务栈（根 compose）已发布的 28085/28080 宿主端口（审计 OBS-001 接线面）
     extra_hosts:
       - "host.docker.internal:host-gateway"

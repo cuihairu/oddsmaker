@@ -4,9 +4,12 @@ global:
   evaluation_interval: 15s
   scrape_timeout: 10s
 
-# Alerting rules
+# Alerting rules（必须写显式文件名，不得用 "alerts/*.yml"：promtool 单测文件
+# oddsmaker-alerts.test.yml 与规则文件同目录，通配会把它当规则文件加载、配置直接
+# 解析失败整栈拒起——2026-10-19 解阻塞复核才发现此回归，钉测试见
+# services/control-service/.../deploy/AlertRulesContractTest#ruleFilesExcludeTheUnitTestFile）
 rule_files:
-  - "alerts/*.yml"
+  - "alerts/oddsmaker-alerts.yml"
 
 # Alertmanager configuration
 alerting:

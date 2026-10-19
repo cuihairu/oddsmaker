@@ -4,13 +4,16 @@ import org.junit.jupiter.api.Test;
 import org.yaml.snakeyaml.Yaml;
 
 import java.io.IOException;
+import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.PathMatcher;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -100,6 +103,69 @@ class AlertRulesContractTest {
         assertTrue(content.contains(RULES.substring(RULES.lastIndexOf('/') + 1)),
                 "测试文件 rule_files 应指向 " + RULES.substring(RULES.lastIndexOf('/') + 1));
         assertTrue(content.contains("evaluation_interval"), "promtool 测试须显式声明 evaluation_interval");
+    }
+
+    /**
+     * 两处可跑监控配置的 rule_files 不得把 promtool 单测文件吞进规则加载：
+     * 单测文件顶层是 tests/rule_files/evaluation_interval 字段，被当规则文件加载会
+     * 解析失败、整栈拒绝起（2026-10-19 解阻塞复核实锤：加单测文件后 k8s 面
+     * `check config` 已红、compose 面沿用同款通配同病）。展开须命中规则文件本体。
+     */
+    @Test
+    void ruleFilesExcludeTheUnitTestFile() throws IOException {
+        List<Path[]> configs = List.of(
+                // k8s 面：配置与 alerts/ 同在 deploy/monitoring/
+                new Path[]{REPO.resolve("deploy/monitoring/prometheus.yaml"), REPO.resolve("deploy/monitoring")},
+                // compose 面：infra/prometheus.yml 的相对 rule_files 依赖 compose 把
+                // deploy/monitoring/alerts 挂到容器配置同目录（挂载钉在下一测试）
+                new Path[]{REPO.resolve("infra/prometheus.yml"), REPO.resolve("deploy/monitoring")});
+        for (Path[] entry : configs) {
+            List<String> matched = ruleFileMatches(entry[0], entry[1]);
+            assertFalse(matched.isEmpty(), entry[0] + " rule_files 未命中任何规则文件");
+            assertTrue(matched.stream().anyMatch(m -> m.endsWith("oddsmaker-alerts.yml")),
+                    entry[0] + " rule_files 须加载 oddsmaker-alerts.yml");
+            for (String file : matched) {
+                assertFalse(file.endsWith(".test.yml"),
+                        entry[0] + " 的 rule_files 把单测文件当规则加载: " + file);
+            }
+        }
+    }
+
+    /** compose 面接线钉：infra compose 须把规则目录挂到容器配置同目录（丢了即静默无告警）。 */
+    @Test
+    void infraComposeMountsTheRulesDirectory() throws IOException {
+        Path compose = REPO.resolve("infra/docker-compose.yml");
+        assertTrue(Files.exists(compose), "infra compose 缺失: " + compose);
+        String content = Files.readString(compose);
+        assertTrue(content.contains("../deploy/monitoring/alerts:/etc/prometheus/alerts"),
+                "infra compose 应把 deploy/monitoring/alerts 挂到 /etc/prometheus/alerts"
+                        + "（与 infra/prometheus.yml 的 rule_files 相对路径对齐）");
+    }
+
+    /** 按配置的 rule_files 通配在实际（或挂载等价）目录下展开，返回命中的仓内相对路径。 */
+    @SuppressWarnings("unchecked")
+    private static List<String> ruleFileMatches(Path config, Path expansionRoot) throws IOException {
+        assertTrue(Files.exists(config), "监控配置缺失: " + config);
+        Object doc = new Yaml().load(Files.readString(config));
+        assertTrue(doc instanceof Map, config + " 应是 YAML 映射");
+        List<String> patterns = (List<String>) ((Map<String, Object>) doc).get("rule_files");
+        assertFalse(patterns == null || patterns.isEmpty(), config + " 缺 rule_files（告警未接线）");
+        List<String> matched = new ArrayList<>();
+        for (String pattern : patterns) {
+            Path patternPath = Paths.get(pattern);
+            Path base = patternPath.getParent() == null
+                    ? expansionRoot
+                    : expansionRoot.resolve(patternPath.getParent());
+            PathMatcher matcher = FileSystems.getDefault()
+                    .getPathMatcher("glob:" + patternPath.getFileName());
+            try (Stream<Path> files = Files.list(base)) {
+                files.filter(Files::isRegularFile)
+                        .filter(f -> matcher.matches(f.getFileName()))
+                        .forEach(f -> matched.add(
+                                REPO.relativize(f.normalize()).toString().replace('\\', '/')));
+            }
+        }
+        return matched;
     }
 
     // ===== 用例盘点 =====

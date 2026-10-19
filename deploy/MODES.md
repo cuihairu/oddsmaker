@@ -76,13 +76,17 @@ session/funnel/retention/risk_scores 等分析表），控制面快照与 Supers
 双保险：根 compose 给 control-service 注入 `ODDSMAKER_REQUIRE_PRODUCTION_SECRETS=true`，
 容器内 `ProductionSecretsValidator` 启动时再校验一遍——凭据空白或仍为开发默认值
 （admin / dev-admin-token / dev-internal-token / oddsmaker 等）直接中止启动。
-infra 件与根件共用根目录 `.env`，注意必须带 `--project-directory .` 起动：
+infra 件与根件共用根目录 `.env`（须含上面清单全部变量；旧档缺项起动时会被 `:?` 点名）。
+起动 infra 件必须在其目录内、以 `--env-file ../.env` 取根 `.env`——**不能用
+`--project-directory .`**：相对挂载路径按 project directory 解析，指到仓库根会让
+infra 件全部 bind source 错位（`./grafana/provisioning`→仓库根、`./../schema/...`→
+仓库父目录，2026-10-20 复核 `docker compose config` 输出实证，起栈即坏）：
 
 ```bash
 docker compose config -q                 # 根件预检：缺变量即报错点名
 docker compose up -d
-docker compose --project-directory . -f infra/docker-compose.yml config -q
-docker compose --project-directory . -f infra/docker-compose.yml up -d
+cd infra && docker compose --env-file ../.env -f docker-compose.yml config -q
+cd infra && docker compose --env-file ../.env -f docker-compose.yml up -d
 ```
 
 - Flink 作业依赖宿主先构建 jar（`./gradlew build` → `cp jobs/flink/*/build/libs/*-all.jar
@@ -103,8 +107,16 @@ docker compose --project-directory . -f infra/docker-compose.yml up -d
   与 gateway `host.docker.internal:28080` 的 `/actuator/prometheus`（actuator 与业务同
   端口；配置在 `infra/prometheus.yml`，prometheus 容器带对应 `extra_hosts`）。与业务栈
   分属两个 compose project，不共享网络、互不重启。前置：业务栈在跑，否则两 job 抓取
-  target down（不影响 infra 自身指标）。真机抓取验证未做（需 Production 宿主机实测
-  `up{job="oddsmaker-control"}`），属外部条件；k8s 面抓取配置见 `deploy/monitoring/`。
+  target down（不影响 infra 自身指标）。**告警规则同接**（2026-10-20 审计 OBS-001 接线面
+  补漏）：`infra/prometheus.yml` 此前只有抓取、18 条告警从未加载——现已显式
+  `rule_files: alerts/oddsmaker-alerts.yml` 并由 compose 挂载
+  `deploy/monitoring/alerts:/etc/prometheus/alerts`；本地活体验证：18 规则加载（5 组
+  health=ok）、业务栈缺位时 `OddsmakerControlServiceDown`/`OddsmakerGatewayServiceDown`
+  在 `for: 1m` 走满后真实 fire（critical）、host-gateway 抓取路径解析正确（down=
+  预期缺栈）。本档无 alertmanager：规则在 prometheus 内评估、经 `/api/v1/alerts` 与
+  Grafana 观测，告警投递面在 k8s 形态（`deploy/monitoring/prometheus.yaml` 的 alerting
+  段）。真机抓取验证未做（需 Production 宿主机实测 `up{job="oddsmaker-control"}`），
+  属外部条件；k8s 面抓取配置见 `deploy/monitoring/`。
 - PostgreSQL 备份归档走 `deploy/backup/`（脚本 + S3）或 K8s `backup-cronjob`。
 
 ## 不入档的编排
