@@ -22,22 +22,7 @@ data:
   LOGGING_LEVEL_IO_ODDSMAKER: "DEBUG"
 
 ---
-# Secret for sensitive configuration
-apiVersion: v1
-kind: Secret
-metadata:
-  name: oddsmaker-gateway-secrets
-  namespace: oddsmaker
-  labels:
-    app: oddsmaker-gateway
-    component: gateway-service
-type: Opaque
-stringData:
-  # 网关访问控制面 /internal/* 的凭证（对应 oddsmaker.control.internal-token 与 oddsmaker.blocklist.internal-token）
-  ODDSMAKER_INTERNAL_TOKEN: "CHANGE_ME_IN_PRODUCTION"
-
----
-# Deployment
+# Deployment（Secret 已拆至 gateway-service-secrets.yaml，首次部署手工 apply，发布流水线不 apply）
 apiVersion: apps/v1
 kind: Deployment
 metadata:

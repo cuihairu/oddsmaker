@@ -147,7 +147,6 @@ jobs:
     needs: [validate, docker]  # 引用 needs.validate.outputs.version，须显式声明依赖
     environment:
       name: production
-      url: https://control.oddsmaker.local
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
@@ -162,6 +161,10 @@ jobs:
           mkdir -p $HOME/.kube
           echo "${{ secrets.KUBE_CONFIG_PROD }}" | base64 -d > $HOME/.kube/config
 
+      # DEPLOY-001：Control 与 Gateway 同一发布契约——单镜像双服务用同一不可变版本
+      # tag 同批滚动两个 deployment，防发布后版本漂移。
+      # *-secrets.yaml（CHANGE_ME 占位凭据）由运维首次部署填真值后手工 apply 一次，
+      # 本流水线不得 apply——再 apply 会用占位值覆盖产线真实凭据。
       - name: Deploy to production
         run: |
           VERSION=${{ needs.validate.outputs.version }}
@@ -169,14 +172,29 @@ jobs:
           kubectl apply -f deploy/k8s/postgres.yaml
           kubectl apply -f deploy/k8s/redis.yaml
           kubectl apply -f deploy/k8s/control-service.yaml
+          kubectl apply -f deploy/k8s/gateway-service.yaml
           kubectl set image deployment/oddsmaker-control control-service=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${VERSION} -n oddsmaker
+          kubectl set image deployment/oddsmaker-gateway gateway-service=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${VERSION} -n oddsmaker
           kubectl rollout status deployment/oddsmaker-control -n oddsmaker --timeout=300s
+          kubectl rollout status deployment/oddsmaker-gateway -n oddsmaker --timeout=300s
 
+      # 健康检查在集群内做：exec 进 pod 用镜像自带 wget 打本机 actuator，不经过任何对外
+      # 域名。ubuntu-latest runner 解析不了占位内网域名（原 curl 必挂），也不得为探活把
+      # 管理端点暴露到公网。control 在 k8s 下经 MANAGEMENT_SERVER_PORT 把 actuator 迁到
+      # 8086 管理口（/app/healthcheck.sh 按 SERVICE 选口只查 8085 app 口，此处不能复用），
+      # gateway 单端口 8080。随后记录两服务实际运行镜像并与发布 tag 断言一致，滚动未完成
+      # 或清单漂移即 fail——发布失败不会带绿 Release job（release needs: deploy）。
       - name: Verify deployment
         run: |
+          VERSION=${{ needs.validate.outputs.version }}
           sleep 30
-          curl -f https://control.oddsmaker.local/actuator/health || exit 1
-          echo "Production deployment successful!"
+          kubectl -n oddsmaker exec deploy/oddsmaker-control -- wget -qO- --timeout=10 http://localhost:8086/actuator/health | grep -q '"status":"UP"'
+          kubectl -n oddsmaker exec deploy/oddsmaker-gateway -- wget -qO- --timeout=10 http://localhost:8080/actuator/health | grep -q '"status":"UP"'
+          RUNNING=$(kubectl -n oddsmaker get deployment oddsmaker-control oddsmaker-gateway -o jsonpath='{range .items[*]}{.metadata.name}={.spec.template.spec.containers[0].image}{"\n"}{end}')
+          echo "$RUNNING"
+          echo "$RUNNING" | grep -qx "oddsmaker-control=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${VERSION}"
+          echo "$RUNNING" | grep -qx "oddsmaker-gateway=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${VERSION}"
+          echo "Production deployment successful: control + gateway @ ${VERSION}"
 
   # Job 5: Create GitHub Release
   release:

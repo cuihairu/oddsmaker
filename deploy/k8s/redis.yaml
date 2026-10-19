@@ -124,16 +124,3 @@ spec:
       protocol: TCP
   selector:
     app: oddsmaker-redis
-
----
-# Secret
-apiVersion: v1
-kind: Secret
-metadata:
-  name: oddsmaker-redis-secrets
-  namespace: oddsmaker
-  labels:
-    app: oddsmaker-redis
-type: Opaque
-stringData:
-  password: "CHANGE_ME_IN_PRODUCTION"

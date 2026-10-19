@@ -24,6 +24,12 @@ helm upgrade --install oddsmaker ./infra/helm/oddsmaker -n oddsmaker --create-na
 
 方式二：Raw YAML（`deploy/k8s/`）
 ```bash
+# 首次部署一次性：Secret 已拆至独立 *-secrets.yaml（内含 CHANGE_ME 占位值），
+# 填入真实值后手工 apply 一次；发布流水线不 apply 占位 Secret（覆盖即毁产线真实凭据）
+kubectl apply -f deploy/k8s/postgres-secrets.yaml
+kubectl apply -f deploy/k8s/redis-secrets.yaml
+kubectl apply -f deploy/k8s/control-service-secrets.yaml
+kubectl apply -f deploy/k8s/gateway-service-secrets.yaml
 kubectl apply -f deploy/k8s/namespace.yaml
 kubectl apply -f deploy/k8s/postgres.yaml
 kubectl apply -f deploy/k8s/redis.yaml
@@ -34,6 +40,7 @@ kubectl apply -f deploy/k8s/gateway-service.yaml
 
 注意
 - 管理令牌：`oddsmaker.admin.token`（Control），通过 `x-admin-token` 访问 /api/**
+- 凭据：Secret 已拆至 `deploy/k8s/*-secrets.yaml`（占位 CHANGE_ME），首次部署填真实值后手工 apply 一次；发布流水线不 apply 占位 Secret（覆盖即毁产线真实凭据）
 - 入口暴露：可用 Ingress/LoadBalancer 暴露 `oddsmaker-gateway` 与 `oddsmaker-control`
 - 下游地址：改 `deploy/k8s/control-service.yaml` 与 `gateway-service.yaml` 的 ConfigMap（Kafka/Registry/ClickHouse）
 - 认证与安全：接入企业网关/WAF；控制面换强令牌或对接 OIDC；启用 TLS（Ingress/ServiceMesh）

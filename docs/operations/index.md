@@ -48,6 +48,13 @@ podman compose down
 ### Kubernetes (Production)
 
 ```bash
+# First-time only: Secret docs are split into *-secrets.yaml files carrying CHANGE_ME
+# placeholders — fill real values, then apply once manually. The release pipeline never
+# applies placeholder Secrets (it would clobber real production credentials)
+kubectl apply -f deploy/k8s/postgres-secrets.yaml
+kubectl apply -f deploy/k8s/redis-secrets.yaml
+kubectl apply -f deploy/k8s/control-service-secrets.yaml
+kubectl apply -f deploy/k8s/gateway-service-secrets.yaml
 # Deploy services (namespace first, then manifests; backup CronJob is optional)
 kubectl apply -f deploy/k8s/namespace.yaml
 kubectl apply -f deploy/k8s/postgres.yaml
