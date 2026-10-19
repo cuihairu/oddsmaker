@@ -355,7 +355,7 @@
 
 ## GOV-001：收敛 TODO 与历史审计记录
 
-**状态：** 待核实
+**状态：** 已整改（2026-10-19 FIRE1019H【已代决】执行；方案与被否选项见 docs/决策记录.md）
 
 **问题背景**
 
@@ -363,24 +363,24 @@
 
 **执行步骤**
 
-- [ ] 检查当前 `todo.md`、历史评估文件和相关故障记录。
-- [ ] 为每个未完成事项建立唯一的任务 ID。
-- [ ] 合并相同问题的重复条目，保留当前状态和最新证据。
-- [ ] 将长期有效的架构决策迁移至决策文档。
-- [ ] 将详细故障时间线迁移至独立的运维事件记录。
-- [ ] 将外部依赖未满足的任务明确标记为 `BLOCKED`。
-- [ ] 为每项任务补齐负责人或执行主体、优先级、依赖关系和验收标准。
-- [ ] 检查是否已有文档构建或链接检查 CI；仅在缺失且确有价值时补充。
-- [ ] 确保归档评估快照不会被误认为当前项目状态。
+- [x] 检查当前 `todo.md`、历史评估文件和相关故障记录（收敛前 183 行：4 条开放项下累计约 83 行逐巡「复核留痕」、1 行千字符级证据堆、1 行「待用户拍板」自锁注记）。
+- [x] 为每个未完成事项建立唯一的任务 ID：`T-AUDIT`（外部生产审计收口）/ `T-DEMO502`（Demo 站公网 502）/ `T-CDC`（Debezium CDC）/ `T-ML`（ML 异常检测评估批次）。
+- [x] 合并相同问题的重复条目，保留当前状态和最新证据：83 行留痕压为每行一条「最近证据+日期」，被收敛内容不删除而是由 git 历史保存（`git log -p todo.md` 可回溯全部逐巡留痕），另加「账本使用协议」节约束后续不再累积。
+- [x] 将长期有效的架构决策迁移至决策文档：历次代决均已登记于 docs/决策记录.md，本轮 GOV-001 代决（方案+4 项被否选项）同批入库。
+- [x] 将详细故障时间线迁移至独立的运维事件记录——**有意不做（不新建文件）**：全仓仅 502 一起独立事件、其诊断结论已由 `demo-diagnose.yml` 只读工作流与 run 39136336862 机器可引用，第二起独立事件出现时再立运维事件记录，不为单起事件维护一个只会过期一次的文档面（理由见 docs/决策记录.md）。
+- [x] 将外部依赖未满足的任务明确标记为 `BLOCKED`：四个开放项均以「维持卡点」+「缺什么」+「解锁条件」内联标注。
+- [x] 为每项任务补齐负责人或执行主体、优先级、依赖关系和验收标准：每行括号内含 P0–P3 优先级、owner（巡检/用户侧/等外部输入/等部署面）、依赖与验收判据。
+- [x] 检查是否已有文档构建或链接检查 CI；仅在缺失且确有价值时补充——**有意不新增**：文档面已有 `pnpm docs:build` 常规验证与既有对账钉测试覆盖，2026-10-19 已有一次为文档面加门禁钉测试反打红 main 的先例（教训：门禁钉测试只钉功能面），不为收敛动作追加 CI 面。
+- [x] 确保归档评估快照不会被误认当前项目状态：收敛后账本只含当前状态与「已完成需求」「边界」两节，历史评估完成度数字已有边界条目禁引用；旧台账证据由审计文档与 git 历史承载。
 
 **验收标准**
 
-- [ ] 主 TODO 聚焦当前未解决的任务。
-- [ ] 每项任务只有一个权威状态。
-- [ ] 历史证据可以追溯，但不会重复出现在多个待办条目中。
-- [ ] 已完成任务具有验证证据。
-- [ ] 阻塞任务明确说明解除阻塞所需的条件。
-- [ ] Code Agent 可以据此独立判断下一项应执行的工作。
+- [x] 主 TODO 聚焦当前未解决的任务（开放区 4 行，全部为待解任务；原混入开放区的 3 条 [x] 完成项已归位「已完成需求」）。
+- [x] 每项任务只有一个权威状态（状态只写在任务行；账本使用协议禁止靠历史留痕推断状态）。
+- [x] 历史证据可以追溯，但不会重复出现在多个待办条目中（git 历史为唯一归档面；审计文档核验结论表为跨轮证据真源）。
+- [x] 已完成任务具有验证证据（「已完成需求」每条保留 commit 与测试数）。
+- [x] 阻塞任务明确说明解除阻塞所需的条件（四项均写明解锁条件与剩余动作）。
+- [x] Code Agent 可以据此独立判断下一项应执行的工作（开放区按优先级排列；卡点写明缺什么，不再留「待拍板」自锁注记）。
 
 ## ML-001：明确 ML 能力的真实运行状态
 
@@ -455,18 +455,18 @@
 
 在本轮整改结束前，Code Agent 必须完成以下检查：
 
-- [ ] 生产环境不会隐式使用已知开发密码或 Token。
-- [ ] 事件幂等边界符合 `game_id + environment + event_id` 的业务定义。
-- [ ] 重试、重放和下游重复写入具有明确且经过测试的语义。
-- [ ] Control 与 Gateway 的发布版本及兼容关系可验证。
-- [ ] 生产发布后的健康检查和真实事件采集冒烟测试通过。
-- [ ] 必须异地保存的备份具备明确的成功、失败和告警状态。
-- [ ] 核心数据库至少完成一次隔离环境中的真实恢复验证。
-- [ ] Lite、Standard、Production 的实际能力与文档一致。
-- [ ] 分析和风控不可用时，不会伪装成正常运行。
-- [ ] 关键业务指标可查询，重要故障具备可验证的告警。
-- [ ] README、部署文档、作业清单与当前代码一致。
-- [ ] TODO 中所有完成项都有测试或运行证据，所有阻塞项均有明确原因。
+- [x] 生产环境不会隐式使用已知开发密码或 Token（SEC-001：全部编排凭据 `${VAR:?}` 必填 + `ProductionSecretsValidator` 启动拒绝开发默认值 + `docker compose config` 双向实证）。
+- [x] 事件幂等边界符合 `game_id + environment + event_id` 的业务定义（DATA-001：入口 ReplayGuard 三元组长度前缀编码 + Flink 侧同口径 + 跨游戏/环境不互斥测试）。
+- [x] 重试、重放和下游重复写入具有明确且经过测试的语义（DATA-001 端到端语义收口：`environment-and-storage.md` 语义节 + 3 例钉测试；残余窗口显式声明而非静默）。
+- [x] Control 与 Gateway 的发布版本及兼容关系可验证（DEPLOY-001：同批双服务滚动 + verify 步运行镜像与发布 tag 逐字断言 + `ReleaseDeployContractTest` 13 例钉测）。
+- [ ] 生产发布后的健康检查和真实事件采集冒烟测试通过（机制已落地：集群内健康检查、失败自动回滚、采集入口 401 双探针冒烟步均已入库；「通过」须首次真实发版执行——外部件：发版触发属用户红线 + 正向冒烟密钥须用户发放）。
+- [x] 必须异地保存的备份具备明确的成功、失败和告警状态（DR-001：exit 0/1/2 三态非静默 + webhook 通知 + `BackupScriptTest` 10 例）。
+- [x] 核心数据库至少完成一次隔离环境中的真实恢复验证（DR-001 四腿：PG 102/102 表行数一致、PITR 20/20 全量+目标时刻精确停点、CH 12000 行精确恢复、Redis 43/43 键）。
+- [x] Lite、Standard、Production 的实际能力与文档一致（DEPLOY-002 + MODES.md 三档矩阵与运行边界声明，compose config 四文件实证）。
+- [x] 分析和风控不可用时，不会伪装成正常运行（DATA-002：readiness 统一读口 + analysisLastEventAt，null=分析链路从未产出，available 语义不再被误读）。
+- [ ] 关键业务指标可查询，重要故障具备可验证的告警（仓内可动面已闭环：抓取/告警/接线三面文件齐 + 36 例 promtool 单测 + 4 例钉测试；「可查询」须 infra 栈真机部署后 up=1 与真实流量告警触发实测——外部件：部署位置属用户/运维决策）。
+- [x] README、部署文档、作业清单与当前代码一致（DOC-001 三口径统一 + FIRE1019F 台账证据与代码一致性抽查全部刷新）。
+- [x] TODO 中所有完成项都有测试或运行证据，所有阻塞项均有明确原因（GOV-001 收敛后逐行满足，2026-10-19 FIRE1019H）。
 
 ## 交付报告
 
@@ -516,7 +516,7 @@ If you want, I can:
 | DATA-001 事件幂等键与去重边界不统一 | **属实（审计时点；2026-10-18 已整改）** | 审计时点 `mark(eventId)` 仅按裸 event_id 去重、键无 game_id/environment；调用方 `BatchController.java:200` 直传 `event.eventId`——跨游戏/跨环境同 event_id 会互相抑制；下游 `EventsEnrichJob.java` keyBy 同为裸 `event_id`（7 天 TTL 去重，跨游戏同号误入 DLQ）。整改后形态：`ReplayGuard.java:85-92`（三元组 `eventKey` 长度前缀编码）、`BatchController.java:200`（传三元组）、`EventsEnrichJob.java:115`（`keyBy(dedupKey)` 同口径） |
 | DEPLOY-001 Control 与 Gateway 发布契约不一致 | **属实（审计时点；2026-10-19 FIRE1019D/E 已整改）** | 整改前 `release.yaml:172` 仅 set image `deployment/oddsmaker-control`；`:178` 健康检查 `https://control.oddsmaker.local`（.local 仅同网 runner 可解析）；`deploy/k8s/gateway-service.yaml` 存在但发布流程不更新 gateway。现 release 双服务同批滚动 + 集群内健康检查 + 失败自动回滚 + 部署后采集入口冒烟（落地跟踪 DEPLOY-001） |
 | DR-001 异地备份与恢复闭环未验证 | **部分属实**（降级系既有拍板；离站可见性 2026-10-18 已整改为 exit 2） | `deploy/backup/postgres-backup.sh:96-101` 与 `deploy/k8s/backup-cronjob.yaml:34-37`：审计时点 aws 缺失 WARN 跳过离站、任务仍 exit 0（a0c1b9f 有意降级，防 set -e 整条掐断留存清理）；现保留降级意图但结尾 exit 2 非静默（落地跟踪 DR-001 备份离站失败可见性）；2026-10-19 本地隔离演练已补 PG/Redis/CH/PITR 四腿（落地跟踪 DR-001 恢复演练闭环），剩余=离站副本恢复需真实对象存储凭据 |
-| OBS-001 业务指标/告警未接通 | **部分属实**（文件面缺口已补，接线面仍待实测） | control 已暴露 prometheus 端点（`application.yaml:171-177`）+ Prometheus 抓 9 job（`prometheus.yaml:21-95`：prometheus/control/gateway/PG/Redis/Kafka/CH/Flink/node）+ 告警 18 条（`oddsmaker-alerts.yml:6-222`）；缺口 1（已补）：gateway 无抓取 job——k8s 面 Service `oddsmaker-gateway:80`→8080、actuator 同端口（`gateway-service.yaml:50-52,124-126`（2026-10-19 Secret 拆分后行号已刷新）），已补 job+down 告警；缺口 2（文件面已补，待实测）：infra/prometheus.yml 原只抓 otel-collector，现 3 job（`:4,13,21`，经 host-gateway 抓宿主 28085/28080），真实流量下告警触发仍未验证（demo 面无监控栈） |
+| OBS-001 业务指标/告警未接通 | **部分属实**（文件面缺口已补，接线面仍待实测） | control 已暴露 prometheus 端点（`application.yaml:171-177`）+ Prometheus 抓 9 job（`prometheus.yaml:21-95`：prometheus/control/gateway/PG/Redis/Kafka/CH/Flink/node）+ 告警 18 条（`oddsmaker-alerts.yml:6-224`，2026-10-19 起 36 例 promtool 触发/静默单测全绿+钉测试 4 例；HighErrorRate 除法按标签集自配比恒 100% 真 bug 同轮发现并修复）；缺口 1（已补）：gateway 无抓取 job——k8s 面 Service `oddsmaker-gateway:80`→8080、actuator 同端口（`gateway-service.yaml:50-52,124-126`（2026-10-19 Secret 拆分后行号已刷新）），已补 job+down 告警；缺口 2（文件面已补，待实测）：infra/prometheus.yml 原只抓 otel-collector，现 3 job（`:4,13,21`，经 host-gateway 抓宿主 28085/28080），真实流量下告警触发仍未验证（demo 面无监控栈） |
 | ML-001 ML 能力真实运行状态不明 | **已有结论**（与账本一致） | 训练管线在 CI（`ci.yaml:83-84` ml-tests，68 例）；在线异常检测已 BLOCKED（`todo.md` ML 条——指标表 0 行、无部署面）；训练完成≠在线检测上线，账本口径已满足本条要求 |
 | DATA-002 分析接口就绪状态与链路不一致 | **属实**（语义面，2026-10-18 增量整改已落地【已代决=向后兼容增量】） | 原诊断属实：`FunnelResultsService` available 反映「CH 可达且查询成功」而非「分析链路在产数据」——Standard 档无 Flink（`docker-compose.quickstart.yml:3`）时空数据仍 available=true。整改：新增 `ClickHouseClient.analysisLastEventAt()`（`ClickHouseClient.java:64-89`，events.max(ts_server)，分区裁剪廉价查询，失败 warn→null 不抛）+ 漏斗结果出参携带 `analysisLastEventAt`（`FunnelResultsService.java:59`，ISO-8601 UTC，null=分析管道从未产出）+ 统一读口 `GET /api/games/{gameId}/readiness`（`GameReadinessController`/`GameReadinessService`）——available 语义不变，不牵动 web/SDK/e2e；降级面零额外查询、字段整体省略。`CohortService.java:301` CH 未配置抛错**保留**：显式 calculate 动作 fail-loud 与读路径降级语义不同，不视为同类缺陷。其余分析出参（finance/crash/risk/prediction 等）叠加同字段属机械扩展，后续批次 |
 | DEPLOY-002 Production Flink 运行边界未声明 | **属实**（文档缺口，本轮已补） | `docker-compose.yml:7`（local executor 形态头注）+ 7 作业容器 `java -jar/-cp` 直跑（`:298,342,380,418,455,503,545`）；全 compose 无 restart 策略、7 模块 checkpointing 均进程内（`jobs/flink/*/src/main` enableCheckpointing）。形态有记录、能力边界无声明——已补入 `deploy/MODES.md` Production 节 |
@@ -539,5 +539,6 @@ If you want, I can:
 - [x] DR-001 WAL 归档链路纠错（2026-10-19 R1019 PITR 演练揪出：归档配置原写 `wal_archive_timeout` 非 PostgreSQL GUC（真名 `archive_timeout`），生产根 compose/k8s postgres 带错名启动即 FATAL `unrecognized configuration parameter` crash 循环——39e2a1c 入库以来该配置零真实执行面，本演练为首次执行。全仓 6 处修正（根 compose 参数+注释、`deploy/k8s/postgres.yaml` args+注释、backup-strategy.md 配置块、operations 中英文档），新增 `WalArchiveConfigTest` 钉测试 4 例（compose/k8s GUC 参数集一致 + 全 deploy 面错名禁绝），先红后绿，`docker compose config` 双验过）
 - [x] OBS-001 文件面缺口（2026-10-18：k8s 面补 gateway 抓取 job（`deploy/monitoring/prometheus.yaml` oddsmaker-gateway:80 /actuator/prometheus）+ GatewayDown 告警（`oddsmaker-alerts.yml`）；control 8086 抓取口经 k8s 清单核实正确（`control-service.yaml:18` MANAGEMENT_SERVER_PORT=8086（k8s 清单仅此一处声明））非笔误）
 - [x] OBS-001 接线面·文件（2026-10-18【已代决=host-gateway 解耦】：`infra/prometheus.yml` 补 oddsmaker-control/gateway 两 job 抓 `host.docker.internal:28085/28080` 的 `/actuator/prometheus`（根 compose 业务栈已发布宿主端口；两 actuator 均与业务同端口、exposure 含 prometheus 已核 `control-service/application.yaml:170-174`、`gateway-service/application.yaml:11`），`infra/docker-compose.yml` prometheus 容器带 `extra_hosts: host.docker.internal:host-gateway`（需 Docker ≥ 20.10）——与业务栈分属两 compose project，不共享网络、不改根 compose、互不重启。验证：promtool check config 绿 + `docker compose config -q` 绿；`deploy/MODES.md` Production 观测段同步改写（原「接线不在矩阵声明内」表述作废）。**剩余外部件**：真机抓取验证（Production 宿主机实测 up{job="oddsmaker-control/gateway"}=1）+ 真实流量告警触发。**取证通道**：`demo-diagnose.yml` 新增 Prometheus 取证腿（2026-10-18，只读：`docker ps infra-prometheus` + `up` 全量 + `prometheus_tsdb_head_min_time` 历史回看起点）。**首测读数（run 39136336862，2026-10-18T14:31Z）**：Production/Demo 机上 infra 栈未部署（无 infra-prometheus 容器、127.0.0.1:9090 拒连；机上仅 demo 三件套）——真机验证的前置不是「重拉」而是「首次部署 infra 栈」（部署位置属用户/运维决策）；该时刻即业务指标积累与 ML-001 条件 a 的起点，读数见 todo.md ML 条目）
-- [ ] GOV-001（账本收敛待用户拍板）/ SITE-001（与账本 502 条同源，等 CF 改源）/ ML-001（与账本 ML 条同源，已 BLOCKED）
+- [x] GOV-001 账本收敛（2026-10-19 FIRE1019H【已代决=原地收敛】：todo.md 4 开放项定稳定 ID（T-AUDIT/T-DEMO502/T-CDC/T-ML），每行收敛为「当前状态+最近证据+卡点/解锁条件+owner/优先级/验收」，约 83 行逐巡复核留痕压缩、git 历史为归档面；新增「账本使用协议」节（无变化不新增留痕行、不为留痕改文件、实质变化才改行）；开放区 3 条 [x] 历史完成项归位「已完成需求」；「待用户拍板」自锁注记解除。**被否选项**：①按域拆多文件（破坏巡检单文件读取面）②删史重写（毁证据链）③为 502 单立运维事件文件（仅一起独立事件，机器证据已在 demo-diagnose run，出现第二起再立）④为账本加 CI 文档检查（R1019 已有文档面钉测试打红 main 先例，门禁只钉功能面）。方案与理由全文见 docs/决策记录.md。SITE-001（与账本 502 条同源，等 CF 改源）/ ML-001（与账本 ML 条同源，已 BLOCKED）维持外部卡点）
+- [x] OBS-001 告警可验证性·promtool 单测面（2026-10-19 FIRE1019H：新增 `deploy/monitoring/alerts/oddsmaker-alerts.test.yml`——18 告警 × 触发/静默 36 例，合成序列越阈值+`for` 窗口走满断言触发且 labels/annotations 逐字匹配、健康序列断言不触发；promtool v2.53.0 全绿。**揪出真 bug 并同轮修复**：HighErrorRate 原式 `rate(5xx_count)/rate(all_count)` 两侧均携带 status 标签，除法按同标签集匹配→分子只与自身分母配对比值恒 100%（任何 5xx 即误报、注解永远写 100%）；修复为两侧 `sum by (instance)` 聚合（分母跨全状态码、结果标签不再携带 status）。新增 `AlertRulesContractTest` 4 例钉测试（每告警必有触发用例、存活告警必有静默用例、测试文件不得引用未知告警、必须 rule_files 钉住规则文件），先红后绿）
 - [x] DOC-001 作业口径统一（2026-10-18：`README.md:137,276`+`README.zh.md:137,276` 重写——7 模块=6 fatJar+dimension-sync（兼 agent 形态）、compose 7 容器（funnels 双跑、dimension-sync 不在 compose）；`deploy/MODES.md` 新增「作业计数口径」定义三口径；`README.md:217` 六 fatJar+agent 表述与该口径对齐核实无误）

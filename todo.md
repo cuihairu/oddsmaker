@@ -2,115 +2,28 @@
 
 需求清单：一条一句；完成项留一行证据（commit + 测试数）。重构契约 = `docs/zh/redesign/06-od2-restructure-plan.md`。
 
+## 账本使用协议（GOV-001 收敛，2026-10-19 已代决，方案与被否选项见 docs/决策记录.md）
+
+- 每条任务一个稳定 ID（T-*）、一个权威状态：状态只写在任务行上，不靠历史留痕推断。
+- 复核**无变化**时不新增留痕行、不为留痕改文件：任务行只保留最近一次证据+日期；被收敛前的逐巡留痕由 git 历史保存（`git log -p todo.md` 可回溯）。
+- 有**实质变化**（新证据/状态翻转/整改落地）才改行：更新状态、证据与解锁条件；卡点必须写清缺什么。
+- 已完成条目移入「已完成需求」（原开放区 [x] 行同批归位）；「边界」是不可再提事项；两者均不占开放账。
+- 审计台账同源约定：SITE-001 与 T-DEMO502 同源、ML-001 与 T-ML 同源（勿双记，以本账为准）。
+
 ## 开放需求
+
+- [ ] T-AUDIT 外部生产审计整改收口（P0，owner=巡检；依赖=外部条件见下；验收=审计文档终验清单全勾或逐条留名卡点）：审计 11 条全部核验完毕、仓内可动整改全部落地——SEC-001 / DATA-001 / DATA-002（已代决=独立 readiness 端点）/ DEPLOY-001（发布契约+冒烟+自动回滚）/ DEPLOY-002 / DEPLOY-003（Secret 拆分）/ DR-001 仓内面（四腿演练+脚本契约）/ OBS-001 文件+接线+promtool 单测面 / DOC-001，逐条证据见 `docs/review/review-2026-10-18-production-audit.md` 核验结论表与整改台账。2026-10-19 FIRE1019H = OBS-001 可验证性收口：`oddsmaker-alerts.test.yml` 18 告警 × 触发/静默 36 例 promtool 全绿 + `AlertRulesContractTest` 4 例钉测试不掉队；过程中揪出 HighErrorRate 真 bug（除法按标签集自配比恒 100%，任何 5xx 即误报）并同轮修复。剩余全部卡外部条件：真机抓取（Production 宿主机 up=1 实测）、真实流量告警触发、首次发版执行冒烟（凭据须用户发放；发版触发属用户红线，agent 不得自行发版）
+- [ ] T-DEMO502 Demo 站公网 502（P1 交付面故障，owner=用户侧；解锁条件=用户在 CF 面板把 `oddsmaker.cuihairu.site` 的 origin A 记录改指 `106.14.216.177`（保持橙云）——唯一剩余动作）：维持卡点。最近证据（2026-10-19 第二十四巡 FIRE1019C）：公网 https/http 双栈仍 502；源站健康已被 demo-diagnose 双腿再证（run 39136336862：直连源站 :80/:443 均 200、cockpit 对照 301、经 CF 502），安全组/境外拦截假说已排除，LE 证书有效至 2027-01-01，仓内与源站无可修项。复核通道 = `demo-diagnose.yml` workflow_dispatch（只读取证），证据未变不重复触发 CI
+- [ ] T-CDC Debezium CDC 维度同步（P3，owner=等外部输入；解锁条件=游戏方开 binlog + 部署 Kafka Connect + 提供 CDC 事件格式与目标表映射，三者齐备即开工）：维持卡点——三项解锁件均为外部输入缺失，仓内无可推进前置项（消费端将复用 dimension-sync-job 事件入口，属解锁后开工面）。最近证据（2026-10-19 第二十四巡 FIRE1019C）：`grep -rl binlog deploy/` 零命中；`debezium` 全仓仅 `DimensionSyncJobTest` 一处方法名、`kafka.connect|connect-api` 零命中；demo 栈（postgres/redis/control-service）无 Kafka
+- [ ] T-ML ML 异常检测进评估批次（P3，owner=等部署面；解锁条件=四项触发条件任一达标；条件 a 需先有 infra 栈部署 + 带网关流量的部署面，自指标落库起算满 7 天（7d）/28 天（28d 分位基线））：维持卡点。最近证据（2026-10-19 第二十四巡 FIRE1019C）：demo compose 服务面仍无 gateway、本地 demo 库四指标表（health/performance/ml_model_metrics/metric_alert_rules）全 0 行、infra 栈未部署（run 39136336862 证据有效，Deploy Demo 各 run 仅滚 demo 三件套）→ 条件 a 时钟未起；条件 b/c（阈值调整次数/误杀率）无记录面，不可测不可判，不编造。读数通道 = demo-diagnose 的 `prometheus_tsdb_head_min_time` 取证腿
+
+## 已完成需求
 
 - [x] docs 内部链接指向一致性（P2，P1016AM 挂账后续项，R2PATROL 完成）：兄弟页内部链接改指同语言对应页——4 处真 404（`docs/reference/api-reference.md` 与其 `.zh.md` 兄弟各 2 处指向英文 locale 下从未存在的 `/reference/dimension-sync`；英文侧改指 `/zh/reference/dimension-sync.en`、中文侧改指 `/zh/reference/dimension-sync`；该设计文档自 9ba45f9 起只在 `docs/zh/reference/`）+ 12 处中文兄弟页静默解析到英文基名（`docs/reference/index.zh.md` 8 处、`docs/operations/index.zh.md` 4 处 → 同目录 `.zh` 兄弟）。理由/影响面/推翻方式见 docs/决策记录.md。验收：全仓 46 条路由链接 + 140 条相对 `.md` 链接 0 失效；三个被改页对结构计数一致（行数/标题/表格/围栏）+ 代码块逐字节相同 + 切换器双向对称不变；围栏内链接未动；`pnpm docs:build` 绿
 
 - [x] docs 英文 locale 正文语言缺口（P2，PATROL016 巡检发现，P1016AM 完成）：英文 locale 下 18 页正文仍是中文（子目录 14 + 根目录 4：competitive-analysis、mmp-attribution-evaluation、决策记录、审计-文档一致性）→ 与其已有 `.en.md` 译版**互换**（基名改英文、中文原件移同目录 `.zh.md`），零新增翻译。正本裁断**已代决**（P1016AM）：英文 locale 槽位以英文为正本、中文归 `.zh.md`；`docs/zh/**` 分叉文档一律不动（理由/影响面/推翻方式见 docs/决策记录.md）。验收：全仓 EN locale 页正文无中文残留（仅余厂商专名 `research/mature-products-survey.md` 与文件名引用 `审计-文档一致性.md` 两类允许项，均代码块/专名规则内）；每个基名页都有 `.zh.md` 兄弟（`index.md` 与 `zh/index.md` 为跨 locale 首页配对）；36 文件互换后切换器双向对称、`pnpm docs:build` 绿
 
 - [x] docs 子目录双语配对（P2，2026-10-16 执行单登记，PATROL016 完成）：52 个 .md 全配——51 个新增兄弟文件（中文源 45 个补 `.en.md`、英文源 6 个补 `.zh.md`）+ `zh/index.md` 已随根目录轮配对；51 个源文件各插 1 行切换器。配对方式**已代决**（PATROL016）：同目录兄弟文件而非 locale 镜像（locale 同名文件非互译，差异 164/198/738 行，见 docs/决策记录.md）。验收：59 对全部通过结构计数一致（行数/标题/表格/围栏）+ 代码块逐字节相同 + 切换器第 3 行且双向对称；英文侧正文无中文残留（仅切换器「中文」二字、代码块内原样注释、厂商专名如 友盟+/神策）；`pnpm docs:build` 绿。顺带按对账规则修 06 §4.1 笔误（「未携带废弃字段」→「携带废弃字段」，与 §3.3.3 及 schema `additionalProperties:false` 对齐，中英同批）
-
-- [ ] 外部生产审计核验与整改（P0 起，`docs/review/review-2026-10-18-production-audit.md`，2026-10-18 他席落地，PATROL1018 补登记并完成首轮核验）：审计 11 条发现，全部核验完毕（2026-10-18 终态，证据见 `docs/review/review-2026-10-18-production-audit.md` 核验结论表 11 行）——SEC-001（compose 硬编码 dev 凭据、无 fail-closed）/ DATA-001（幂等键裸 event_id 跨游戏互斥）/ DEPLOY-001（发布只更 control + .local 健康检查）属实，DR-001 / OBS-001 部分属实，ML-001 与账本 BLOCKED 一致；DATA-002/DEPLOY-002/DOC-001/GOV-001/SITE-001 首轮补核完毕（属实归属见表）。**SEC-001 已整改完成**（PATROL1018E：根 compose + infra compose 凭据全改 `${VAR:?}` 必填、control-service 增 `ProductionSecretsValidator` 双保险、`deploy/MODES.md` 补 Production .env 必填清单；全量门禁 2050 绿 + compose config 双向实证）
-  - **下一步**：待拍板一项（GOV-001 账本收敛=巡检读取面）；外部待验证：OBS-001 真机抓取（Production 宿主机 up=1 实测）+ 真实流量告警触发；已完成（追加）：DATA-002 统一读口【已代决=独立端点替代逐出参散播】（新增 GET /api/games/{gameId}/readiness → available + analysisLastEventAt，game:read 鉴权，不发明阈值；fan-out 否决记入审计台账；测试先行 5 例，control-service 全量 2063 绿）。已完成：PATROL1018E 单 = SEC-001、DATA-001 全链路（gateway+enrich 三元组去重）、DR-001 脚本面（exit 2 非静默）、DEPLOY-002（MODES.md 运行边界）、DOC-001（README 中英+MODES.md 三口径）、OBS-001 文件面（gateway 抓取 job+down 告警）；2026-10-18 后续巡检 = DATA-002 增量面【已代决】（漏斗结果新增 analysisLastEventAt=events.max(ts_server)，available 语义不变向后兼容；CohortService 抛错保留——显式 calculate fail-loud 与读路径降级语义不同）、OBS-001 接线面文件【已代决=host-gateway 解耦】（infra prometheus 经宿主网关抓 28085/28080 actuator，不共享网络不改根 compose，promtool+compose config 双绿，MODES.md 同步改写）；2026-10-19 R1019 增量 = DR-001 恢复演练本地腿：隔离容器内 PG（产线脚本备份→新空库 pg_restore→102/102 表逐表行数与源库一致→bootRun validate 启动 health UP 零 ERROR）+ Redis（CronJob 同款 --rdb 导出→43/43 键恢复抽验一致）两腿闭环 + PITR 腿（pg_basebackup 基线+归档回放 20/20 全量、recovery_target_time 精确停在 R2 提交前排除后批数据）；PITR 演练揪出并修复 `wal_archive_timeout` 错名 GUC（真名 `archive_timeout`，生产根 compose/k8s postgres 带错名启动即 FATAL，39e2a1c 入库以来零真实执行面）——compose/k8s/文档 6 处修正 + `WalArchiveConfigTest` 钉测试 4 例（先红后绿）+ `docker compose config` 双验，流程与证据记入 backup-strategy.md §Testing，DR-001 剩余外部件收窄为 CH 恢复腿（需 CH 环境+Altinity CLI）+ 离站副本恢复（需真实对象存储凭据）+ 全栈 RTO/RPO 实测；同日第四轮 CH 腿闭环（clickhouse/clickhouse-server:24.8 + Altinity clickhouse-backup 2.8.1 真二进制 + moto 作 S3 端点）——原稿入库以来从未被执行，全部调用面与 2.8.x 不符（连接类 CLI 参数、create --diff-from、upload --storage-class 三处 flag provided but not defined；BACKUP_DIR 与工具真实落点错位致留存清理扫空目录）：按实证契约重写 `clickhouse-backup.sh` + 新增 `ClickhouseBackupCliContractTest` 8 例钉测（先红后绿）；修复后全链闭环 full→S3 上传→incremental（upload --diff-from=full_*）→全新 CH restore_remote 两步 →12000 行=R1+R2 精确恢复、备份后写入的 500 行精确排除；死端点实证离站失败面（本地完好+留存照常+exit 2）；`restore latest_full` 实证为假命令（2.8.x FTL）文档已改 restore_remote。剩余外部件收窄为：离站副本恢复（真实对象存储凭据，机制面已证）+ 全栈 RTO/RPO 实测。审计 11 条全部核验完毕；2026-10-19 FIRE1019D = DEPLOY-001 发布契约【用户令开工整改完成】：release deploy 同批 apply gateway 清单、control/gateway 双 `kubectl set image`（同一不可变版本 tag，单镜像 SERVICE 区分）+ 双 rollout status；健康检查弃 `control.oddsmaker.local`（GH-hosted runner 解析不了 .local、首次发版必挂，亦不为探活暴露管理端点到公网）改集群内 `kubectl exec` wget actuator（control 8086 管理口——k8s 清单 MANAGEMENT_SERVER_PORT 已迁 actuator、镜像自带 healthcheck.sh 查 8085 必 404 不能复用，实测 compose 容器内 wget :8085 UP 佐证端口语义；gateway 8080）；verify 步记录双服务实际运行镜像并与发布 tag `grep -qx` 断言一致；environment.url 去不可达 .local；`ReleaseDeployContractTest` 5 例钉测先红后绿（含 workflow YAML 语法门）；同轮 FIRE1019E 补齐自动回滚（新增 `Record running images` 步滚动前按容器名 jsonpath 记两服务 prev 镜像进 GITHUB_ENV，首次发布 `|| true` 置空继续；`Deploy`/`Verify` 两步 `set -euo pipefail`+`trap ERR` 调 `deploy/k8s/rollback-release.sh`——apply/rollout 超时/健康断言/运行版本断言任一失败回退两服务；脚本不用 `set -e`（一处失败不中止另一处）、空 prev 跳过告警、任一失败非零退出；`ReleaseDeployContractTest` 5→11 例先红后绿，含桩 kubectl 沙箱三例；真机回滚仍属发版实测外部件）。同轮新增发现并同轮整改 DEPLOY-003（第 12 条）：发布流水线逐清单 apply 的四份 manifest 内嵌 `CHANGE_ME_IN_PRODUCTION` 占位 Secret、每次 apply 即用占位值覆盖产线真实凭据（`git tag` 仅 nightly、release 零执行面，属首次发版即触发的隐性雷）——四份 Secret 拆独立 `deploy/k8s/*-secrets.yaml`（首次部署填真实值手工 apply 一次）、主清单清空 Secret 只留 secretRef/secretKeyRef 引用、钉测断言发布引用清单零 Secret/零占位值，operations 中英 + deploy.k8s 中英 + MODES.md 部署步骤同步改写；仓内可动整改面已清，余下=GOV-001 待拍板 + 外部条件（真实凭据/真机/发版实测）；2026-10-19 FIRE1019F = 审计台账证据与代码一致性抽查+过期引用清理（核验结论表全 10 行逐条 file:line 复验）：SEC-001 行改「审计时点已整改」并刷新 fail-closed 现址（docker-compose.yml:31,142,191,198 等）、backup-cronjob secretRef 行号 111-112,164-165→127-129,180-182、DATA-001 行改指整改后形态（ReplayGuard.java:85-92 三元组/BatchController.java:200/EventsEnrichJob.java:115）、DEPLOY-001 行改「整改前 release.yaml:172/:178」+现双服务滚动、DR-001 行补离站 exit 2 已整改+四腿演练、OBS-001 行刷 9 job（prometheus.yaml:21-95）/18 告警（oddsmaker-alerts.yml:6-222）/infra 3 job（:4,13,21）、control-service.yaml:18,162→:18；连带刷新 审计-文档一致性 中英 release.yaml:124-128→126-130、todo.md:148 release.yaml:170→189；纯 .md，docs build 绿；2026-10-19 FIRE1019G = DEPLOY-001 执行项「部署后真实事件采集冒烟」机制面落地：release 新增 `Smoke ingest endpoint` 步（port-forward 隧道直击 gateway pod /v1/batch：无凭据断 401 missing_api_key、伪造 key 断 401 invalid_api_key，任一不符 ERR trap 回滚，trap 计数钉 2→3；正向冒烟 secret 门控 SMOKE_API_KEY/SMOKE_API_SECRET/vars.SMOKE_GAME_ID 按契约签名、dev 环境豁免 unknown_event，未配置 ::warning:: 跳过——密钥须用户在 Control 发放，外部件）；ReleaseDeployContractTest 11→13 例先红后绿，真实脚本沙箱仿真 gateway 五路径重演全符合
-  - **同源去重**：SITE-001 与账本 502 条同源（勿双记）；ML-001 与账本 ML 条同源（已 BLOCKED）
-  - **卡点**：GOV-001（收敛 todo.md 结构）待用户拍板——账本结构是巡检自动化的读取面，agent 不得单方重构
-
-> R1015F 代决（用户可推翻）：以下两条维持卡点、不重启；2026-10-11 parked 拍板项（provider+token_ref、HarmonyOS SDK）维持 parked。
-
-- [ ] Debezium CDC 维度同步：等真实游戏方开 binlog 并部署 Kafka Connect 后排期，消费端复用 dimension-sync-job 事件入口
-  - **卡点类型**：外部输入缺失——仓内无可推进前置项，属「等外部基建」而非「等时间」
-  - **解锁条件**：游戏方开 binlog + 部署 Kafka Connect + 提供 CDC 事件格式与目标表映射（三者齐备即开工）
-  - 复核留痕（2026-10-15）：仓内 debezium/Kafka Connect 检索零信号（命中全为文档 + `DimensionSyncJobTest` 一处方法名）；演示栈无 Kafka、无 gateway
-  - 复核留痕（2026-10-16）：解锁条件仍不成立——`grep -rl "binlog" deploy/` 零命中；`kafka.connect|connect-api|debezium` 全仓零命中（仅 `DimensionSyncJobTest` 一处方法名）；演示栈 3 容器（control/postgres/redis）无 Kafka。三项解锁件（游戏方 binlog、Kafka Connect、CDC 事件格式与目标表映射）仍为外部输入缺失，维持卡点
-  - 复核留痕（2026-10-16 PATROL016）：无变化——`binlog` 在 `deploy/` 仍零命中；`kafka.connect|connect-api|debezium` 全仓仍仅 `DimensionSyncJobTest` 一处方法名；本机无任何 oddsmaker 容器在跑。三项解锁件仍为外部输入缺失，维持卡点
-  - 复核留痕（2026-10-16 R2PATROL）：无变化——`grep -rl binlog deploy/` 仍零命中；`kafka.connect|connect-api|debezium` 全仓仍仅文档 + `DimensionSyncJobTest` 一处方法名。demo 栈今有 3 容器在跑（control/postgres/redis，均 healthy、已 3 天），但仍无 Kafka、无 CDC 事件格式与目标表映射文件，三项解锁件仍为外部输入缺失，维持卡点
-  - 复核留痕（2026-10-18 PATROL1018A）：无变化——`grep -rl binlog deploy/` 零命中；`kafka.connect|connect-api|debezium` 全仓仍仅 `DimensionSyncJobTest` 一处方法名；`deploy/demo/docker-compose.yml` 服务面（postgres/redis/control-service）无 Kafka、无 CDC 组件。三项解锁件仍为外部输入缺失，维持卡点
-  - 复核留痕（2026-10-18 PATROL1018B）：无变化——`grep -rl binlog deploy/` 零命中；`kafka.connect|connect-api|debezium` 全仓仍仅 `DimensionSyncJobTest` 一处方法名（1018A 同日复核，期间无新提交）。三项解锁件仍为外部输入缺失，维持卡点
-  - 复核留痕（2026-10-18 PATROL1018R1）：无变化——同日第三巡，仓内零新提交（HEAD=cdab480 同步）、binlog 零命中。三项解锁件仍为外部输入缺失，维持卡点
-  - 复核留痕（2026-10-18 PATROL1018 第四巡）：无变化——R1 后零新提交、binlog 零命中，证据同上轮。维持卡点
-  - 复核留痕（2026-10-18 PATROL-R1018 第五巡）：无变化，证据同上轮。维持卡点
-  - 复核留痕（2026-10-18 PATROL-R1018C 第六巡）：无变化，证据同上轮。维持卡点
-  - 复核留痕（2026-10-18 第七巡）：无变化，证据同上轮。维持卡点
-  - 复核留痕（2026-10-18 第八巡 r1018）：无变化，证据同上轮。维持卡点
-  - 复核留痕（2026-10-18 第九巡）：无变化，证据同上轮。维持卡点
-  - 复核留痕（2026-10-18 第十巡 patrol-sweep）：无变化，证据同上轮。维持卡点
-  - 复核留痕（2026-10-18 第十一巡）：无变化，证据同上轮。维持卡点
-  - 复核留痕（2026-10-18 第十二巡 PATROL1018A）：无变化，证据同上轮。维持卡点
-  - 复核留痕（2026-10-18 第十三巡 PATROL1018）：无变化，证据同上轮。维持卡点
-  - 复核留痕（2026-10-18 第十四巡 PATROL1018）：无变化，证据同上轮。维持卡点
-  - 复核留痕（2026-10-18 第十五巡 PATROL018）：无变化，证据同上轮。维持卡点
-  - 复核留痕（2026-10-18 第十六巡）：无变化，证据同上轮。维持卡点
-  - 复核留痕（2026-10-18 第十七巡）：无变化，证据同上轮。维持卡点
-  - 复核留痕（2026-10-18 第十八巡 r1018）：无变化，证据同上轮。维持卡点
-  - 复核留痕（2026-10-18 第十九巡 PATROL1018E）：无变化，证据同上轮。维持卡点
-  - 复核留痕（2026-10-18 第二十巡）：无变化，证据同上轮。维持卡点
-  - 复核留痕（2026-10-18 第二十一巡 PATROL1018F）：无变化，证据同上轮。维持卡点
-  - 复核留痕（2026-10-18 第二十二巡）：无变化，证据同上轮。维持卡点
-  - 复核留痕（2026-10-19 第二十三巡 r1019）：无变化——HEAD=11e9025 与 origin 同步、期间零新提交；`grep -rl binlog deploy/` 仍零命中；`debezium` 全仓仍仅 `DimensionSyncJobTest` 一处方法名、`kafka.connect|connect-api` 零命中。三项解锁件仍为外部输入缺失，维持卡点
-  - 复核留痕（2026-10-19 第二十四巡 FIRE1019C）：无变化——HEAD=7a169ce 与 origin 同步（23 巡后 5 新提交均属 R1019 DR/CH 腿与文档面，与 CDC 无涉）；`grep -rl binlog deploy/` 仍零命中；`debezium` 全仓仍仅 `DimensionSyncJobTest` 一处方法名、`kafka.connect|connect-api` 零命中。三项解锁件仍为外部输入缺失，维持卡点
-- [ ] Demo 站公网 502（交付面故障，PATROL1017 发现；2026-10-18 复核：公网仍 502，控制探针 cloudflare/github 200，源站侧状态未变）：源站全链路已证健康（on-box 与公网直连均 200），502 定位为 Cloudflare 回源配置（用户侧 CF 面板/Aliyun 安全组），源站与仓内无可修项；复核通道 = Demo Diagnose workflow_dispatch（只读取证，demo-diagnose.yml）；2026-10-18 run 39136336862 境外腿：源站 IP 直连 :80/:443 均 200、同 IP cockpit 301、经 CF 502——源站健康结论再度实证，卡点仍在用户侧 CF 回源
-  - **卡点类型**：用户侧配置缺失——CF 回源链（CF 面板内 origin A 记录指向 / SSL 模式 / Aliyun 安全组对 CF 边缘 IP 段的入站放行）不正确，须 CF/Aliyun 控制台凭据才能动，仓内与部署机均无可操作项
-  - **解锁条件**：用户在 CF 面板把 `oddsmaker.cuihairu.site` 的 origin A 记录指到部署机现公网 IP `106.14.216.177`（保持橙云代理）——这是唯一剩余解锁动作：安全组/境外拦截假说已被境外视点探针排除（见 PATROL1017C 留痕），LE 证书有效至 2027-01-01、80/443 双栈从境内与境外实测均 200，无第二分支。CF 侧操作属用户侧（见边界「CF DNS 域名切换属用户侧操作，本仓不动」）
-  - 复核留痕（2026-10-17 PATROL1017）：发现——公网 `GET /` 与 `/api/*` 均 `error code: 502`（http:80 同样 502；非 521/522，说明 CF 侧拿到的是无效源站响应而非连接拒绝，故障面在源站 nginx/证书/回源配置）；而 Deploy Demo run 38844622658（R1025 rerun）与手动触发 38931937869 均 success、on-box `curl 127.0.0.1:38085/actuator/health`=UP、镜像已滚至 digest sha256:a99f2c9a…，手动重部署后 60s 再探仍 502 ×3。已证本机非部署机（无 `/opt/oddsmaker`；本机 `oddsmaker-demo-*` 为本地测试遗留栈），当时结论「无部署机访问通道」
-  - 诊断留痕（2026-10-17 PATROL1017B）：故障定位完成，源站无罪——① 上轮「无部署机访问通道」结论修正：部署机上 self-hosted runner 本身就是受控通道，新增只读诊断工作流 `.github/workflows/demo-diagnose.yml`（拍板见决策记录 PATROL1017B）上机取证：nginx active、:80/:443 双栈监听、compose 栈 3 容器 healthy、control 直连 UP、README §3 回源自查 :80 带 Host=200、:443=200、LE 证书 CN=oddsmaker.cuihairu.site 有效至 2027-01-01；② 本席公网直连源站 IP `106.14.216.177` 带 Host 同法 :80=200、:443=200（对照组 cockpit :80=301 同样健康）；③ 兄弟域名 DNS 姿态给出分野：cockpit/wingman 灰云直解 `106.14.216.177` 公网 200，coding 灰云直解但 502（其 vhost 自身上游死，独立问题、非本仓范围），唯 oddsmaker 橙云走 CF 代理且 502。对照 README §3 判别式「CF 报 502 而这里 200，就是 DNS 或 SSL 模式没配对」：源站与仓内零可修项，剩余动作用户侧 CF 面板/Aliyun 控制台，维持卡点待用户操作
-  - 诊断留痕（2026-10-17 PATROL1017C）：解锁分支收敛为一——demo-diagnose 增第二条腿 `foreign-vantage`（GitHub-hosted runner，境外 DC，与 CF 边缘同类入站路径；run 38949053623 双 job 绿）直探源站 `106.14.216.177`：:80 带 Host=**200**、:443=**200**、cockpit 对照=301，同 run 公网经 CF 仍 502。「安全组拦截境外/CF IP 段」假说排除——源站对境外入站完全开放，且此前 CF origin 若指向本 IP 本应通。剩余唯一原因：**CF 面板内 oddsmaker 的 origin 记录指错**（大概率沿用部署机旧 IP），解锁动作收敛为用户在 CF 面板改一条 A 记录指向 `106.14.216.177`
-  - 复核留痕（2026-10-18 PATROL1018A）：无变化——公网经 CF `GET /` 与 `/actuator/health` 仍 502（http:80 与 https:443 双栈同 502），唯一解锁动作（用户在 CF 面板把 origin A 记录改指 `106.14.216.177`）仍待用户操作，源站与仓内无可修项，维持卡点
-  - 复核留痕（2026-10-18 PATROL1018B）：无变化且源站今日再证健康——demo-diagnose run 39052955219 双腿绿：上机腿（ali）compose 3 容器 healthy、control 直连 UP、nginx active、:80 带 Host=200、:443=200、证书 CN=oddsmaker.cuihairu.site 有效至 2027-01-01（日志中 `nginx -t` 报 cockpit 证书 Permission denied 系 runner 非 root 取证噪音，nginx 服务本身 active 正常出 200）；境外腿（GitHub runner，与 CF 边缘同类入站）直探 `106.14.216.177` :80=200、:443=200、cockpit 对照=301、同视点公网经 CF 仍 502。CF origin 记录指错为唯一剩余原因今日复现成立，解锁动作不变（用户改 CF origin A 记录），维持卡点
-  - 复核留痕（2026-10-18 PATROL1018R1）：无变化——公网 https/http 仍 502，用户侧 CF 动作未见；源站健康同日已由 run 39052955219 双腿再证（见上条），本轮不重复触发 CI 取证。维持卡点，解锁动作不变
-  - 复核留痕（2026-10-18 PATROL1018 第四巡）：无变化——公网仍 502，证据同上轮。维持卡点，解锁动作不变
-  - 复核留痕（2026-10-18 PATROL-R1018 第五巡）：无变化——公网仍 502。维持卡点
-  - 复核留痕（2026-10-18 PATROL-R1018C 第六巡）：无变化——公网仍 502。维持卡点
-  - 复核留痕（2026-10-18 第七巡）：无变化——公网仍 502。维持卡点
-  - 复核留痕（2026-10-18 第八巡 r1018）：无变化——公网仍 502。维持卡点
-  - 复核留痕（2026-10-18 第九巡）：无变化——公网仍 502（首轮探针 000 经对照甄别为本机出口单次抖动：cockpit 301 / cloudflare 200 / github 200，重试即 502）。维持卡点
-  - 复核留痕（2026-10-18 第十巡 patrol-sweep）：无变化——公网仍 502。维持卡点
-  - 复核留痕（2026-10-18 第十一巡）：无变化——公网仍 502。维持卡点
-  - 复核留痕（2026-10-18 第十二巡 PATROL1018A）：无变化——公网仍 502。维持卡点
-  - 复核留痕（2026-10-18 第十三巡 PATROL1018）：无变化——公网仍 502。维持卡点
-  - 复核留痕（2026-10-18 第十四巡 PATROL1018）：无变化——公网仍 502。维持卡点
-  - 复核留痕（2026-10-18 第十五巡 PATROL018）：无变化——公网仍 502。维持卡点
-  - 复核留痕（2026-10-18 第十六巡）：无变化——公网仍 502。维持卡点
-  - 复核留痕（2026-10-18 第十七巡）：无变化——公网仍 502。维持卡点
-  - 复核留痕（2026-10-18 第十八巡 r1018）：无变化——公网仍 502。维持卡点
-  - 复核留痕（2026-10-18 第十九巡 PATROL1018E）：无变化——公网仍 502。维持卡点
-  - 复核留痕（2026-10-18 第二十巡）：无变化——公网仍 502。维持卡点
-  - 复核留痕（2026-10-18 第二十一巡 PATROL1018F）：无变化——公网仍 502（另发现 Deploy Demo run 39091500095 于 checkout 腿挂，属 self-hosted runner 连 github.com 抖动同族，已 rerun --failed 处置，部署腿未发生）。维持卡点
-  - 复核留痕（2026-10-18 第二十二巡）：无变化——公网仍 502；上轮 checkout flake 经 rerun 已愈（run 39091500095 双 job success），无遗留。维持卡点
-  - 复核留痕（2026-10-19 第二十三巡 r1019）：无变化——本巡直测公网 https/http 双栈仍 502（2026-10-19T00:40+08）；CI 面无故障：定时 nightly 10-18 UTC success（run 39090477048，10-16/17/18 三连绿）、Deploy Demo 最新 success（run 39137531232）、源站证据仍有效（run 39136336862，期间零新提交）。维持卡点，解锁动作不变（用户 CF 面板 origin A 记录→106.14.216.177）
-  - 复核留痕（2026-10-19 第二十四巡 FIRE1019C）：公网仍 502（2026-10-19T03:34Z，https 双探：首轮 000 经对照甄别为本机出口单次抖动——cockpit 200 / cloudflare 200，重试即 502；http:80 亦 502）。CI 面一处交付面小恙：Deploy Demo run 39192644992 checkout 腿挂（self-hosted runner 连 github.com GnuTLS/TLS 中断 + 443 连不上，3 次重试均网络错，与 PATROL1018F 同族非代码回归），已 rerun --failed 处置；nightly 02:46Z success、Deploy Demo 01:23Z success（镜像未落后）。维持卡点，解锁动作不变（用户 CF 面板 origin A 记录→106.14.216.177）
-- [ ] ML 异常检测进评估批次：任一触发条件成立即开工——指标历史可回看 7 天以上且 7d/28d 分位基线可算；单游戏阈值告警规则月均调整 3 次以上；告警误杀率超 30% 持续 2 周。**条件 a 时钟（2026-10-18 记）**：业务指标接线 2026-10-18 落地（ffb4dc1，infra prometheus host-gateway 抓 control/gateway），但 Demo Diagnose 实测（run 39136336862，2026-10-18T14:31Z）：Production/Demo 机上 infra 栈未部署（无 infra-prometheus 容器，127.0.0.1:9090 拒连；机上仅 demo 三件套 control/postgres/redis）→ 指标积累尚未开始，条件 a 最早成立于「infra 栈部署后 +7 天」（7 天）/「+28 天」（28d 分位基线）；读数通道 = Demo Diagnose 的 prometheus_tsdb_head_min_time 取证腿（demo-diagnose.yml）。条件 b/c 无取证通道（规则调整次数与误杀率现无记录面），不可测不可判，不编造
-  - **卡点类型**：触发条件未成立——条件 (a) 非等待可解，需先补部署面
-  - **解锁条件**：四项触发条件任一达标；其中条件 (a) 需先有**带网关流量的部署面**，并自指标开始落库起算满 **7 天**（7d/28d 分位基线方可算）
-  - 复核留痕（2026-10-15）：演示库 health_metrics / data_quality_metrics / metric_alert_rules 三表皆 0 行、最早指标日期为无；health_metrics 无产线写入方（`collectMetric` 仅模拟开关路径、默认关），data_quality_metrics 需网关真实流量而演示栈无 gateway
-  - 复核留痕（2026-10-16）：解锁条件仍不成立——演示栈实跑 3 容器（control/postgres/redis，无 gateway、无 Kafka），指标历史全空：health_metrics/performance_metrics/ml_model_metrics/metric_alert_rules 皆 0 行、health_metrics 最早日期为无（data_quality_rules=3、health_checks=4 为规则定义与服务探活，非指标历史）；更正 10-15 留痕表名笔误：库中无 data_quality_metrics 表，结论不变。无网关流量部署面则指标不落库，条件 (a) 的 7 天起算无从开始，维持卡点
-  - 复核留痕（2026-10-16 PATROL016）：无变化——本机无 oddsmaker 容器在跑（部署面未起，指标历史无从新增），四项触发条件仍无一达标，维持卡点
-  - 复核留痕（2026-10-16 R2PATROL）：解锁条件仍不成立，但前提有更新——demo 栈今有 3 容器在跑（control/postgres/redis，均 healthy、已 3 天），指标表仍全空：health_metrics / performance_metrics / ml_model_metrics / metric_alert_rules 皆 0 行（health_metrics 0 行故无 collected_at 区间），`data_quality_metrics` 表中无此表（与 10-15 更正一致）。本机唯一 gateway 容器 `spawn-api-gateway-1` 属无关 compose 项目 `spawn`（2026-10-12 创建），非 oddsmaker 网关，不构成「带网关流量的部署面」；无 Kafka。条件 (a) 的 7 天起算无从开始，维持卡点
-  - 复核留痕（2026-10-18 PATROL1018A）：无变化——`deploy/demo/docker-compose.yml` 服务面（postgres/redis/control-service）无 gateway，本机运行栈 3 容器（control/postgres/redis）均 healthy；指标表 health_metrics / performance_metrics / ml_model_metrics / metric_alert_rules 皆 0 行、health_metrics 最早 collected_at 为无。条件 (a) 无部署面故 7 天起算无从开始，四项触发条件仍无一达标，维持卡点
-  - 复核留痕（2026-10-18 PATROL1018B）：无变化——demo compose 服务面仍无 gateway；指标表 health_metrics / performance_metrics / ml_model_metrics / metric_alert_rules 皆 0 行（1018A 同日复核，期间无新提交）。维持卡点
-  - 复核留痕（2026-10-18 PATROL1018R1）：无变化——demo compose 仍无 gateway、health_metrics 0 行（同日第三巡，期间无新提交）。四项触发条件仍无一达标，维持卡点
-  - 复核留痕（2026-10-18 PATROL1018 第四巡）：无变化——demo 无 gateway、指标 0 行，证据同上轮。维持卡点
-  - 复核留痕（2026-10-18 PATROL-R1018 第五巡）：无变化，证据同上轮。维持卡点
-  - 复核留痕（2026-10-18 PATROL-R1018C 第六巡）：无变化，证据同上轮。维持卡点
-  - 复核留痕（2026-10-18 第七巡）：无变化，证据同上轮。维持卡点
-  - 复核留痕（2026-10-18 第八巡 r1018）：无变化，证据同上轮。维持卡点
-  - 复核留痕（2026-10-18 第九巡）：无变化，证据同上轮。维持卡点
-  - 复核留痕（2026-10-18 第十巡 patrol-sweep）：无变化，证据同上轮。维持卡点
-  - 复核留痕（2026-10-18 第十一巡）：无变化，证据同上轮。维持卡点
-  - 复核留痕（2026-10-18 第十二巡 PATROL1018A）：无变化，证据同上轮。维持卡点
-  - 复核留痕（2026-10-18 第十三巡 PATROL1018）：无变化，证据同上轮。维持卡点
-  - 复核留痕（2026-10-18 第十四巡 PATROL1018）：无变化，证据同上轮。维持卡点
-  - 复核留痕（2026-10-18 第十五巡 PATROL018）：无变化，证据同上轮。维持卡点
-  - 复核留痕（2026-10-18 第十六巡）：无变化，证据同上轮。维持卡点
-  - 复核留痕（2026-10-18 第十七巡）：无变化，证据同上轮。维持卡点
-  - 复核留痕（2026-10-18 第十八巡 r1018）：无变化，证据同上轮。维持卡点
-  - 复核留痕（2026-10-18 第十九巡 PATROL1018E）：无变化，证据同上轮。维持卡点
-  - 复核留痕（2026-10-18 第二十巡）：无变化，证据同上轮。维持卡点
-  - 复核留痕（2026-10-18 第二十一巡 PATROL1018F）：无变化，证据同上轮。维持卡点
-  - 复核留痕（2026-10-18 第二十二巡）：无变化，证据同上轮。维持卡点
-  - 复核留痕（2026-10-19 第二十三巡 r1019）：无变化——demo compose 服务面仍无 gateway（仅 postgres/redis/control-service）；本地 demo 库 health_metrics/performance_metrics/ml_model_metrics/metric_alert_rules 仍 0 行；infra 栈未见部署（上轮证据 run 39136336862 有效，期间零新提交）。条件 (a) 时钟未起，四项触发条件仍无一达标，维持卡点
-  - 复核留痕（2026-10-19 第二十四巡 FIRE1019C）：无变化——demo compose 服务面仍无 gateway（postgres/redis/control-service）；本地 demo 栈 3 容器 healthy（control/postgres/redis，Up 6 days），直查 demo 库四指标表仍全 0 行；infra 栈未见部署（上轮证据 run 39136336862 有效，后续 Deploy Demo 各 run 仅滚 demo 三件套镜像、无 infra 部署面）。条件 (a) 时钟未起，四项触发条件仍无一达标，维持卡点
-
-## 已完成需求
 
 - [x] ruleConditions 引 EventSchema 字段（P2，**已代决** FW1016D 2026-10-16，契约行 74；用户可推翻）：FEATURE 条件 feature 名合法取值域 = risk-job 计算面特征登记表（`RiskFeatures` 两侧清单 6 特征），写路径未知名显式拒绝；不做 EventSchema 交叉校验（特征名是「信号 × 窗口」派生量、非事件契约字段）。理由/影响面/推翻方式见 docs/决策记录.md。验收：两侧清单常量齐备且测试钉同一份名单、未知名写路径拒绝测试绿、JSON 形态/列/存量行/读路径跳过语义/既有指标名全不变 ✅（5c501aa：control-service 174 suites/2039 例 0 失败、risk-job 10 suites/99 例 0 失败；顺带修 control.md FEATURE 示例 `threshold`→真源 `value`）
 - [x] Signal 显式信号清单（P2，重构契约 §2.4「2.0 动作」代决开工）：按契约枚举 gold_gain / login_ip / device / … 显式声明（snake_case 沿用仓内惯例），只补显式声明与文档，**不改既有暴露面**（序列化格式与既有指标名不变）；control-service 与 Flink risk-job 两侧同批对齐。验收：两侧清单常量齐备且被测试钉住、契约文档行同步、相关测试全绿 ✅（7602a72：两侧 `RiskSignals` 9 信号清单 + 各 3 例测试同钉 `DOCUMENTED` 名单；契约 §2.4 Signal 行已落地注记；risk-job 全模块 96 例 0 失败）
@@ -173,8 +86,8 @@
 - 事件自由流动不做：dev 模式外未注册 schema 的事件默认拒收
 - SDK 与业务层不持有物理路由：storage_profile 是唯一桥
 - Data Lineage 系统化不做；移动端原生队列之外的新客户端端不做
-- provider 多态与 auth.token_ref 密钥引用表不另行排期：inline credential 加 AES-GCM 已覆盖现有 provider 面（2026-10-11 拍板）
-- HarmonyOS SDK 不开工：绿地新建而非补缺，维持低优先级（2026-10-11 拍板）
+- provider 多态与 auth.token_ref 密钥引用表不另行排期：inline credential 加 AES-GCM 已覆盖现有 provider 面（2026-10-11 拍板；R1015F 代决维持不动，用户可推翻）
+- HarmonyOS SDK 不开工：绿地新建而非补缺，维持低优先级（2026-10-11 拍板；R1015F 代决维持 parked）
 - 站内 IM 不做：webhook 加邮件已覆盖离线触达，IM 属产品级新方向留待用户
 - unmerge 身份拆分不做：修正路径已齐（tombstone 反查、GDPR 擦除、再 merge 纠错）
 - CF DNS 域名切换属用户侧操作，本仓不动

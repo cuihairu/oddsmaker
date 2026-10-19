@@ -1,0 +1,141 @@
+package io.oddsmaker.control.deploy;
+
+import org.junit.jupiter.api.Test;
+import org.yaml.snakeyaml.Yaml;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/**
+ * OBS-001 告警可验证性钉测试（2026-10-19 FIRE1019H 审计整改）。
+ * 审计验收「重要故障具备可验证的告警」此前只做到文件面（18 条规则能被 promtool 解析），
+ * 没有任何一处证明表达式在真实序列下真的会触发/恢复。配套 promtool 单元测试文件
+ * `oddsmaker-alerts.test.yml` 逐条给出触发序列与静默序列；本钉测试保证两者不掉队：
+ * 新增/改名告警必须同步补触发与静默用例，删用例即打红。
+ */
+class AlertRulesContractTest {
+
+    private static final Path REPO = Paths.get("..", "..").toAbsolutePath().normalize();
+
+    private static final String RULES = "deploy/monitoring/alerts/oddsmaker-alerts.yml";
+
+    private static final String RULE_TESTS = "deploy/monitoring/alerts/oddsmaker-alerts.test.yml";
+
+    @SuppressWarnings("unchecked")
+    private static List<Map<String, Object>> load(Path path, String what) throws IOException {
+        assertTrue(Files.exists(path), what + " 缺失: " + path);
+        Object doc = new Yaml().load(Files.readString(path));
+        assertTrue(doc instanceof Map, what + " 应是 YAML 映射");
+        return (List<Map<String, Object>>) ((Map<String, Object>) doc).get("tests");
+    }
+
+    /** 规则文件里的全部告警名（多 group 展平）。 */
+    @SuppressWarnings("unchecked")
+    private static List<String> alertNames() throws IOException {
+        Path path = REPO.resolve(RULES);
+        assertTrue(Files.exists(path), "告警规则文件缺失: " + path);
+        Object doc = new Yaml().load(Files.readString(path));
+        List<String> names = new ArrayList<>();
+        for (Object group : (List<Object>) ((Map<String, Object>) doc).get("groups")) {
+            for (Object rule : (List<Object>) ((Map<String, Object>) group).get("rules")) {
+                names.add((String) ((Map<String, Object>) rule).get("alert"));
+            }
+        }
+        return names;
+    }
+
+    /**
+     * 每条告警都必须有触发用例（exp_alerts 非空）：规则文件能解析不代表会触发——
+     * 指标名拼错、阈值单位错（秒/毫秒）、rate 窗口错都只在真实序列评估时暴露。
+     */
+    @Test
+    void everyAlertHasAFiringCase() throws IOException {
+        List<String> names = alertNames();
+        assertFalse(names.isEmpty(), "规则文件应至少含一条告警");
+        Map<String, Integer> firing = firingCases();
+        for (String name : names) {
+            assertTrue(firing.getOrDefault(name, 0) >= 1,
+                    "告警 " + name + " 无触发用例（oddsmaker-alerts.test.yml 须有 exp_alerts 非空的断言）");
+        }
+    }
+
+    /** 存活类告警（*Down / *Failed）必须有静默用例：健康序列下不许误报。 */
+    @Test
+    void availabilityAlertsHaveQuietCases() throws IOException {
+        Map<String, Integer> quiet = quietCases();
+        for (String name : alertNames()) {
+            if (name.endsWith("Down") || name.endsWith("Failed")) {
+                assertTrue(quiet.getOrDefault(name, 0) >= 1,
+                        "存活告警 " + name + " 无静默用例（健康序列 exp_alerts 必须为空断言）");
+            }
+        }
+    }
+
+    /** 测试文件里引用的告警名不得超出规则文件（改名/删除后残留用例即打红）。 */
+    @Test
+    void testFileReferencesNoUnknownAlerts() throws IOException {
+        List<String> names = alertNames();
+        for (String referenced : referencedAlertNames()) {
+            assertTrue(names.contains(referenced),
+                    "测试文件引用了规则文件中不存在的告警: " + referenced + "（规则已改名/删除？）");
+        }
+    }
+
+    /** 测试文件必须以 rule_files 指向当前规则文件（防止测的是别处规则的孤儿文件）。 */
+    @Test
+    void testFilePinsTheRulesFile() throws IOException {
+        Path path = REPO.resolve(RULE_TESTS);
+        assertTrue(Files.exists(path), "promtool 单元测试文件缺失: " + path + "（OBS-001 告警可验证性）");
+        String content = Files.readString(path);
+        assertTrue(content.contains(RULES.substring(RULES.lastIndexOf('/') + 1)),
+                "测试文件 rule_files 应指向 " + RULES.substring(RULES.lastIndexOf('/') + 1));
+        assertTrue(content.contains("evaluation_interval"), "promtool 测试须显式声明 evaluation_interval");
+    }
+
+    // ===== 用例盘点 =====
+
+    private Map<String, Integer> firingCases() throws IOException {
+        return tally(true);
+    }
+
+    private Map<String, Integer> quietCases() throws IOException {
+        return tally(false);
+    }
+
+    /** 按 alertname 统计触发/静默用例数（exp_alerts 非空=触发，空=静默）。 */
+    private Map<String, Integer> tally(boolean firing) throws IOException {
+        Map<String, Integer> counts = new LinkedHashMap<>();
+        for (Map<String, Object> block : load(REPO.resolve(RULE_TESTS), "promtool 测试文件")) {
+            for (Object checkObj : (List<Object>) block.getOrDefault("alert_rule_test", List.of())) {
+                Map<String, Object> check = (Map<String, Object>) checkObj;
+                String name = (String) check.get("alertname");
+                List<Object> exp = (List<Object>) check.getOrDefault("exp_alerts", List.of());
+                boolean isFiring = !exp.isEmpty();
+                if (isFiring == firing) {
+                    counts.merge(name, 1, Integer::sum);
+                }
+            }
+        }
+        return counts;
+    }
+
+    private List<String> referencedAlertNames() throws IOException {
+        List<String> names = new ArrayList<>();
+        for (Map<String, Object> block : load(REPO.resolve(RULE_TESTS), "promtool 测试文件")) {
+            for (Object checkObj : (List<Object>) block.getOrDefault("alert_rule_test", List.of())) {
+                names.add((String) ((Map<String, Object>) checkObj).get("alertname"));
+            }
+        }
+        return names;
+    }
+}

@@ -1,0 +1,543 @@
+# Oddsmaker Alerting Rules — promtool 单元测试
+#
+# OBS-001 审计验收「重要故障具备可验证的告警」：18 条规则此前只做到能被 promtool 解析
+# （文件面），没有任何一处证明表达式在真实序列下会触发/静默。每个告警一组触发用例
+# （合成序列越过阈值 + `for` 窗口走满，断言触发且 labels/annotations 精确匹配）与
+# 一组静默用例（健康序列下同告警不得触发），覆盖全 18 条。
+#
+# 运行：
+#   cd deploy/monitoring/alerts
+#   promtool test rules oddsmaker-alerts.test.yml
+#   # 镜像形态：
+#   docker run --rm -v "$PWD":/w -w /w --entrypoint promtool \
+#     prom/prometheus:v2.53.0 test rules oddsmaker-alerts.test.yml
+#
+# 阈值取自规则的「刚越过」值，避免用例绑死当前阈值而掩盖阈值本身的单位错误：
+#   rate(redis_evicted_keys_total[5m]) > 100 是「每秒 100 次」，触发序列取 110/s。
+# 模板展开须逐字匹配：humanizePercentage 用 %.4g，{{ $value }} 用 float64 最短表示，
+# 故选 6%/87.5%/90%/95%/100/60/20000 这类精确可表示的值。直方图分位数（3.5/1.5）
+# 的桶步进取 300s 评估窗的整数倍（4800/7200/9600/12000 与 1350/2700/3000），
+# 使 rate 结果为精确浮点——0.95 的二进制不精确性会让任意通用值带噪声
+# （曾得到 3.499999999999999），只有整数速率下 rank 插值才逐字落在 3.5/1.5。
+rule_files:
+  - oddsmaker-alerts.yml
+
+evaluation_interval: 1m
+
+tests:
+  # ===== oddsmaker-control-service =====
+
+  - interval: 1m
+    input_series:
+      - series: 'up{job="oddsmaker-control",instance="control:8086"}'
+        values: '0+0x10'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: OddsmakerControlServiceDown
+        exp_alerts:
+          - exp_labels:
+              job: oddsmaker-control
+              instance: control:8086
+              severity: critical
+              service: control-service
+            exp_annotations:
+              summary: "Oddsmaker Control Service is down"
+              description: "The Oddsmaker Control Service has been down for more than 1 minute."
+
+  - interval: 1m
+    input_series:
+      - series: 'up{job="oddsmaker-control",instance="control:8086"}'
+        values: '1+0x10'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: OddsmakerControlServiceDown
+        exp_alerts: []
+
+  - interval: 1m
+    input_series:
+      - series: 'up{job="oddsmaker-gateway",instance="gateway:80"}'
+        values: '0+0x10'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: OddsmakerGatewayServiceDown
+        exp_alerts:
+          - exp_labels:
+              job: oddsmaker-gateway
+              instance: gateway:80
+              severity: critical
+              service: gateway-service
+            exp_annotations:
+              summary: "Oddsmaker Gateway Service is down"
+              description: "The Oddsmaker Gateway Service (ingestion entry) has been down for more than 1 minute."
+
+  - interval: 1m
+    input_series:
+      - series: 'up{job="oddsmaker-gateway",instance="gateway:80"}'
+        values: '1+0x10'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: OddsmakerGatewayServiceDown
+        exp_alerts: []
+
+  # 6/(6+94)=6% 刚过阈值。规则分母必须按 instance 聚合（见规则文件注释），
+  # 因此结果序列不再携带 status 标签。
+  - interval: 1m
+    input_series:
+      - series: 'http_server_requests_seconds_count{status="500",instance="control:8086"}'
+        values: '0+6x20'
+      - series: 'http_server_requests_seconds_count{status="200",instance="control:8086"}'
+        values: '0+94x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: HighErrorRate
+        exp_alerts:
+          - exp_labels:
+              instance: control:8086
+              severity: warning
+              service: control-service
+            exp_annotations:
+              summary: "High error rate detected"
+              description: "Error rate is 6% (above 5%)"
+
+  - interval: 1m
+    input_series:
+      - series: 'http_server_requests_seconds_count{status="500",instance="control:8086"}'
+        values: '0+1x20'
+      - series: 'http_server_requests_seconds_count{status="200",instance="control:8086"}'
+        values: '0+199x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: HighErrorRate
+        exp_alerts: []
+
+  # 桶速率精确为 80/120/160/200 每秒，rank=0.95·200=190 落在 le=2..4 区间
+  # 插值 (190-160)/(200-160)=0.75 → 2+0.75·2=3.5s，逐字精确。
+  - interval: 1m
+    input_series:
+      - series: 'http_server_requests_seconds_bucket{le="0.5",instance="control:8086"}'
+        values: '0+4800x20'
+      - series: 'http_server_requests_seconds_bucket{le="1",instance="control:8086"}'
+        values: '0+7200x20'
+      - series: 'http_server_requests_seconds_bucket{le="2",instance="control:8086"}'
+        values: '0+9600x20'
+      - series: 'http_server_requests_seconds_bucket{le="4",instance="control:8086"}'
+        values: '0+12000x20'
+      - series: 'http_server_requests_seconds_bucket{le="+Inf",instance="control:8086"}'
+        values: '0+12000x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: HighLatency
+        exp_alerts:
+          - exp_labels:
+              instance: control:8086
+              severity: warning
+              service: control-service
+            exp_annotations:
+              summary: "High latency detected"
+              description: "P95 latency is 3.5s (above 2s)"
+
+  - interval: 1m
+    input_series:
+      - series: 'http_server_requests_seconds_bucket{le="0.5",instance="control:8086"}'
+        values: '0+50x20'
+      - series: 'http_server_requests_seconds_bucket{le="1",instance="control:8086"}'
+        values: '0+100x20'
+      - series: 'http_server_requests_seconds_bucket{le="2",instance="control:8086"}'
+        values: '0+100x20'
+      - series: 'http_server_requests_seconds_bucket{le="4",instance="control:8086"}'
+        values: '0+100x20'
+      - series: 'http_server_requests_seconds_bucket{le="+Inf",instance="control:8086"}'
+        values: '0+100x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: HighLatency
+        exp_alerts: []
+
+  - interval: 1m
+    input_series:
+      - series: 'jvm_memory_used_bytes{area="heap",instance="control:8086"}'
+        values: '7000000000+0x30'
+      - series: 'jvm_memory_max_bytes{area="heap",instance="control:8086"}'
+        values: '8000000000+0x30'
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: HighMemoryUsage
+        exp_alerts:
+          - exp_labels:
+              area: heap
+              instance: control:8086
+              severity: warning
+              service: control-service
+            exp_annotations:
+              summary: "High memory usage"
+              description: "JVM heap usage is 87.5%"
+
+  - interval: 1m
+    input_series:
+      - series: 'jvm_memory_used_bytes{area="heap",instance="control:8086"}'
+        values: '6000000000+0x30'
+      - series: 'jvm_memory_max_bytes{area="heap",instance="control:8086"}'
+        values: '8000000000+0x30'
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: HighMemoryUsage
+        exp_alerts: []
+
+  - interval: 1m
+    input_series:
+      - series: 'process_cpu_usage{instance="control:8086"}'
+        values: '0.9+0x30'
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: HighCpuUsage
+        exp_alerts:
+          - exp_labels:
+              instance: control:8086
+              severity: warning
+              service: control-service
+            exp_annotations:
+              summary: "High CPU usage"
+              description: "CPU usage is 90%"
+
+  - interval: 1m
+    input_series:
+      - series: 'process_cpu_usage{instance="control:8086"}'
+        values: '0.5+0x30'
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: HighCpuUsage
+        exp_alerts: []
+
+  - interval: 1m
+    input_series:
+      - series: 'hikaricp_connections_active{instance="control:8086"}'
+        values: '95+0x20'
+      - series: 'hikaricp_connections_max{instance="control:8086"}'
+        values: '100+0x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: DatabaseConnectionPoolExhausted
+        exp_alerts:
+          - exp_labels:
+              instance: control:8086
+              severity: critical
+              service: control-service
+            exp_annotations:
+              summary: "Database connection pool nearly exhausted"
+              description: "Connection pool usage is 95%"
+
+  - interval: 1m
+    input_series:
+      - series: 'hikaricp_connections_active{instance="control:8086"}'
+        values: '70+0x20'
+      - series: 'hikaricp_connections_max{instance="control:8086"}'
+        values: '100+0x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: DatabaseConnectionPoolExhausted
+        exp_alerts: []
+
+  # 桶速率精确为 22.5/45/50 每秒，rank=0.95·50=47.5 落在 le=1..2 区间
+  # 插值 (47.5-45)/(50-45)=0.5 → 1+0.5·1=1.5s，逐字精确。
+  - interval: 1m
+    input_series:
+      - series: 'hikaricp_connections_usage_seconds_bucket{le="0.5",instance="control:8086"}'
+        values: '0+1350x20'
+      - series: 'hikaricp_connections_usage_seconds_bucket{le="1",instance="control:8086"}'
+        values: '0+2700x20'
+      - series: 'hikaricp_connections_usage_seconds_bucket{le="2",instance="control:8086"}'
+        values: '0+3000x20'
+      - series: 'hikaricp_connections_usage_seconds_bucket{le="+Inf",instance="control:8086"}'
+        values: '0+3000x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: HighDatabaseQueryTime
+        exp_alerts:
+          - exp_labels:
+              instance: control:8086
+              severity: warning
+              service: control-service
+            exp_annotations:
+              summary: "High database query time"
+              description: "P95 query time is 1.5s"
+
+  - interval: 1m
+    input_series:
+      - series: 'hikaricp_connections_usage_seconds_bucket{le="0.5",instance="control:8086"}'
+        values: '0+50x20'
+      - series: 'hikaricp_connections_usage_seconds_bucket{le="1",instance="control:8086"}'
+        values: '0+100x20'
+      - series: 'hikaricp_connections_usage_seconds_bucket{le="2",instance="control:8086"}'
+        values: '0+100x20'
+      - series: 'hikaricp_connections_usage_seconds_bucket{le="+Inf",instance="control:8086"}'
+        values: '0+100x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: HighDatabaseQueryTime
+        exp_alerts: []
+
+  # ===== oddsmaker-database =====
+
+  - interval: 1m
+    input_series:
+      - series: 'up{job="postgres",instance="postgres:5432"}'
+        values: '0+0x10'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PostgresDown
+        exp_alerts:
+          - exp_labels:
+              job: postgres
+              instance: postgres:5432
+              severity: critical
+              service: postgres
+            exp_annotations:
+              summary: "PostgreSQL is down"
+              description: "PostgreSQL has been down for more than 1 minute."
+
+  - interval: 1m
+    input_series:
+      - series: 'up{job="postgres",instance="postgres:5432"}'
+        values: '1+0x10'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PostgresDown
+        exp_alerts: []
+
+  - interval: 1m
+    input_series:
+      - series: 'pg_stat_activity_count{instance="postgres:5432"}'
+        values: '100+0x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: HighDatabaseConnections
+        exp_alerts:
+          - exp_labels:
+              instance: postgres:5432
+              severity: warning
+              service: postgres
+            exp_annotations:
+              summary: "High database connections"
+              description: "Active connections: 100"
+
+  - interval: 1m
+    input_series:
+      - series: 'pg_stat_activity_count{instance="postgres:5432"}'
+        values: '50+0x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: HighDatabaseConnections
+        exp_alerts: []
+
+  - interval: 1m
+    input_series:
+      - series: 'pg_replication_lag{instance="postgres:5432"}'
+        values: '60+0x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: DatabaseReplicationLag
+        exp_alerts:
+          - exp_labels:
+              instance: postgres:5432
+              severity: warning
+              service: postgres
+            exp_annotations:
+              summary: "Database replication lag"
+              description: "Replication lag is 60s"
+
+  - interval: 1m
+    input_series:
+      - series: 'pg_replication_lag{instance="postgres:5432"}'
+        values: '5+0x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: DatabaseReplicationLag
+        exp_alerts: []
+
+  # ===== oddsmaker-cache =====
+
+  - interval: 1m
+    input_series:
+      - series: 'up{job="redis",instance="redis:6379"}'
+        values: '0+0x10'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: RedisDown
+        exp_alerts:
+          - exp_labels:
+              job: redis
+              instance: redis:6379
+              severity: critical
+              service: redis
+            exp_annotations:
+              summary: "Redis is down"
+              description: "Redis has been down for more than 1 minute."
+
+  - interval: 1m
+    input_series:
+      - series: 'up{job="redis",instance="redis:6379"}'
+        values: '1+0x10'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: RedisDown
+        exp_alerts: []
+
+  - interval: 1m
+    input_series:
+      - series: 'redis_memory_used_bytes{instance="redis:6379"}'
+        values: '9000000000+0x30'
+      - series: 'redis_memory_max_bytes{instance="redis:6379"}'
+        values: '10000000000+0x30'
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: RedisHighMemoryUsage
+        exp_alerts:
+          - exp_labels:
+              instance: redis:6379
+              severity: warning
+              service: redis
+            exp_annotations:
+              summary: "Redis high memory usage"
+              description: "Memory usage is 90%"
+
+  - interval: 1m
+    input_series:
+      - series: 'redis_memory_used_bytes{instance="redis:6379"}'
+        values: '7000000000+0x30'
+      - series: 'redis_memory_max_bytes{instance="redis:6379"}'
+        values: '10000000000+0x30'
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: RedisHighMemoryUsage
+        exp_alerts: []
+
+  - interval: 1m
+    input_series:
+      - series: 'redis_evicted_keys_total{instance="redis:6379"}'
+        values: '0+6600x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: RedisHighEvictionRate
+        exp_alerts:
+          - exp_labels:
+              instance: redis:6379
+              severity: warning
+              service: redis
+            exp_annotations:
+              summary: "Redis high eviction rate"
+              description: "Eviction rate: 110/s"
+
+  - interval: 1m
+    input_series:
+      - series: 'redis_evicted_keys_total{instance="redis:6379"}'
+        values: '0+600x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: RedisHighEvictionRate
+        exp_alerts: []
+
+  # ===== oddsmaker-messaging =====
+
+  - interval: 1m
+    input_series:
+      - series: 'up{job="kafka",instance="kafka:9092"}'
+        values: '0+0x10'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: KafkaDown
+        exp_alerts:
+          - exp_labels:
+              job: kafka
+              instance: kafka:9092
+              severity: critical
+              service: kafka
+            exp_annotations:
+              summary: "Kafka is down"
+              description: "Kafka has been down for more than 1 minute."
+
+  - interval: 1m
+    input_series:
+      - series: 'up{job="kafka",instance="kafka:9092"}'
+        values: '1+0x10'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: KafkaDown
+        exp_alerts: []
+
+  - interval: 1m
+    input_series:
+      - series: 'kafka_consumer_group_lag{instance="flink:8081"}'
+        values: '20000+0x30'
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: KafkaHighConsumerLag
+        exp_alerts:
+          - exp_labels:
+              instance: flink:8081
+              severity: warning
+              service: kafka
+            exp_annotations:
+              summary: "Kafka high consumer lag"
+              description: "Consumer lag: 20000 messages"
+
+  - interval: 1m
+    input_series:
+      - series: 'kafka_consumer_group_lag{instance="flink:8081"}'
+        values: '5000+0x30'
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: KafkaHighConsumerLag
+        exp_alerts: []
+
+  # ===== oddsmaker-stream-processing =====
+
+  - interval: 1m
+    input_series:
+      - series: 'up{job="flink",instance="flink:8081"}'
+        values: '0+0x10'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: FlinkJobManagerDown
+        exp_alerts:
+          - exp_labels:
+              job: flink
+              instance: flink:8081
+              severity: critical
+              service: flink
+            exp_annotations:
+              summary: "Flink Job Manager is down"
+              description: "Flink Job Manager has been down for more than 1 minute."
+
+  - interval: 1m
+    input_series:
+      - series: 'up{job="flink",instance="flink:8081"}'
+        values: '1+0x10'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: FlinkJobManagerDown
+        exp_alerts: []
+
+  - interval: 1m
+    input_series:
+      - series: 'flink_jobmanager_job_uptime{instance="flink:8081"}'
+        values: '-1+0x10'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: FlinkJobFailed
+        exp_alerts:
+          - exp_labels:
+              instance: flink:8081
+              severity: critical
+              service: flink
+            exp_annotations:
+              summary: "Flink job failed"
+              description: "A Flink job has failed."
+
+  - interval: 1m
+    input_series:
+      - series: 'flink_jobmanager_job_uptime{instance="flink:8081"}'
+        values: '3600000+0x10'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: FlinkJobFailed
+        exp_alerts: []
