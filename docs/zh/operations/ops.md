@@ -37,13 +37,13 @@
   - 生产建议使用外部 DB 存储（PostgreSQL）而非内存；开启兼容性校验
 
 可观测性与告警
-- 指标来源：OpenTelemetry（网关/作业/控制面）→ OTel Collector → Prometheus（或远程存储）
-- 核心告警（以下为示例阈值，仓内告警规则以 deploy/monitoring/alerts/oddsmaker-alerts.yml 为准，当前覆盖 control-service/database/cache/messaging/stream-processing 五组）
-  - 控制面 `HTTP 5xx` 比例 > 5%（5m 窗口、持续 2m）——即仓内 `HighErrorRate` 规则，仅覆盖 control-service（网关无同类告警）
+- 指标来源：业务服务经 actuator `/actuator/prometheus` 原生导出、Prometheus 直抓（OTel Collector→Prometheus 管线在位、业务侧 OTLP 为待接项；Flink 作业 local executor 形态无指标端点，见 DEPLOY-002）
+- 核心告警（以下为示例阈值，仓内告警规则以 deploy/monitoring/alerts/oddsmaker-alerts.yml 为准，当前 24 条规则 6 组：control-service/database/cache/messaging/stream-processing/analytics-db；逐条触发条件与首查动作见 `docs/operations/incident-response.md` Alert Runbook 节）
+  - 控制面/网关 `HTTP 5xx` 比例 > 5%（5m 窗口、持续 2m）——即仓内 `HighErrorRate` 规则（按 instance 聚合、无 job 过滤，两业务服务同覆盖；网关 401 拒绝属 4xx 不计入）
   - 网关 `429` > 5%（5m）（配合看 Key/IP；可能是限速/流量峰值）【示例，仓内未配置】
   - Kafka `Consumer Lag` 持续上升（> 10k 消息/分区）【示例；仓内为 `KafkaHighConsumerLag`（lag > 10000，持续 5m）】
   - Flink `Checkpoint Failed` 连续 3 次；或 `Duration` > 2 x Interval【示例，仓内未配置】
-  - ClickHouse `Insert Error` > 0；`Merge backlog` 超阈值；`Disk Used` > 80%【示例，仓内未配置】
+  - ClickHouse `Insert Error` > 0（仓内 `ClickHouseWriteFailures`，持续 5m）；`Merge backlog` 超阈值【示例，仓内未配置】；磁盘 > 80%（仓内为反向口径 `ClickHouseDiskSpaceLow`：default 盘剩余 < 15%）；另配 `ClickHouseDown`/`ClickHouseHighQueryTime`
 
 回放与重算
 - 回放：定位时间窗 → 从 `events_raw` 指定 offsets 重放到专用消费组 → 作业从 Checkpoint/Savepoint 启动
