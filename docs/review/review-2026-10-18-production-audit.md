@@ -316,11 +316,11 @@
 
 **验收标准**
 
-- [ ] 能够从观测系统查询到真实业务服务的指标。
-- [ ] Gateway、Kafka、Flink、ClickHouse 和风控关键链路具有基本故障可见性。
-- [ ] 关键告警具有触发条件和处理说明。
-- [ ] 重要故障发生时，不需要仅依赖人工查看日志才能发现。
-- [ ] 指标和日志不引入不必要的敏感数据及高基数问题。
+- [x] 能够从观测系统查询到真实业务服务的指标（2026-10-20 轮次 1020c 本地活体：`up{job="oddsmaker-control"}=1`/`up{job="oddsmaker-gateway"}=1`，`http_server_requests_seconds_count` 带真实 status/uri 标签可查询（control /actuator/health 200 n=69、gateway /v1/batch 401 n=3）、jvm/process/hikaricp 族同面可见；postgres/redis/kafka/clickhouse 四中间件 up=1 同轮实证。Production 宿主机真机查询=外部件，随终验清单「关键业务指标可查询」条收口）。
+- [ ] Gateway、Kafka、Flink、ClickHouse 和风控关键链路具有基本故障可见性（四链路已可见：Gateway/GatewayDown 抓取+告警、Kafka/kafka-exporter+Down+lag 告警、ClickHouse/原生 9363 端点+4 告警+Down 活体 fire、Flink/FlinkJobManagerDown+FlinkJobFailed 规则（k8s 面）。卡点两条留名：① 风控链路无 Prometheus 指标形态（执行步骤「风控指标」条有据，指标化=独立后续项）；② Flink compose 面无 JobManager 端点（DEPLOY-002 边界，集群化=独立后续工作））。
+- [x] 关键告警具有触发条件和处理说明（2026-10-20 本轮 fresh 重测：promtool test rules 45 例 SUCCESS、k8s 面 check config 22 rules SUCCESS；处置说明=`docs/operations/incident-response.md`/`.zh.md` Alert Runbook 节 22 条逐条，2026-10-20 r1020j 轮对规则逐条对账修正 6 处触发口径漂移）。
+- [x] 重要故障发生时，不需要仅依赖人工查看日志才能发现（机制活体已证：ControlDown/GatewayDown 于 `for` 满后真实 fire、HighDatabaseConnections 故障注入真实 fire（value=82）、ClickHouseDown 停库 fire/重启解除——全部经 Prometheus 触达告警而非翻日志；真实生产流量下的实测=外部件，随终验清单「关键业务指标可查询」条收口）。
+- [x] 指标和日志不引入不必要的敏感数据及高基数问题（2026-10-20 轮次 p1020b 全量核查：唯一定制指标 gateway `oddsmaker.gateway.remote.key.lookup.total` 标签有界（outcome 4 定值+HTTP code 集），无 user_id/event_id/player_id 入标签；日志无 token/secret/password/jwt 明文、apiKey `redact()` 在位、无事件 payload 整体入日志）。
 
 ---
 
