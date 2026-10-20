@@ -274,15 +274,15 @@ Per-alert first-response guide for the rule set shipped in `deploy/monitoring/al
 | HighErrorRate | warning | 5xx > 5% of requests for 2m | Drill down `http_server_requests_seconds_count{status=~"5.."}` by `uri`; check recent deploys and downstream health. |
 | HighLatency | warning | P95 > 2s for 2m | Compare `http_server_requests_seconds_bucket` by uri; check DB pool and downstream latency. |
 | HighMemoryUsage | warning | JVM heap > 85% max for 5m | Watch heap trend; check for leaks before restarting; `jvm_gc_pause` histogram. |
-| HighCpuUsage | warning | CPU > 90% for 5m | Identify hot threads; check for load spikes or runaway loops. |
-| DatabaseConnectionPoolExhausted | critical | Hikari active ≈ max | Find connection leaks (`hikaricp_connections_pending`); check for slow queries holding connections. |
-| HighDatabaseQueryTime | warning | Avg DB query > 1s for 5m | Look for missing indexes / long transactions in PG (`pg_stat_statements`). |
+| HighCpuUsage | warning | CPU > 80% for 5m | Identify hot threads; check for load spikes or runaway loops. |
+| DatabaseConnectionPoolExhausted | critical | Hikari active/max > 90% for 2m | Find connection leaks (`hikaricp_connections_pending`); check for slow queries holding connections. |
+| HighDatabaseQueryTime | warning | P95 DB query > 1s for 2m | Look for missing indexes / long transactions in PG (`pg_stat_statements`). |
 | PostgresDown | critical | exporter `up=0` for 1m | Check postgres container + exporter. Note: exporter `up=1` only proves HTTP — verify `pg_stat` series exist to rule out auth failure. |
 | HighDatabaseConnections | warning | `pg_stat_activity_count` > 80 | Identify idle/sleeping backends (`pg_stat_activity`); terminate offenders or raise limits. |
-| DatabaseReplicationLag | warning | Replication lag > 10s | Check standby replay; `pg_stat_replication` on primary. |
+| DatabaseReplicationLag | warning | Replication lag > 30s for 2m | Check standby replay; `pg_stat_replication` on primary. |
 | RedisDown | critical | exporter `up=0` for 1m | Check redis container; verify sessions/cache consumers fail over gracefully. |
-| RedisHighMemoryUsage | warning | used/max > 90% (silent when maxmemory=0) | Check key growth and eviction policy; `maxmemory` unconfigured is guarded by `redis_memory_max_bytes > 0`. |
-| RedisHighEvictionRate | warning | Evictions > 100/s for 5m | Working set exceeds budget: raise maxmemory or fix TTLs. |
+| RedisHighMemoryUsage | warning | used/max > 85% for 5m (silent when maxmemory=0) | Check key growth and eviction policy; `maxmemory` unconfigured is guarded by `redis_memory_max_bytes > 0`. |
+| RedisHighEvictionRate | warning | Evictions > 100/s for 2m | Working set exceeds budget: raise maxmemory or fix TTLs. |
 | KafkaDown | critical | exporter `up=0` for 1m | Check kafka container; producers (gateway) will block/fail. |
 | KafkaHighConsumerLag | warning | Group lag > 10000 for 5m | Check consumer health (`kafka_consumergroup_*`); scale or restart the lagging consumer. |
 | FlinkJobManagerDown | critical | `up{job="flink"}=0` for 1m | k8s face only (compose local-executor jobs have no JobManager endpoint). Check JM pod/container. |

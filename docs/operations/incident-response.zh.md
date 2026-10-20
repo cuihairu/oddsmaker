@@ -274,15 +274,15 @@ psql -c "SELECT client_ip, count(*) FROM audit_logs WHERE result = 'FAILURE' GRO
 | HighErrorRate | warning | 5xx 占比 > 5% 持续 2m | 按 `uri` 下钻 `http_server_requests_seconds_count{status=~"5.."}`；查近期发版与下游健康。 |
 | HighLatency | warning | P95 > 2s 持续 2m | 对比 `http_server_requests_seconds_bucket`（按 uri）；查连接池与下游延迟。 |
 | HighMemoryUsage | warning | JVM 堆 > 85% 上限持续 5m | 观察堆趋势；重启前先查泄漏迹象；看 `jvm_gc_pause` 直方图。 |
-| HighCpuUsage | warning | CPU > 90% 持续 5m | 定位热点线程；排查突发负载或失控循环。 |
-| DatabaseConnectionPoolExhausted | critical | Hikari 活跃连接 ≈ 上限 | 查连接泄漏（`hikaricp_connections_pending`）；查占住连接的慢查询。 |
-| HighDatabaseQueryTime | warning | 平均 DB 查询 > 1s 持续 5m | 查 PG 缺索引 / 长事务（`pg_stat_statements`）。 |
+| HighCpuUsage | warning | CPU > 80% 持续 5m | 定位热点线程；排查突发负载或失控循环。 |
+| DatabaseConnectionPoolExhausted | critical | Hikari 活跃/上限 > 90% 持续 2m | 查连接泄漏（`hikaricp_connections_pending`）；查占住连接的慢查询。 |
+| HighDatabaseQueryTime | warning | P95 DB 查询 > 1s 持续 2m | 查 PG 缺索引 / 长事务（`pg_stat_statements`）。 |
 | PostgresDown | critical | exporter `up=0` 持续 1m | 查 postgres 容器与 exporter。注意：exporter `up=1` 只证明 HTTP——需确认 `pg_stat` 系列存在以排除鉴权失败。 |
 | HighDatabaseConnections | warning | `pg_stat_activity_count` > 80 | 用 `pg_stat_activity` 找空闲/睡眠连接；回收肇事会话或上调上限。 |
-| DatabaseReplicationLag | warning | 复制延迟 > 10s | 查备库回放；主库看 `pg_stat_replication`。 |
+| DatabaseReplicationLag | warning | 复制延迟 > 30s 持续 2m | 查备库回放；主库看 `pg_stat_replication`。 |
 | RedisDown | critical | exporter `up=0` 持续 1m | 查 redis 容器；确认会话/缓存消费方已按降级路径兜底。 |
-| RedisHighMemoryUsage | warning | used/max > 90%（maxmemory=0 时静默） | 查键增长与淘汰策略；未配 `maxmemory` 的实例由 `redis_memory_max_bytes > 0` 护栏静默。 |
-| RedisHighEvictionRate | warning | 淘汰 > 100/s 持续 5m | 工作集超预算：上调 maxmemory 或修 TTL。 |
+| RedisHighMemoryUsage | warning | used/max > 85% 持续 5m（maxmemory=0 时静默） | 查键增长与淘汰策略；未配 `maxmemory` 的实例由 `redis_memory_max_bytes > 0` 护栏静默。 |
+| RedisHighEvictionRate | warning | 淘汰 > 100/s 持续 2m | 工作集超预算：上调 maxmemory 或修 TTL。 |
 | KafkaDown | critical | exporter `up=0` 持续 1m | 查 kafka 容器；生产方（gateway）会阻塞/失败。 |
 | KafkaHighConsumerLag | warning | 组积压 > 10000 持续 5m | 查消费者健康（`kafka_consumergroup_*`）；扩容或重启落后消费者。 |
 | FlinkJobManagerDown | critical | `up{job="flink"}=0` 持续 1m | 仅 k8s 面（compose 的 local executor 作业无 JobManager 端点）。查 JM pod/容器。 |
