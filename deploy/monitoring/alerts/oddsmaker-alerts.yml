@@ -99,6 +99,33 @@ groups:
           summary: "High database query time"
           description: "P95 query time is {{ $value }}s"
 
+      # Webhook delivery failures
+      # 派发失败被 REQUIRES_NEW + 调用方 catch 吞掉，不进重试队列的失败只有表/日志可见；
+      # 这是通知链路自身的告警——描述不嵌 $value：rate 结果带浮点噪声
+      - alert: WebhookDeliveryFailing
+        expr: |
+          rate(oddsmaker_webhook_delivery_total{outcome="failed"}[5m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+          service: control-service
+        annotations:
+          summary: "Webhook deliveries are failing"
+          description: "Webhook deliveries have been failing for more than 5 minutes."
+
+      # Risk action execution failures
+      # 处置动作（封禁/人审/限流/打标）失败同样被顶层 catch 吞掉
+      - alert: RiskActionFailing
+        expr: |
+          rate(oddsmaker_risk_action_total{outcome="failed"}[5m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+          service: control-service
+        annotations:
+          summary: "Risk actions are failing"
+          description: "Risk action executions have been failing for more than 5 minutes."
+
   - name: oddsmaker-database
     rules:
       # PostgreSQL down

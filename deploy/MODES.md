@@ -119,7 +119,7 @@ cd infra && docker compose --env-file ../.env -f docker-compose.yml up -d
   host-gateway 抓根 compose 宿主端口 25432/26379/29092）+ 对应三 job；本地活体
   实证三组件 up=1、pg/redis/kafka 指标族可见、对应 Down 告警静默不误报、
   RedisHighMemoryUsage 对未配 maxmemory 的实例加 `and redis_memory_max_bytes > 0`
-  护栏不误报。**ClickHouse 观测面**（2026-10-20 轮次 p1020b 补漏，规则 18→22 条）：
+  护栏不误报。**ClickHouse 观测面**（2026-10-20 轮次 p1020b 补漏，规则 18→22 条；1020d 又补控制面 2 条通知/风控链路告警 `WebhookDeliveryFailing`/`RiskActionFailing`，现行 24 条）：
   18 条规则无一条引用 ClickHouse（k8s 面虽有 clickhouse 抓取 job 但属死序列），compose
   面连抓取都没有——根 compose 的 CH 以 config.d 开启原生 Prometheus 端点
   （`deploy/monitoring/clickhouse/prometheus.xml`，容器 9363 → 宿主 29363；24.8 自带，

@@ -3,6 +3,7 @@ package io.oddsmaker.control.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.oddsmaker.control.jpa.*;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -62,9 +63,18 @@ public class WebhookService {
     @Autowired
     private AuditLogService auditLogService;
 
+    @Autowired(required = false)   // 与 asyncExecutor 同型：单测注入 SimpleMeterRegistry，缺 bean 时静默不记
+    private MeterRegistry meterRegistry;
+
     /** 发送侧 buildHeaders 仅实现这三种鉴权（hmac/oauth2 无实现，校验拒绝防静默不生效） */
     private static final Set<String> SUPPORTED_HTTP_METHODS = Set.of("POST", "PUT", "PATCH");
     private static final Set<String> SUPPORTED_AUTH_TYPES = Set.of("none", "basic", "bearer", "api_key");
+
+    /**
+     * 告警投递结果指标：outcome=success|failed|retry_scheduled（投递失败与排重试各计一次，
+     * 标签定值集，测试投递不计入——与 getWebhookStats 的统计口径一致）。
+     */
+    static final String DELIVERY_METRIC = "oddsmaker.webhook.delivery.total";
 
     /**
      * 发送风险案例Webhook
@@ -513,12 +523,14 @@ public class WebhookService {
             // 记录成功
             log.markAsSuccess(response.getStatusCode().value(), response.getBody(), responseTime);
             config.recordSuccess();
+            recordDelivery("success");
 
             logger.info("Webhook sent successfully: {} -> {}", config.name, config.webhookUrl);
 
         } catch (Exception e) {
             // 记录失败
             log.markAsFailed(e.getMessage(), e.getClass().getSimpleName());
+            recordDelivery("failed");
 
             // 检查是否需要重试（shouldRetry 已保证 maxRetries != null && > 0；
             // retryCount 唯一递增点是下方 scheduleRetry，sendWebhook 的 log 由 createWebhookLog
@@ -527,6 +539,7 @@ public class WebhookService {
                 long delayMs = config.retryBackoffMs * (long) Math.pow(2, log.retryCount);
                 LocalDateTime nextRetry = LocalDateTime.now().plus(java.time.Duration.ofMillis(delayMs));
                 log.scheduleRetry(nextRetry);
+                recordDelivery("retry_scheduled");
                 logger.info("Scheduling webhook retry: {} at {}", config.name, nextRetry);
             }
 
@@ -536,6 +549,13 @@ public class WebhookService {
 
         webhookLogRepo.save(log);
         webhookConfigRepo.save(config);
+    }
+
+    /** 投递结果计数（定值标签集，无外部输入标签）；meterRegistry 缺位时静默不记 */
+    private void recordDelivery(String outcome) {
+        if (meterRegistry != null) {
+            meterRegistry.counter(DELIVERY_METRIC, "outcome", outcome).increment();
+        }
     }
 
     private void retryWebhook(WebhookConfigEntity config, WebhookLogEntity log) {

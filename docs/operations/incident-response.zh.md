@@ -265,7 +265,7 @@ psql -c "SELECT client_ip, count(*) FROM audit_logs WHERE result = 'FAILURE' GRO
 
 ## 告警处置速查（oddsmaker-alerts.yml）
 
-`deploy/monitoring/alerts/oddsmaker-alerts.yml` 全部 22 条规则的逐条首发响应（告警名为稳定 ID，由钉测试守护）。下方查询对两面监控栈通用：Prometheus（compose 栈 `:9090`）或 Grafana。
+`deploy/monitoring/alerts/oddsmaker-alerts.yml` 全部 24 条规则的逐条首发响应（告警名为稳定 ID，由钉测试守护）。下方查询对两面监控栈通用：Prometheus（compose 栈 `:9090`）或 Grafana。
 
 | 告警 | 级别 | 触发条件 | 首查 / 处置 |
 |---|---|---|---|
@@ -277,6 +277,8 @@ psql -c "SELECT client_ip, count(*) FROM audit_logs WHERE result = 'FAILURE' GRO
 | HighCpuUsage | warning | CPU > 80% 持续 5m | 定位热点线程；排查突发负载或失控循环。 |
 | DatabaseConnectionPoolExhausted | critical | Hikari 活跃/上限 > 90% 持续 2m | 查连接泄漏（`hikaricp_connections_pending`）；查占住连接的慢查询。 |
 | HighDatabaseQueryTime | warning | P95 DB 查询 > 1s 持续 2m | 查 PG 缺索引 / 长事务（`pg_stat_statements`）。 |
+| WebhookDeliveryFailing | warning | `rate(oddsmaker_webhook_delivery_total{outcome="failed"}[5m]) > 0` 持续 5m | 告警外投失败：查失败配置的 `url`/密钥与 `webhook_logs` 重试计数。失败只落日志——要么排入重试（计 `retry_scheduled`）要么丢弃，没有投递队列，必须修配置本身。测试投递不计入。 |
+| RiskActionFailing | warning | `rate(oddsmaker_risk_action_total{outcome="failed"}[5m]) > 0` 持续 5m | 风控处置（封禁/人审/限流/打标）执行失败：读 control 错误日志拿事件 id，修依赖（封禁名单写入、审核队列、游戏服 webhook）。outcome 为 `ok`/`failed`/`decision_rejected`（状态机非法流转，属业务拒绝非基础设施故障）；未知动作收敛为 `action="other"`。 |
 | PostgresDown | critical | exporter `up=0` 持续 1m | 查 postgres 容器与 exporter。注意：exporter `up=1` 只证明 HTTP——需确认 `pg_stat` 系列存在以排除鉴权失败。 |
 | HighDatabaseConnections | warning | `pg_stat_activity_count` > 80 | 用 `pg_stat_activity` 找空闲/睡眠连接；回收肇事会话或上调上限。 |
 | DatabaseReplicationLag | warning | 复制延迟 > 30s 持续 2m | 查备库回放；主库看 `pg_stat_replication`。 |

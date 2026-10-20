@@ -276,6 +276,56 @@ tests:
         alertname: HighDatabaseQueryTime
         exp_alerts: []
 
+  - interval: 1m
+    input_series:
+      - series: 'oddsmaker_webhook_delivery_total{outcome="failed"}'
+        values: '0+20x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: WebhookDeliveryFailing
+        exp_alerts:
+          - exp_labels:
+              outcome: failed
+              severity: warning
+              service: control-service
+            exp_annotations:
+              summary: "Webhook deliveries are failing"
+              description: "Webhook deliveries have been failing for more than 5 minutes."
+
+  - interval: 1m
+    input_series:
+      - series: 'oddsmaker_webhook_delivery_total{outcome="failed"}'
+        values: '0+0x20'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: WebhookDeliveryFailing
+        exp_alerts: []
+
+  - interval: 1m
+    input_series:
+      - series: 'oddsmaker_risk_action_total{outcome="failed"}'
+        values: '0+20x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: RiskActionFailing
+        exp_alerts:
+          - exp_labels:
+              outcome: failed
+              severity: warning
+              service: control-service
+            exp_annotations:
+              summary: "Risk actions are failing"
+              description: "Risk action executions have been failing for more than 5 minutes."
+
+  - interval: 1m
+    input_series:
+      - series: 'oddsmaker_risk_action_total{outcome="failed"}'
+        values: '0+0x20'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: RiskActionFailing
+        exp_alerts: []
+
   # ===== oddsmaker-database =====
 
   - interval: 1m

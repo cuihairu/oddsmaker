@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.oddsmaker.control.dto.RiskEventDto;
 import io.oddsmaker.control.jpa.AuditLogEntity;
 import io.oddsmaker.control.jpa.BlockListEntity;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -451,5 +452,46 @@ class RiskEventConsumerTest {
         assertEquals("Amount exceeds threshold", dto.reason);
         assertNotNull(dto.evidence);
         assertEquals("999", dto.evidence.get("amount"));
+    }
+
+    @Test
+    @DisplayName("处置结果计入动作指标：THROTTLE→ok、未知 action→action=other、非法流转→decision_rejected、链路异常→failed")
+    void dispatchOutcomesCountedInActionMetric() {
+        SimpleMeterRegistry meters = new SimpleMeterRegistry();
+        ReflectionTestUtils.setField(consumer, "meterRegistry", meters);
+
+        // ok：THROTTLE 跨带合法流转
+        consumer.onRiskEvent(riskEventJson("THROTTLE", "MEDIUM", "DEVICE", "dev_th_metric", "rr_freq"));
+        // action=other：未知 action 走 default 分支，外部输入不被原样写入标签
+        consumer.onRiskEvent(riskEventJson("BOGUS_ACTION", "MEDIUM", "DEVICE", "dev_th_bogus", "rr_bogus"));
+        // decision_rejected：已有 BLOCK 案件再收同层动作（非法流转）
+        io.oddsmaker.control.jpa.RiskCaseEntity blockedCase = new io.oddsmaker.control.jpa.RiskCaseEntity();
+        blockedCase.id = "rc_metric";
+        blockedCase.gameId = "game_demo";
+        blockedCase.environmentId = "prod";
+        blockedCase.targetType = "device_id";
+        blockedCase.targetId = "dev_th_rejected";
+        blockedCase.status = io.oddsmaker.control.jpa.RiskCaseEntity.DecisionStatus.BLOCK;
+        when(riskCaseRepo.findUnresolvedBySubject("game_demo", "prod", "device_id", "dev_th_rejected",
+            io.oddsmaker.control.jpa.RiskCaseEntity.DecisionStatus.RESOLVED))
+            .thenReturn(java.util.List.of(blockedCase));
+        consumer.onRiskEvent(riskEventJson("THROTTLE", "MEDIUM", "DEVICE", "dev_th_rejected", "rr_freq"));
+        // failed：处置链路异常被顶层 catch 吞掉
+        when(riskCaseRepo.save(any())).thenThrow(new RuntimeException("db down"));
+        consumer.onRiskEvent(riskEventJson("REVIEW", "HIGH", "PLAYER", "user_metric", "rr_receipt"));
+
+        // Search 是可变累积的：每条断言单独取，避免 tag 值互斥累积成永假条件
+        java.util.function.BiFunction<String, String, Double> count = (action, outcome) ->
+            meters.get(RiskEventConsumer.ACTION_METRIC)
+                .tag("action", action).tag("outcome", outcome).counter().count();
+        assertEquals(1.0, count.apply("throttle", "ok"));
+        assertEquals(1.0, count.apply("other", "ok"));
+        assertEquals(1.0, count.apply("throttle", "decision_rejected"));
+        assertEquals(1.0, count.apply("review", "failed"));
+        // 基数护栏：外部输入动作不得原样入标签（BOGUS_ACTION 归 other）
+        assertTrue(meters.getMeters().stream()
+                .filter(m -> m.getId().getName().equals(RiskEventConsumer.ACTION_METRIC))
+                .noneMatch(m -> "bogus_action".equals(m.getId().getTag("action"))),
+            "未知处置动作必须 clamp 为 other");
     }
 }

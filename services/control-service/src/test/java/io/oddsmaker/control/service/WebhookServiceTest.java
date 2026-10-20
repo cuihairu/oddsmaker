@@ -7,6 +7,7 @@ import io.oddsmaker.control.jpa.WebhookConfigEntity;
 import io.oddsmaker.control.jpa.WebhookConfigRepo;
 import io.oddsmaker.control.jpa.WebhookLogEntity;
 import io.oddsmaker.control.jpa.WebhookLogRepo;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -16,6 +17,7 @@ import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.core.annotation.AnnotatedElementUtils;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
@@ -412,5 +414,45 @@ class WebhookServiceTest {
         Transactional tx = AnnotatedElementUtils.findMergedAnnotation(m, Transactional.class);
         assertNotNull(tx, "sendCustomWebhook 必须自带事务注解");
         assertEquals(Propagation.REQUIRES_NEW, tx.propagation());
+    }
+
+    @Test
+    @DisplayName("派发结果计入投递指标：outcome=success|failed|retry_scheduled，标签定值集、测试投递不计入")
+    void dispatchOutcomesCountedInDeliveryMetric() {
+        SimpleMeterRegistry meters = new SimpleMeterRegistry();
+        ReflectionTestUtils.setField(webhookService, "meterRegistry", meters);
+
+        WebhookConfigEntity config = config("g1");
+        config.id = "wc_dispatch";
+        config.eventTypes = "quota_warning";
+        config.maxRetries = 1;
+        config.retryBackoffMs = 1000;
+        when(webhookConfigRepo.findActiveByGameId("g1")).thenReturn(List.of(config));
+        when(restTemplateProvider.forConfig(config)).thenReturn(restTemplate);
+        when(restTemplate.exchange(anyString(), eq(HttpMethod.POST),
+                any(HttpEntity.class), eq(String.class)))
+            .thenReturn(ResponseEntity.ok("pong"))
+            .thenThrow(new ResourceAccessException("Connection refused"));
+
+        webhookService.sendCustomWebhook("g1", "quota_warning", Map.of("quota_id", "q1"));
+        webhookService.sendCustomWebhook("g1", "quota_warning", Map.of("quota_id", "q1"));
+
+        // Search 是可变累积的：每条断言单独取，避免 tag 值互斥累积成永假条件
+        java.util.function.Function<String, Double> count = outcome ->
+            meters.get(WebhookService.DELIVERY_METRIC).tag("outcome", outcome).counter().count();
+        assertEquals(1.0, count.apply("success"));
+        assertEquals(1.0, count.apply("failed"));
+        assertEquals(1.0, count.apply("retry_scheduled"));
+        // 基数护栏：outcome 只允许三个定值 → 恰好 3 条序列
+        assertEquals(3, meters.getMeters().stream()
+            .filter(m -> m.getId().getName().equals(WebhookService.DELIVERY_METRIC))
+            .count());
+
+        // 测试投递绕过统计（与 getWebhookStats 口径一致）：不计入投递指标
+        when(webhookConfigRepo.findById("wc_dispatch")).thenReturn(Optional.of(config));
+        when(restTemplate.exchange(anyString(), eq(HttpMethod.POST),
+                any(HttpEntity.class), eq(String.class))).thenReturn(ResponseEntity.ok("pong"));
+        assertEquals("success", webhookService.sendTestWebhook("wc_dispatch", "g1").get("status"));
+        assertEquals(1.0, count.apply("success"));
     }
 }

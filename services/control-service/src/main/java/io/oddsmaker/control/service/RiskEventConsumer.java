@@ -8,6 +8,7 @@ import io.oddsmaker.control.jpa.IdentityLinkEntity;
 import io.oddsmaker.control.jpa.IdentityLinkRepo;
 import io.oddsmaker.control.jpa.RiskCaseEntity;
 import io.oddsmaker.control.jpa.RiskCaseRepo;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,6 +19,7 @@ import org.springframework.stereotype.Component;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 风控事件消费者
@@ -39,6 +41,15 @@ import java.util.Map;
 public class RiskEventConsumer {
 
     private static final Logger logger = LoggerFactory.getLogger(RiskEventConsumer.class);
+
+    /**
+     * 风控动作执行结果指标：action=处置动作、outcome=ok|failed|decision_rejected。
+     * action 来自 Flink 事件外部输入，经 clampAction 收敛到 KNOWN_ACTIONS 定值集（否则归 other），
+     * 防标签基数被事件内容撑爆——与观测面「标签禁高基数」口径一致。
+     */
+    static final String ACTION_METRIC = "oddsmaker.risk.action.total";
+    private static final Set<String> KNOWN_ACTIONS =
+        Set.of("block", "review", "webhook", "throttle", "mark", "alert");
 
     @Autowired
     private ObjectMapper objectMapper;
@@ -63,6 +74,9 @@ public class RiskEventConsumer {
 
     @Autowired
     private RiskActionRecorder riskActionRecorder;
+
+    @Autowired(required = false)   // 与 WebhookService 同型：单测注入 SimpleMeterRegistry，缺 bean 时静默不记
+    private MeterRegistry meterRegistry;
 
     /** 身份关联扩散封禁开关（默认关：共享设备可能关联大量玩家，灰度后再开）。 */
     @Value("${oddsmaker.risk.identity-extend:false}")
@@ -105,6 +119,7 @@ public class RiskEventConsumer {
                 riskCase = decide(event, decision);
                 if (riskCase == null) {
                     riskActionRecorder.record(event, event.action.toLowerCase(), "decision_rejected", null);
+                    recordActionOutcome(event, "decision_rejected");
                     return;
                 }
             }
@@ -143,9 +158,29 @@ public class RiskEventConsumer {
                     riskActionRecorder.record(event, event.action.toLowerCase(), "logged", null);
                     break;
             }
+            recordActionOutcome(event, "ok");
         } catch (Exception e) {
             logger.error("Failed to handle risk event {}: {}", event.riskEventId, e.getMessage(), e);
+            recordActionOutcome(event, "failed");
         }
+    }
+
+    /** 动作执行结果计数：outcome=ok|failed|decision_rejected；action 经 clampAction 收敛到定值集 */
+    private void recordActionOutcome(RiskEventDto event, String outcome) {
+        if (meterRegistry == null) {
+            return;
+        }
+        meterRegistry.counter(ACTION_METRIC, "action", clampAction(event.action), "outcome", outcome)
+            .increment();
+    }
+
+    /** 处置动作收敛到定值集：外部输入的非 KNOWN_ACTIONS 值（含 null、大小写差异）一律归 other */
+    private static String clampAction(String action) {
+        if (action == null) {
+            return "other";
+        }
+        String lowered = action.toLowerCase();
+        return KNOWN_ACTIONS.contains(lowered) ? lowered : "other";
     }
 
     /** 判定型动作 → DecisionStatus；WEBHOOK/未知动作不构成判定（不建案、不落状态） */

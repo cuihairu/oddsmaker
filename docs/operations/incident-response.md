@@ -265,7 +265,7 @@ psql -c "SELECT client_ip, count(*) FROM audit_logs WHERE result = 'FAILURE' GRO
 
 ## Alert Runbook (oddsmaker-alerts.yml)
 
-Per-alert first-response guide for the rule set shipped in `deploy/monitoring/alerts/oddsmaker-alerts.yml` (22 rules; rule names are stable IDs referenced by contract tests). Queries below work on both monitoring faces: Prometheus UI (`:9090`, compose stack) or Grafana.
+Per-alert first-response guide for the rule set shipped in `deploy/monitoring/alerts/oddsmaker-alerts.yml` (24 rules; rule names are stable IDs referenced by contract tests). Queries below work on both monitoring faces: Prometheus UI (`:9090`, compose stack) or Grafana.
 
 | Alert | Severity | Triggered when | First checks / action |
 |---|---|---|---|
@@ -277,6 +277,8 @@ Per-alert first-response guide for the rule set shipped in `deploy/monitoring/al
 | HighCpuUsage | warning | CPU > 80% for 5m | Identify hot threads; check for load spikes or runaway loops. |
 | DatabaseConnectionPoolExhausted | critical | Hikari active/max > 90% for 2m | Find connection leaks (`hikaricp_connections_pending`); check for slow queries holding connections. |
 | HighDatabaseQueryTime | warning | P95 DB query > 1s for 2m | Look for missing indexes / long transactions in PG (`pg_stat_statements`). |
+| WebhookDeliveryFailing | warning | `rate(oddsmaker_webhook_delivery_total{outcome="failed"}[5m]) > 0` for 5m | Outbound alert delivery is broken — check the failing config's `url`/secret and the `webhook_logs` retry counters. Failures are logged and either retried (counted as `retry_scheduled`) or dropped; there is no delivery queue, so the config must be fixed. Test deliveries are not counted. |
+| RiskActionFailing | warning | `rate(oddsmaker_risk_action_total{outcome="failed"}[5m]) > 0` for 5m | Risk actions (block/review/throttle/mark) are failing to execute — read the control-service error log for the event id and fix the dependency (block list write, review queue, game-server webhook). Outcome is `ok`, `failed`, or `decision_rejected` (illegal state transition, not an infra failure); unknown actions are clamped to `action="other"`. |
 | PostgresDown | critical | exporter `up=0` for 1m | Check postgres container + exporter. Note: exporter `up=1` only proves HTTP — verify `pg_stat` series exist to rule out auth failure. |
 | HighDatabaseConnections | warning | `pg_stat_activity_count` > 80 | Identify idle/sleeping backends (`pg_stat_activity`); terminate offenders or raise limits. |
 | DatabaseReplicationLag | warning | Replication lag > 30s for 2m | Check standby replay; `pg_stat_replication` on primary. |
