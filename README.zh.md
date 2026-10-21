@@ -6,6 +6,7 @@
 
 # Oddsmaker
 
+[![Status](https://img.shields.io/badge/status-in%20development-orange)](https://github.com/cuihairu/oddsmaker/releases)
 [![CI](https://github.com/cuihairu/oddsmaker/actions/workflows/ci.yaml/badge.svg)](https://github.com/cuihairu/oddsmaker/actions/workflows/ci.yaml)
 [![Docs](https://github.com/cuihairu/oddsmaker/actions/workflows/docs.yaml/badge.svg)](https://cuihairu.github.io/oddsmaker/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
