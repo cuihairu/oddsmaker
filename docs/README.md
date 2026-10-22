@@ -1,6 +1,6 @@
 # Documentation Overview
 
-> 🌐 Language: **English** · 中文 → [README.zh.md](README.zh.md)
+> 🌐 Language: **English** · 中文 → [README.zh.md](zh/README)
 
 This directory is Oddsmaker's documentation source (VitePress). The published site ships two entry points by language: English (`/`) and Chinese (`/zh/`).
 

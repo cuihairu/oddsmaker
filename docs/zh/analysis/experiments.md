@@ -1,6 +1,6 @@
 # 实验平台（A/B）MVP
 
-> 🌐 Language: **中文** · English → [experiments.en.md](experiments.en.md)
+> 🌐 Language: **中文** · English → [experiments.en.md](../../analysis/experiments)
 
 目标：提供可配置的实验（variants/权重/目标规则），SDK 侧一致性分流与曝光事件，ClickHouse 侧快速聚合曝光/转化指标。
 

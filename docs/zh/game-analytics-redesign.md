@@ -62,7 +62,7 @@
 - 金额和资源数量字段使用 Decimal/Double 语义，避免道具、虚拟币和广告收入的小数精度丢失。
 - 重点对象单独建宽表或物化视图，如 `level_progress`, `economy_flows`, `monetization_daily`。
 
-字典草案见 [game-event-dictionary.zh.md](game-event-dictionary.zh.md)。
+字典草案见 [game-event-dictionary.zh.md](game-event-dictionary.md)。
 
 ## 4. 对标案例
 

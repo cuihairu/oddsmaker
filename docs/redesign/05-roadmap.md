@@ -4,7 +4,7 @@
 
 Roadmap goal: first get the model right, then add game analytics and risk control. Every phase must be independently releasable.
 
-> **Status (2026-09)**: P0–P4 have all been delivered (event contract v1, control plane, risk control enforcement pipeline, monetization and intelligence); the actual delivery details are authoritative in the repository root `todo.md` — P5 reporting dashboards, P6 experiments/Crash/intelligence, and P7 competitive gap convergence are all complete (release notes in [release-notes/v0.2.0.md](../../release-notes/v0.2.0.md)), and P8 MMP attribution is conditionally approved and on hold. This document is kept as a design-period roadmap retrospective and is no longer updated with progress.
+> **Status (2026-09)**: P0–P4 have all been delivered (event contract v1, control plane, risk control enforcement pipeline, monetization and intelligence); the actual delivery details are authoritative in the repository root `todo.md` — P5 reporting dashboards, P6 experiments/Crash/intelligence, and P7 competitive gap convergence are all complete (release notes in [release-notes/v0.2.0.md](../release-notes/v0.2.0.md)), and P8 MMP attribution is conditionally approved and on hold. This document is kept as a design-period roadmap retrospective and is no longer updated with progress.
 
 ## Phase Overview
 

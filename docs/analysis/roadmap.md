@@ -4,7 +4,7 @@
 
 Goal: build a multi-game real-time analytics and risk control platform usable inside a single game company. The platform is not shared across multiple companies, and Organization/Tenant is not used as a business model.
 
-> **Status (2026-09)**: All Phase capabilities in this document have been delivered (including A/B experiments + SRM, Crash collection and symbolication, pLTV/churn/risk scoring, Remote Config/LiveOps); the implementation details are tracked in the active tracker `todo.md` at the repo root; P7 competitive gap convergence is complete (see the release notes [release-notes/v0.2.0.md](../../release-notes/v0.2.0.md)), and P8 MMP attribution is a conditionally approved item that is currently on hold. This document is retained as a product roadmap retrospective and is no longer updated with progress.
+> **Status (2026-09)**: All Phase capabilities in this document have been delivered (including A/B experiments + SRM, Crash collection and symbolication, pLTV/churn/risk scoring, Remote Config/LiveOps); the implementation details are tracked in the active tracker `todo.md` at the repo root; P7 competitive gap convergence is complete (see the release notes [release-notes/v0.2.0.md](../release-notes/v0.2.0.md)), and P8 MMP attribution is a conditionally approved item that is currently on hold. This document is retained as a product roadmap retrospective and is no longer updated with progress.
 
 ## Current Judgment
 

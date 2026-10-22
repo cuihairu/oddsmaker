@@ -1,6 +1,6 @@
 # 贡献指南
 
-> 🌐 Language: **中文** · English → [contributing.en.md](contributing.en.md)
+> 🌐 Language: **中文** · English → [contributing.en.md](../../getting-started/contributing)
 
 代码风格
 - Java：Google Java Style（缩进2空格）；Spring Boot 4；Lombok 禁用（便于审查）

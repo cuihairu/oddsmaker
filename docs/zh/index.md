@@ -100,7 +100,7 @@ MFA（两步验证）、RBAC 权限控制（8 角色 × global/game/environment 
 - [贡献指南](/zh/getting-started/contributing) - 提交与协作规范
 - [实验平台](/zh/analysis/experiments) - 实验平台（A/B）MVP
 - [产品路线图](/zh/analysis/roadmap) - 游戏分析平台产品路线图
-- [决策记录](/决策记录.zh) - 巡检代决台账
+- [决策记录](/zh/决策记录) - 巡检代决台账
 
 ## 社区
 

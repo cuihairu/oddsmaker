@@ -1,6 +1,6 @@
 # Oddsmaker 平台重设计方案（索引）
 
-> 🌐 Language: **中文** · English → [index.en.md](index.en.md)
+> 🌐 Language: **中文** · English → [index.en.md](../../redesign/index)
 
 本目录记录 Oddsmaker 游戏分析平台的新目标架构：**单公司部署、多游戏管理、多环境隔离、内置风控**。
 

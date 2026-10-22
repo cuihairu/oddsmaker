@@ -1,6 +1,6 @@
 # 生产部署与运维建议（Oddsmaker）
 
-> 🌐 Language: **中文** · English → [ops.en.md](ops.en.md)
+> 🌐 Language: **中文** · English → [ops.en.md](../../operations/ops)
 
 目标：高可用、低延迟、可回放可重算、监控完善。以下建议按组件给出容量估算、关键参数、监控点与告警阈值。
 

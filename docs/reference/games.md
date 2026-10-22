@@ -1,6 +1,6 @@
 # Games API
 
-> 🌐 Language: **English** · 中文 → [games.zh.md](games.zh.md)
+> 🌐 Language: **English** · 中文 → [games.zh.md](../zh/reference/games)
 
 Game management API for creating and managing game products.
 

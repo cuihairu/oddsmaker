@@ -1,6 +1,6 @@
 # Environments API
 
-> 🌐 Language: **English** · 中文 → [environments.zh.md](environments.zh.md)
+> 🌐 Language: **English** · 中文 → [environments.zh.md](../zh/reference/environments)
 
 Environment management API, used to manage the different deployment environments of a game (dev, staging, prod).
 

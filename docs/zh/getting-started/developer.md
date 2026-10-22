@@ -1,6 +1,6 @@
 # 开发者指南（本地）
 
-> 🌐 Language: **中文** · English → [developer.en.md](developer.en.md)
+> 🌐 Language: **中文** · English → [developer.en.md](../../getting-started/developer)
 
 一键演示
 ```bash

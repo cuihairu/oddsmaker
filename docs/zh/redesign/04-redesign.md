@@ -1,6 +1,6 @@
 # 04 - 重设计方案
 
-> 🌐 Language: **中文** · English → [04-redesign.en.md](04-redesign.en.md)
+> 🌐 Language: **中文** · English → [04-redesign.en.md](../../redesign/04-redesign)
 
 ## 1. 设计原则
 

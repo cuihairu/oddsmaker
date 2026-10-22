@@ -1,6 +1,6 @@
 # SDK 设计规范（跨端一致）
 
-> 🌐 Language: **中文** · English → [sdk-design.en.md](sdk-design.en.md)
+> 🌐 Language: **中文** · English → [sdk-design.en.md](../../reference/sdk-design)
 
 初始化
 - `apiKey`, `endpoint`, `gameId`, `environment`，自动生成 `deviceId`（可覆盖）。

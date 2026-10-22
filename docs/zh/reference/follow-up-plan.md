@@ -1,6 +1,6 @@
 # 后续推进规划
 
-> 🌐 Language: **中文** · English → [follow-up-plan.en.md](follow-up-plan.en.md)
+> 🌐 Language: **中文** · English → [follow-up-plan.en.md](../../reference/follow-up-plan)
 
 本文档记录 Oddsmaker 当前未完成的功能项，按优先级排列，包含设计、实现方案和验收标准。每项推进前先在此登记，避免散落讨论。
 

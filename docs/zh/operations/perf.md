@@ -1,6 +1,6 @@
 # 性能与压测指南
 
-> 🌐 Language: **中文** · English → [perf.en.md](perf.en.md)
+> 🌐 Language: **中文** · English → [perf.en.md](../../operations/perf)
 
 目标：验证网关 /v1/batch 在不同批量大小与速率下的吞吐、时延与错误率；评估下游（Kafka/CH/Flink）压测时的稳定性。
 

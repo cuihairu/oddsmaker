@@ -1,6 +1,6 @@
 # Flink 作业说明
 
-> 🌐 Language: **中文** · English → [jobs.en.md](jobs.en.md)
+> 🌐 Language: **中文** · English → [jobs.en.md](../../analysis/jobs)
 
 包含 7 个作业：
 - events-enrich-job：校验/去重/富化（UA/GeoIP）→ ClickHouse events

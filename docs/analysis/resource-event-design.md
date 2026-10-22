@@ -1,6 +1,6 @@
 # Oddsmaker Resource Event Design
 
-> 🌐 Language: **English** · 中文 → [resource-event-design.zh.md](resource-event-design.zh.md)
+> 🌐 Language: **English** · 中文 → [resource-event-design.zh.md](../zh/analysis/resource-event-design)
 
 ## Conclusion
 

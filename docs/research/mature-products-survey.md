@@ -1,6 +1,6 @@
 # Survey of Mature Analytics and Risk-Control Products (Features, Interactions, SDKs)
 
-> 🌐 Language: **English** · 中文 → [mature-products-survey.zh.md](mature-products-survey.zh.md)
+> 🌐 Language: **English** · 中文 → [mature-products-survey.zh.md](../zh/research/mature-products-survey)
 
 > Survey date: 2026-10 ｜ Method: each product's official documentation and product pages on their sites + GitHub repos (protocols and open-source status) + developer-center download pages; page screenshots captured 2026-10-08, sources in §8
 > Covers 14 vendors: 10 analytics (GameAnalytics, Unity Analytics, Adjust, AppsFlyer, Firebase Analytics, Amplitude, 友盟+, TalkingData, 神策, GrowingIO), 4 risk control (数美, 网易易盾, 阿里云风险识别, 顶象)

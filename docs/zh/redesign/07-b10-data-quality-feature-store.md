@@ -1,6 +1,6 @@
 # B10 设计定稿：数据质量指标与共享 Feature 双写
 
-> 🌐 Language: **中文** · English → [07-b10-data-quality-feature-store.en.md](07-b10-data-quality-feature-store.en.md)
+> 🌐 Language: **中文** · English → [07-b10-data-quality-feature-store.en.md](../../redesign/07-b10-data-quality-feature-store)
 
 本文是 B10 批次的设计定稿，契约来自计划书 §5.3 与 B10 行（`06-od2-restructure-plan`）：Data Quality 五指标 + Game Data Health 页方向，共享 Feature 双写 schema，不做 Data Lineage 系统。本批已随 B10（8eba96c）落地（V0.9.22 迁移、DataQualityController、DataQualityReporter、DeadLetterConsumer 等）；下文行号为设计稿编号，落地后以源码为准。所有信号点均读码核对，文件与行号见各节，核对基于 2026-10-07 工作副本。
 

@@ -1,6 +1,6 @@
 # 01 - 现状评估
 
-> 🌐 Language: **中文** · English → [01-assessment.en.md](01-assessment.en.md)
+> 🌐 Language: **中文** · English → [01-assessment.en.md](../../redesign/01-assessment)
 
 ## 1. 项目定位偏差
 

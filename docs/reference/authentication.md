@@ -1,6 +1,6 @@
 # Authentication
 
-> 🌐 Language: **English** · 中文 → [authentication.zh.md](authentication.zh.md)
+> 🌐 Language: **English** · 中文 → [authentication.zh.md](../zh/reference/authentication)
 
 The authentication, token, and permission model of the control service.
 

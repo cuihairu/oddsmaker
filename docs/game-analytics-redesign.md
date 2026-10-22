@@ -1,6 +1,6 @@
 # complier Game Analytics Project Redesign
 
-> 🌐 Language: **English** · 中文 → [game-analytics-redesign.zh.md](game-analytics-redesign.zh.md)
+> 🌐 Language: **English** · 中文 → [game-analytics-redesign.zh.md](zh/game-analytics-redesign)
 
 Last updated: `2026-06-05`
 

@@ -18,9 +18,9 @@ This guide covers:
 
 ## Quick Links
 
-- [Startup Guide (Tested)](/operations/startup.zh) - 本机从零拉起全栈的实测步骤与踩坑记录
-- [Incident Response](/operations/incident-response.zh) - Handle incidents
-- [Troubleshooting](/operations/troubleshooting.zh) - Debug issues
+- [Startup Guide (Tested)](/zh/operations/startup) - 本机从零拉起全栈的实测步骤与踩坑记录
+- [Incident Response](/zh/operations/incident-response) - Handle incidents
+- [Troubleshooting](/zh/operations/troubleshooting) - Debug issues
 
 ## Deployment Options
 
@@ -43,7 +43,7 @@ podman compose down
 
 > 分体 dev 模式（`make infra-up`）只起中间件不含 postgres，
 > `make gateway/control` 的 bootRun 需自备本地 PG，否则请用根 compose。坑位清单见
-> [Startup Guide](/operations/startup.zh)。
+> [Startup Guide](/zh/operations/startup)。
 
 ### Kubernetes (Production)
 

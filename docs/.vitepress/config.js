@@ -33,7 +33,6 @@ const redesignSidebar = [
 
 export default withMermaid(defineConfig({
   base: '/oddsmaker/',
-  ignoreDeadLinks: true,
 
   locales: {
     root: {

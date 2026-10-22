@@ -1,6 +1,6 @@
 # Oddsmaker Incident Response Runbook
 
-> 🌐 Language: **English** · 中文 → [incident-response.zh.md](incident-response.zh.md)
+> 🌐 Language: **English** · 中文 → [incident-response.zh.md](../zh/operations/incident-response)
 
 ## Overview
 

@@ -1,6 +1,6 @@
 # 06 - Oddsmaker 2.0 重构计划书（Code Agent 可执行版）
 
-> 🌐 Language: **中文** · English → [06-od2-restructure-plan.en.md](06-od2-restructure-plan.en.md)
+> 🌐 Language: **中文** · English → [06-od2-restructure-plan.en.md](../../redesign/06-od2-restructure-plan)
 
 > **身份**：本文是把 04-redesign（新架构）与 05-roadmap（实施路线）收束成一份**可直接交给 Code Agent 分批执行**的契约：
 > 领域模型、模块边界、数据契约一次性定死，后续按 §8 批次逐批执行，每批附验收标准与门禁。

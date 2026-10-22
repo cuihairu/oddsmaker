@@ -1,6 +1,6 @@
 # Operations Guide
 
-> 🌐 Language: **English** · 中文 → [index.zh.md](index.zh.md)
+> 🌐 Language: **English** · 中文 → [index.zh.md](../zh/operations/index)
 
 Welcome to the Oddsmaker Operations Guide. This section provides documentation for deploying, monitoring, and maintaining the Oddsmaker platform.
 

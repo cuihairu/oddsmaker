@@ -1,6 +1,6 @@
 # 05 - 实施路线
 
-> 🌐 Language: **中文** · English → [05-roadmap.en.md](05-roadmap.en.md)
+> 🌐 Language: **中文** · English → [05-roadmap.en.md](../../redesign/05-roadmap)
 
 路线目标：先把模型改正确，再补游戏分析和风控。每个阶段都必须能独立发布。
 

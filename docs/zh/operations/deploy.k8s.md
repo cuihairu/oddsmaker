@@ -1,6 +1,6 @@
 # K8s 部署（示例）
 
-> 🌐 Language: **中文** · English → [deploy.k8s.en.md](deploy.k8s.en.md)
+> 🌐 Language: **中文** · English → [deploy.k8s.en.md](../../operations/deploy.k8s)
 
 前提
 - 已有 Kafka/Schema Registry/ClickHouse 集群（或使用云服务），拿到地址

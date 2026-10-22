@@ -1,6 +1,6 @@
 # Release Notes Index
 
-> 🌐 Language: **English** · 中文 → [README.zh.md](README.zh.md)
+> 🌐 Language: **English** · 中文 → [README.zh.md](../zh/release-notes/README)
 
 Current release notes:
 - [v0.1.0.md](v0.1.0.md): Release notes for the first release

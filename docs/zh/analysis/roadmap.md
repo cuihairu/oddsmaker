@@ -1,6 +1,6 @@
 # Oddsmaker 游戏分析平台产品路线图
 
-> 🌐 Language: **中文** · English → [roadmap.en.md](roadmap.en.md)
+> 🌐 Language: **中文** · English → [roadmap.en.md](../../analysis/roadmap)
 
 目标：建设一个游戏公司内部可用的多游戏实时分析与风控平台。平台不做多公司共用，也不把 Organization/Tenant 作为业务模型。
 
