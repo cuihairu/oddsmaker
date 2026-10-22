@@ -35,10 +35,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7.0.1
 
       - name: Set up JDK ${{ env.JAVA_VERSION }}
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v6.1.0
         with:
           java-version: ${{ env.JAVA_VERSION }}
           distribution: 'temurin'
@@ -47,7 +47,7 @@ jobs:
       # 其余 13 个模块 493 例（agent 211 / Flink 七作业 257 / sdks-server 8 / libs/common-* 17）
       # 只在 nightly 跑——改坏它们的提交在 CI 上绿、到夜里才红（与 ml、web 缺门一族）。
       - name: Build and test（走仓库 wrapper，与 nightly/release 同一 Gradle 版本真源）
-        uses: gradle/gradle-build-action@v3
+        uses: gradle/gradle-build-action@v3.5.0
         with:
           arguments: |
             --no-daemon
@@ -55,7 +55,7 @@ jobs:
             test
 
       - name: Upload test results
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7.0.2
         if: always()
         with:
           name: test-results
@@ -69,8 +69,8 @@ jobs:
       run:
         working-directory: sdks/web
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: '24'
       - run: npm ci || npm i
@@ -88,8 +88,8 @@ jobs:
       run:
         working-directory: ml
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.0.0
         with:
           python-version: '3.12'
           cache: 'pip'
@@ -107,16 +107,16 @@ jobs:
     name: Web Console tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7.0.1
 
       # pnpm 必须先于 setup-node 安装：cache: 'pnpm' 会执行 pnpm store path，pnpm 不在 PATH 时 setup-node 直接失败
       - name: Set up pnpm
-        uses: pnpm/action-setup@v5
+        uses: pnpm/action-setup@v6.1.0
         with:
           version: 12
           run_install: false
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: '24'
           cache: 'pnpm'
@@ -142,9 +142,9 @@ jobs:
     name: Android SDK tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7.0.1
 
-      - uses: actions/setup-java@v5
+      - uses: actions/setup-java@v6.1.0
         with:
           java-version: ${{ env.JAVA_VERSION }}
           distribution: 'temurin'
@@ -154,7 +154,7 @@ jobs:
         run: ./gradlew --no-daemon --stacktrace -p sdks/android/jvm-coverage test
 
       - name: Upload test results
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7.0.2
         if: always()
         with:
           name: android-sdk-test-results
