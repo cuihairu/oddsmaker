@@ -22,5 +22,11 @@
     "ab-testing"
   ],
   "author": "Oddsmaker Team",
-  "license": "MIT"
+  "license": "MIT",
+  "pnpm": {
+    "overrides": {
+      "dompurify@<3.4.17": "3.4.17",
+      "vite@<6.4.4": "6.4.4"
+    }
+  }
 }
