@@ -6,10 +6,12 @@
 
 # Oddsmaker
 
-<p align="center">[![Status](https://img.shields.io/badge/status-in%20development-orange)](https://github.com/cuihairu/oddsmaker/releases)</p>
-[![CI](https://github.com/cuihairu/oddsmaker/actions/workflows/ci.yaml/badge.svg)](https://github.com/cuihairu/oddsmaker/actions/workflows/ci.yaml)
-[![Docs](https://github.com/cuihairu/oddsmaker/actions/workflows/docs.yaml/badge.svg)](https://cuihairu.github.io/oddsmaker/)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+<p align="center">
+<a href="https://github.com/cuihairu/oddsmaker/releases"><img alt="Status" src="https://img.shields.io/badge/status-in%20development-orange"></a>
+</p>
+<a href="https://github.com/cuihairu/oddsmaker/actions/workflows/ci.yaml"><img alt="CI" src="https://github.com/cuihairu/oddsmaker/actions/workflows/ci.yaml/badge.svg"></a>
+<a href="https://cuihairu.github.io/oddsmaker/"><img alt="Docs" src="https://github.com/cuihairu/oddsmaker/actions/workflows/docs.yaml/badge.svg"></a>
+<a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-blue.svg"></a>
 
 </div>
 
