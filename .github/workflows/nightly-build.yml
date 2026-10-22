@@ -105,7 +105,7 @@ jobs:
       # 本 job 名为 Full Test Suite 却四腿缺二（ml 与 sdks/web）——nightly 是滚动 Release
       # 二进制 + :nightly 镜像交付前的最后一道闸，与 ci.yaml 四条腿同口径。
       - name: Set up Python ${{ env.PYTHON_VERSION }}
-        uses: actions/setup-python@v7.0.0
+        uses: actions/setup-python@v7.1.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
