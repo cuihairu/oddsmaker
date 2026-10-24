@@ -7,10 +7,7 @@
 # Oddsmaker
 
 <p align="center">
-<a href="https://github.com/cuihairu/oddsmaker/releases"><img alt="Status" src="https://img.shields.io/badge/status-in%20development-orange"></a>
-<a href="https://github.com/cuihairu/oddsmaker/actions/workflows/ci.yaml"><img alt="CI" src="https://github.com/cuihairu/oddsmaker/actions/workflows/ci.yaml/badge.svg"></a>
-<a href="https://cuihairu.github.io/oddsmaker/"><img alt="Docs" src="https://github.com/cuihairu/oddsmaker/actions/workflows/docs.yaml/badge.svg"></a>
-<a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-blue.svg"></a>
+<a href="https://github.com/cuihairu/oddsmaker/releases"><img alt="Status" src="https://img.shields.io/badge/status-in%20development-orange"></a> <a href="https://github.com/cuihairu/oddsmaker/actions/workflows/ci.yaml"><img alt="CI" src="https://github.com/cuihairu/oddsmaker/actions/workflows/ci.yaml/badge.svg"></a> <a href="https://cuihairu.github.io/oddsmaker/"><img alt="Docs" src="https://github.com/cuihairu/oddsmaker/actions/workflows/docs.yaml/badge.svg"></a> <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-blue.svg"></a>
 </p>
 
 </div>
