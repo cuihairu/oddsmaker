@@ -1,7 +1,5 @@
 # 02 - Design Issue List
 
-> 🌐 Language: **English** · 中文 → [02-design-issues.md](02-design-issues.md)
-
 Graded by severity: P0 must be fixed immediately, P1 affects core capabilities, P2 is an enhancement item.
 
 ## P0-1 The Target Architecture Should Not Continue to Do Multi-Tenancy

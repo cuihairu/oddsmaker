@@ -1,7 +1,5 @@
 # End-to-End Verification Scripts (E2E)
 
-> 🌐 Language: **English** · 中文 → [e2e.md](e2e.md)
-
 Run with one command
 ```bash
 bash scripts/e2e.sh

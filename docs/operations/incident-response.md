@@ -1,7 +1,5 @@
 # Oddsmaker Incident Response Runbook
 
-> 🌐 Language: **English** · 中文 → [incident-response.zh.md](../zh/operations/incident-response)
-
 ## Overview
 
 This runbook provides procedures for responding to incidents affecting the Oddsmaker Gaming Analytics Platform.

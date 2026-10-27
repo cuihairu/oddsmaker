@@ -1,7 +1,5 @@
 # 端到端验证脚本（E2E）
 
-> 🌐 Language: **中文** · English → [e2e.en.md](../../getting-started/e2e)
-
 一键执行
 ```bash
 bash scripts/e2e.sh

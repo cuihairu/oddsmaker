@@ -1,7 +1,5 @@
 # MMP 归因接入评估（P7-5 调研报告）
 
-> 🌐 Language: **中文** · English → [mmp-attribution-evaluation.md](mmp-attribution-evaluation.md)
-
 > 对应 `docs/competitive-analysis.md` 差距矩阵第 5 项「归因/买量（MMP 集成、CPI/ROAS）」。
 > 结论先行：**技术可行、路径清晰，但强依赖外部 MMP 账号与套餐权限——建议立项（P8）但以真实账号可用性为前置条件**，本文档给出建表草案与推荐接入路径。
 

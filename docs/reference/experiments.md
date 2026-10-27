@@ -1,7 +1,5 @@
 # Experiments API
 
-> 🌐 Language: **English** · 中文 → [experiments.zh.md](../zh/reference/experiments)
-
 A/B test analytics API, used to analyze experiment data and conversion rates.
 
 ## Endpoint List

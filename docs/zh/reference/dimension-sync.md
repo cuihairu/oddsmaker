@@ -1,7 +1,5 @@
 # 维度数据同步设计
 
-> 🌐 Language: **中文** · English → [dimension-sync.en.md](../../reference/dimension-sync)
-
 > **实现状态（2026-10）**：已落地的是 Sync Agent（`agents/dimension-sync-agent/`，mysql/postgres/csv/excel/kafka 五类 source）、**HTTP Pull 链路**（Control 侧 scheduler + Bearer 凭证 AES-GCM 加密托管 + `next_cursor` 断点续传，配置见 `dimension-pulls` API）、**Pull 配置 YAML 面**（`dimension-pulls/export` + `/import`，凭证永不落盘）、**Agent 属性面 Control 托管**（`agent-configs` API + 控制台「Agent 托管配置」面 + `/api/dimensions/agent-configs/resolved` 下发口，密钥 AES-GCM 密文托管；Agent 端 `control.config-url` 开关启动拉取 + 本地文件兜底，`control.config-refresh-seconds` 轮询热更新，优先级 本地 < Control < System property）、`/v1/batch` 维度事件通道和 `dimension-sync-job`（消费 `oddsmaker.events_raw` 写 `item_dim`/`level_dim`）。仅剩 Debezium CDC（外部依赖最重，待游戏方 Kafka 基建）一条未落地——本文对未落地部分逐处标注。
 
 ## 结论

@@ -1,7 +1,5 @@
 # 后续推进规划
 
-> 🌐 Language: **中文** · English → [follow-up-plan.en.md](../../reference/follow-up-plan)
-
 本文档记录 Oddsmaker 当前未完成的功能项，按优先级排列，包含设计、实现方案和验收标准。每项推进前先在此登记，避免散落讨论。
 
 > **2026-09 状态同步**：本清单为早期行动项视角，现按各项落地结果标注状态（详见下表与各节状态行）。阶段级进度以仓库根 `todo.md` 为活跃跟踪表——P7 竞品差距收敛已全部完成（发布说明见 [release-notes/v0.2.0.md](../../release-notes/v0.2.0.md)），其后维度同步 Agent（§4）与 Python 训练管线（§6）也已交付。本清单各项已交付；仓库当前在册：P8 MMP 归因（暂停）与 `todo.md` 开放需求两条（Debezium CDC 维度同步、ML 异常检测进评估批次）。

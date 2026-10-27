@@ -1,7 +1,5 @@
 # Oddsmaker 故障排查指南
 
-> 🌐 Language: **中文** · English → [troubleshooting.md](troubleshooting.md)
-
 ## 快速诊断
 
 ### 健康检查命令

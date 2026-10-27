@@ -1,7 +1,5 @@
 # 04 - Redesign Proposal
 
-> 🌐 Language: **English** · 中文 → [04-redesign.md](04-redesign.md)
-
 ## 1. Design Principles
 
 1. **Single-company deployment**: the company is the deployment boundary, not a business tenant; the multi-tenant model is no longer built.

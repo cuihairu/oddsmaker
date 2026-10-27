@@ -1,7 +1,5 @@
 # 03 - 参考项目取舍
 
-> 🌐 Language: **中文** · English → [03-open-source-reference.en.md](../../redesign/03-open-source-reference)
-
 本章只讨论 Oddsmaker 应该借鉴哪些能力。**不要照搬开源分析产品的 SaaS 多租户模型**。
 
 ## 1. 参考矩阵

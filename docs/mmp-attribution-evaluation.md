@@ -1,7 +1,5 @@
 # MMP Attribution Integration Evaluation (P7-5 Research Report)
 
-> 🌐 Language: **English** · 中文 → [mmp-attribution-evaluation.zh.md](zh/mmp-attribution-evaluation)
-
 > Corresponds to item 5 "Attribution / UA (MMP integration, CPI/ROAS)" in the gap matrix of `docs/competitive-analysis.md`.
 > Conclusion first: **Technically feasible, path is clear, but it depends heavily on an external MMP account and the right plan tier — recommend initiating the project (P8) with actual account availability as a precondition**. This document provides the table-creation draft and the recommended integration path.
 

@@ -1,7 +1,5 @@
 # Oddsmaker Control Service API Reference
 
-> 🌐 Language: **English** · 中文 → [api-reference.zh.md](api-reference.zh.md)
-
 Oddsmaker is a single-company, multi-game analytics and risk-control platform. The control service manages games, environments, storage profiles, API keys, tracking plans, risk rules, users, role assignments, and audit logs.
 
 Oddsmaker does not model `Organization` or `Tenant` as target business resources. The core business boundary is `game_id + environment`, while physical routing is controlled by `storage_profile`.

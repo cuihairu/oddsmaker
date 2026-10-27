@@ -1,7 +1,5 @@
 # 网关性能调参建议（Oddsmaker Gateway）
 
-> 🌐 Language: **中文** · English → [perf-tuning.en.md](../../operations/perf-tuning)
-
 目标：在高吞吐（10k–50k evts/s）下保持稳定低延迟与低错误率。以下建议按 JVM、Reactor Netty、Kafka Producer、操作系统与部署层面给出。
 
 JVM/GC

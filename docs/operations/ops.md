@@ -1,7 +1,5 @@
 # Production Deployment and Operations Recommendations (Oddsmaker)
 
-> 🌐 Language: **English** · 中文 → [ops.md](ops.md)
-
 Goal: high availability, low latency, replayable and recomputable, with comprehensive monitoring. The recommendations below provide capacity estimates, key parameters, monitoring points, and alert thresholds per component.
 
 Overall capacity estimates (reference)

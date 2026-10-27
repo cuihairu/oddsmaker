@@ -1,7 +1,5 @@
 # Startup Guide (Locally Tested Path)
 
-> 🌐 Language: **English** · 中文 → [startup.zh.md](../zh/operations/startup)
-
 > This document is organized from the **tested steps** of bringing up the full stack from scratch on a Linux host (podman + docker shim) on 2026-09-23,
 > not an ideal path copied from the README. The pitfalls hit and the landmines fixed are recorded along the way so that those who follow can simply copy them.
 

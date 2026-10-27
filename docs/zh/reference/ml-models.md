@@ -1,7 +1,5 @@
 # ML Models API
 
-> 🌐 Language: **中文** · English → [ml-models.md](ml-models.md)
-
 机器学习模型管理 API，用于模型训练、部署和预测。实际训练由 `ml/` 目录的 `oddsmaker-ml` Python 管线执行（churn / pltv / risk / propensity 四类线性可解释模型），产物为版本化 JSON，经 `/api/ml-artifacts` 注册后由 Control 侧批量打分回写。
 
 ## 端点列表

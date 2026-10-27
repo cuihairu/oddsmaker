@@ -1,7 +1,5 @@
 # Experiment Platform (A/B) MVP
 
-> 🌐 Language: **English** · 中文 → [experiments.md](experiments.md)
-
 Goal: provide configurable experiments (variants/weights/target rules), consistent assignment and exposure events on the SDK side, and fast aggregation of exposure and conversion metrics on the ClickHouse side.
 
 Data model (control plane)

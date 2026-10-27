@@ -1,7 +1,5 @@
 # Oddsmaker Control Plane API (Target Model)
 
-> 🌐 Language: **English** · 中文 → [control.md](control.md)
-
 The control plane manages a single company's games, environments, API Keys, Tracking Plans, PII policies, risk policies, user permissions, and audit logs.
 
 There is no longer an Organization/Tenant API design. Company information belongs to deployment configuration and is not treated as a business resource.

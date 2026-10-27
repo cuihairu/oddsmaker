@@ -1,7 +1,5 @@
 # Gateway Performance Tuning Recommendations (Oddsmaker Gateway)
 
-> 🌐 Language: **English** · 中文 → [perf-tuning.md](perf-tuning.md)
-
 Goal: maintain stable low latency and low error rates under high throughput (10k–50k evts/s). The recommendations below cover the JVM, Reactor Netty, Kafka Producer, OS, and deployment layers.
 
 JVM/GC

@@ -1,7 +1,5 @@
 # 06 - Oddsmaker 2.0 Restructure Plan (Code Agent Executable Edition)
 
-> 🌐 Language: **English** · 中文 → [06-od2-restructure-plan.md](06-od2-restructure-plan.md)
-
 > **Role**: this document converges 04-redesign (the new architecture) and 05-roadmap (the implementation roadmap) into a single **contract that can be handed directly to a Code Agent for batch-by-batch execution**:
 > The domain model, module boundaries, and data contracts are fixed once and for all; afterwards each batch is executed in turn per the batches in §8, each batch carrying acceptance criteria and gates.
 > Source materials: this document + `04-redesign.md` + `05-roadmap.md` + `todo.md` in the repo root (80/80 all checked off = the state at that time).

@@ -68,8 +68,6 @@ if (typeof window !== 'undefined') {{
 </script>
 
 
-> 🌐 Language: **English** · 中文 → [zh/index.md](/zh/)
-
 ## Quick Start
 
 ```bash

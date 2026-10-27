@@ -1,7 +1,5 @@
 # 游戏分析场景覆盖度分析
 
-> 🌐 Language: **中文** · English → [gaming-scenarios.md](gaming-scenarios.md)
-
 本文档分析 Oddsmaker 平台对游戏分析场景的覆盖程度和自由度。
 
 ## 总体评估

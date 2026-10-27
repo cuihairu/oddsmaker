@@ -1,7 +1,5 @@
 # Oddsmaker 全 Java 架构（单公司多游戏）
 
-> 🌐 Language: **中文** · English → [architecture.en.md](../../reference/architecture)
-
 目标：为一个游戏公司内部提供多游戏、多环境的实时分析和风控平台。公司是部署边界，不做多公司共用的多租户 SaaS。
 
 ## 总览

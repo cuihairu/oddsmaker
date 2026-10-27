@@ -1,7 +1,5 @@
 # Flink Jobs
 
-> 🌐 Language: **English** · 中文 → [jobs.md](jobs.md)
-
 Contains 7 jobs:
 - events-enrich-job: validation/deduplication/enrichment (UA/GeoIP) → ClickHouse events
 - sessions-job: 30-minute session window → ClickHouse sessions

@@ -1,7 +1,5 @@
 # Chinese Reference
 
-> 🌐 Language: **English** · 中文 → [index.md](index.md)
-
 This section organizes the Chinese API and game analytics scenario documents.
 
 ## Architecture and Interfaces

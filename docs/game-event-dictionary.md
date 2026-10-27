@@ -1,7 +1,5 @@
 # Game Event Dictionary
 
-> 🌐 Language: **English** · 中文 → [game-event-dictionary.zh.md](zh/game-event-dictionary)
-
 Updated: `2026-10-05`
 
 This dictionary pins down the first-stage goal of `complier`: unify event names, fix core fields, keep room for extension. The principle is "preset core events + custom extension fields".

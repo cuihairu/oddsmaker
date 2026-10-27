@@ -1,7 +1,5 @@
 # API 参考
 
-> 🌐 Language: **中文** · English → [index.md](index.md)
-
 欢迎使用 Oddsmaker API 参考。本部分提供所有 API 端点的详细文档。
 
 ## Base URL

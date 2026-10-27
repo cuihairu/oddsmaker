@@ -1,7 +1,5 @@
 # Oddsmaker Control Service API 参考
 
-> 🌐 Language: **中文** · English → [api-reference.md](api-reference.md)
-
 Oddsmaker 是一个单公司、多游戏的分析与风控平台。control 服务管理游戏、环境、存储档案、API key、埋点方案（tracking plan）、风控规则、用户、角色分配与审计日志。
 
 Oddsmaker 不把 `Organization` 或 `Tenant` 建模为目标业务资源。核心业务边界是 `game_id + environment`，物理路由则由 `storage_profile` 控制。

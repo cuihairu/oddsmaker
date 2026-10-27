@@ -1,7 +1,5 @@
 # 文档总览
 
-> 🌐 Language: **中文** · English → [README.md](README.md)
-
 本目录是 Oddsmaker 的文档源（VitePress）。线上站点按语言分英文（`/`）和中文（`/zh/`）两套入口。
 
 ## 入口

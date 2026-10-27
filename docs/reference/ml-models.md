@@ -1,7 +1,5 @@
 # ML Models API
 
-> 🌐 Language: **English** · 中文 → [ml-models.zh.md](../zh/reference/ml-models)
-
 Machine learning model management API for model training, deployment, and prediction. Actual training is executed by the `oddsmaker-ml` Python pipeline in the `ml/` directory (four types of linear, interpretable models: churn / pltv / risk / propensity). The outputs are versioned JSON, registered via `/api/ml-artifacts`, and then batch-scored and written back by the Control side.
 
 ## Endpoint List

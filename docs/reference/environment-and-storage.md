@@ -1,7 +1,5 @@
 # Environment and Storage Profile Design
 
-> 🌐 Language: **English** · 中文 → [environment-and-storage.md](environment-and-storage.md)
-
 Oddsmaker's goal is not to build a multi-tenant SaaS that "looks sophisticated", but to provide **a single game company** with a genuinely operable multi-game analytics and risk control platform.
 
 This means the model must satisfy three things at once:

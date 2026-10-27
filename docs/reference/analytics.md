@@ -1,7 +1,5 @@
 # Analytics API
 
-> 🌐 Language: **English** · 中文 → [analytics.zh.md](analytics.zh.md)
-
 The analytics API covers five categories — revenue, ads, sessions, performance, and social — all reported by gameId.
 
 ## Base URL

@@ -1,7 +1,5 @@
 # Risk API
 
-> 🌐 Language: **English** · 中文 → [risk.zh.md](../zh/reference/risk)
-
 Risk control management API for risk rules, case management, and real-time risk assessment.
 
 ## Endpoint List

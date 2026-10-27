@@ -1,7 +1,5 @@
 # Dimension Data Sync Design
 
-> 🌐 Language: **English** · 中文 → [dimension-sync.md](dimension-sync.md)
-
 > **Implementation status (2026-10)**: What has landed is the Sync Agent (`agents/dimension-sync-agent/`, five source types: mysql/postgres/csv/excel/kafka), the **HTTP Pull pipeline** (Control-side scheduler + Bearer credential AES-GCM encrypted custody + `next_cursor` resumable transfer, configuration in the `dimension-pulls` API), the **Pull config YAML surface** (`dimension-pulls/export` + `/import`, credentials never written to disk), **Control custody of the Agent property surface** (`agent-configs` API + the console "Agent Managed Config" surface + the `/api/dimensions/agent-configs/resolved` delivery endpoint, secret keys under AES-GCM ciphertext custody; on the Agent side the `control.config-url` switch triggers a startup fetch + local file fallback, and `control.config-refresh-seconds` polls for hot updates, precedence local < Control < System property), the `/v1/batch` dimension event channel, and `dimension-sync-job` (consumes `oddsmaker.events_raw` and writes `item_dim`/`level_dim`). Only Debezium CDC remains unimplemented (heaviest external dependency, pending game-side Kafka infrastructure)—this document marks every unimplemented part inline.
 
 ## Conclusion

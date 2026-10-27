@@ -1,7 +1,5 @@
 # Developer Guide (Local)
 
-> 🌐 Language: **English** · 中文 → [developer.md](developer.md)
-
 One-command demo
 ```bash
 bash scripts/quickstart.sh

@@ -1,7 +1,5 @@
 # K8s Deployment (Example)
 
-> 🌐 Language: **English** · 中文 → [deploy.k8s.md](deploy.k8s.md)
-
 Prerequisites
 - Have an existing Kafka/Schema Registry/ClickHouse cluster (or use a cloud service) and obtain the addresses
 - Images: CI builds and pushes a single-image dual-service `ghcr.io/cuihairu/oddsmaker:nightly` (root `Dockerfile`, `SERVICE=control|gateway` selects the service, aligned with the `deploy/k8s/` manifests); to build separately, `services/gateway-service/Dockerfile` and `services/control-service/Dockerfile` can each be built

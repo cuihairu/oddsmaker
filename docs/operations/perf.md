@@ -1,7 +1,5 @@
 # Performance and Load Testing Guide
 
-> 🌐 Language: **English** · 中文 → [perf.md](perf.md)
-
 Goal: verify the throughput, latency, and error rate of the gateway /v1/batch under different batch sizes and rates; evaluate the stability of downstream (Kafka/CH/Flink) under load testing.
 
 Preparation

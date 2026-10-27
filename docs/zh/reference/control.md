@@ -1,7 +1,5 @@
 # Oddsmaker 控制面 API（目标模型）
 
-> 🌐 Language: **中文** · English → [control.en.md](../../reference/control)
-
 控制面负责管理一个公司内部的游戏、环境、API Key、Tracking Plan、PII 策略、风控策略、用户权限和审计日志。
 
 不再设计 Organization/Tenant API。公司信息属于部署配置，不作为业务资源。

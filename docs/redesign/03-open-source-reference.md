@@ -1,7 +1,5 @@
 # 03 - Reference Project Trade-Offs
 
-> 🌐 Language: **English** · 中文 → [03-open-source-reference.md](03-open-source-reference.md)
-
 This chapter discusses only which capabilities Oddsmaker should borrow. **Do not copy the SaaS multi-tenant model of open-source analytics products**.
 
 ## 1. Reference Matrix

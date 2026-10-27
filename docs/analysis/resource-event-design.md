@@ -1,7 +1,5 @@
 # Oddsmaker Resource Event Design
 
-> 🌐 Language: **English** · 中文 → [resource-event-design.zh.md](../zh/analysis/resource-event-design)
-
 ## Conclusion
 
 Oddsmaker adopts a **resource-flow fact model**:

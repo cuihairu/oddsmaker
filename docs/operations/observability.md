@@ -1,7 +1,5 @@
 # Observability (Metrics/Traces/Logs)
 
-> 🌐 Language: **English** · 中文 → [observability.md](observability.md)
-
 Local monitoring stack
 - OTel Collector: receives OTLP (:4317/:4318), exports via Prometheus (:9464)
 - Prometheus: scrapes metrics exposed by the OTel Collector (otelcol_*)

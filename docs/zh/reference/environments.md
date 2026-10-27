@@ -1,7 +1,5 @@
 # Environments API
 
-> 🌐 Language: **中文** · English → [environments.md](environments.md)
-
 环境管理 API，用于管理游戏的不同部署环境（dev、staging、prod）。
 
 ## 端点列表

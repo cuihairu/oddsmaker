@@ -1,7 +1,5 @@
 # SDK Design Specification (Cross-Platform Consistency)
 
-> 🌐 Language: **English** · 中文 → [sdk-design.md](sdk-design.md)
-
 Initialization
 - `apiKey`, `endpoint`, `gameId`, `environment`; `deviceId` auto-generated (overridable).
 - Batch sending: triggered by default at 5s or 50 events; `application/x-ndjson`; retries/queues on failure.

@@ -40,8 +40,6 @@ features:
     details: MFA、RBAC 和完整审计日志
 ---
 
-> 🌐 Language: **中文** · English → [index.md](/)
-
 ## 快速开始
 
 ```bash

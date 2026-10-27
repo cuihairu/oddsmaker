@@ -1,7 +1,5 @@
 # 04 - 重设计方案
 
-> 🌐 Language: **中文** · English → [04-redesign.en.md](../../redesign/04-redesign)
-
 ## 1. 设计原则
 
 1. **单公司部署**：公司是部署边界，不是业务租户；不再建多租户模型。

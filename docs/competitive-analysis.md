@@ -1,6 +1,5 @@
 # Oddsmaker Competitive Comparison and Feature Gap Analysis
 
-> 🌐 Language: **English** · 中文 → [competitive-analysis.zh.md](zh/competitive-analysis)
 > Research date: 2026-09 ｜ Method: web search + official documentation of each product (Unity docs.unity.com / firebase.google.com / gameanalytics.com / learn.microsoft.com PlayFab / posthog.com)
 > Use of the conclusions: update `todo.md` roadmap priorities (adding the P7 gap-closure batch) and drive the first landed feature (P7-1 live event inspector).
 

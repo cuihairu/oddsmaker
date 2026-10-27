@@ -1,7 +1,5 @@
 # 分析 API
 
-> 🌐 Language: **中文** · English → [analytics.en.md](analytics.en.md)
-
 分析 API 覆盖收入、广告、会话、性能和社交五类，均按 gameId 出数。
 
 ## 基础 URL

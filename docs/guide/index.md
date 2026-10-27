@@ -1,7 +1,5 @@
 # Getting Started
 
-> 🌐 Language: **English** · 中文 → [index.zh.md](../zh/guide/index)
-
 Welcome to Oddsmaker, the professional gaming analytics platform for single company operating multiple games.
 
 ## Overview

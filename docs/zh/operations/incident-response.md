@@ -1,7 +1,5 @@
 # Oddsmaker 事故响应手册
 
-> 🌐 Language: **中文** · English → [incident-response.md](incident-response.md)
-
 ## 概览
 
 本手册提供针对影响 Oddsmaker 游戏分析平台的事故的响应流程。

@@ -1,7 +1,5 @@
 # SDK 设计规范（跨端一致）
 
-> 🌐 Language: **中文** · English → [sdk-design.en.md](../../reference/sdk-design)
-
 初始化
 - `apiKey`, `endpoint`, `gameId`, `environment`，自动生成 `deviceId`（可覆盖）。
 - 批量发送：默认 5s 或 50 条触发；`application/x-ndjson`；失败后重试/回队列。

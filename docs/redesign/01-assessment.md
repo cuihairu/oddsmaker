@@ -1,7 +1,5 @@
 # 01 - Current-State Assessment
 
-> 🌐 Language: **English** · 中文 → [01-assessment.md](01-assessment.md)
-
 ## 1. Project Positioning Deviation
 
 The current documentation positions the old project as an "enterprise-grade multi-tenant game data analytics platform", but this direction does not match the real private-deployment game company scenario.

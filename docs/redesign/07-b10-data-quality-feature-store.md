@@ -1,7 +1,5 @@
 # B10 Final Design: Data Quality Metrics and Shared Feature Dual Write
 
-> 🌐 Language: **English** · 中文 → [07-b10-data-quality-feature-store.md](07-b10-data-quality-feature-store.md)
-
 This document is the final design of the B10 batch; the contract comes from §5.3 of the plan document and from the B10 row (`06-od2-restructure-plan`): the five Data Quality metrics + the direction of the Game Data Health page, the shared Feature dual-write schema, and no Data Lineage system. This batch has already landed together with B10 (8eba96c) (the V0.9.22 migration, DataQualityController, DataQualityReporter, DeadLetterConsumer, etc.); the line numbers below are design-draft numbering, and after landing the source code is authoritative. All signal points were verified by reading the code; the files and line numbers are given in each section, and the verification is based on the 2026-10-07 working copy.
 
 ## 1 Scope

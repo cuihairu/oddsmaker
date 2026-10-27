@@ -1,7 +1,5 @@
 # 游戏事件字典
 
-> 🌐 Language: **中文** · English → [game-event-dictionary.md](game-event-dictionary.md)
-
 更新时间：`2026-10-05`
 
 这份字典用于把 `complier` 的第一阶段目标固定下来：统一事件名、固定核心字段、保留扩展空间。原则是“预置核心事件 + 自定义扩展字段”。

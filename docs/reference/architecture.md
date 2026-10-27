@@ -1,7 +1,5 @@
 # Oddsmaker All-Java Architecture (Single Company, Multiple Games)
 
-> 🌐 Language: **English** · 中文 → [architecture.md](architecture.md)
-
 Goal: provide a real-time analytics and risk-control platform for multiple games and multiple environments inside one game company. The company is the deployment boundary; no multi-company shared multi-tenant SaaS.
 
 ## Overview

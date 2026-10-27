@@ -1,7 +1,5 @@
 # 可观测性（Metrics/Traces/Logs）
 
-> 🌐 Language: **中文** · English → [observability.en.md](../../operations/observability)
-
 本地监控栈
 - OTel Collector：接收 OTLP（:4317/:4318），Prometheus 导出（:9464）
 - Prometheus：抓取 OTel Collector 暴露指标（otelcol_*）

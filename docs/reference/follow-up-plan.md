@@ -1,7 +1,5 @@
 # Follow-up Plan
 
-> 🌐 Language: **English** · 中文 → [follow-up-plan.md](follow-up-plan.md)
-
 This document records Oddsmaker's currently unfinished feature items, ordered by priority, including design, implementation approach, and acceptance criteria. Each item is registered here before work starts, to avoid scattered discussion.
 
 > **2026-09 status sync**: This list is written from an early action-item perspective; status is now annotated by each item's outcome (see the table below and the status line in each section). Stage-level progress uses the repo root `todo.md` as the active tracking table—P7 competitor-gap convergence is fully complete (release notes in [release-notes/v0.2.0.md](../release-notes/v0.2.0.md)), and the subsequent dimension sync Agent (§4) and the Python training pipeline (§6) have also been delivered. All items in this list have been delivered; the repo currently has on the books: P8 MMP attribution (paused) and two open requirements in `todo.md` (Debezium CDC dimension sync, ML anomaly detection into the evaluation batch).

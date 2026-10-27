@@ -1,7 +1,5 @@
 # K8s 部署（示例）
 
-> 🌐 Language: **中文** · English → [deploy.k8s.en.md](../../operations/deploy.k8s)
-
 前提
 - 已有 Kafka/Schema Registry/ClickHouse 集群（或使用云服务），拿到地址
 - 镜像：CI 构建推送单镜像双服务 `ghcr.io/cuihairu/oddsmaker:nightly`（根 `Dockerfile`，`SERVICE=control|gateway` 选服务，与 `deploy/k8s/` 清单对齐）；如需自建，`services/gateway-service/Dockerfile` 与 `services/control-service/Dockerfile` 可各自构建

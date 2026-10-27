@@ -1,7 +1,5 @@
 # Oddsmaker Platform Redesign Plan (Index)
 
-> 🌐 Language: **English** · 中文 → [index.md](index.md)
-
 This directory records the new target architecture for the Oddsmaker game analytics platform: **single-company deployment, multi-game management, multi-environment isolation, built-in risk control**.
 
 ## Design Boundary

@@ -1,7 +1,5 @@
 # Oddsmaker Ingestion API
 
-> 🌐 Language: **English** · 中文 → [api.md](api.md)
-
 Path: `POST /v1/batch`
 
 ## Headers

@@ -1,7 +1,5 @@
 # 入门
 
-> 🌐 Language: **中文** · English → [index.md](index.md)
-
 欢迎使用 Oddsmaker——面向单公司运营多款游戏的专业游戏分析平台。
 
 ## 概览

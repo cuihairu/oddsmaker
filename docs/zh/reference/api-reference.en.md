@@ -1,7 +1,5 @@
 # Control Service API Reference Index
 
-> 🌐 Language: **English** · 中文 → [api-reference.md](api-reference.md)
-
 This is the Chinese entry point to the Control Service REST API.
 
 ## Reference Contents

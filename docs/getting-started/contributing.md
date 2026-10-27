@@ -1,7 +1,5 @@
 # Contributing Guide
 
-> 🌐 Language: **English** · 中文 → [contributing.md](contributing.md)
-
 Code style
 - Java: Google Java Style (2-space indentation); Spring Boot 4; Lombok disabled (for ease of review)
 - Kotlin: official Kotlin style; Android SDK depends only on OkHttp

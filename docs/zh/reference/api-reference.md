@@ -1,7 +1,5 @@
 # 控制服务 API 参考索引
 
-> 🌐 Language: **中文** · English → [api-reference.en.md](api-reference.en.md)
-
 这是控制服务 REST API 的中文入口。
 
 ## 参考内容

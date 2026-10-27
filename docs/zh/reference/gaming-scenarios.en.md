@@ -1,7 +1,5 @@
 # Game Analytics Scenario Coverage
 
-> 🌐 Language: **English** · 中文 → [gaming-scenarios.md](gaming-scenarios.md)
-
 This document analyzes the coverage and flexibility of the Oddsmaker platform with respect to game analytics scenarios.
 
 ## Overall Assessment

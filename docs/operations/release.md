@@ -1,7 +1,5 @@
 # Release Guide (30-Minute Demo Spin-Up + Production Checklist)
 
-> 🌐 Language: **English** · 中文 → [release.md](release.md)
-
 Quick demo (≈10–30 minutes)
 1) Dependencies
 - Docker + docker compose

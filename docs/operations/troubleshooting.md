@@ -1,7 +1,5 @@
 # Oddsmaker Troubleshooting Guide
 
-> 🌐 Language: **English** · 中文 → [troubleshooting.zh.md](../zh/operations/troubleshooting)
-
 ## Quick Diagnostics
 
 ### Health Check Commands
