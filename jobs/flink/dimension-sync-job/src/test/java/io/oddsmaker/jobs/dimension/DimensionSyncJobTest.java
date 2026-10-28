@@ -295,7 +295,7 @@ class DimensionSyncJobTest {
         assertEquals(7, calls.size());
     }
 
-    // ===== parseProps / parseDebezium 边角 =====
+    // ===== parseProps 边角 =====
 
     @Test
     @DisplayName("parseProps：无 attributes 对象时顶层字段兜底（保留字段排除后全收）")

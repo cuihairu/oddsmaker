@@ -13,7 +13,7 @@
 ## 开放需求
 
 - [ ] T-DEMO502 Demo 站公网 502（P1 交付面故障，owner=用户侧；解锁条件=用户在 CF 面板把 `oddsmaker.cuihairu.site` 的 origin A 记录改指 `106.14.216.177`（保持橙云），并把源站 443 换回受信证书或把 CF SSL 临时改为 Full）：2026-10-28 15:49 CST p1028 复核：经 CF=502（Cloudflare edge 响应）；`curl --resolve` 直连源站 origin80=200、origin443=200（`-k`）；`openssl s_client` Verify return code 18，证书仍为 self-signed（subject=issuer=CN=oddsmaker.cuihairu.site）；较 2026-10-22 无变化。仓内与源站无可修项，剩余动作均在用户 CF/源站 TLS 面板
-- [ ] T-CDC Debezium CDC 维度同步（P3，owner=等外部输入；解锁条件=游戏方开 binlog + 部署 Kafka Connect + 提供 CDC 事件格式与目标表映射，三者齐备即开工）：仓内预备面已备（2026-10-19：`docs/zh/reference/dimension-sync.md` CDC 节三选项对比 + 信封→`RawDimensionChange` 字段映射表，实证选项 C 不可行=缺 resource_id 控制列全量静默丢弃；A/B 两径待解锁后按游戏方配合度拍板；中英镜像对称，`pnpm docs:build` 绿；Flink 侧信封解析代码面亦有——`DimensionSyncJobTest.java:298` parseDebezium 边角已单测）。2026-10-20 PATROL1020 实测：`grep -rl binlog deploy/`=0、`debezium` 仓内引用=设计文档+台账+该 Flink 单测（deploy/ 与接线配置 0 处）；游戏方 binlog/Kafka Connect/格式映射三项外部输入仍未到。2026-10-28 15:49 CST p1028 复核：`grep -rl binlog deploy/`=0、`debezium` 仓内引用仍=设计文档+台账+该 Flink 单测（deploy/ 与接线配置 0 处）；三项外部输入仍未到，解锁三条件仍缺
+- [ ] T-CDC Debezium CDC 维度同步（P3，owner=等外部输入；解锁条件=游戏方开 binlog + 部署 Kafka Connect + 提供 CDC 事件格式与目标表映射，三者齐备即开工）：仓内预备面已备（2026-10-19：`docs/zh/reference/dimension-sync.md` CDC 节三选项对比 + 信封→`RawDimensionChange` 字段映射表，实证选项 C 不可行=缺 resource_id 控制列全量静默丢弃；A/B 两径待解锁后按游戏方配合度拍板；中英镜像对称，`pnpm docs:build` 绿；Flink 生产代码仅 `parseProps` 扁平事件解析，Debezium 未实现）。2026-10-20 PATROL1020 实测：`grep -rl binlog deploy/`=0、`debezium` 仓内引用=设计文档+台账（deploy/ 与接线配置 0 处）；游戏方 binlog/Kafka Connect/格式映射三项外部输入仍未到。2026-10-28 15:49 CST p1028 复核：`grep -rl binlog deploy/`=0、`debezium` 仓内引用仍=设计文档+台账（deploy/ 与接线配置 0 处）；三项外部输入仍未到，解锁三条件仍缺。2026-10-28 审核更正：此前「Flink 信封解析已单测」不成立，`DimensionSyncJobTest.java` 原第 298 行仅为注释误提 parseDebezium，已清理
 - [ ] T-ML ML 异常检测进评估批次（P3，owner=等部署面；解锁条件=四项触发条件任一达标；条件 a 需先有 infra 栈部署 + 带网关流量的部署面，自指标落库起算满 7 天（7d）/28 天（28d 分位基线））：条件 a 时钟未起。2026-10-20 r1020j 实测：demo compose 服务面=postgres/redis/control-service（无 gateway、无 prometheus/otel 组件）→ 无部署面；条件 b/c（阈值调整次数/误杀率）无记录面，不可测不可判，不编造。读数通道=demo-diagnose 的 `prometheus_tsdb_head_min_time` 取证腿（runner-docker offline 期间暂不可用）。2026-10-28 15:49 CST p1028 复核：demo compose 服务面仍=postgres/redis/control-service（无 gateway、无 prometheus/otel 组件）→ 条件 a 时钟仍未起
 
 ## 已完成需求
@@ -94,3 +94,7 @@
 - CF DNS 域名切换属用户侧操作，本仓不动
 - P8 MMP 归因接入暂停：前置 MMP 原始数据导出权限未达成
 - 旧评估完成度数字（80/80 等）不得再引用为现状
+
+## 审核发现
+
+- [x] 审核发现：T-CDC 行声称 Flink 侧已有 `parseDebezium` 信封解析及单测，但生产代码仅有扁平 `parseProps`，`DimensionSyncJobTest.java:298` 只是注释中提及该名且无对应测试，文档亦明确 Debezium 未实现（todo.md:16）——属实；已修正 T-CDC 表述并移除注释残留，Flink 单测全绿
