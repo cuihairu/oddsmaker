@@ -98,4 +98,5 @@
 ## 审核发现
 
 - [x] 审核发现：T-CDC 行声称 Flink 侧已有 `parseDebezium` 信封解析及单测，但生产代码仅有扁平 `parseProps`，`DimensionSyncJobTest.java:298` 只是注释中提及该名且无对应测试，文档亦明确 Debezium 未实现（todo.md:16）——属实；已修正 T-CDC 表述并移除注释残留，Flink 单测全绿
-- [x] 审核发现：772b1ff..HEAD 未发现问题
+- [x] 审核发现：cce16e68d6938bbaac62afb8c5c699b2076afbbc..HEAD 未发现问题（范围已更正：原误记为 772b1ff..HEAD，该范围误含 96953c3 T-CDC 发现与修正、cce16e6 BLOCKED 收尾，非「未发现问题」；cce16e6..HEAD 仅含 41f2049 记录行本身，无问题）
+- [x] 审核发现：审核范围应记为 cce16e68d6938bbaac62afb8c5c699b2076afbbc..HEAD，但新增行误记为 772b1ff..HEAD，与实际审核范围不一致（todo.md:101）——属实；已更正第 101 行范围为 cce16e6..HEAD，`git rev-list --count cce16e6..HEAD`=1（仅 41f2049 记录行）、`git log --oneline cce16e6..HEAD` 无其他提交
