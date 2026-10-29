@@ -98,3 +98,4 @@
 ## 审核发现
 
 - [x] 审核发现：T-CDC 行声称 Flink 侧已有 `parseDebezium` 信封解析及单测，但生产代码仅有扁平 `parseProps`，`DimensionSyncJobTest.java:298` 只是注释中提及该名且无对应测试，文档亦明确 Debezium 未实现（todo.md:16）——属实；已修正 T-CDC 表述并移除注释残留，Flink 单测全绿
+- [x] 审核发现：772b1ff..HEAD 未发现问题
