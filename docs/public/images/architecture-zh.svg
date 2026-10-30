@@ -1,0 +1,135 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="1180" viewBox="0 0 1280 1180" role="img" aria-labelledby="title desc" xml:lang="zh-CN">
+<title id="title">Oddsmaker · 系统架构</title>
+<desc id="desc">单公司多游戏实时分析与风控平台。SDK 事件经网关前置校验入 Kafka 与 Schema Registry，Flink 作业做富化去重、会话、留存、漏斗、风险检测与身份合并，分析结果落 ClickHouse，风险侧写 Redis 并回调游戏服 webhook；控制面写 PostgreSQL，BI 用 Superset。图示基于仓库模块与部署事实。</desc>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10Z" fill="context-stroke"/></marker></defs>
+<style>text{font-family:Arial,'Noto Sans CJK SC','Microsoft YaHei',sans-serif;fill:#172b4d}.title{font-size:30px;font-weight:700}.name{font-size:22px;font-weight:700}.body{font-size:16px;fill:#435570}.small{font-size:14px;fill:#52647b}.label{font-size:14px;fill:#435570;paint-order:stroke;stroke:#f8fafc;stroke-width:5px;stroke-linejoin:round}.edge{fill:none;stroke-linejoin:round}.dash{stroke-dasharray:7 5}</style>
+<rect width="1280" height="1180" rx="20" fill="#f8fafc"/>
+<text x="40" y="48" class="title" text-anchor="start">Oddsmaker · 系统架构</text>
+<text x="40" y="80" class="body" text-anchor="start">单公司多游戏 · game_id + environment 数据边界 · 实时分析 ＋ 风险控制同一管线</text>
+
+<path d="M175 220 V250" fill="none" stroke="#f8fafc" stroke-width="9"/>
+<path id="sdk-web" data-from="sdk-web" data-to="gateway" d="M175 220 V250" class="edge" style="stroke:#475569;stroke-width:2" marker-end="url(#arrow)"/>
+<path d="M485 220 V250" fill="none" stroke="#f8fafc" stroke-width="9"/>
+<path id="sdk-mobile" data-from="sdk-mobile" data-to="gateway" d="M485 220 V250" class="edge" style="stroke:#475569;stroke-width:2" marker-end="url(#arrow)"/>
+<path d="M795 220 V250" fill="none" stroke="#f8fafc" stroke-width="9"/>
+<path id="sdk-unity" data-from="sdk-unity" data-to="gateway" d="M795 220 V250" class="edge" style="stroke:#475569;stroke-width:2" marker-end="url(#arrow)"/>
+<path d="M1105 220 V250" fill="none" stroke="#f8fafc" stroke-width="9"/>
+<path id="sdk-server" data-from="sdk-server" data-to="gateway" d="M1105 220 V250" class="edge" style="stroke:#475569;stroke-width:2" marker-end="url(#arrow)"/>
+<path d="M300 360 V400 H175 V430" fill="none" stroke="#f8fafc" stroke-width="9"/>
+<path id="gateway-kafka" data-from="gateway" data-to="kafka" d="M300 360 V400 H175 V430" class="edge" style="stroke:#2563eb;stroke-width:2.5" marker-end="url(#arrow)"/>
+<path d="M400 560 H440" fill="none" stroke="#f8fafc" stroke-width="9"/>
+<path id="kafka-flink" data-from="kafka" data-to="flink" d="M400 560 H440" class="edge" style="stroke:#2563eb;stroke-width:2.5" marker-end="url(#arrow)"/>
+<path d="M480 760 V800 H175 V830" fill="none" stroke="#f8fafc" stroke-width="9"/>
+<path id="flink-ch" data-from="flink" data-to="clickhouse" d="M480 760 V800 H175 V830" class="edge" style="stroke:#7c3aed;stroke-width:2.5" marker-end="url(#arrow)"/>
+<path d="M1067 680 V805 H795 V830" fill="none" stroke="#f8fafc" stroke-width="9"/>
+<path id="risk-redis" data-from="risk-job" data-to="redis" d="M1067 680 V805 H795 V830" class="edge" style="stroke:#c2410c;stroke-width:2.5" marker-end="url(#arrow)"/>
+<path d="M490 930 V955 H175 V980" fill="none" stroke="#f8fafc" stroke-width="9"/>
+<path id="control-pg" data-from="postgres" data-to="control" d="M490 930 V955 H175 V980" class="edge" style="stroke:#0891b2;stroke-width:2.5" marker-end="url(#arrow)" marker-start="url(#arrow)"/>
+<path d="M175 930 V955 H485 V980" fill="none" stroke="#f8fafc" stroke-width="9"/>
+<path id="ch-dashboard" data-from="clickhouse" data-to="dashboard" d="M175 930 V955 H485 V980" class="edge" style="stroke:#7c3aed;stroke-width:2.5" marker-end="url(#arrow)"/>
+<path d="M175 930 V945 H795 V980" fill="none" stroke="#f8fafc" stroke-width="9"/>
+<path id="ch-bi" data-from="clickhouse" data-to="bi" d="M175 930 V945 H795 V980" class="edge" style="stroke:#7c3aed;stroke-width:2.5" marker-end="url(#arrow)"/>
+<path d="M795 930 V955 H1105 V980" fill="none" stroke="#f8fafc" stroke-width="9"/>
+<path id="redis-webhook" data-from="redis" data-to="webhook" d="M795 930 V955 H1105 V980" class="edge" style="stroke:#c2410c;stroke-width:2.5" marker-end="url(#arrow)"/>
+
+<g id="sdk-web" data-node="sdk-web"><rect x="40" y="130" width="270" height="90" rx="12" fill="#fff7ed" stroke="#fdba74" stroke-width="1.5"/>
+<text x="60" y="168" class="name" text-anchor="start">Web SDK</text>
+<text x="60" y="196" class="body" text-anchor="start">浏览器 / H5</text>
+</g>
+<g id="sdk-mobile" data-node="sdk-mobile"><rect x="350" y="130" width="270" height="90" rx="12" fill="#fff7ed" stroke="#fdba74" stroke-width="1.5"/>
+<text x="370" y="168" class="name" text-anchor="start">Android / iOS SDK</text>
+<text x="370" y="196" class="body" text-anchor="start">原生移动端</text>
+</g>
+<g id="sdk-unity" data-node="sdk-unity"><rect x="660" y="130" width="270" height="90" rx="12" fill="#fff7ed" stroke="#fdba74" stroke-width="1.5"/>
+<text x="680" y="168" class="name" text-anchor="start">Unity SDK</text>
+<text x="680" y="196" class="body" text-anchor="start">游戏引擎客户端</text>
+</g>
+<g id="sdk-server" data-node="sdk-server"><rect x="970" y="130" width="270" height="90" rx="12" fill="#fff7ed" stroke="#fdba74" stroke-width="1.5"/>
+<text x="990" y="168" class="name" text-anchor="start">Server SDK</text>
+<text x="990" y="196" class="body" text-anchor="start">服务端（sdks/server）</text>
+</g>
+
+<g id="gateway" data-node="gateway"><rect x="160" y="250" width="960" height="110" rx="12" fill="#fff" stroke="#cbd5e1" stroke-width="1.5"/>
+<text x="180" y="286" class="name" text-anchor="start">Gateway · /v1/batch（gateway-service）</text>
+<text x="180" y="318" class="body" text-anchor="start">前置校验：API Key / HMAC · 时间窗 · 重放 · 限流 · PII 过滤 · Schema 校验 · 风险前置检查</text>
+<text x="180" y="345" class="body" text-anchor="start">事件统一以 game_id + environment 落主题，物理路由由 storage_profile 决定</text>
+</g>
+
+<g id="kafka" data-node="kafka"><rect x="40" y="430" width="360" height="330" rx="12" fill="#eef2ff" stroke="#a5b4fc" stroke-width="1.5"/>
+<text x="60" y="466" class="name" text-anchor="start">Kafka ＋ Schema Registry</text>
+<text x="60" y="498" class="body" text-anchor="start">Kafka（KRaft 单节点）</text>
+<text x="60" y="524" class="body" text-anchor="start">Apicurio Schema Registry</text>
+<text x="60" y="550" class="body" text-anchor="start">主题按 game_id+environment 分区</text>
+<text x="60" y="590" class="small" text-anchor="start">JSON Schema + Avro 治理</text>
+<text x="60" y="616" class="small" text-anchor="start">属性白名单 · PII 策略</text>
+<text x="60" y="642" class="small" text-anchor="start">事件大小上限</text>
+<text x="60" y="690" class="small" text-anchor="start">infra/docker-compose.yml</text>
+<text x="60" y="716" class="small" text-anchor="start">apache/kafka:3.7 · apicurio 2.6</text>
+</g>
+
+<g id="flink" data-node="flink"><rect x="440" y="430" width="800" height="330" rx="12" fill="#eef2ff" stroke="#a5b4fc" stroke-width="1.5"/>
+<text x="460" y="466" class="name" text-anchor="start">Flink 流处理作业（jobs/flink）</text>
+<rect x="460" y="478" width="235" height="95" rx="10" fill="#fff" stroke="#cbd5e1" stroke-width="1.5"/>
+<text x="480" y="512" class="body" text-anchor="start">Enrich + Dedup + Identity</text>
+<text x="480" y="540" class="small" text-anchor="start">富化 · 去重 · 身份解析</text>
+<rect x="705" y="478" width="235" height="95" rx="10" fill="#fff" stroke="#cbd5e1" stroke-width="1.5"/>
+<text x="725" y="512" class="body" text-anchor="start">Sessions</text>
+<text x="725" y="540" class="small" text-anchor="start">会话聚合</text>
+<rect x="950" y="478" width="235" height="95" rx="10" fill="#fff" stroke="#cbd5e1" stroke-width="1.5"/>
+<text x="970" y="512" class="body" text-anchor="start">Retention</text>
+<text x="970" y="540" class="small" text-anchor="start">留存分析</text>
+<rect x="460" y="585" width="235" height="95" rx="10" fill="#fff" stroke="#cbd5e1" stroke-width="1.5"/>
+<text x="480" y="619" class="body" text-anchor="start">Funnels + Revenue</text>
+<text x="480" y="647" class="small" text-anchor="start">漏斗 · 收入 · 虚拟经济</text>
+<rect x="705" y="585" width="235" height="95" rx="10" fill="#fff" stroke="#cbd5e1" stroke-width="1.5"/>
+<text x="725" y="619" class="body" text-anchor="start">Risk Detection</text>
+<text x="725" y="647" class="small" text-anchor="start">脚本行为 · 资源异常 · 支付 / 广告异常</text>
+<rect x="950" y="585" width="235" height="95" rx="10" fill="#fff" stroke="#cbd5e1" stroke-width="1.5"/>
+<text x="970" y="619" class="body" text-anchor="start">Identity Merge / Dimension Sync</text>
+<text x="970" y="647" class="small" text-anchor="start">身份合并 · 维度同步</text>
+<text x="460" y="720" class="small" text-anchor="start">风险输出：mark / alert / block / review / throttle ＋ webhook；事件与证据持久化供回溯</text>
+</g>
+
+<g id="clickhouse" data-node="clickhouse"><rect x="40" y="830" width="270" height="100" rx="12" fill="#edf5ff" stroke="#93b9e3" stroke-width="1.5"/>
+<text x="60" y="868" class="name" text-anchor="start">ClickHouse</text>
+<text x="60" y="898" class="body" text-anchor="start">OLAP 分析存储 · 实时指标</text>
+</g>
+<g id="postgres" data-node="postgres"><rect x="350" y="830" width="270" height="100" rx="12" fill="#edf5ff" stroke="#93b9e3" stroke-width="1.5"/>
+<text x="370" y="868" class="name" text-anchor="start">PostgreSQL</text>
+<text x="370" y="898" class="body" text-anchor="start">控制面 · RBAC / 审计 · 实验配置</text>
+</g>
+<g id="redis" data-node="redis"><rect x="660" y="830" width="270" height="100" rx="12" fill="#edf5ff" stroke="#93b9e3" stroke-width="1.5"/>
+<text x="680" y="868" class="name" text-anchor="start">Redis</text>
+<text x="680" y="898" class="body" text-anchor="start">风险缓存 · 限流 · 在线状态</text>
+</g>
+<g id="objectstore" data-node="objectstore"><rect x="970" y="830" width="270" height="100" rx="12" fill="#edf5ff" stroke="#93b9e3" stroke-width="1.5"/>
+<text x="990" y="868" class="name" text-anchor="start">对象存储 / 归档</text>
+<text x="990" y="898" class="body" text-anchor="start">原始事件归档 · 长期留存</text>
+</g>
+
+<g id="control" data-node="control"><rect x="40" y="980" width="270" height="90" rx="12" fill="#fdf4ff" stroke="#f0abfc" stroke-width="1.5"/>
+<text x="60" y="1018" class="name" text-anchor="start">Control Service</text>
+<text x="60" y="1046" class="body" text-anchor="start">控制面 · 下发网关 / 实验 / 风控规则</text>
+</g>
+<g id="dashboard" data-node="dashboard"><rect x="350" y="980" width="270" height="90" rx="12" fill="#fdf4ff" stroke="#f0abfc" stroke-width="1.5"/>
+<text x="370" y="1018" class="name" text-anchor="start">Realtime Dashboard</text>
+<text x="370" y="1046" class="body" text-anchor="start">实时看板 · 直读 ClickHouse</text>
+</g>
+<g id="bi" data-node="bi"><rect x="660" y="980" width="270" height="90" rx="12" fill="#fdf4ff" stroke="#f0abfc" stroke-width="1.5"/>
+<text x="680" y="1018" class="name" text-anchor="start">BI · Superset</text>
+<text x="680" y="1046" class="body" text-anchor="start">自助分析 · 指标口径</text>
+</g>
+<g id="webhook" data-node="webhook"><rect x="970" y="980" width="270" height="90" rx="12" fill="#fdf4ff" stroke="#f0abfc" stroke-width="1.5"/>
+<text x="990" y="1018" class="name" text-anchor="start">Game Server Webhook</text>
+<text x="990" y="1046" class="body" text-anchor="start">风控回调 · 游戏服处置</text>
+</g>
+
+<text x="300" y="418" class="label" text-anchor="middle" style="fill:#2563eb">事件入流</text>
+<text x="420" y="552" class="label" text-anchor="middle" style="fill:#2563eb">事件流 →</text>
+<text x="300" y="815" class="label" text-anchor="middle" style="fill:#7c3aed">分析结果落库</text>
+<text x="900" y="815" class="label" text-anchor="middle" style="fill:#c2410c">风险状态 →</text>
+<text x="300" y="962" class="label" text-anchor="middle" style="fill:#0891b2">控制面读写</text>
+<text x="60" y="1110" class="small" text-anchor="start">可观测：OpenTelemetry Collector + Prometheus + Grafana（infra/）· 模型面：oddsmaker_ml（流失 / LTV / 风险评分，Python）· 维度同步：dimension-sync-agent 写 ClickHouse 维表</text>
+<text x="60" y="1136" class="small" text-anchor="start">逻辑边界统一为 game_id + environment；环境表达发布阶段，物理数据路由由 storage_profile 决定。</text>
+<text x="60" y="1162" class="small" text-anchor="start">实线：业务数据 · 无圆点交叉不表示连通</text>
+</svg>

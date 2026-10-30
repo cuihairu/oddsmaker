@@ -40,6 +40,12 @@ features:
     details: MFA、RBAC 和完整审计日志
 ---
 
+## 系统架构
+
+![Oddsmaker 系统架构图](/images/architecture-zh.svg)
+
+---
+
 ## 快速开始
 
 ```bash
