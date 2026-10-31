@@ -1,6 +1,6 @@
 # UI 审计报告 — oddsmaker / web（2026-10-31）
 
-- **审计对象**: `oddsmaker/web`（Vue 3 + Vite + Tailwind CSS 管理控制台，34 路由）
+- **审计对象**: `oddsmaker/web`（Vue 3 + Vite + Tailwind CSS 管理控制台，32 路由）
 - **审计方法**: impeccable skill v4.8.0（上下文脚本 + detect --json + WCAG 对比度计算 + Playwright 渲染截图）
 - **截图证据**: `/home/cui/.cache/audit-shots-oddsmaker7/`（13 桌面 + 13 窄屏 + 登录/登录错误，全部经 SPA 导航渲染）
 - **审计维度**: 层级/排版 · 色彩对比度（WCAG AA）· 动效 · 响应式 · 边界状态 · UX 文案
@@ -9,7 +9,7 @@
 
 ## 总体批评（不留情面）
 
-这套界面的**设计系统骨架是成立的**：单一 primary 色板、统一的卡片/徽章/表格样式、所有 37 张表格都套了 `overflow-x-auto`、窄屏下卡片自动堆叠、侧边栏收起为抽屉——响应式处理是这个仓库最值得称赞的部分，比同类管理后台认真得多。
+这套界面的**设计系统骨架是成立的**：单一 primary 色板、统一的卡片/徽章/表格样式、37 张表格中绝大多数套了 `overflow-x-auto`（RiskLabView/UsersView/WebhooksView 弹窗内约 5 张未套）、窄屏下卡片自动堆叠、侧边栏收起为抽屉——响应式处理是这个仓库最值得称赞的部分，比同类管理后台认真得多。
 
 **但它在「最不该出错的地方」出了错，而且错在全局层：**
 
@@ -17,7 +17,7 @@
 
 2. **三个全局图标按钮对屏幕阅读器不可见、对低视力用户几乎不可见**。顶部通知铃铛、汉堡菜单、底部登出按钮全部是**纯图标、无文字**，前两者连 `aria-label` 都没有——读屏软件只会报「按钮」，不会报它干嘛的。同时这三个图标用 `text-gray-400`（#9ca3af），在白底上 **2.54:1**，远低于非文本元素 3:1 的标准。这是典型的「看得见的人看得见，看不见的人被遗忘」的 checkbox 式可访问性缺失。
 
-3. **标题层级结构是错的**。侧边栏 Logo 是一个 `<h1>`（`AppLayout.vue:104`），每个页面标题又是 `<h1>`——任何页面都同时出现**两个一级标题**，文档大纲被破坏。这是 SEO/读屏层面的结构性错误，不是审美偏好。
+3. **标题层级结构是错的**。侧边栏 Logo 原为 `<h1>`（已修复，见 P3-1），每个页面标题又是 `<h1>`——修复前任何页面都同时出现**两个一级标题**，文档大纲被破坏。这是 SEO/读屏层面的结构性错误，不是审美偏好。
 
 以上三条都是**「修起来一行、错起来全局」**的典型。设计系统的价值就在于「一处定义、处处生效」，但反面是「一处错、处处错」——这次的对比度错误就是被 23 个文件共同放大的一次。
 
@@ -41,25 +41,25 @@
 | P1-3 | 铃铛/汉堡按钮无 `aria-label`，读屏报「按钮」无功能说明 | `AppLayout.vue:207,225` | — | ✅ **已修复** `da8ce9f`：加 `aria-label="通知"` / `aria-label="打开菜单"` |
 
 ### P2（中等）
-- **P2-1（部署风险，非源码缺陷）**：部署 dist 将 `/login` 嵌套进 AppLayout，登录卡片 `y=1349`（视口 900px）——登录表单在首屏视口之下约 450px。**源码正确**（`router/index.js` 中 `/login` 为独立顶层路由，`LoginView.vue` 为独立居中卡片，无侧边栏）。**处置**：非源码可修；需从当前源码重新构建部署。证据见下「附录 A」。
+- **P2-1（部署风险，非源码缺陷）**：部署 dist 将 `/login` 嵌套进 AppLayout，登录卡片 `y=1349`（视口 900px）——登录表单在首屏视口之下约 450px。**源码正确**（`router/index.js` 中 `/login` 为独立顶层路由，`LoginView.vue` 为独立居中卡片，无侧边栏）。**处置**：非源码可修；需从当前源码重新构建部署。证据见下「附录 A」。**未修原因**：属部署产物漂移（线上 dist 早于/异于当前源码），源码侧无可修对象；从当前源码重建部署即消除，本批源码修复不涉及部署面。
 
-### P3（轻微 — 记为 TODO，未修改）
+### P3（轻微）
 
-| # | 问题 | 位置 | 建议 |
+| # | 问题 | 位置 | 处理 |
 |---|------|------|------|
-| P3-1 | 双 `<h1>`：侧边栏 Logo 为 `<h1>`，页面标题亦为 `<h1>`，文档大纲错乱 | `AppLayout.vue:104` + 各页面标题 | Logo 改为 `<p>`/`<span>`，或 `aria-hidden` |
-| P3-2 | 偏离主色板的强调色标题（AI 检测器 4 条告警） | `FinanceView.vue:128`、`FunnelsView.vue:357`、`PaymentFunnelView.vue:130,134`（`text-indigo-600`/`text-purple-600`） | 改用 `primary`/`accent` 色板 |
-| P3-3 | 弹窗遮罩不可键盘关闭：9 处 `div @click` 遮罩，无 Escape 关闭、无 `role="dialog"`/`aria-modal` | 各视图弹窗 | 加 Escape 监听 + `role="dialog"` + `aria-modal` |
-| P3-4 | 「管理」分组标签 `text-gray-400` = 2.54:1 < 4.5:1（文本） | `AppLayout.vue:137` | 升为 `text-gray-500`（4.83:1） |
+| P3-1 | 双 `<h1>`：侧边栏 Logo 为 `<h1>`，页面标题亦为 `<h1>`，文档大纲错乱 | `AppLayout.vue:104` + 各页面标题 | ✅ **已修复** `5fa96a1`（报告后落地）：Logo 改为 `<span>` |
+| P3-2 | 偏离主色板的强调色标题（AI 检测器 4 条告警） | `FinanceView.vue:128`、`FunnelsView.vue:357`、`PaymentFunnelView.vue:130,134`（`text-indigo-600`/`text-purple-600`） | ✅ **已修复** `fb98c7f`（报告后落地）：改用 `primary`/`accent` 色板 |
+| P3-3 | 弹窗遮罩不可键盘关闭：18 处可点击关闭遮罩（15 处 `@click.self` + 3 处 `absolute inset-0` 背板），无 Escape 关闭、无 `role="dialog"`/`aria-modal` | 13 个视图弹窗 | ✅ **已修复** `3f47e58`：共享 `useEscapeClose` 组合式 + `role="dialog"`/`aria-modal`，加载遮罩加 `role="status"` |
+| P3-4 | 「管理」分组标签 `text-gray-400` = 2.54:1 < 4.5:1（文本） | `AppLayout.vue:137` | ✅ **已修复** `f23cabe`：升为 `text-gray-500`（4.83:1） |
 
 ---
 
 ## 逐维度结论
 
-- **层级/排版**：布局统一（`lg:pl-64` + sticky 顶栏），侧边栏 27 项扁平无分组（功能多，建议后续分组）；P3-1 双 h1 是唯一结构性问题。
+- **层级/排版**：布局统一（`lg:pl-64` + sticky 顶栏），侧边栏 29 项（27 导航 + 2 管理）含「管理」分组标签（非扁平）；P3-1 双 h1 修复前是唯一结构性问题。
 - **色彩对比度（WCAG AA）**：`.btn-primary` 4.10:1、图标按钮 2.54:1、`管理`标签 2.54:1 不达标 → P1/P3 修复；`nav-active` 5.57:1、`btn-danger` 4.83:1、全部徽章、`btn-secondary` 均达标。
 - **动效**：侧边栏 `transition-transform duration-300`、按钮 `transition-colors duration-200`、加载 spinner——克制且无过度动效；无 `prefers-reduced-motion` 降级（轻微，未单列）。
-- **响应式**：✅ 良好。37 张表全部 `overflow-x-auto`；窄屏卡片堆叠、侧边栏抽屉化、汉堡可用；窄屏截图（390px）验证无横向溢出。
+- **响应式**：✅ 良好。37 张表绝大多数 `overflow-x-auto`（RiskLabView/UsersView/WebhooksView 弹窗内约 5 张未套）；窄屏卡片堆叠、侧边栏抽屉化、汉堡可用；窄屏截图（390px）验证无横向溢出。
 - **边界状态**：✅ 留存报表空状态文案优秀（「ClickHouse 未配置，留存报表不可用」+ 指引）；登录错误行内提示 + MFA 挑战流；未发现空白/死链状态。
 - **UX 文案**：中文文案一致、无生硬英文直译；错误提示具体（登录失败明确）；按钮文案为动词式（登录/导出/保存）。
 
@@ -95,5 +95,9 @@
 | `c78b47a` | `fix(ui): primary button contrast`（`.btn-primary` bg-600→700，hover→800） | P1 修复 |
 | `f15b7c7` | `fix(ui): icon button contrast`（铃/汉堡/登出 gray-400→500） | P1 修复 |
 | `da8ce9f` | `fix(ui): icon button labels`（铃铛/汉堡加 aria-label） | P1 修复 |
+| `5fa96a1` | `fix(ui): single page heading`（侧边栏 Logo `<h1>`→`<span>`，消除双 h1） | P3 修复 |
+| `fb98c7f` | `fix(ui): stat title palette`（Finance/Funnels/PaymentFunnel 共 4 处 indigo/purple→primary/accent） | P3 修复 |
+| `3f47e58` | `fix(ui): modal keyboard accessibility`（共享 `useEscapeClose` 组合式，13 视图 18 处弹窗 Escape+`role="dialog"`/`aria-modal`，加载遮罩 `role="status"`） | P3 修复 |
+| `f23cabe` | `fix(ui): group label contrast`（「管理」标签 gray-400→500） | P3 修复 |
 
-**统计**：UI 发现 7 项（P1×3 已修，P3×4 记为 TODO），另 2 项环境性说明（非 UI，不计入）。测试套件未执行（`web/node_modules` 为空，按任务约束禁止安装）；本次改动均为样式类/属性级，零逻辑影响。
+**统计**：UI 发现 7 项全部处理（P1×3、P3×4 已修），P2-1 为部署产物漂移、非源码可修（见该项「未修原因」），另 2 项环境性说明（非 UI，不计入）。P1 批次当时 `web/node_modules` 为空未跑测试（改动均为样式类/属性级）；P3 批次每项提交前本地验证：`pnpm build` 绿 + vitest 全量 202/202 通过。
