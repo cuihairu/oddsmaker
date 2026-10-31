@@ -134,7 +134,7 @@ async function handleLogout() {
           <!-- 管理员菜单 -->
           <template v-if="authStore.isAdmin">
             <div class="pt-4 mt-4 border-t border-gray-200">
-              <p class="px-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+              <p class="px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
                 管理
               </p>
             </div>
