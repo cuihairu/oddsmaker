@@ -3,6 +3,7 @@ import { ref, watch, onMounted } from 'vue'
 import api from '@/services/api'
 import GameSelector from '@/components/GameSelector.vue'
 import { useGameList } from '@/composables/useGameList'
+import { useEscapeClose } from '@/composables/useEscapeClose'
 
 const { currentGameId } = useGameList()
 
@@ -23,6 +24,9 @@ const editing = ref(null)      // null=创建，否则为编辑目标配置
 const saving = ref(false)
 const form = ref(emptyForm())
 const formError = ref('')
+
+useEscapeClose(showForm, () => (showForm.value = false))
+useEscapeClose(logTarget, () => (logTarget.value = null))
 
 const AUTH_TYPES = [
   { value: 'none', label: '无鉴权' },
@@ -366,7 +370,7 @@ watch(currentGameId, load)
       class="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
       @click.self="showForm = false"
     >
-      <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-2xl mx-4 max-h-[85vh] overflow-y-auto">
+      <div role="dialog" aria-modal="true" class="bg-white rounded-lg shadow-xl p-6 w-full max-w-2xl mx-4 max-h-[85vh] overflow-y-auto">
         <div class="flex items-center justify-between mb-4">
           <h3 class="text-base font-medium text-gray-900">
             {{ editing ? `编辑配置：${editing.displayName || editing.name}` : '新建 Webhook 配置' }}
@@ -455,7 +459,7 @@ watch(currentGameId, load)
       class="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
       @click.self="logTarget = null"
     >
-      <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-3xl mx-4 max-h-[80vh] overflow-y-auto">
+      <div role="dialog" aria-modal="true" class="bg-white rounded-lg shadow-xl p-6 w-full max-w-3xl mx-4 max-h-[80vh] overflow-y-auto">
         <div class="flex items-center justify-between mb-4">
           <h3 class="text-base font-medium text-gray-900">
             发送日志：{{ logTarget.displayName || logTarget.name }}

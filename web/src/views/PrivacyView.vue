@@ -3,6 +3,7 @@ import { ref, reactive, watch, onMounted } from 'vue'
 import api from '@/services/api'
 import GameSelector from '@/components/GameSelector.vue'
 import { useGameList } from '@/composables/useGameList'
+import { useEscapeClose } from '@/composables/useEscapeClose'
 
 const { currentGameId } = useGameList()
 
@@ -13,6 +14,7 @@ const showForm = ref(false)
 const saving = ref(false)
 const lastCreated = ref(null)      // 创建后展示 resolved_identities 折叠面板
 const detailTarget = ref(null)     // execution_summary 详情弹层
+useEscapeClose(detailTarget, () => (detailTarget.value = null))
 
 const typeOptions = [
   { value: 'PLAYER_ID', label: 'player_id（玩家 ID）' },
@@ -250,7 +252,7 @@ watch(currentGameId, load)
       class="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
       @click.self="detailTarget = null"
     >
-      <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-2xl mx-4 max-h-[80vh] overflow-y-auto">
+      <div role="dialog" aria-modal="true" class="bg-white rounded-lg shadow-xl p-6 w-full max-w-2xl mx-4 max-h-[80vh] overflow-y-auto">
         <div class="flex items-start justify-between mb-3">
           <h3 class="text-base font-medium text-gray-900">执行详情 {{ detailTarget.id }}</h3>
           <span class="px-2 py-0.5 rounded-full text-xs font-medium" :class="statusColors[detailTarget.status]">

@@ -2,6 +2,7 @@
 import { ref, reactive, watch, onMounted } from 'vue'
 import api from '@/services/api'
 import { useGameList } from '@/composables/useGameList'
+import { useEscapeClose } from '@/composables/useEscapeClose'
 
 const users = ref([])
 const loading = ref(true)
@@ -50,6 +51,7 @@ function getStatusLabel(status) {
 // ===== 角色分配（RBAC：user_role_assignments，global/game/environment 三级 scope）=====
 
 const raTarget = ref(null)      // 目标用户
+useEscapeClose(raTarget, () => (raTarget.value = null))
 const assignments = ref([])     // 现有分配
 const roles = ref([])           // 可分配角色（/api/roles）
 const raLoading = ref(false)
@@ -249,7 +251,7 @@ function scopeLabel(scope) {
       class="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
       @click.self="raTarget = null"
     >
-      <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-2xl mx-4 max-h-[85vh] overflow-y-auto">
+      <div role="dialog" aria-modal="true" class="bg-white rounded-lg shadow-xl p-6 w-full max-w-2xl mx-4 max-h-[85vh] overflow-y-auto">
         <div class="flex items-center justify-between mb-4">
           <h3 class="text-lg font-semibold text-gray-900">
             角色分配 — {{ raTarget.username }}

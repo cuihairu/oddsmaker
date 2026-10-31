@@ -3,6 +3,7 @@ import { ref, computed, watch, onMounted } from 'vue'
 import api from '@/services/api'
 import GameSelector from '@/components/GameSelector.vue'
 import { useGameList } from '@/composables/useGameList'
+import { useEscapeClose } from '@/composables/useEscapeClose'
 
 const { currentGameId } = useGameList()
 
@@ -20,6 +21,8 @@ const form = ref(emptyForm())
 
 // ---- 成员预览 ----
 const previewTarget = ref(null)
+useEscapeClose(showCreate, () => (showCreate.value = false))
+useEscapeClose(previewTarget, () => (previewTarget.value = null))
 const previewMembers = ref([])
 const previewLoading = ref(false)
 const previewError = ref('')
@@ -284,7 +287,7 @@ watch(currentGameId, load)
     <!-- 新建分群弹层 -->
     <div v-if="showCreate" class="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div class="absolute inset-0 bg-gray-900/50" @click="showCreate = false"></div>
-      <div class="relative bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
+      <div role="dialog" aria-modal="true" class="relative bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
         <h2 class="text-lg font-bold text-gray-900 mb-4">新建分群</h2>
 
         <div class="grid grid-cols-2 gap-4 mb-4">
@@ -386,7 +389,7 @@ watch(currentGameId, load)
     <!-- 成员预览弹层 -->
     <div v-if="previewTarget" class="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div class="absolute inset-0 bg-gray-900/50" @click="previewTarget = null"></div>
-      <div class="relative bg-white rounded-lg shadow-xl max-w-lg w-full p-6">
+      <div role="dialog" aria-modal="true" class="relative bg-white rounded-lg shadow-xl max-w-lg w-full p-6">
         <h2 class="text-lg font-bold text-gray-900 mb-1">成员预览</h2>
         <p class="text-sm text-gray-500 mb-4">
           「{{ previewTarget.display_name || previewTarget.name }}」 · 前 {{ previewMembers.length }} 个{{ subjectLabels[previewTarget.subject] || '主体' }} ID

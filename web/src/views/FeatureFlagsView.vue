@@ -2,6 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 import api from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
+import { useEscapeClose } from '@/composables/useEscapeClose'
 
 const authStore = useAuthStore()
 
@@ -21,6 +22,9 @@ const formMode = ref('create')
 const formSaving = ref(false)
 const formError = ref('')
 const form = ref({})
+
+useEscapeClose(formOpen, () => (formOpen.value = false))
+useEscapeClose(pctTarget, () => (pctTarget.value = null))
 
 const FLAG_TYPES = ['BOOLEAN', 'PERCENTAGE', 'WHITELIST', 'BLACKLIST', 'CONDITIONAL']
 
@@ -327,7 +331,7 @@ onMounted(load)
       class="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
       @click.self="formOpen = false"
     >
-      <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+      <div role="dialog" aria-modal="true" class="bg-white rounded-lg shadow-xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
         <div class="flex items-center justify-between mb-4">
           <h3 class="text-base font-medium text-gray-900">
             {{ formMode === 'create' ? '新建功能开关' : `编辑：${form.flagKey}` }}
@@ -401,7 +405,7 @@ onMounted(load)
       class="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
       @click.self="pctTarget = null"
     >
-      <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
+      <div role="dialog" aria-modal="true" class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
         <div class="flex items-center justify-between mb-4">
           <h3 class="text-base font-medium text-gray-900">灰度设置：{{ pctTarget.flagName }}</h3>
           <button @click="pctTarget = null" class="text-gray-400 hover:text-gray-600 text-sm">关闭</button>

@@ -3,6 +3,7 @@ import { ref, reactive, watch, onMounted } from 'vue'
 import api from '@/services/api'
 import GameSelector from '@/components/GameSelector.vue'
 import { useGameList } from '@/composables/useGameList'
+import { useEscapeClose } from '@/composables/useEscapeClose'
 
 const { currentGameId } = useGameList()
 
@@ -14,6 +15,7 @@ const showForm = ref(false)
 const saving = ref(false)
 const evalResult = ref(null)
 const actionTarget = ref(null)   // { alert, action: 'acknowledge' | 'resolve' }
+useEscapeClose(actionTarget, () => (actionTarget.value = null))
 const actionComment = ref('')
 
 const metricOptions = [
@@ -496,7 +498,7 @@ watch(currentGameId, () => { load(); loadEmailConfig() })
 
     <!-- 确认/解决弹层 -->
     <div v-if="actionTarget" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40" @click.self="actionTarget = null">
-      <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
+      <div role="dialog" aria-modal="true" class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
         <h3 class="text-base font-medium text-gray-900 mb-2">
           {{ actionTarget.action === 'acknowledge' ? '确认告警' : '解决告警' }}
         </h3>

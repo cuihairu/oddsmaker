@@ -3,6 +3,7 @@ import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import api from '@/services/api'
 import GameSelector from '@/components/GameSelector.vue'
 import { useGameList } from '@/composables/useGameList'
+import { useEscapeClose } from '@/composables/useEscapeClose'
 
 const { currentGameId } = useGameList()
 
@@ -298,6 +299,10 @@ const acFormMode = ref('create')
 const acFormSaving = ref(false)
 const acFormError = ref('')
 const acForm = ref({})
+
+useEscapeClose(formOpen, () => (formOpen.value = false))
+useEscapeClose(yamlOpen, () => (yamlOpen.value = false))
+useEscapeClose(acFormOpen, () => (acFormOpen.value = false))
 
 const AGENT_PROPS_TEMPLATE = `# 非密钥属性（每行一键；# 开头为注释）
 gateway.endpoint=https://ingest.oddsmaker.local
@@ -655,7 +660,7 @@ watch(autoRefresh, setupTimer)
 
     <!-- 创建/编辑 Agent 托管配置弹层（secrets 仅键名回显；编辑留空=保留既有，填写即整体轮换） -->
     <div v-if="acFormOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40" @click.self="acFormOpen = false">
-      <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
+      <div role="dialog" aria-modal="true" class="bg-white rounded-lg shadow-xl p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
         <div class="flex items-center justify-between mb-4">
           <h3 class="text-base font-medium text-gray-900">
             {{ acFormMode === 'create' ? '新建 Agent 托管配置' : `编辑：${acForm.agentKey}（${acForm.environment}）` }}
@@ -701,7 +706,7 @@ watch(autoRefresh, setupTimer)
 
     <!-- 创建/编辑 Pull 源弹层（credential 建档必填；编辑留空=保留既有凭证） -->
     <div v-if="formOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40" @click.self="formOpen = false">
-      <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+      <div role="dialog" aria-modal="true" class="bg-white rounded-lg shadow-xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
         <div class="flex items-center justify-between mb-4">
           <h3 class="text-base font-medium text-gray-900">
             {{ formMode === 'create' ? '新建 HTTP Pull 源' : `编辑：${form.sourceKey}（${form.environment}）` }}
@@ -764,7 +769,7 @@ watch(autoRefresh, setupTimer)
 
     <!-- YAML 导入/导出弹层（导出凭证永不落盘；导入按 (环境, 源标识) 定位，credential 缺省=保留既有） -->
     <div v-if="yamlOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40" @click.self="yamlOpen = false">
-      <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
+      <div role="dialog" aria-modal="true" class="bg-white rounded-lg shadow-xl p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
         <div class="flex items-center justify-between mb-4">
           <h3 class="text-base font-medium text-gray-900">
             {{ yamlMode === 'export' ? '导出 Pull 配置 YAML' : '导入 Pull 配置 YAML' }}

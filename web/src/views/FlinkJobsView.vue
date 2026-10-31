@@ -3,6 +3,7 @@ import { ref, watch, onMounted } from 'vue'
 import api from '@/services/api'
 import GameSelector from '@/components/GameSelector.vue'
 import { useGameList } from '@/composables/useGameList'
+import { useEscapeClose } from '@/composables/useEscapeClose'
 
 const { currentGameId } = useGameList()
 
@@ -13,6 +14,7 @@ const error = ref('')
 const success = ref('')
 const actingId = ref(null)   // 当前正在部署/停止/刷新的作业
 const detailTarget = ref(null)  // 详情弹层对应的作业
+useEscapeClose(detailTarget, () => (detailTarget.value = null))
 const detail = ref(null)       // { config, rules }
 const detailLoading = ref(false)
 
@@ -246,7 +248,7 @@ watch(currentGameId, load)
       class="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
       @click.self="detailTarget = null"
     >
-      <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-3xl mx-4 max-h-[85vh] overflow-y-auto">
+      <div role="dialog" aria-modal="true" class="bg-white rounded-lg shadow-xl p-6 w-full max-w-3xl mx-4 max-h-[85vh] overflow-y-auto">
         <div class="flex items-center justify-between mb-4">
           <h3 class="text-base font-medium text-gray-900">
             作业详情：{{ detailTarget.displayName || detailTarget.name }}

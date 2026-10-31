@@ -3,6 +3,7 @@ import { ref, watch, onMounted } from 'vue'
 import api from '@/services/api'
 import GameSelector from '@/components/GameSelector.vue'
 import { useGameList } from '@/composables/useGameList'
+import { useEscapeClose } from '@/composables/useEscapeClose'
 
 const { currentGameId } = useGameList()
 
@@ -14,6 +15,7 @@ const filterLevel = ref('')
 
 // 详情弹层
 const detail = ref(null)
+useEscapeClose(detail, () => (detail.value = null))
 const detailLoading = ref(false)
 const showUnblock = ref(false)
 const unblockReason = ref('')
@@ -214,11 +216,11 @@ onMounted(load)
     </div>
 
     <!-- 详情弹层 -->
-    <div v-if="detailLoading" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+    <div v-if="detailLoading" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40" role="status" aria-label="加载中">
       <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-white"></div>
     </div>
     <div v-else-if="detail" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40" @click.self="detail = null">
-      <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-2xl mx-4 max-h-[85vh] overflow-y-auto">
+      <div role="dialog" aria-modal="true" class="bg-white rounded-lg shadow-xl p-6 w-full max-w-2xl mx-4 max-h-[85vh] overflow-y-auto">
         <div class="flex items-start justify-between mb-4">
           <div>
             <h3 class="text-base font-medium text-gray-900">{{ detail.caseNumber }}</h3>

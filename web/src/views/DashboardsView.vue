@@ -4,6 +4,7 @@ import api from '@/services/api'
 import GameSelector from '@/components/GameSelector.vue'
 import TrendChart from '@/components/TrendChart.vue'
 import { useGameList } from '@/composables/useGameList'
+import { useEscapeClose } from '@/composables/useEscapeClose'
 
 const { currentGameId } = useGameList()
 
@@ -26,6 +27,7 @@ const dataError = ref({})
 
 // ---- 添加 widget 弹层 ----
 const showAdd = ref(false)
+useEscapeClose(showAdd, () => (showAdd.value = false))
 const addForm = ref({ type: 'kpi', source: 'online-overview', title: '', span: 6, environment: 'prod', minutes: 10, days: 30, granularity: 'day' })
 
 const SOURCE_LABELS = {
@@ -483,7 +485,7 @@ watch(activeId, applyActive)
     <!-- 添加 widget 弹层 -->
     <div v-if="showAdd" class="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div class="absolute inset-0 bg-gray-900/50" @click="showAdd = false"></div>
-      <div class="relative bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+      <div role="dialog" aria-modal="true" class="relative bg-white rounded-lg shadow-xl max-w-md w-full p-6">
         <h2 class="text-lg font-bold text-gray-900 mb-4">添加 Widget</h2>
 
         <div class="space-y-4">

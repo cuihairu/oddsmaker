@@ -3,6 +3,7 @@ import { ref, onMounted } from 'vue'
 import api from '@/services/api'
 import GameSelector from '@/components/GameSelector.vue'
 import { useGameList } from '@/composables/useGameList'
+import { useEscapeClose } from '@/composables/useEscapeClose'
 
 const { currentGameId, loadGames } = useGameList()
 
@@ -14,6 +15,7 @@ const compatResult = ref(null)
 
 // PII 策略列（环境级 Schema > ApiKey > 网关默认链的设置入口）：DRAFT 版可编辑
 const piiModal = ref(null)
+useEscapeClose(piiModal, () => (piiModal.value = null))
 const piiSaving = ref(false)
 const piiError = ref('')
 
@@ -395,7 +397,7 @@ function getCompatLabel(mode) {
       class="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
       @click.self="piiModal = null"
     >
-      <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+      <div role="dialog" aria-modal="true" class="bg-white rounded-lg shadow-xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
         <div class="flex items-center justify-between mb-4">
           <h3 class="text-base font-medium text-gray-900">PII 策略：{{ piiModal.schema.name }}</h3>
           <button @click="piiModal = null" class="text-gray-400 hover:text-gray-600 text-sm">关闭</button>
