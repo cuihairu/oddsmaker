@@ -125,7 +125,7 @@ watch([currentGameId, granularity, days, segmentId], load)
         </div>
         <div class="card">
           <p class="text-sm font-medium text-gray-500">ARPPU</p>
-          <p class="text-2xl font-semibold text-indigo-600 mt-1">{{ summary.arppu ?? 0 }}</p>
+          <p class="text-2xl font-semibold text-primary-600 mt-1">{{ summary.arppu ?? 0 }}</p>
         </div>
         <div class="card">
           <p class="text-sm font-medium text-gray-500">付费率</p>

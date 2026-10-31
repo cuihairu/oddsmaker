@@ -127,11 +127,11 @@ watch([currentGameId, days, segmentId], load)
       <div class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4 mb-8">
         <div class="card">
           <p class="text-sm font-medium text-gray-500">首充率</p>
-          <p class="text-2xl font-semibold text-indigo-600 mt-1">{{ pct(funnel.firstPayRate) }}</p>
+          <p class="text-2xl font-semibold text-primary-600 mt-1">{{ pct(funnel.firstPayRate) }}</p>
         </div>
         <div class="card">
           <p class="text-sm font-medium text-gray-500">二充率（首充 → 二充）</p>
-          <p class="text-2xl font-semibold text-purple-600 mt-1">{{ pct(funnel.firstToSecondRate) }}</p>
+          <p class="text-2xl font-semibold text-accent-600 mt-1">{{ pct(funnel.firstToSecondRate) }}</p>
         </div>
         <div class="card">
           <p class="text-sm font-medium text-gray-500">付费用户月留存</p>

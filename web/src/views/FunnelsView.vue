@@ -354,7 +354,7 @@ watch(days, () => { if (selected.value) loadResult(selected.value) })
           </div>
           <div class="card">
             <p class="text-sm font-medium text-gray-500">完成末步用户</p>
-            <p class="text-2xl font-semibold text-indigo-600 mt-1">
+            <p class="text-2xl font-semibold text-primary-600 mt-1">
               {{ (result.overall?.lastUsers ?? 0).toLocaleString() }}
             </p>
           </div>
