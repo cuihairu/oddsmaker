@@ -183,7 +183,7 @@ async function handleLogout() {
             </div>
             <button
               @click="handleLogout"
-              class="ml-auto p-1 text-gray-400 hover:text-gray-600"
+              class="ml-auto p-1 text-gray-500 hover:text-gray-600"
               title="登出"
             >
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -206,7 +206,7 @@ async function handleLogout() {
       <div class="sticky top-0 z-10 flex items-center h-16 px-4 bg-white border-b border-gray-200 lg:px-8">
         <button
           @click="toggleSidebar"
-          class="p-2 text-gray-400 rounded-lg lg:hidden hover:text-gray-600 hover:bg-gray-100"
+          class="p-2 text-gray-500 rounded-lg lg:hidden hover:text-gray-600 hover:bg-gray-100"
         >
           <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path
@@ -222,7 +222,7 @@ async function handleLogout() {
         
         <div class="flex items-center space-x-4">
           <!-- 通知按钮 -->
-          <button class="p-2 text-gray-400 rounded-lg hover:text-gray-600 hover:bg-gray-100">
+          <button class="p-2 text-gray-500 rounded-lg hover:text-gray-600 hover:bg-gray-100">
             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path
                 stroke-linecap="round"
