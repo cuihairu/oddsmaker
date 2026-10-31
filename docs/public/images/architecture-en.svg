@@ -8,13 +8,13 @@
 <text x="40" y="80" class="body" text-anchor="start">Single company, multiple games · game_id + environment data boundary · real-time analytics and risk control on one pipeline</text>
 
 <path d="M175 220 V250" fill="none" stroke="#f8fafc" stroke-width="9"/>
-<path id="sdk-web" data-from="sdk-web" data-to="gateway" d="M175 220 V250" class="edge" style="stroke:#475569;stroke-width:2" marker-end="url(#arrow)"/>
+<path id="sdk-web-edge" data-from="sdk-web" data-to="gateway" d="M175 220 V250" class="edge" style="stroke:#475569;stroke-width:2" marker-end="url(#arrow)"/>
 <path d="M485 220 V250" fill="none" stroke="#f8fafc" stroke-width="9"/>
-<path id="sdk-mobile" data-from="sdk-mobile" data-to="gateway" d="M485 220 V250" class="edge" style="stroke:#475569;stroke-width:2" marker-end="url(#arrow)"/>
+<path id="sdk-mobile-edge" data-from="sdk-mobile" data-to="gateway" d="M485 220 V250" class="edge" style="stroke:#475569;stroke-width:2" marker-end="url(#arrow)"/>
 <path d="M795 220 V250" fill="none" stroke="#f8fafc" stroke-width="9"/>
-<path id="sdk-unity" data-from="sdk-unity" data-to="gateway" d="M795 220 V250" class="edge" style="stroke:#475569;stroke-width:2" marker-end="url(#arrow)"/>
+<path id="sdk-unity-edge" data-from="sdk-unity" data-to="gateway" d="M795 220 V250" class="edge" style="stroke:#475569;stroke-width:2" marker-end="url(#arrow)"/>
 <path d="M1105 220 V250" fill="none" stroke="#f8fafc" stroke-width="9"/>
-<path id="sdk-server" data-from="sdk-server" data-to="gateway" d="M1105 220 V250" class="edge" style="stroke:#475569;stroke-width:2" marker-end="url(#arrow)"/>
+<path id="sdk-server-edge" data-from="sdk-server" data-to="gateway" d="M1105 220 V250" class="edge" style="stroke:#475569;stroke-width:2" marker-end="url(#arrow)"/>
 <path d="M300 360 V400 H175 V430" fill="none" stroke="#f8fafc" stroke-width="9"/>
 <path id="gateway-kafka" data-from="gateway" data-to="kafka" d="M300 360 V400 H175 V430" class="edge" style="stroke:#2563eb;stroke-width:2.5" marker-end="url(#arrow)"/>
 <path d="M400 560 H440" fill="none" stroke="#f8fafc" stroke-width="9"/>
@@ -22,7 +22,7 @@
 <path d="M480 760 V800 H175 V830" fill="none" stroke="#f8fafc" stroke-width="9"/>
 <path id="flink-ch" data-from="flink" data-to="clickhouse" d="M480 760 V800 H175 V830" class="edge" style="stroke:#7c3aed;stroke-width:2.5" marker-end="url(#arrow)"/>
 <path d="M1067 680 V805 H795 V830" fill="none" stroke="#f8fafc" stroke-width="9"/>
-<path id="risk-redis" data-from="risk-job" data-to="redis" d="M1067 680 V805 H795 V830" class="edge" style="stroke:#c2410c;stroke-width:2.5" marker-end="url(#arrow)"/>
+<path id="risk-redis" data-from="flink" data-to="redis" d="M820 680 V805 H795 V830" class="edge" style="stroke:#c2410c;stroke-width:2.5" marker-end="url(#arrow)"/>
 <path d="M490 930 V955 H175 V980" fill="none" stroke="#f8fafc" stroke-width="9"/>
 <path id="control-pg" data-from="postgres" data-to="control" d="M490 930 V955 H175 V980" class="edge" style="stroke:#0891b2;stroke-width:2.5" marker-end="url(#arrow)" marker-start="url(#arrow)"/>
 <path d="M175 930 V955 H485 V980" fill="none" stroke="#f8fafc" stroke-width="9"/>
@@ -102,9 +102,9 @@
 <text x="680" y="868" class="name" text-anchor="start">Redis</text>
 <text x="680" y="898" class="body" text-anchor="start">Risk cache · rate limit · presence</text>
 </g>
-<g id="objectstore" data-node="objectstore"><rect x="970" y="830" width="270" height="100" rx="12" fill="#edf5ff" stroke="#93b9e3" stroke-width="1.5"/>
-<text x="990" y="868" class="name" text-anchor="start">Object storage / archive</text>
-<text x="990" y="898" class="body" text-anchor="start">Raw event archive · long-term retention</text>
+<g id="event-export" data-node="event-export"><rect x="970" y="830" width="270" height="100" rx="12" fill="#edf5ff" stroke="#93b9e3" stroke-width="1.5"/>
+<text x="990" y="868" class="name" text-anchor="start">Raw event export</text>
+<text x="990" y="898" class="body" text-anchor="start">Local directory · ops syncs to object storage archive</text>
 </g>
 
 <g id="control" data-node="control"><rect x="40" y="980" width="270" height="90" rx="12" fill="#fdf4ff" stroke="#f0abfc" stroke-width="1.5"/>
