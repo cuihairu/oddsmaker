@@ -101,7 +101,7 @@ async function handleLogout() {
       <div class="flex flex-col h-full">
         <!-- Logo -->
         <div class="flex items-center h-16 px-6 border-b border-gray-200">
-          <h1 class="text-xl font-bold text-primary-600">Oddsmaker</h1>
+          <span class="text-xl font-bold text-primary-600">Oddsmaker</span>
         </div>
 
         <!-- 导航菜单 -->
