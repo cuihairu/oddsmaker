@@ -37,6 +37,8 @@ describe('MetricAlertBell', () => {
     await settle()
     expect(w.text()).toContain('新建崩溃率告警')
     expect(w.find('input.input').element.value).toBe('崩溃率告警')
+    // 弹层需具备对话框可访问性语义与 Escape 关闭（对齐 3f47e58 弹窗修复模式）
+    expect(w.find('[role="dialog"]').attributes('aria-modal')).toBe('true')
   })
 
   it('规则名为空时拒绝保存且不发请求', async () => {

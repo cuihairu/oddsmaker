@@ -2,6 +2,7 @@
 import { ref, reactive } from 'vue'
 import api from '@/services/api'
 import { useGameList } from '@/composables/useGameList'
+import { useEscapeClose } from '@/composables/useEscapeClose'
 
 // 图表级告警入口（Amplitude 铃铛式交互，调研「告警配置贴图表」落点）：
 // 铃铛按钮 + 快速建规则弹层，规则本体走既有 /api/games/{gameId}/alert-rules。
@@ -16,6 +17,7 @@ const props = defineProps({
 const { currentGameId } = useGameList()
 
 const open = ref(false)
+useEscapeClose(open, () => (open.value = false))
 const saving = ref(false)
 const error = ref('')
 const justCreated = ref(false)
@@ -101,7 +103,7 @@ async function save() {
   </span>
 
   <div v-if="open" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40" @click.self="open = false">
-    <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-lg mx-4">
+    <div role="dialog" aria-modal="true" class="bg-white rounded-lg shadow-xl p-6 w-full max-w-lg mx-4">
       <h3 class="text-base font-medium text-gray-900 mb-4">
         新建{{ metricLabels[metricType] || metricType }}告警
       </h3>
