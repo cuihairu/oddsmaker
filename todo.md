@@ -129,7 +129,7 @@
 - [x] 审核发现：e09a1be 在 todo.md:127 把 `.github/workflows/demo-diagnose.yml:68` 与「本 commit 修复」并列列出，但本 diff 文件清单仅 todo.md 与 web/tests/components/MetricAlertBell.spec.js 两处，未改动 demo-diagnose.yml——demo-diagnose.yml:68 仅作为「取证腿仅 openssl x509 -noout -subject -dates」的背景引用，并非本 commit 修复对象，「本 commit 修复」覆盖范围表述不准确（todo.md:127、.github/workflows/demo-diagnose.yml:68）——属实；127 行已把 workflow 明确标为「背景引用」而非修复对象，`git show --stat --oneline e09a1be` 仅改 todo.md 与 web/tests/components/MetricAlertBell.spec.js（本 commit 修复）。
 - [x] 审核发现：e09a1be 在 todo.md:125 记录新增 Escape 断言位置为「web/tests/components/MetricAlertBell.spec.js:42-45」，实测新增行为第 42 行 `window.dispatchEvent(...)`、第 43 行 `await settle()`、第 44 行 `expect(...exists()).toBe(false)`，第 45 行为闭括号 `})`——行号范围含上下文闭括号，实为 42-44 行（web/tests/components/MetricAlertBell.spec.js:44）——属实；125 行已改为 42-44，`nl -ba web/tests/components/MetricAlertBell.spec.js | sed -n '42,45p'` 显示 42-44 为三条新增语句、45 为闭括号（本 commit 修复）。
 - [x] 审核发现：第 128 行把 `include` 的定位写成 `web/vitest.config.js:12`，但同一行又承认实际为第 16 行，记录内定位引用自相矛盾（todo.md:128）——属实；已把该行两处 `web/vitest.config.js:12` 更正为 `:16`，定位一致（本 commit 修复）（核实：`nl -ba web/vitest.config.js | sed -n '14,17p'` 显示 include 位于第 16 行）
-- [ ] 审核发现：本轮 diff 未见问题（16b06030..HEAD）。
+> 审核发现（不属实，已排除）：本轮 diff 未见问题（16b06030..HEAD）——不属实：0b09222 在 README.md:3 将英文 Docs 链接改成 `https://cuihairu.github.io/oddsmaker//`，引入双斜杠回归（核实：`git diff 16b06030..HEAD -- README.md` 输出 `-.../oddsmaker/"` → `+.../oddsmaker//"`，且当前 `sed -n 3p README.md` 同样命中 `oddsmaker//`）
 
 - [ ] **DOC-GIF · P2 · 文档 · 配置开关效果动态图(每个开关 off→on 对比+GIF)**
   - 交付:枚举本仓全部「开启后有效果」的开关/配置项;自动流水线生成证据——GUI 类用 @vscode/test-electron 或应用截图(off 一张/on 一张+切换过程录屏),CLI 类用终端录屏(asciinema→GIF 或 ffmpeg);ffmpeg 缝合动态 GIF。
