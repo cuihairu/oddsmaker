@@ -117,7 +117,7 @@ graph TB
 Manage multiple games with isolated environments, API keys, and configurations.
 
 ### Real-time Processing
-Event pipeline built on Kafka + Flink + ClickHouse (design target 10k–50k events/s per node, see /zh/operations/perf-tuning).
+Event pipeline built on Kafka + Flink + ClickHouse (design target 10k–50k events/s per node, see /operations/perf-tuning).
 
 ### Risk Control
 Detect and prevent cheating, payment fraud, and other suspicious activities.

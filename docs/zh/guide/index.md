@@ -123,11 +123,11 @@ curl -X POST http://localhost:38080/v1/batch \
 
 ## 下一步
 
-- [API Reference](/reference/) - 探索完整的 API
-- [Operations](/operations/) - 部署与运维指南
+- [API 参考](/zh/reference/) - 探索完整的 API
+- [运维指南](/zh/operations/) - 部署与运维指南
 
 ## 获取帮助
 
 - [GitHub Issues](https://github.com/cuihairu/oddsmaker/issues) - 报告 bug
 - [Discussions](https://github.com/cuihairu/oddsmaker/discussions) - 提问与交流
-- [Documentation](/reference/) - 浏览文档
+- [参考文档](/zh/reference/) - 浏览文档

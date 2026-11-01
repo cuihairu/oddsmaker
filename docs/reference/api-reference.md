@@ -124,7 +124,7 @@ There is no standalone PII-policy resource. Ingest policy is bound per API key a
 |---|---|---|
 | PUT | `/api/keys/{keyId}/policy` | Set PII handling (`piiEmail`/`piiPhone`/`piiIp`), props allowlist, deny/mask keys, and rate limits (`rpm`, `ipRpm`) |
 
-The gateway enforces these fields on `/v1/batch`. See the [collect API](/zh/reference/api) for the enforcement semantics.
+The gateway enforces these fields on `/v1/batch`. See the [collect API](/reference/api) for the enforcement semantics.
 
 ### Risk Rules
 
