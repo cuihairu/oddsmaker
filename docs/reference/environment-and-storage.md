@@ -280,3 +280,69 @@ Oddsmaker's recommended model is:
 - `storage_profile` is the configuration slot for isolation strength (currently only `SHARED` is wired up)
 
 This model is more realistic than "keeping only game", and more operable than "splitting a separate database for every environment".
+
+## Event Delivery and Deduplication Semantics (audit DATA-001)
+
+The end-to-end delivery semantics of Kafka `events_raw` → events-enrich-job → ClickHouse `events`
+are **at-least-once** — the platform does not promise exactly-once; this section explicitly bounds the
+residual duplication window.
+
+### Logical event identity and the two deduplication passes
+
+Logical event identity = `game_id + environment + event_id`, length-prefix encoded (length-delimited,
+so a separator can never collide with a key). The same key is used in two places:
+
+- Gateway `ReplayGuard` (Redis, entry idempotency) — the first pass, absorbing ingestion-end resends;
+- Enrich job `DedupFunction` (Flink keyed state, 7-day TTL) — the second pass, absorbing Kafka
+  re-delivery and restart replay.
+
+### Deduplication scope
+
+Job-side deduplication only holds within the operator's **keyed state** scope. Keyed state is persisted
+with checkpoints and survives a restart only if the checkpoint is recoverable; the repo has not
+configured an external state backend or HA manager, so checkpoints land in the JobManager process.
+
+### Residual duplication windows (not eliminated)
+
+1. **Restart where the checkpoint is unrecoverable** (compose local-executor shape: in-process state
+   backend, no HA) → dedup state is completely empty, and a re-delivered same-`event_id` event is
+   inserted again;
+2. **Checkpoint interval window** (residual under `CheckpointingMode.AT_LEAST_ONCE`) → the JDBC sink
+   flushes without waiting for the checkpoint to complete; if the job crashes after the flush but
+   before the checkpoint completes, recovery rewinds the offsets and re-reads this batch, while dedup
+   state only returns to the last checkpoint (without this batch) → the same `event_id` is inserted
+   again;
+3. **Non-transactional sink** → JDBC batch write + retries (`maxRetries=3`) can replay already-applied
+   rows under at-least-once semantics.
+
+### Neither the storage layer nor the query layer converges duplicates
+
+`events` is a plain `ENGINE = MergeTree` (ORDER BY includes `event_id`, but no `dedup_token`, not a
+ReplacingMergeTree), and the analytical queries do not compensate with uniq/argMax on event_id —
+**duplicate rows persist permanently**, and AggregatingMergeTree-style aggregation tables count them
+twice.
+
+### Current decision
+
+This batch does not introduce downstream idempotent writes: ReplacingMergeTree + `dedup_token` would
+require reworking all aggregation tables and read queries at once (the `dedup` modifier, aggregation
+semantics changes), and is left as an independent later batch, not folded into this one. The current
+boundary = the two upstream dedup passes + explicit residual-window declaration + observation, rather
+than "duplicates eliminated".
+
+### Observation semantics
+
+Events judged duplicate inside the job go to the DLQ side output (Kafka text topic, message carries the
+`duplicate` marker) — the duplicate count in the DLQ is a direct reading of the upstream dedup
+interception volume. Note it is only an upper-bound signal: under window type 1 duplicates are inserted
+directly and leave no DLQ trace, so a silent DLQ does not mean the downstream is duplicate-free.
+
+### Verification surface
+
+- `EventsEnrichJobTest.dedupScopeIsJobStateOnly`: behavioral pin — a fresh state instance re-delivering
+  the same event_id goes to the sink a second time, turning "dedup only holds within state scope" into
+  an executable assertion;
+- `ClickhouseEventsDeliverySemanticsTest`: schema pin (the events table has no dedup token, and
+  switching to a partition-dedup engine fails the test) + doc-reconciliation pin (the four key
+  statements — at-least-once / keyed state / MergeTree / residual — failing the test if missing), so
+  the residual risk cannot be quietly written off as eliminated in the docs.

@@ -120,8 +120,8 @@ NDJSON：
 ## 幂等与去重
 
 - `event_id` 应在 `game_id + environment` 内唯一。
-- Gateway 在 schema 校验通过后占用幂等位：同一 `event_id` 的 SDK 重试静默吸收（计 `duplicates`，仍回 `accepted`，不重复发布、不进 DLQ）。
-- Flink enrich/dedup 按 `event_id` 去重（7 天 TTL）。
+- Gateway 在 schema 校验通过后占用幂等位：同一逻辑事件身份（`game_id + environment + event_id`，长度前缀编码）的 SDK 重试静默吸收（计 `duplicates`，仍回 `accepted`，不重复发布、不进 DLQ）。
+- Flink enrich/dedup 按同一逻辑事件身份 `game_id + environment + event_id` 去重（7 天 TTL，keyed state）。
 
 ## 校验与治理
 

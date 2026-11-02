@@ -84,13 +84,13 @@ flowchart TB
         ClickHouse[(ClickHouse)]
         Postgres[(PostgreSQL)]
         Redis[(Redis)]
-        Archive[(Object Storage / Archive)]
+        Archive["原始事件导出（本地目录，运维同步）"]
     end
 
     subgraph Apps
         Control[Control Service]
         Dashboard[Realtime Dashboard]
-        BI[Superset / Metabase]
+        BI[Superset]
         Webhook[Game Server Webhook]
     end
 
@@ -114,6 +114,7 @@ flowchart TB
     Control --> Gateway
     ClickHouse --> Dashboard
     ClickHouse --> BI
+    ClickHouse --> Archive
 ```
 
 ## Canonical Data Boundary

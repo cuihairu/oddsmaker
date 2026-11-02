@@ -119,7 +119,7 @@ Example:
 ```json
 {
   "gameId": "game_demo",
-  "environmentId": "game_demo_prod",
+  "environmentId": "env_game_demo_prod",
   "name": "android-client",
   "keyType": "client",
   "rateLimit": {
@@ -129,7 +129,7 @@ Example:
 }
 ```
 
-> `environmentId` is the environment's internal identifier (e.g. `game_demo_prod`), not the logical name (e.g. `prod`); it is generated automatically when the environment is created.
+> `environmentId` is the environment's internal identifier (e.g. `env_game_demo_prod`, always `env_`-prefixed), not the logical name (e.g. `prod`); it is generated automatically when the environment is created.
 
 Key types:
 
@@ -192,7 +192,7 @@ POST /api/experiments/{id}/pause
 - `environmentId`: environment internal ID (either this or `environment`)
 - `environment`: environment logical name, such as `dev`/`staging`/`prod` (either this or `environmentId`, compatibility field)
 - `name`: experiment name
-- `status`: experiment status: `draft`/`running`/`paused`
+- `status`: experiment status: `DRAFT`/`LIVE`/`PAUSED`/`ENDED` (legacy input `running` normalizes to `LIVE`; storage and output always use the enum name)
 - `salt`: bucketing salt
 - `config`: experiment configuration (variants/targeting/metrics)
 

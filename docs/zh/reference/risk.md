@@ -47,7 +47,7 @@
 | `COLLUSION` | 团伙作弊 |
 | `ECONOMY` | 经济系统异常 |
 
-规则类型（ruleType）7 类：`THRESHOLD`、`FREQUENCY`、`PATTERN`、`VELOCITY`、`RATIO`、`ANOMALY`、`MACHINE_LEARNING`。
+规则类型（ruleType）8 类：`THRESHOLD`、`FREQUENCY`、`PATTERN`、`VELOCITY`、`RATIO`、`ANOMALY`、`MACHINE_LEARNING`、`FEATURE`（B5：`ruleConditions.features` 从 risk 特征登记表取值评估）。
 
 ## 风险等级
 

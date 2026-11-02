@@ -120,8 +120,8 @@ NDJSON:
 ## Idempotency and Deduplication
 
 - `event_id` should be unique within `game_id + environment`.
-- The gateway claims the idempotency slot after schema validation passes: SDK retries with the same `event_id` are silently absorbed (counted as `duplicates`, still returned as `accepted`, not republished, and not sent to the DLQ).
-- Flink enrich/dedup deduplicates by `event_id` (7-day TTL).
+- The gateway claims the idempotency slot after schema validation passes: SDK retries of the same logical event identity (`game_id + environment + event_id`, length-prefixed) are silently absorbed (counted as `duplicates`, still returned as `accepted`, not republished, and not sent to the DLQ).
+- Flink enrich/dedup deduplicates by the same logical event identity `game_id + environment + event_id` (7-day TTL in keyed state).
 
 ## Validation and Governance
 

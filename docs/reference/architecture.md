@@ -133,7 +133,7 @@ ORDER BY (game_id, environment, event_type, event_date, player_id, user_id, devi
 
 ## Key Design
 
-- Idempotent deduplication: the client generates `event_id`; the gateway claims the idempotency slot after schema validation to absorb SDK retries (counted as `duplicates`); Flink deduplicates by `event_id` (state TTL 7 days, duplicates go to the DLQ).
+- Idempotent deduplication: the client generates `event_id`; the gateway claims the idempotency slot after schema validation to absorb SDK retries (counted as `duplicates`); Flink deduplicates by the logical event identity `game_id + environment + event_id` (state TTL 7 days, duplicates go to the DLQ).
 - Out-of-order handling: Flink uses event time and watermarks; late events enter the compensation path.
 - Schema governance: the Tracking Plan governs event names, field dictionaries, enums, and cardinality limits.
 - Client safety: clients hold only the public `api_key`; HMAC is used only by the Server SDK.

@@ -133,7 +133,7 @@ ORDER BY (game_id, environment, event_type, event_date, player_id, user_id, devi
 
 ## 关键设计
 
-- 幂等去重：客户端生成 `event_id`；Gateway 在 schema 校验通过后占用幂等位吸收 SDK 重试（计 `duplicates`）；Flink 按 `event_id` 去重（状态 TTL 7 天，重复进 DLQ）。
+- 幂等去重：客户端生成 `event_id`；Gateway 在 schema 校验通过后占用幂等位吸收 SDK 重试（计 `duplicates`）；Flink 按逻辑事件身份 `game_id + environment + event_id` 去重（状态 TTL 7 天，重复进 DLQ）。
 - 乱序处理：Flink 使用事件时间和 watermark，迟到事件进入补偿链路。
 - Schema 治理：Tracking Plan 管事件名、字段字典、枚举、cardinality 上限。
 - 客户端安全：客户端只持 public `api_key`；HMAC 只用于 Server SDK。

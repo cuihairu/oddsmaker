@@ -119,7 +119,7 @@ DELETE /api/keys/{keyId}
 ```json
 {
   "gameId": "game_demo",
-  "environmentId": "game_demo_prod",
+  "environmentId": "env_game_demo_prod",
   "name": "android-client",
   "keyType": "client",
   "rateLimit": {
@@ -129,7 +129,7 @@ DELETE /api/keys/{keyId}
 }
 ```
 
-> `environmentId` 是环境的内部标识符（如 `game_demo_prod`），不是逻辑名称（如 `prod`）；创建环境时自动生成。
+> `environmentId` 是环境的内部标识符（如 `env_game_demo_prod`，恒带 `env_` 前缀），不是逻辑名称（如 `prod`）；创建环境时自动生成。
 
 Key 类型：
 
@@ -192,7 +192,7 @@ POST /api/experiments/{id}/pause
 - `environmentId`：环境内部 ID（与 `environment` 二选一）
 - `environment`：环境逻辑名称，如 `dev`/`staging`/`prod`（与 `environmentId` 二选一，兼容字段）
 - `name`：实验名称
-- `status`：实验状态：`draft`/`running`/`paused`
+- `status`：实验状态：`DRAFT`/`LIVE`/`PAUSED`/`ENDED`（旧 API 输入 `running` 归一化为 `LIVE`；存储与输出一律枚举名）
 - `salt`：分流盐值
 - `config`：实验配置（variants/targeting/metrics）
 

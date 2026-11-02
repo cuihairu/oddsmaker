@@ -30,7 +30,7 @@ Oddsmaker should not become "a shared analytics SaaS for multiple companies." Th
 
 **GameAnalytics event taxonomy + ClickHouse real-time analytics + Flink stateful computation + single-company multi-game control plane + built-in risk control pipeline**
 
-- Event primary key (contract declaration): `game_id + environment + event_id`; the gateway idempotency key is actually the single `event_id` key (`ReplayGuard.consumeEventId`), and the ClickHouse `events` table is a MergeTree with no uniqueness constraint
+- Event primary key (contract declaration): `game_id + environment + event_id`; the gateway idempotency key is the logical event identity `game_id + environment + event_id` (`ReplayGuard.consumeEventId(gameId, environment, eventId)`, length-prefixed), and the ClickHouse `events` table is a MergeTree with no uniqueness constraint
 - Query partitioning: `game_id + environment + event_date`
 - Permission boundary: user roles bound to games or environments
 - Configuration boundary: API Keys, Tracking Plans, sampling, PII, and risk control policies are issued per game environment

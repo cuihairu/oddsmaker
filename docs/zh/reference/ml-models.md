@@ -53,7 +53,7 @@ Authorization: Bearer {token}
 {
   "gameId": "game_abc123",
   "modelName": "Churn Prediction Model",
-  "type": "CLASSIFICATION",
+  "modelType": "CLASSIFICATION",
   "framework": "scikit-learn",
   "description": "预测玩家流失概率"
 }
@@ -65,8 +65,8 @@ Authorization: Bearer {token}
   "id": "ml_abc123",
   "gameId": "game_abc123",
   "modelName": "Churn Prediction Model",
-  "type": "CLASSIFICATION",
-  "status": "DRAFT",
+  "modelType": "CLASSIFICATION",
+  "modelStatus": "DRAFT",
   "version": 1,
   "createdAt": "2024-01-01T00:00:00Z"
 }

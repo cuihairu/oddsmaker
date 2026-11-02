@@ -47,7 +47,7 @@ The case review console page is `/risk-cases` (list filtering + detail dialog + 
 | `COLLUSION` | Organized fraud |
 | `ECONOMY` | Economy system anomaly |
 
-Rule types (ruleType), 7 kinds: `THRESHOLD`, `FREQUENCY`, `PATTERN`, `VELOCITY`, `RATIO`, `ANOMALY`, `MACHINE_LEARNING`.
+Rule types (ruleType), 8 kinds: `THRESHOLD`, `FREQUENCY`, `PATTERN`, `VELOCITY`, `RATIO`, `ANOMALY`, `MACHINE_LEARNING`, `FEATURE` (B5: `ruleConditions.features` evaluated from the risk feature registry).
 
 ## Risk Levels
 
