@@ -13,12 +13,12 @@
 | Bucket | Total | P0 | P1 | P2 | P3 | Fixed | Remaining |
 |--------|------:|---:|---:|---:|---:|------:|----------:|
 | Security static scan | 7 | 0 | 1 | 0 | 6 | 1 | 6 |
-| Hidden-bug hunt (stream) | 11 | 0 | 2 | 4 | 5 | 2 | 9 |
+| Hidden-bug hunt (stream) | 10 | 0 | 2 | 4 | 4 | 2 | 8 |
 | Hidden-bug hunt (control-plane) | 12 | 0 | 0 | 7 | 5 | 0 | 12 |
 | Quality gates | 2 | 0 | 0 | 2 | 0 | 0 | 2 |
-| **Total** | **32** | **0** | **3** | **13** | **16** | **3** | **29** |
+| **Total** | **31** | **0** | **3** | **13** | **15** | **3** | **28** |
 
-**29 findings recorded** (32 total − 3 fixed). **3 P1 fixed**, 13 P2 + 16 P3 remaining (including 2 quality-gate gaps) → `todo.md` T-REV01–28.
+**28 findings recorded** (31 total − 3 fixed). **3 P1 fixed**, 13 P2 + 15 P3 remaining (including 2 quality-gate gaps) → `todo.md` T-REV01–28.
 
 **Fixed commits**:
 | # | Commit | Finding |
