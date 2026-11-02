@@ -156,6 +156,7 @@ class EventsExportServiceTest {
             assertThrows(BusinessException.class, () -> service.listDays(gid, "prod"));
         }
         // 合法标识符不受影响
+        when(ch.query(anyString(), any(Object[].class))).thenReturn(List.of());
         service.exportDay("game_a", "prod", "2026-09-20", false);
         assertTrue(Files.exists(tempDir.resolve("game_a/events/dt=2026-09-20/events-prod.jsonl")));
     }

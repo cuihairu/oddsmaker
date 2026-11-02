@@ -2,6 +2,7 @@ package io.oddsmaker.gateway.kafka;
 
 import io.oddsmaker.common.model.Event;
 import io.oddsmaker.gateway.config.TrustPolicy;
+import io.oddsmaker.gateway.security.ReplayGuard;
 import org.apache.avro.Schema;
 import org.apache.avro.generic.GenericData;
 import org.apache.avro.generic.GenericRecord;
@@ -51,10 +52,12 @@ public class AvroPublisher {
     private Schema schema;
     private final ObjectMapper om;
     private final DlqPublisher dlq;
+    private final ReplayGuard replayGuard;
 
-    public AvroPublisher(ObjectMapper om, DlqPublisher dlq) {
+    public AvroPublisher(ObjectMapper om, DlqPublisher dlq, ReplayGuard replayGuard) {
         this.om = om;
         this.dlq = dlq;
+        this.replayGuard = replayGuard;
     }
 
     @PostConstruct
@@ -95,11 +98,13 @@ public class AvroPublisher {
         String routingKey = buildRoutingKey(e);
         // 异步发送失败（broker 不可达/delivery 超时）会在 Future 上静默完成；若不观察，
         // 事件已被计数 ACCEPTED 却从未进 Kafka（静默丢失，审计 C2026-11-02）。挂失败回调
-        // 路由到 DLQ，使发送失败可观测、可恢复（下游去重吸收 DLQ 回放产生的重复）。
+        // 释放幂等位（SDK 重试可重新占用并重发，与同步 catch 路径同口径）并路由到 DLQ，
+        // 使发送失败可观测；注意 DLQ 消费者仅计数不重投，DLQ 不构成回放恢复。
         return producer.send(new ProducerRecord<>(eventsTopic, routingKey, gr), (metadata, exception) -> {
             if (exception != null) {
                 log.warn("Kafka send failed, routed to DLQ: eventId={} topic={}", e.eventId, eventsTopic, exception);
                 try {
+                    replayGuard.releaseEventId(e.gameId, e.environment, e.eventId);
                     dlq.publish(e.eventId, "kafka_send_failed", om.writeValueAsString(e));
                 } catch (Exception inner) {
                     log.error("Failed to route event to DLQ: eventId={}", e.eventId, inner);

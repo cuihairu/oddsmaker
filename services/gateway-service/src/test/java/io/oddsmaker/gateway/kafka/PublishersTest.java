@@ -2,6 +2,9 @@ package io.oddsmaker.gateway.kafka;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.oddsmaker.common.model.Event;
+import io.oddsmaker.gateway.security.ReplayGuard;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.apache.avro.Schema;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
@@ -48,6 +51,7 @@ class PublishersTest {
     private AvroPublisher avroPublisher;
 
     private DlqPublisher dlqPublisher;
+    private ReplayGuard replayGuard;
 
     @BeforeEach
     void setUp() throws Exception {
@@ -55,7 +59,8 @@ class PublishersTest {
         ReflectionTestUtils.setField(dlqPublisher, "producer", producer);
         ReflectionTestUtils.setField(dlqPublisher, "dlqTopic", "oddsmaker.deadletter");
 
-        avroPublisher = new AvroPublisher(new ObjectMapper(), dlqPublisher);
+        replayGuard = new ReplayGuard(600_000, 200_000, 86_400_000);
+        avroPublisher = new AvroPublisher(new ObjectMapper(), dlqPublisher, replayGuard);
         Schema schema = new Schema.Parser().parse(
             new String(new ClassPathResource("schemas/oddsmaker-event.avsc").getInputStream().readAllBytes(),
                 java.nio.charset.StandardCharsets.UTF_8));
@@ -177,7 +182,7 @@ class PublishersTest {
         // 序列化异常 → "{}"（ObjectMapper mock 抛出）
         ObjectMapper throwing = mock(ObjectMapper.class);
         when(throwing.writeValueAsString(any())).thenThrow(new RuntimeException("boom"));
-        AvroPublisher bad = new AvroPublisher(throwing, dlqPublisher);
+        AvroPublisher bad = new AvroPublisher(throwing, dlqPublisher, replayGuard);
         ReflectionTestUtils.setField(bad, "schema",
             ReflectionTestUtils.getField(avroPublisher, "schema"));
         ReflectionTestUtils.setField(bad, "producer", producer);
@@ -202,33 +207,33 @@ class PublishersTest {
         verify(producer).send(org.mockito.ArgumentMatchers.argThat(r ->
             r.topic().equals("oddsmaker.deadletter")
                 && String.valueOf(r.value()).contains("\"reason\":\"invalid_schema\"")
-                && String.valueOf(r.value()).endsWith("\"raw\":{\"a\":1}}")));
+                && String.valueOf(r.value()).endsWith("\"raw\":{\"a\":1}}")), any(org.apache.kafka.clients.producer.Callback.class));
 
         // null key 与 null raw
         dlqPublisher.publish(null, "bad", null);
         verify(producer).send(org.mockito.ArgumentMatchers.argThat(r ->
             String.valueOf(r.value()).startsWith("{\"event_id\":\"\",")
-                && String.valueOf(r.value()).contains("\"raw\":null")));
+                && String.valueOf(r.value()).contains("\"raw\":null")), any(org.apache.kafka.clients.producer.Callback.class));
 
         // 非 JSON raw → 字符串转义（" → \"，\ → \\）
         dlqPublisher.publish("evt_2", "boom", "plain \"text\" \\ end");
         verify(producer).send(org.mockito.ArgumentMatchers.argThat(r ->
-            String.valueOf(r.value()).contains("\"raw\":\"plain \\\"text\\\" \\\\ end\"")));
+            String.valueOf(r.value()).contains("\"raw\":\"plain \\\"text\\\" \\\\ end\"")), any(org.apache.kafka.clients.producer.Callback.class));
 
         // raw 以 [ 开头（JSON 数组）同样原样嵌入
         dlqPublisher.publish("evt_3", "boom", "[1,2]");
         verify(producer).send(org.mockito.ArgumentMatchers.argThat(r ->
-            String.valueOf(r.value()).endsWith("\"raw\":[1,2]}")));
+            String.valueOf(r.value()).endsWith("\"raw\":[1,2]}")), any(org.apache.kafka.clients.producer.Callback.class));
     }
 
     @Test
     @DisplayName("DlqPublisher：broker 不可达时 send() 挂满 max.block.ms 后静默吞掉失败（future 被忽略）")
     void dlqPublishBlocksSilentlyWhenBrokerUnreachable() {
-        // fire-and-forget 的两层实测语义（kafka-clients 3.7，运维发现）：
+        // fire-and-forget 的实测语义（kafka-clients 3.7，运维发现）：
         // 1) 阻塞：KafkaProducer#send 在调用线程等 metadata（waitOnMetadata），broker 不可达时
         //    挂满 max.block.ms——生产默认 60s，即 Gateway API 线程的最坏拖挂时长；
         // 2) 静默：TimeoutException 属 ApiException 族，doSend 不抛而是返回 FutureFailure——
-        //    DlqPublisher 忽略 future，该条 DLQ 消息无声丢失（无日志无指标）。
+        //    失败经回调日志 + 指标（oddsmaker.dlq.publish.failures）观测，不再是完全静默。
         // 此处用死端口 + 2s max.block.ms 离线锁定该行为；真实回路见 PublishersBrokerE2ETest
         java.util.Properties p = new java.util.Properties();
         p.put("bootstrap.servers", "127.0.0.1:19092");
@@ -248,8 +253,25 @@ class PublishersTest {
     }
 
     @Test
+    @DisplayName("DLQ 发布：异步投递失败有日志与指标观测")
+    void dlqPublishFailureIsObservable() {
+        MeterRegistry meters = new SimpleMeterRegistry();
+        ReflectionTestUtils.setField(dlqPublisher, "meters", meters);
+        org.mockito.Mockito.doAnswer(invocation -> {
+            org.apache.kafka.clients.producer.Callback callback = invocation.getArgument(1);
+            callback.onCompletion(null, new org.apache.kafka.common.errors.TimeoutException("broker down"));
+            return future;
+        }).when(producer).send(any(ProducerRecord.class), any(org.apache.kafka.clients.producer.Callback.class));
+
+        dlqPublisher.publish("evt_dlq_fail", "kafka_send_failed", "{}");
+
+        assertEquals(1, meters.counter("oddsmaker.dlq.publish.failures", "reason", "kafka_send_failed").count());
+    }
+
+    @Test
     @DisplayName("AvroPublisher publish：异步发送失败经回调路由 DLQ（不静默丢失，审计 C2026-11-02）")
     void publishRoutesAsyncFailureToDlq() {
+        assertTrue(replayGuard.consumeEventId("game_demo", "prod", "evt_12345678"));
         org.mockito.Mockito.doAnswer(invocation -> {
             org.apache.kafka.clients.producer.Callback cb = invocation.getArgument(1);
             cb.onCompletion(null, new org.apache.kafka.common.errors.TimeoutException("broker down"));
@@ -260,7 +282,8 @@ class PublishersTest {
 
         // 失败回调应把同一事件写到 deadletter topic（1 参 send：DlqPublisher 投递路径）
         verify(producer).send(org.mockito.ArgumentMatchers.argThat(r ->
-            "oddsmaker.deadletter".equals(r.topic())));
+            "oddsmaker.deadletter".equals(r.topic())), any(org.apache.kafka.clients.producer.Callback.class));
+        assertTrue(replayGuard.consumeEventId("game_demo", "prod", "evt_12345678"));
     }
 
     @Test
@@ -279,7 +302,7 @@ class PublishersTest {
     @Test
     @DisplayName("AvroPublisher init：加载 avsc + Apicurio 序列化器装配（惰性建连）")
     void avroPublisherInitLoadsSchemaAndProducer() throws Exception {
-        AvroPublisher avro = new AvroPublisher(new ObjectMapper(), dlqPublisher);
+        AvroPublisher avro = new AvroPublisher(new ObjectMapper(), dlqPublisher, new ReplayGuard(600_000, 200_000, 86_400_000));
         ReflectionTestUtils.setField(avro, "bootstrap", "127.0.0.1:19092");
         ReflectionTestUtils.setField(avro, "eventsTopic", "oddsmaker.events_raw");
         ReflectionTestUtils.setField(avro, "registryUrl", "http://127.0.0.1:18081/apis/registry/v2");

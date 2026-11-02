@@ -292,7 +292,8 @@ residual duplication window.
 Logical event identity = `game_id + environment + event_id`, length-prefix encoded (length-delimited,
 so a separator can never collide with a key). The same key is used in two places:
 
-- Gateway `ReplayGuard` (Redis, entry idempotency) — the first pass, absorbing ingestion-end resends;
+- Gateway `ReplayGuard` (local generation cache, entry idempotency) — the first pass, absorbing ingestion-end
+  resends; the window is instance-local (shared Redis is a future hardening step);
 - Enrich job `DedupFunction` (Flink keyed state, 7-day TTL) — the second pass, absorbing Kafka
   re-delivery and restart replay.
 
@@ -332,10 +333,12 @@ than "duplicates eliminated".
 
 ### Observation semantics
 
-Events judged duplicate inside the job go to the DLQ side output (Kafka text topic, message carries the
-`duplicate` marker) — the duplicate count in the DLQ is a direct reading of the upstream dedup
-interception volume. Note it is only an upper-bound signal: under window type 1 duplicates are inserted
-directly and leave no DLQ trace, so a silent DLQ does not mean the downstream is duplicate-free.
+Events judged duplicate inside the job are emitted to the `DedupFunction`'s `duplicate` side output, but that
+side output is not wired to the DLQ sink in the current job graph — only the `ValidateFunction`'s DLQ side
+output is connected (see T-REV04), so duplicate events do not currently reach the DLQ and the DLQ
+`duplicates_enrich` counter is not a reading of upstream dedup interception volume. This is a known gap
+(todo T-REV04), not an intended observation semantics; the counter remains an upper-bound signal only once
+the dedup side output is wired.
 
 ### Verification surface
 

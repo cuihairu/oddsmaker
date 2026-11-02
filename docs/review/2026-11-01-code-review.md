@@ -35,7 +35,7 @@
 
 **Location**: `services/control-service/src/main/java/io/oddsmaker/control/service/EventsExportService.java` — `exportDay(...)` (gameId path variable + environment body field concatenated into `Path.of(storageDir, gameId, "events", ...)` and `fileName = "events-" + environment + ".jsonl"`) and `listDays(gameId)`.
 
-**Problem**: `gameId` (from path) and `environment` (from body) were only non-blank checked, then concatenated into a filesystem path with no segment validation. A request `GET /events/{gameId}/export?environment=..%2F..%2Fetc` could traverse outside the storage root; `environment="..%2F.."` in the filename likewise.
+**Problem**: `gameId` (from path) and `environment` (from body) were only non-blank checked, then concatenated into a filesystem path with no segment validation. A request `POST /api/games/{gameId}/events-export` with `environment="..%2F..%2Fetc"` could traverse outside the storage root; `environment="..%2F.."` in the filename likewise.
 
 **Fix**: added `requireSafePathSegment(value, errorCode, reason)` rejecting `/`, `\`, `\0`, and `..`; wired into `exportDay` (gameId + environment) and `listDays` (gameId). Rejects with `BusinessException`.
 
@@ -57,9 +57,11 @@
 
 **Problem**: `publish` did `return producer.send(new ProducerRecord<>(...))` and the returned `Future` was never awaited. With `acks=all` and a broker outage, `KafkaProducer.send` returns a Future that completes exceptionally on the I/O thread — the caller never observes it, the event is counted `ACCEPTED` by the gateway yet never reaches Kafka. Silent loss with no log or metric.
 
-**Fix**: switched to the 2-arg `producer.send(record, callback)` (Kafka ≥ 3.7). The callback routes any `exception != null` to `dlq.publish(eventId, "kafka_send_failed", json)`, with an inner try/catch + `log.error` so DLQ failure cannot throw into the send path.
+**Fix**: switched to the 2-arg `producer.send(record, callback)` (Kafka ≥ 3.7). The callback routes any `exception != null` to `dlq.publish(eventId, "kafka_send_failed", json)`, with an inner try/catch + `log.error` so DLQ failure cannot throw into the send path; the callback also releases the idempotency bit (`ReplayGuard.releaseEventId`) so an SDK retry can re-consume and re-send.
 
-**Tests**: `PublishersTest.publishRoutesAsyncFailureToDlq()` (callback invoked with `TimeoutException` → DLQ topic receives the event); `PublishersBrokerE2ETest` constructor sites updated.
+**Tests**: `PublishersTest.publishRoutesAsyncFailureToDlq()` (callback invoked with `TimeoutException` → DLQ topic receives the event, idempotency bit released); `PublishersBrokerE2ETest` constructor sites updated.
+
+**Boundary note**: the DLQ consumer only counts (by reason) and never replays — DLQ messages do not return to `events_raw`, so "recoverable" applies to the retry-at-gateway path (via the released idempotency bit), not to a DLQ replay path.
 
 ---
 

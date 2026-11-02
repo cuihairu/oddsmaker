@@ -1,7 +1,11 @@
 package io.oddsmaker.gateway.kafka;
 
+import io.micrometer.core.instrument.MeterRegistry;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -10,6 +14,8 @@ import java.util.Properties;
 
 @Component
 public class DlqPublisher {
+    private static final Logger log = LoggerFactory.getLogger(DlqPublisher.class);
+
     @Value("${oddsmaker.kafka.bootstrap}")
     private String bootstrap;
 
@@ -17,6 +23,9 @@ public class DlqPublisher {
     private String dlqTopic;
 
     private KafkaProducer<String, String> producer;
+
+    @Autowired(required = false)
+    private MeterRegistry meters;
 
     @PostConstruct
     public void init() {
@@ -34,7 +43,14 @@ public class DlqPublisher {
                 key == null ? "" : key,
                 reason,
                 raw == null ? "null" : stringify(raw));
-        producer.send(new ProducerRecord<>(dlqTopic, key, payload));
+        producer.send(new ProducerRecord<>(dlqTopic, key, payload), (metadata, exception) -> {
+            if (exception != null) {
+                log.error("DLQ send failed: key={} reason={}", key, reason, exception);
+                if (meters != null) {
+                    meters.counter("oddsmaker.dlq.publish.failures", "reason", reason).increment();
+                }
+            }
+        });
     }
 
     private String stringify(String raw) {

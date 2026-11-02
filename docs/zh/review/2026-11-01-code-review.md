@@ -35,7 +35,7 @@
 
 **位置**: `services/control-service/src/main/java/io/oddsmaker/control/service/EventsExportService.java` — `exportDay(...)`（gameId 路径变量 + environment body 字段拼接进 `Path.of(storageDir, gameId, "events", ...)` 与 `fileName = "events-" + environment + ".jsonl"`）及 `listDays(gameId)`。
 
-**问题**: `gameId`（路径）与 `environment`（body）仅做非空校验，随后无片段校验直接拼入文件系统路径。请求 `GET /events/{gameId}/export?environment=..%2F..%2Fetc` 可穿越存储根目录；`environment="..%2F.."` 同样可进文件名。
+**问题**: `gameId`（路径）与 `environment`（body）仅做非空校验，随后无片段校验直接拼入文件系统路径。请求 `POST /api/games/{gameId}/events-export` 携带 `environment="..%2F..%2Fetc"` 可穿越存储根目录；`environment="..%2F.."` 同样可进文件名。
 
 **修复**: 新增 `requireSafePathSegment(value, errorCode, reason)` 拒绝 `/`、`\`、`\0`、`..`；接入 `exportDay`（gameId + environment）与 `listDays`（gameId），以 `BusinessException` 拒绝。
 
@@ -57,9 +57,11 @@
 
 **问题**: `publish` 原为 `return producer.send(new ProducerRecord<>(...))`，返回的 `Future` 从不被观察。`acks=all` 下 broker 故障时 `KafkaProducer.send` 在 I/O 线程返回异常完成的 Future — 调用方永远看不到，事件被网关计为 `ACCEPTED` 却从未进 Kafka。静默丢失，无日志无指标。
 
-**修复**: 改用双参 `producer.send(record, callback)`（Kafka ≥ 3.7）。回调将任何 `exception != null` 路由至 `dlq.publish(eventId, "kafka_send_failed", json)`，内层 try/catch + `log.error` 保证 DLQ 失败不抛入发送路径。
+**修复**: 改用双参 `producer.send(record, callback)`（Kafka ≥ 3.7）。回调将任何 `exception != null` 路由至 `dlq.publish(eventId, "kafka_send_failed", json)`，内层 try/catch + `log.error` 保证 DLQ 失败不抛入发送路径；回调同时释放幂等位（`ReplayGuard.releaseEventId`），SDK 重试可重新占用并重发。
 
-**测试**: `PublishersTest.publishRoutesAsyncFailureToDlq()`（回调以 `TimeoutException` 触发 → DLQ 主题收到该事件）；`PublishersBrokerE2ETest` 构造点更新。
+**测试**: `PublishersTest.publishRoutesAsyncFailureToDlq()`（回调以 `TimeoutException` 触发 → DLQ 主题收到该事件、幂等位已释放）；`PublishersBrokerE2ETest` 构造点更新。
+
+**边界注**: DLQ 消费者仅按 reason 计数、从不回放/重投，DLQ 消息不会回到 `events_raw`——「可恢复」仅适用于网关重试路径（经释放的幂等位），不适用于 DLQ 回放路径。
 
 ---
 
