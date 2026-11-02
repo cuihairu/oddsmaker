@@ -125,3 +125,7 @@
 - [x] 审核发现：spec 新增断言行号范围 42-45 实为 42-44——已更正
 - [x] 审核发现：vitest.config include 行号 :12/:16 自相矛盾——统一 :16
 > 审核发现（不属实，已排除）：16b06030..HEAD 无问题——不成立：0b09222 曾引入 README Docs 链接双斜杠回归（后续 6ca6625 修复）
+
+- [x] 审核发现：docs/审计-文档一致性.md:245 称「all 11 `deploy/k8s/` manifests」被 operations/index.md:52-62 引用，但该段仅含 10 条 `kubectl apply`，且 deploy/k8s/ 下第 11 个文件是 `rollback-release.sh`（脚本而非 manifest），实际被引用的是 10 个 manifest——已更正为 10 个 manifest + rollback-release.sh 注（00c79bb）
+- [x] 审核发现：docs/审计-文档一致性.md:247 称「RBAC with 8 roles」匹配 `V0.2.3__rbac_permissions_roles.sql:134-143`，但 134-143 行仅含 6 个 `role_*` 插入（role_operator/role_game_admin/role_analyst/role_marketing/role_finance/role_developer），8 个角色需到 134-147 行（含 role_viewer/role_qa）才完整——已更正为 :134-146（00c79bb）
+- [x] 审核发现：docs/审计-文档一致性.md:253 称 todo.md「139 lines before」整理后减少，但整理前（8320be0）实际为 138 行、整理后（0033f76）为 127 行；「139」与实测 138 不符——已更正为 138（8320be0）→127（0033f76）（00c79bb）
