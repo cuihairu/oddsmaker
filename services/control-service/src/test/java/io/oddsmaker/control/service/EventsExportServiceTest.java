@@ -143,6 +143,24 @@ class EventsExportServiceTest {
     }
 
     @Test
+    @DisplayName("exportDay/listDays：gameId/environment 含路径穿越段被拒（不写盘、不越出导出目录）")
+    void exportDayAndListDaysRejectPathTraversal() {
+        when(ch.isAvailable()).thenReturn(true);
+        // environment 含 .. 或分隔符 → 拒绝，且不写任何文件
+        for (String env : new String[]{"../etc", "a/b", "..", "a\\b"}) {
+            assertThrows(BusinessException.class, () -> service.exportDay("game_a", env, "2026-09-20", false));
+        }
+        // gameId 含穿越段 → 拒绝
+        for (String gid : new String[]{"../../x", "a/b", ".."}) {
+            assertThrows(BusinessException.class, () -> service.exportDay(gid, "prod", "2026-09-20", false));
+            assertThrows(BusinessException.class, () -> service.listDays(gid, "prod"));
+        }
+        // 合法标识符不受影响
+        service.exportDay("game_a", "prod", "2026-09-20", false);
+        assertTrue(Files.exists(tempDir.resolve("game_a/events/dt=2026-09-20/events-prod.jsonl")));
+    }
+
+    @Test
     @DisplayName("listDays：按日期倒序 + 环境过滤，无分区返回空")
     void listDaysSortedAndFiltered() {
         when(ch.isAvailable()).thenReturn(true);

@@ -75,9 +75,11 @@ public class EventsExportService {
         if (gameId == null || gameId.isBlank()) {
             throw new BusinessException("INVALID_GAME: " + "缺少游戏 ID");
         }
+        requireSafePathSegment(gameId, "INVALID_GAME", "非法游戏 ID: ");
         if (environment == null || environment.isBlank() || environment.length() > 100) {
             throw new BusinessException("INVALID_ENV: " + "非法环境: " + environment);
         }
+        requireSafePathSegment(environment, "INVALID_ENV", "非法环境: ");
         LocalDate day = parseDate(date);
         if (!ch.isAvailable()) {
             throw new BusinessException("CH_UNAVAILABLE: " + "ClickHouse 未配置，无法导出");
@@ -179,6 +181,10 @@ public class EventsExportService {
     // ---------------- 分区发现 ----------------
 
     public List<Map<String, Object>> listDays(String gameId, String environment) {
+        if (gameId == null || gameId.isBlank()) {
+            return List.of();
+        }
+        requireSafePathSegment(gameId, "INVALID_GAME", "非法游戏 ID: ");
         Path root = Path.of(storageDir, gameId, "events");
         List<Map<String, Object>> days = new ArrayList<>();
         if (!Files.isDirectory(root)) return days;
@@ -214,6 +220,14 @@ public class EventsExportService {
 
     private Path partitionDir(String gameId, String environment, LocalDate day) {
         return Path.of(storageDir, gameId, "events", "dt=" + day.format(ISO_DATE));
+    }
+
+    /** gameId/environment 会拼进导出文件路径，拒绝路径分隔符与穿越段，防止逃出导出目录。 */
+    private static void requireSafePathSegment(String value, String errorCode, String reason) {
+        if (value.indexOf('/') >= 0 || value.indexOf('\\') >= 0 || value.indexOf('\0') >= 0
+                || value.contains("..")) {
+            throw new BusinessException(errorCode + ": " + reason + value);
+        }
     }
 
     private LocalDate parseDate(String date) {
