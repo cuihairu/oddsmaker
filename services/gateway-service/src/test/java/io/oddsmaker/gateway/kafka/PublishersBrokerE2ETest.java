@@ -234,7 +234,7 @@ class PublishersBrokerE2ETest {
                 "apicurio registry 不可达（" + REGISTRY_URL + "），Avro 回路用例跳过——docker 起 registry 后重跑");
 
         String topic = newTopic();
-        AvroPublisher avro = new AvroPublisher(new ObjectMapper());
+        AvroPublisher avro = new AvroPublisher(new ObjectMapper(), new DlqPublisher());
         ReflectionTestUtils.setField(avro, "bootstrap", BOOTSTRAP);
         ReflectionTestUtils.setField(avro, "eventsTopic", topic);
         ReflectionTestUtils.setField(avro, "registryUrl", REGISTRY_URL);
@@ -273,7 +273,7 @@ class PublishersBrokerE2ETest {
     @DisplayName("registry 不可达：Avro 序列化在调用线程同步抛出（API 线程可见失败）")
     void avroPublishFailsFastWhenRegistryDown() throws Exception {
         String topic = newTopic();
-        AvroPublisher avro = new AvroPublisher(new ObjectMapper());
+        AvroPublisher avro = new AvroPublisher(new ObjectMapper(), new DlqPublisher());
         Schema schema = new Schema.Parser().parse(new String(
                 new ClassPathResource("schemas/oddsmaker-event.avsc").getInputStream().readAllBytes(),
                 java.nio.charset.StandardCharsets.UTF_8));

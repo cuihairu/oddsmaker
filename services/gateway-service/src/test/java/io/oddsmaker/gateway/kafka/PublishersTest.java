@@ -51,18 +51,18 @@ class PublishersTest {
 
     @BeforeEach
     void setUp() throws Exception {
-        avroPublisher = new AvroPublisher(new ObjectMapper());
+        dlqPublisher = new DlqPublisher();
+        ReflectionTestUtils.setField(dlqPublisher, "producer", producer);
+        ReflectionTestUtils.setField(dlqPublisher, "dlqTopic", "oddsmaker.deadletter");
+
+        avroPublisher = new AvroPublisher(new ObjectMapper(), dlqPublisher);
         Schema schema = new Schema.Parser().parse(
             new String(new ClassPathResource("schemas/oddsmaker-event.avsc").getInputStream().readAllBytes(),
                 java.nio.charset.StandardCharsets.UTF_8));
         ReflectionTestUtils.setField(avroPublisher, "schema", schema);
         ReflectionTestUtils.setField(avroPublisher, "producer", producer);
         ReflectionTestUtils.setField(avroPublisher, "eventsTopic", "oddsmaker.events_raw");
-        when(producer.send(any(ProducerRecord.class))).thenReturn(future);
-
-        dlqPublisher = new DlqPublisher();
-        ReflectionTestUtils.setField(dlqPublisher, "producer", producer);
-        ReflectionTestUtils.setField(dlqPublisher, "dlqTopic", "oddsmaker.deadletter");
+        when(producer.send(any(ProducerRecord.class), any(org.apache.kafka.clients.producer.Callback.class))).thenReturn(future);
     }
 
     private Event fullEvent() {
@@ -128,7 +128,7 @@ class PublishersTest {
         @SuppressWarnings("unchecked")
         org.mockito.ArgumentCaptor<ProducerRecord<String, Object>> captor =
             org.mockito.ArgumentCaptor.forClass(ProducerRecord.class);
-        verify(producer).send(captor.capture());
+        verify(producer).send(captor.capture(), any(org.apache.kafka.clients.producer.Callback.class));
         ProducerRecord<String, Object> record = captor.getValue();
         assertEquals("oddsmaker.events_raw", record.topic());
         assertEquals("game_demo|prod", record.key());
@@ -153,7 +153,7 @@ class PublishersTest {
         risk.eventType = "risk";
         avroPublisher.publish(risk);
         verify(producer).send(org.mockito.ArgumentMatchers.argThat(r ->
-            "oddsmaker.events_raw".equals(r.topic())));
+            "oddsmaker.events_raw".equals(r.topic())), any(org.apache.kafka.clients.producer.Callback.class));
         clearInvocations(producer);
 
         // 名称包含 risk 的埋点同样不改道
@@ -163,7 +163,7 @@ class PublishersTest {
         avroPublisher.publish(named);
         verify(producer).send(org.mockito.ArgumentMatchers.argThat(r ->
             "oddsmaker.events_raw".equals(r.topic()) && "user_risk_signal".equals(
-                ((org.apache.avro.generic.GenericRecord) r.value()).get("event_name"))));
+                ((org.apache.avro.generic.GenericRecord) r.value()).get("event_name"))), any(org.apache.kafka.clients.producer.Callback.class));
         clearInvocations(producer);
 
         // null props → "{}"
@@ -171,20 +171,20 @@ class PublishersTest {
         noProps.props = null;
         avroPublisher.publish(noProps);
         verify(producer).send(org.mockito.ArgumentMatchers.argThat(r ->
-            "{}".equals(String.valueOf(((org.apache.avro.generic.GenericRecord) r.value()).get("props_json")))));
+            "{}".equals(String.valueOf(((org.apache.avro.generic.GenericRecord) r.value()).get("props_json")))), any(org.apache.kafka.clients.producer.Callback.class));
         clearInvocations(producer);
 
         // 序列化异常 → "{}"（ObjectMapper mock 抛出）
         ObjectMapper throwing = mock(ObjectMapper.class);
         when(throwing.writeValueAsString(any())).thenThrow(new RuntimeException("boom"));
-        AvroPublisher bad = new AvroPublisher(throwing);
+        AvroPublisher bad = new AvroPublisher(throwing, dlqPublisher);
         ReflectionTestUtils.setField(bad, "schema",
             ReflectionTestUtils.getField(avroPublisher, "schema"));
         ReflectionTestUtils.setField(bad, "producer", producer);
         ReflectionTestUtils.setField(bad, "eventsTopic", "oddsmaker.events_raw");
         bad.publish(fullEvent());
         verify(producer).send(org.mockito.ArgumentMatchers.argThat(r ->
-            "{}".equals(String.valueOf(((org.apache.avro.generic.GenericRecord) r.value()).get("props_json")))));
+            "{}".equals(String.valueOf(((org.apache.avro.generic.GenericRecord) r.value()).get("props_json")))), any(org.apache.kafka.clients.producer.Callback.class));
         clearInvocations(producer);
 
         // tsServer null 分支
@@ -192,7 +192,7 @@ class PublishersTest {
         nullTs.tsServer = null;
         avroPublisher.publish(nullTs);
         verify(producer).send(org.mockito.ArgumentMatchers.argThat(r ->
-            ((org.apache.avro.generic.GenericRecord) r.value()).get("ts_server") == null));
+            ((org.apache.avro.generic.GenericRecord) r.value()).get("ts_server") == null), any(org.apache.kafka.clients.producer.Callback.class));
     }
 
     @Test
@@ -248,6 +248,22 @@ class PublishersTest {
     }
 
     @Test
+    @DisplayName("AvroPublisher publish：异步发送失败经回调路由 DLQ（不静默丢失，审计 C2026-11-02）")
+    void publishRoutesAsyncFailureToDlq() {
+        org.mockito.Mockito.doAnswer(invocation -> {
+            org.apache.kafka.clients.producer.Callback cb = invocation.getArgument(1);
+            cb.onCompletion(null, new org.apache.kafka.common.errors.TimeoutException("broker down"));
+            return future;
+        }).when(producer).send(any(ProducerRecord.class), any(org.apache.kafka.clients.producer.Callback.class));
+
+        avroPublisher.publish(fullEvent());
+
+        // 失败回调应把同一事件写到 deadletter topic（1 参 send：DlqPublisher 投递路径）
+        verify(producer).send(org.mockito.ArgumentMatchers.argThat(r ->
+            "oddsmaker.deadletter".equals(r.topic())));
+    }
+
+    @Test
     @DisplayName("DlqPublisher init：按配置装配 KafkaProducer（String 序列化，惰性建连）")
     void dlqPublisherInitBuildsProducer() {
         DlqPublisher dlq = new DlqPublisher();
@@ -263,7 +279,7 @@ class PublishersTest {
     @Test
     @DisplayName("AvroPublisher init：加载 avsc + Apicurio 序列化器装配（惰性建连）")
     void avroPublisherInitLoadsSchemaAndProducer() throws Exception {
-        AvroPublisher avro = new AvroPublisher(new ObjectMapper());
+        AvroPublisher avro = new AvroPublisher(new ObjectMapper(), dlqPublisher);
         ReflectionTestUtils.setField(avro, "bootstrap", "127.0.0.1:19092");
         ReflectionTestUtils.setField(avro, "eventsTopic", "oddsmaker.events_raw");
         ReflectionTestUtils.setField(avro, "registryUrl", "http://127.0.0.1:18081/apis/registry/v2");

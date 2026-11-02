@@ -26,6 +26,9 @@ import java.util.concurrent.Future;
  */
 @Component
 public class AvroPublisher {
+
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(AvroPublisher.class);
+
     @Value("${oddsmaker.kafka.bootstrap}")
     private String bootstrap;
 
@@ -47,8 +50,12 @@ public class AvroPublisher {
     private KafkaProducer<String, Object> producer;
     private Schema schema;
     private final ObjectMapper om;
+    private final DlqPublisher dlq;
 
-    public AvroPublisher(ObjectMapper om) { this.om = om; }
+    public AvroPublisher(ObjectMapper om, DlqPublisher dlq) {
+        this.om = om;
+        this.dlq = dlq;
+    }
 
     @PostConstruct
     public void init() throws Exception {
@@ -86,7 +93,19 @@ public class AvroPublisher {
     public Future<RecordMetadata> publish(Event e) {
         GenericRecord gr = buildGenericRecord(e);
         String routingKey = buildRoutingKey(e);
-        return producer.send(new ProducerRecord<>(eventsTopic, routingKey, gr));
+        // 异步发送失败（broker 不可达/delivery 超时）会在 Future 上静默完成；若不观察，
+        // 事件已被计数 ACCEPTED 却从未进 Kafka（静默丢失，审计 C2026-11-02）。挂失败回调
+        // 路由到 DLQ，使发送失败可观测、可恢复（下游去重吸收 DLQ 回放产生的重复）。
+        return producer.send(new ProducerRecord<>(eventsTopic, routingKey, gr), (metadata, exception) -> {
+            if (exception != null) {
+                log.warn("Kafka send failed, routed to DLQ: eventId={} topic={}", e.eventId, eventsTopic, exception);
+                try {
+                    dlq.publish(e.eventId, "kafka_send_failed", om.writeValueAsString(e));
+                } catch (Exception inner) {
+                    log.error("Failed to route event to DLQ: eventId={}", e.eventId, inner);
+                }
+            }
+        });
     }
 
     private String buildRoutingKey(Event e) {
