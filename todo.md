@@ -17,6 +17,37 @@
 - [ ] T-ML ML 异常检测进评估批次（P3，owner=等部署面）：解锁=四项触发条件任一达标；条件 a 需 infra 栈部署 + 带网关流量的部署面，自指标落库满 7 天（7d）/28 天（28d 分位基线）；条件 b/c（阈值调整次数/误杀率）缺记录面。2026-11-01 复核：infra-prometheus 未运行（Exited 11 天前）、demo compose 服务面仍=postgres/redis/control-service（无 gateway）、127.0.0.1:9090 由 Cockpit 占用——条件 a 时钟未起。【已代决暂缓（需部署面输入）】
 - [ ] DOC-GIF 配置开关效果动态图（P2，文档）：枚举全部「开启后有效果」的开关/配置项，自动流水线生成证据（GUI 类 off/on 截图 + 切换录屏，CLI 类终端录屏，ffmpeg 缝合 GIF）；docs「配置效果」页（双语）逐开关嵌入说明 + off 图 + on 图 + GIF；流水线可重跑，兼作配置效果回归测试（参考 kode todo C-24 同款模式，2026-11-01 用户令全舰队推广）。
 
+## 代码深审 2026-11-02 挂账（T-REV，来源 docs/review/2026-11-01-code-review.md；P0/P1 已当场修，此处仅 P2/P3）
+
+- [ ] T-REV01 ReplayGuard 轮换竞态（P2）：`rotateIfNeeded` 锁外 `current==signatures` 判真后并发换代，锁内 `else` 误轮换 eventIds 丢弃整代 TTL 幂等记录（security/ReplayGuard.java:122-126）
+- [ ] T-REV02 FunnelsJob 可选步回退未验证中间步 optional（P2）：非 optional 中间步被静默跳过，N+1 步对 N-1 步时间戳匹配（jobs/flink/funnels-job/.../ConfigurableFunnelsJob.java:450-462）
+- [ ] T-REV03 risk-job FEATURE 广播状态无 TTL（P2）：广播 MapState 不能带 TTL，主体闲置一周后旧特征值仍参与评估（jobs/flink/risk-job/.../FeatureRuleFunction.java:30-31,119）
+- [ ] T-REV04 events-enrich dedup 的 DLQ 侧输出未接线（P2）：仅 validated.getSideOutput(DLQ) 接 DLQ sink，dedup 流 DLQ 输出被孤立（jobs/flink/events-enrich-job/.../EventsEnrichJob.java:158 vs 411-437）
+- [ ] T-REV05 ExportService 事务回滚毒化（P2）：类级 @Transactional 下 catch 内 markAsFailed+save 再抛 RuntimeException，API 代理路径整个回滚、FAILED 标记丢失、作业卡 PENDING，CH 查询+文件写在事务内持连接（services/control-service/.../ExportService.java:161-166）
+- [ ] T-REV06 CohortService 同型事务毒化（P2）：CohortController:95 外部调用下 CALCULATING/FAILED 双标记回滚、重 CH computeCohort 在事务内（services/control-service/.../CohortService.java:143-146）
+- [ ] T-REV07 claim 并发唯一冲突 500（P2）：catch DataIntegrityViolation 内回查现有记录，但唯一违例已毒化事务，设计的中幂等 200 不可达；RedeemCodeService:207、PlayerDataQueryService:154 同型（services/control-service/.../MailService.java:168-171）
+- [ ] T-REV08 IdentityConsumer 吞异常致链接丢失（P2）：upsertIdentity 成功后 catch 吞掉异常并提交，offset 前进、链接静默丢失、不重试（services/control-service/.../IdentityConsumer.java:82-84）
+- [ ] T-REV09 SegmentService DELETE+INSERT 无原子性（P2）：ALTER DELETE 后 INSERT 失败则 segment_members 置空、所有 segmentFilterFragment 返回空，需人工重跑（services/control-service/.../SegmentService.java:164-182）
+- [ ] T-REV10 BlockListClient 缓存键缺 gameId（P2）：本地缓存键 targetType:targetValue 无 gameId，跨游戏误封达 15s（services/gateway-service/.../config/BlockListClient.java:38-58）
+- [ ] T-REV11 DataQualityCounters 非原子计数（P2）：`arr[ordinal]++` 非 LongAdder，并发 reactor 线程丢计数（services/gateway-service/.../metrics/DataQualityCounters.java:55）
+- [ ] T-REV12 无 JVM 静态分析门（P2）：gradle 无 checkstyle/spotless/ktlint/detekt/pmd，CI 只跑 test——lint 门缺失（build.gradle.kts + .github/workflows/ci.yaml）
+- [ ] T-REV13 web eslint 门已坏（P2）：无 eslint 配置（eslint≥9 强制 flat config）+ lint 脚本用 eslint10 已移除的 --ignore-path；CI 只接线 test/build（web/package.json + web/vitest.config.js）
+- [ ] T-REV14 死配置 oddsmaker.security.jwt.*（P3）：全仓零消费者，真实密钥走 oddsmaker.auth.jwt-secret 且受 ProductionSecretsValidator 保护；死块含硬编码默认值待清（services/control-service/.../application.yaml:97-99）
+- [ ] T-REV15 gateway 配置测试密钥对（P3）：apiKey→secret 测试对随主配置，注释已标生产勿用（services/gateway-service/.../application.yaml:34）
+- [ ] T-REV16 k8s postgres 占位口令（P3）：CHANGE_ME_IN_PRODUCTION 占位，未改即应用则 DB 认证用占位（deploy/k8s/postgres-secrets.yaml:14）
+- [ ] T-REV17 k8s redis 占位口令（P3）：同上（deploy/k8s/redis-secrets.yaml:13）
+- [ ] T-REV18 MlRetrainScheduler 内部 http://（P3）：配置派生非用户输入，非 TLS 拉取（services/control-service/.../MlRetrainScheduler.java:225）
+- [ ] T-REV19 webhook/集成 URL 只查前缀（P3）：admin 提供端点仅验 http(s):// 前缀，允许 http:// 到内网主机（services/control-service/.../WebhookService.java:345、IntegrationService:189、DimensionPullService:615）
+- [ ] T-REV20 EventQueue diskEvents 少计（P3）：重溢盘后未加回 rest.size()，diskEvents 下计致磁盘超 maxDiskEvents（sdks/server/.../EventQueue.java:153-166）
+- [ ] T-REV21 RiskJob toJson 只转义 "（P3）：未转义 \，反斜杠/证据值致 risk_events 主题畸形 JSON（jobs/flink/risk-job/.../RiskJob.java:1055）
+- [ ] T-REV22 RetentionJob 迟发 day<first 被忽略（P3）：队列已设后更早首日事件直接丢弃，无队列校正（jobs/flink/retention-job/.../RetentionJob.java:195-238）
+- [ ] T-REV23 窗口/键控键裸拼接无长度前缀（P3）：game_id|environment|subject 裸拼接，含 | 的 game_id 撞键并状态；RiskJob:988、RetentionJob:123、FunnelsJob:121、IdentityMergeJob:140 同型
+- [ ] T-REV24 QuotaEntity 可空列拆箱 NPE（P3）：currentUsage 为可空 BIGINT，isOverLimit/getUsagePercent/incrementUsage 未判空拆箱；RateLimitService:166-167 同型（services/control-service/.../jpa/QuotaEntity.java:98,113,133）
+- [ ] T-REV25 ClickHouse Statement 未关（P3）：execute(conn -> conn.createStatement().execute(...)) 只关连接不关 Statement；PlayerErasureService:624 同型（services/control-service/.../RetentionEnforcementService.java:237）
+- [ ] T-REV26 @CreationTimestamp 不回填内存实体（P3）：createGame 返回 GameDTO 时 createdAt/updatedAt 仍 null；GameService:247 同型（services/control-service/.../GameService.java:97）
+- [ ] T-REV27 ReportService timeRange NumberFormatException（P3）：TIME_RANGE_PATTERN 允许无界数字，20+ 位 timeRange 抛未捕获 NumberFormatException→500（services/control-service/.../ReportService.java:508）
+- [ ] T-REV28 RiskEventConsumer 吞异常致 BLOCK 未强制（P3）：handleBlock 瞬时失败被吞、offset 提交、BLOCK 永不执行；risk_case 已显 BLOCK 决策（services/control-service/.../RiskEventConsumer.java:162-165）
+
 ## 已完成需求
 
 - [x] T-AUDIT 外部生产审计整改收口（P0）：审计 11 条全部核验、仓内可动整改全部落地（ML/SITE 两面由 T-ML/T-DEMO502 同源挂账不双记），§10 终验清单 9 勾 + 2 条纯外部卡点（首次真实发版健康检查/事件冒烟、生产流量告警实测）；整改链 aae925e/27df30b/0569935/0ba912f/a51fa90（0ba912f：control-service 184 suite/2106 例 0 失败、promtool 49 例 SUCCESS），明细见 docs/review/review-2026-10-18-production-audit.md
