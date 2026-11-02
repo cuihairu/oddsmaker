@@ -275,6 +275,9 @@ public class BatchController {
                                 }
                                 inspect(event, keyContext, EventInspectorBuffer.OUTCOME_ACCEPTED, null, null);
                             } catch (Exception ex) {
+                                // 发布失败：释放幂等位，SDK 重试可重新占用并重发；
+                                // 否则重试被上方 consumeEventId 吸收为重复、事件静默丢失（审计 C2026-11-02）
+                                replayGuard.releaseEventId(event.gameId, event.environment, event.eventId);
                                 reject(resp, event, keyContext, "kafka_error");
                                 inspect(event, keyContext, EventInspectorBuffer.OUTCOME_REJECTED, "kafka_error", null);
                             }

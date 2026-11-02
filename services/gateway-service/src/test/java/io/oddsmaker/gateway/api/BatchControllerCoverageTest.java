@@ -286,6 +286,34 @@ class BatchControllerCoverageTest {
     }
 
     @Test
+    @DisplayName("kafka_error 后 SDK 重试不被幂等吸收：发布失败时释放幂等位")
+    void kafkaErrorReleasesIdempotencyBit() {
+        when(avroPublisher.publish(any()))
+            .thenThrow(new RuntimeException("broker down"))
+            .thenReturn(null);
+        String body = "[" + event("01JKAFKARETRY1", "game_demo", "d1", null) + "]";
+        // 第一次提交：发布失败 → kafka_error（幂等位随之释放）
+        client.post().uri("/v1/batch")
+            .contentType(MediaType.APPLICATION_JSON)
+            .header("x-api-key", "pk_test_example")
+            .bodyValue(body)
+            .exchange()
+            .expectStatus().is2xxSuccessful()
+            .expectBody()
+            .jsonPath("$.rejected[0].reason").isEqualTo("kafka_error");
+        // SDK 重试同一事件：应真正发布（accepted），而不是被吸收为 duplicate（审计 C2026-11-02）
+        client.post().uri("/v1/batch")
+            .contentType(MediaType.APPLICATION_JSON)
+            .header("x-api-key", "pk_test_example")
+            .bodyValue(body)
+            .exchange()
+            .expectStatus().is2xxSuccessful()
+            .expectBody()
+            .jsonPath("$.accepted[0]").isEqualTo("01JKAFKARETRY1")
+            .jsonPath("$.duplicates").isEqualTo(0);
+    }
+
+    @Test
     @DisplayName("数组 null 与非对象元素被跳过，其余正常处理")
     void nullArrayElementsSkipped() {
         client.post().uri("/v1/batch")

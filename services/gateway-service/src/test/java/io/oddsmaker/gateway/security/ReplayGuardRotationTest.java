@@ -62,6 +62,19 @@ class ReplayGuardRotationTest {
         assertFalse(guard.isTimestampPlausible(now - 2_000, now));    }
 
     @Test
+    @DisplayName("releaseEventId：发布失败后释放幂等位，同身份可重新占用（SDK 重试重发）")
+    void releaseEventIdAllowsReconsume() {
+        ReplayGuard guard = new ReplayGuard(600_000, 200_000, 86_400_000);
+        assertTrue(guard.consumeEventId("game-a", "prod", "evt-1"));
+        assertFalse(guard.consumeEventId("game-a", "prod", "evt-1"));  // 已见
+        guard.releaseEventId("game-a", "prod", "evt-1");
+        assertTrue(guard.consumeEventId("game-a", "prod", "evt-1"));   // 释放后可重新占用
+        // 释放只影响目标身份：另一环境同号事件（独立键）仍保持已见
+        assertTrue(guard.consumeEventId("game-a", "dev", "evt-1"));
+        assertFalse(guard.consumeEventId("game-a", "dev", "evt-1"));
+    }
+
+    @Test
     @DisplayName("幂等键=game_id+environment+event_id：跨游戏/跨环境同号 event_id 不互斥")
     void sameEventIdAcrossGamesAndEnvironmentsStaysIndependent() {
         ReplayGuard guard = new ReplayGuard(600_000, 200_000, 86_400_000);

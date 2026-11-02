@@ -99,6 +99,15 @@ public class ReplayGuard {
     }
 
     /**
+     * 发布失败后释放幂等位：让 SDK 重试重新占用并重发（at-least-once）。
+     * 仅当发布同步抛错（事件未进 Kafka）时调用；成功路径不释放——若释放，
+     * 并发重试会在同窗口双发（下游去重虽能吸收，但仍非必要）。
+     */
+    public void releaseEventId(String gameId, String environment, String eventId) {
+        eventIds.seen.remove(eventKey(gameId, environment, eventId));
+    }
+
+    /**
      * 事件时间戳信差检查：客户端时间偏离服务器过远视为可疑（伪造或严重时钟漂移）。
      */
     public boolean isTimestampPlausible(Long tsClient, long nowMillis) {
