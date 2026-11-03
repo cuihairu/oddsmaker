@@ -448,7 +448,20 @@ public class ConfigurableFunnelsJob {
                 }
                 state.put("step_" + stepIndex + "_ts", ts);
             } else if (step.optional) {
+                // 仅当当前步与锚点之间所有被跳过的中间步都是 optional 时才允许回退：
+                // 否则 N+1 步会绕过未到达的必选中间步，对其 N-1 步时间戳误配（T-REV02）。
+                // 锚点下界 = 当前步下方最近的必选步；锚点必须不低于它，其上的中间步才全为 optional。
+                int lowerBound = 0;
+                for (int j = stepIndex - 1; j >= 0; j--) {
+                    if (!config.steps.get(j).optional) {
+                        lowerBound = j;
+                        break;
+                    }
+                }
                 for (int i = prevStepIndex - 1; i >= 0; i--) {
+                    if (i < lowerBound) {
+                        break;
+                    }
                     Long prevPrevTs = state.get("step_" + i + "_ts");
                     if (prevPrevTs != null && ts - prevPrevTs <= stepWindowMs(step)) {
                         String key = "step_" + stepIndex + "_day_" + day;

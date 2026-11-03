@@ -470,6 +470,29 @@ class ConfigurableFunnelsJobTest {
         return fn;
     }
 
+    /** 按显式 optional 标志构造顺序漏斗处理函数（步骤窗 10s）。 */
+    private static ConfigurableFunnelsJob.ConfigurableFunnelProcess processWithOptionalFlags(
+            String type, long windowSec, TestMapState state, boolean... optionalFlags) throws Exception {
+        ConfigurableFunnelsJob.FunnelConfig config = new ConfigurableFunnelsJob.FunnelConfig();
+        config.id = "f1";
+        config.name = "t";
+        config.type = type;
+        config.timeWindowSec = windowSec;
+        config.enabled = true;
+        List<ConfigurableFunnelsJob.FunnelStep> steps = new ArrayList<>();
+        for (int i = 0; i < optionalFlags.length; i++) {
+            ConfigurableFunnelsJob.FunnelStep s = step("e" + (i + 1), i, optionalFlags[i]);
+            s.timeWindowSec = 10;
+            steps.add(s);
+        }
+        config.steps = steps;
+        ConfigurableFunnelsJob.ConfigurableFunnelProcess fn = new ConfigurableFunnelsJob.ConfigurableFunnelProcess(config);
+        Field f = ConfigurableFunnelsJob.ConfigurableFunnelProcess.class.getDeclaredField("state");
+        f.setAccessible(true);
+        f.set(fn, state);
+        return fn;
+    }
+
     private static RawEvent event(String name, long tsMs) {
         RawEvent r = new RawEvent();
         r.game_id = "g";
@@ -480,7 +503,7 @@ class ConfigurableFunnelsJobTest {
     }
 
     @Test
-    @DisplayName("顺序漏斗：三步依序推进；跳步超窗被 optional 回退救回")
+    @DisplayName("顺序漏斗：三步依序推进；跳过必选中间步被拒绝")
     void sequentialFunnelAdvances() throws Exception {
         TestMapState state = new TestMapState();
         ConfigurableFunnelsJob.ConfigurableFunnelProcess fn = processWithState("SEQUENTIAL", 3, 60, state);
@@ -491,17 +514,15 @@ class ConfigurableFunnelsJobTest {
         assertEquals(1, out.size());
         assertEquals(1, out.get(0).step);
 
-        // 跳过 e2 直接 e3：prev(step_1) 无 ts → optional 回退 step_0(0)，8-0 <= 10s → 计入
+        // 跳过必选中间步 e2 直接 e3：回退被必选 step_1 阻断 → 不计（T-REV02）
         fn.processElement(event("e3", 8L), keyedContext(fn), sinkTo(out));
-        assertEquals(2, out.size());
-        assertEquals(3, out.get(1).step);
-        assertEquals("Step 3", out.get(1).stepName);
-        assertEquals(100.0, out.get(1).conversionRate);
+        assertEquals(1, out.size());
+        assertNullState(state, "step_2_ts");
 
         // e2：prev(step_2 有 ts=8) 12-8 <= 10 → 计入
         fn.processElement(event("e2", 12L), keyedContext(fn), sinkTo(out));
-        assertEquals(3, out.size());
-        assertEquals(2, out.get(2).step);
+        assertEquals(2, out.size());
+        assertEquals(2, out.get(1).step);
     }
 
     @Test
@@ -789,16 +810,50 @@ class ConfigurableFunnelsJobTest {
     }
 
     @Test
-    @DisplayName("顺序漏斗 optional 回退：目标步骤当日已计数时只推进 ts 不重复 emit")
+    @DisplayName("顺序漏斗 optional 回退：跳过全 optional 中间步可回退；当日已计数只推进 ts")
     void optionalFallbackSkipsAlreadyCountedDay() throws Exception {
         TestMapState state = new TestMapState();
-        ConfigurableFunnelsJob.ConfigurableFunnelProcess fn = processWithState("SEQUENTIAL", 3, 60, state);
+        // e1 必选、e2 可选、e3 可选：跳过 e2 时中间步全为 optional，允许回退 step_0
+        ConfigurableFunnelsJob.ConfigurableFunnelProcess fn = processWithOptionalFlags(
+                "SEQUENTIAL", 60, state, false, true, true);
         List<ConfigurableFunnelsJob.FunnelRow> out = new ArrayList<>();
         fn.processElement(event("e1", 0L), keyedContext(fn), sinkTo(out));
         // 预置 step_2 当日已计数：回溯命中 step_0（8-0<=10s）但 day key 已存在 → 不 emit、仍推进 ts
         state.m.put("step_2_day_0", 1L);
         fn.processElement(event("e3", 8L), keyedContext(fn), sinkTo(out));
         assertEquals(1, out.size());
+        assertEquals(Long.valueOf(8L), state.m.get("step_2_ts"));
+    }
+
+    @Test
+    @DisplayName("顺序漏斗 optional 回退：跳过必选中间步被阻断（T-REV02）")
+    void optionalFallbackBlockedByRequiredMiddleStep() throws Exception {
+        TestMapState state = new TestMapState();
+        // e1 必选、e2 必选、e3 可选：跳过 e2 时中间步含必选 → 回退必须被阻断
+        ConfigurableFunnelsJob.ConfigurableFunnelProcess fn = processWithOptionalFlags(
+                "SEQUENTIAL", 60, state, false, false, true);
+        List<ConfigurableFunnelsJob.FunnelRow> out = new ArrayList<>();
+
+        fn.processElement(event("e1", 0L), keyedContext(fn), sinkTo(out));
+        // e3 直接到达：prev(step_1) 无 ts 且 e2 为必选 → 不计、不写 step_2_ts
+        fn.processElement(event("e3", 8L), keyedContext(fn), sinkTo(out));
+        assertEquals(1, out.size());
+        assertNullState(state, "step_2_ts");
+    }
+
+    @Test
+    @DisplayName("顺序漏斗 optional 回退：跳过全 optional 中间步仍可回退救回")
+    void optionalFallbackAllowedWhenMiddleAllOptional() throws Exception {
+        TestMapState state = new TestMapState();
+        ConfigurableFunnelsJob.ConfigurableFunnelProcess fn = processWithOptionalFlags(
+                "SEQUENTIAL", 60, state, false, true, true);
+        List<ConfigurableFunnelsJob.FunnelRow> out = new ArrayList<>();
+
+        fn.processElement(event("e1", 0L), keyedContext(fn), sinkTo(out));
+        // e3（optional）跳过可选 e2：回退命中 step_0（8-0<=10s）→ 计入
+        fn.processElement(event("e3", 8L), keyedContext(fn), sinkTo(out));
+        assertEquals(2, out.size());
+        assertEquals(3, out.get(1).step);
         assertEquals(Long.valueOf(8L), state.m.get("step_2_ts"));
     }
 
