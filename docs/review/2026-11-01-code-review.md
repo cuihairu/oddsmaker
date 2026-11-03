@@ -57,11 +57,11 @@
 
 **Problem**: `publish` did `return producer.send(new ProducerRecord<>(...))` and the returned `Future` was never awaited. With `acks=all` and a broker outage, `KafkaProducer.send` returns a Future that completes exceptionally on the I/O thread — the caller never observes it, the event is counted `ACCEPTED` by the gateway yet never reaches Kafka. Silent loss with no log or metric.
 
-**Fix**: switched to the 2-arg `producer.send(record, callback)` (Kafka ≥ 3.7). The callback routes any `exception != null` to `dlq.publish(eventId, "kafka_send_failed", json)`, with an inner try/catch + `log.error` so DLQ failure cannot throw into the send path; the callback also releases the idempotency bit (`ReplayGuard.releaseEventId`) so an SDK retry can re-consume and re-send.
+**Fix**: switched to the 2-arg `producer.send(record, callback)` (Kafka ≥ 3.7). The callback routes any `exception != null` to `dlq.publish(eventId, "kafka_send_failed", json)`, with an inner try/catch + `log.error` so DLQ failure cannot throw into the send path. The callback does **not** release the idempotency bit (`ReplayGuard.releaseEventId`): under `acks=all`, an async `TimeoutException` fires after `delivery.timeout.ms` and does not guarantee the record was not delivered (broker may have committed but the ack was lost / ISR slow), so releasing would let an SDK retry re-send an event that may already be in `events_raw` — a duplicate write. The synchronous catch path (`BatchController`) still releases, because a synchronous `send()` throw proves the record never reached Kafka.
 
-**Tests**: `PublishersTest.publishRoutesAsyncFailureToDlq()` (callback invoked with `TimeoutException` → DLQ topic receives the event, idempotency bit released); `PublishersBrokerE2ETest` constructor sites updated.
+**Tests**: `PublishersTest.publishRoutesAsyncFailureToDlq()` (callback invoked with `TimeoutException` → DLQ topic receives the event, idempotency bit NOT released); `PublishersTest.publishSuccessDoesNotReleaseIdempotencyBit()` (success callback neither releases nor writes DLQ); `PublishersBrokerE2ETest` constructor sites updated.
 
-**Boundary note**: the DLQ consumer only counts (by reason) and never replays — DLQ messages do not return to `events_raw`, so "recoverable" applies to the retry-at-gateway path (via the released idempotency bit), not to a DLQ replay path.
+**Boundary note**: the DLQ consumer only counts (by reason) and never replays — DLQ messages do not return to `events_raw`. `kafka_send_failed` is outside `GATEWAY_REASONS`, so the consumer counts it in the `dlq_other` bucket (the async path already counted the event as `accepted`; it must not be double-counted as a gateway rejection). "Recoverable" applies only to the synchronous retry path (via the released idempotency bit), not to the async path (no release) and not to a DLQ replay.
 
 ---
 

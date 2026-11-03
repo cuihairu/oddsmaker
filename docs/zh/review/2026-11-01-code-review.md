@@ -57,11 +57,11 @@
 
 **问题**: `publish` 原为 `return producer.send(new ProducerRecord<>(...))`，返回的 `Future` 从不被观察。`acks=all` 下 broker 故障时 `KafkaProducer.send` 在 I/O 线程返回异常完成的 Future — 调用方永远看不到，事件被网关计为 `ACCEPTED` 却从未进 Kafka。静默丢失，无日志无指标。
 
-**修复**: 改用双参 `producer.send(record, callback)`（Kafka ≥ 3.7）。回调将任何 `exception != null` 路由至 `dlq.publish(eventId, "kafka_send_failed", json)`，内层 try/catch + `log.error` 保证 DLQ 失败不抛入发送路径；回调同时释放幂等位（`ReplayGuard.releaseEventId`），SDK 重试可重新占用并重发。
+**修复**: 改用双参 `producer.send(record, callback)`（Kafka ≥ 3.7）。回调将任何 `exception != null` 路由至 `dlq.publish(eventId, "kafka_send_failed", json)`，内层 try/catch + `log.error` 保证 DLQ 失败不抛入发送路径。回调**不**释放幂等位（`ReplayGuard.releaseEventId`）：`acks=all` 下异步 `TimeoutException` 在 `delivery.timeout.ms` 到期后触发，且不保证记录未投递（broker 可能已提交但 ack 丢失/ISR 慢），释放会让 SDK 重试重发可能已入 `events_raw` 的事件——重复写入。同步 catch 路径（`BatchController`）仍释放，因为同步 `send()` 抛错证明记录必然未进 Kafka。
 
-**测试**: `PublishersTest.publishRoutesAsyncFailureToDlq()`（回调以 `TimeoutException` 触发 → DLQ 主题收到该事件、幂等位已释放）；`PublishersBrokerE2ETest` 构造点更新。
+**测试**: `PublishersTest.publishRoutesAsyncFailureToDlq()`（回调以 `TimeoutException` 触发 → DLQ 主题收到该事件、幂等位**未**释放）；`PublishersTest.publishSuccessDoesNotReleaseIdempotencyBit()`（成功回调既不释放也不写 DLQ）；`PublishersBrokerE2ETest` 构造点更新。
 
-**边界注**: DLQ 消费者仅按 reason 计数、从不回放/重投，DLQ 消息不会回到 `events_raw`——「可恢复」仅适用于网关重试路径（经释放的幂等位），不适用于 DLQ 回放路径。
+**边界注**: DLQ 消费者仅按 reason 计数、从不回放/重投，DLQ 消息不会回到 `events_raw`。`kafka_send_failed` 不在 `GATEWAY_REASONS` 内，消费者将其计入 `dlq_other` 桶（异步路径已把该事件计为 `accepted`，不得再作网关拒绝双计）。「可恢复」仅适用于同步重试路径（经释放的幂等位），不适用于异步路径（未释放）与 DLQ 回放路径。
 
 ---
 
