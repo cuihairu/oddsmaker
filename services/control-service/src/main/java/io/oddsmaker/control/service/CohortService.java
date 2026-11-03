@@ -19,7 +19,6 @@ import java.util.stream.Collectors;
  * 计算和管理用户同期群分析
  */
 @Service
-@Transactional
 public class CohortService {
 
     private static final Logger logger = LoggerFactory.getLogger(CohortService.class);
@@ -54,6 +53,7 @@ public class CohortService {
     /**
      * 创建同期群
      */
+    @Transactional
     public CohortEntity createCohort(String gameId, String environmentId, String name, String displayName,
                                     String description, CohortEntity.CohortType cohortType,
                                     LocalDate startDate, LocalDate endDate, String timeUnit,
