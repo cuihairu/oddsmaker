@@ -23,9 +23,6 @@ const error = ref('')
 const justCreated = ref(false)
 
 const metricLabels = { DAU: 'DAU', REVENUE: '收入', CRASH_RATE: '崩溃率' }
-const comparisonLabels = { GT: '高于', LT: '低于', BOTH: '双向 ±' }
-const windowLabels = { TODAY: '今日至今', HOUR_1: '近 1 小时' }
-
 const form = reactive({
   name: '',
   conditionType: 'BASELINE_DEVIATION',

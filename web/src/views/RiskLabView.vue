@@ -212,10 +212,6 @@ function fmtTime(ts) {
   return ts ? String(ts).replace('T', ' ').slice(0, 19) : '-'
 }
 
-function fmtRate(rate) {
-  return rate === null || rate === undefined ? '-' : `${rate}%`
-}
-
 watch(currentGameId, () => {
   stats.value = null
   selectedRule.value = null

@@ -10,7 +10,7 @@ import { settle } from '../helpers/settle.js'
  */
 vi.mock('@/services/api', () => ({ default: { get: vi.fn(), post: vi.fn() } }))
 
-async function fresh(metricType = 'CRASH_RATE') {
+async function fresh(_metricType = 'CRASH_RATE') {
   vi.resetModules()
   localStorage.clear()
   const api = (await import('@/services/api')).default

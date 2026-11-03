@@ -158,7 +158,7 @@ describe('SegmentsView', () => {
 
   it('列表失败臂：后端 message 与无 response 兜底，横幅可关闭', async () => {
     const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-    const { api, SegmentsView } = await fresh({ segError: { response: { data: { message: '无权限' } } } })
+    const { SegmentsView } = await fresh({ segError: { response: { data: { message: '无权限' } } } })
     const w = await mountView(SegmentsView)
     expect(w.text()).toContain('无权限')
     await w.find('.text-red-500').trigger('click')

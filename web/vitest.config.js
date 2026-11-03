@@ -12,7 +12,9 @@ export default defineConfig({
     }
   },
   test: {
+    pool: 'threads',
     environment: 'jsdom',
+    testTimeout: 15000,
     include: ['tests/**/*.spec.js'],
     coverage: {
       provider: 'v8',

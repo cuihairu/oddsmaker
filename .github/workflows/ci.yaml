@@ -125,6 +125,9 @@ jobs:
       - name: Install dependencies
         run: pnpm -C web install --frozen-lockfile
 
+      - name: Lint
+        run: pnpm -C web lint
+
       - name: Run tests
         run: pnpm -C web test
 

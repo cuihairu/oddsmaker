@@ -755,7 +755,7 @@ describe('DashboardsView', () => {
     const ctx = await fresh({
       dashboards: [{ id: 'd1', name: '主面板', layout: JSON.stringify({ widgets: [] }) }, DX]
     })
-    const { api, DashboardsView } = ctx
+    const { api } = ctx
     const w = await mountDash(ctx, DX)
 
     expect(w.text()).toContain('空仪表盘') // layout null → '{}' → 缺 widgets 键 → []

@@ -288,6 +288,7 @@ describe('SchemasView', () => {
     await piiBtns[0].trigger('click')
     await settle()
     const modalText = w.find('.fixed.inset-0').text()
+    expect(api.get).toHaveBeenCalled()
     expect(modalText).toContain('v1.1-draft')
     // 回填：ip=coarse、maskKeys=contact，email/phone 未指定
     const modalSelects = w.findAll('.fixed.inset-0 select')

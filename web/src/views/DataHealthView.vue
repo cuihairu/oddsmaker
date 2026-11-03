@@ -39,7 +39,7 @@ onMounted(async () => {
       gameId.value = games.value[0].gameId || games.value[0].id
       await loadAll()
     }
-  } catch (e) {
+  } catch (_e) {
     error.value = '游戏列表加载失败'
   }
 })
@@ -56,7 +56,7 @@ async function loadAll() {
     ])
     summary.value = s.data
     series.value = se.data || []
-  } catch (e) {
+  } catch (_e) {
     error.value = '数据质量指标加载失败'
     summary.value = null
     series.value = []
@@ -77,7 +77,7 @@ async function loadFeatureStore() {
       params: { scopeKey: featureScopeKey.value.trim(), hours: hours.value }
     })
     featureRows.value = resp.data || []
-  } catch (e) {
+  } catch (_e) {
     featureError.value = 'feature_store 取数失败'
     featureRows.value = []
   } finally {

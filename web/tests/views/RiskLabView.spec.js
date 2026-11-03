@@ -118,7 +118,6 @@ async function fresh({ stats = STATS, samples = SAMPLES, replay = REPLAY, sets =
 }
 
 const ruleRows = (w) => w.findAll('tbody')[0].findAll('tr')
-const sampleRows = (w) => w.findAll('tbody')[1]?.findAll('tr') ?? []
 const caseCalls = (api) => api.get.mock.calls.filter((c) => c[0].endsWith('/risk-cases'))
 const replayCalls = (api) => api.post.mock.calls.filter((c) => c[0].endsWith('/risk-lab/replay'))
 const setCalls = (api) => api.post.mock.calls.filter((c) => c[0].endsWith('/risk-lab/sample-sets'))

@@ -27,7 +27,7 @@ function parsePiiPolicy(raw) {
   try {
     const obj = JSON.parse(raw)
     return obj && typeof obj === 'object' && !Array.isArray(obj) ? obj : null
-  } catch (e) {
+  } catch (_e) {
     return null
   }
 }

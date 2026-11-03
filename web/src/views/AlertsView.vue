@@ -91,9 +91,9 @@ async function load() {
     ])
     rules.value = ruleRes.data
     alerts.value = alertRes.data
-  } catch (e) {
-    error.value = e.response?.data?.message || '加载业务告警失败'
-    console.error('Failed to load alerts:', e)
+  } catch (_e) {
+    error.value = _e.response?.data?.message || '加载业务告警失败'
+    console.error('Failed to load alerts:', _e)
   } finally {
     loading.value = false
   }
@@ -123,8 +123,8 @@ async function saveRule() {
     showForm.value = false
     resetForm()
     await load()
-  } catch (e) {
-    error.value = e.response?.data?.message || '创建规则失败'
+  } catch (_e) {
+    error.value = _e.response?.data?.message || '创建规则失败'
   } finally {
     saving.value = false
   }
@@ -134,8 +134,8 @@ async function toggleRule(rule) {
   try {
     await api.put(`/api/games/${currentGameId.value}/alert-rules/${rule.id}`, { ...rule, enabled: !rule.enabled })
     await load()
-  } catch (e) {
-    error.value = e.response?.data?.message || '更新规则失败'
+  } catch (_e) {
+    error.value = _e.response?.data?.message || '更新规则失败'
   }
 }
 
@@ -144,8 +144,8 @@ async function deleteRule(rule) {
   try {
     await api.delete(`/api/games/${currentGameId.value}/alert-rules/${rule.id}`)
     await load()
-  } catch (e) {
-    error.value = e.response?.data?.message || '删除规则失败'
+  } catch (_e) {
+    error.value = _e.response?.data?.message || '删除规则失败'
   }
 }
 
@@ -155,8 +155,8 @@ async function evaluateRule(rule) {
   try {
     const res = await api.post(`/api/games/${currentGameId.value}/alert-rules/${rule.id}/evaluate`)
     evalResult.value = { rule, ...res.data }
-  } catch (e) {
-    error.value = e.response?.data?.message || '试算失败'
+  } catch (_e) {
+    error.value = _e.response?.data?.message || '试算失败'
   }
 }
 
@@ -174,8 +174,8 @@ async function submitAction() {
     )
     actionTarget.value = null
     await load()
-  } catch (e) {
-    error.value = e.response?.data?.message || '操作失败'
+  } catch (_e) {
+    error.value = _e.response?.data?.message || '操作失败'
     actionTarget.value = null
   }
 }
@@ -209,7 +209,7 @@ async function loadEmailConfig() {
     } else {
       Object.assign(emailCfg, { loaded: true, exists: false, recipients: '', environment: '', enabled: false })
     }
-  } catch (e) {
+  } catch (_e) {
     emailCfg.loaded = true
   }
 }
@@ -229,8 +229,8 @@ async function saveEmailConfig() {
     })
     emailMsg.value = '邮件通道配置已保存'
     await loadEmailConfig()
-  } catch (e) {
-    emailMsg.value = e.response?.data?.message || '保存邮件通道配置失败'
+  } catch (_e) {
+    emailMsg.value = _e.response?.data?.message || '保存邮件通道配置失败'
   } finally {
     emailSaving.value = false
   }
@@ -244,8 +244,8 @@ async function testEmailConfig() {
     emailMsg.value = res.data.sent
       ? `测试邮件已发送（${res.data.recipients} 个收件人）`
       : '测试发送未执行：SMTP 未配置（需设置 spring.mail.host）或无收件人'
-  } catch (e) {
-    emailMsg.value = e.response?.data?.message || '测试发送失败'
+  } catch (_e) {
+    emailMsg.value = _e.response?.data?.message || '测试发送失败'
   } finally {
     emailTesting.value = false
   }

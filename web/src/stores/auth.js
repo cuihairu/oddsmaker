@@ -32,8 +32,8 @@ export const useAuthStore = defineStore('auth', () => {
       localStorage.setItem('token', token.value)
       api.defaults.headers.common['Authorization'] = `Bearer ${token.value}`
       return true
-    } catch (err) {
-      error.value = err.response?.data?.message || '登录失败'
+    } catch (_err) {
+      error.value = _err.response?.data?.message || '登录失败'
       return false
     } finally {
       loading.value = false
@@ -43,7 +43,7 @@ export const useAuthStore = defineStore('auth', () => {
   async function logout() {
     try {
       await api.post('/api/auth/logout')
-    } catch (err) {
+    } catch (_err) {
       // 忽略登出错误
     } finally {
       token.value = null
@@ -60,7 +60,7 @@ export const useAuthStore = defineStore('auth', () => {
       api.defaults.headers.common['Authorization'] = `Bearer ${token.value}`
       const response = await api.get('/api/users/me')
       user.value = response.data
-    } catch (err) {
+    } catch (_err) {
       // Token无效，清除认证状态
       token.value = null
       user.value = null

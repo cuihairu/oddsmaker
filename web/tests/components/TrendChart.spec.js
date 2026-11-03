@@ -12,8 +12,7 @@ const mount_ = (props) => mount(TrendChart, { props })
 
 function parsePoints(wrapper, index = 0) {
   return wrapper
-    .findAll('polyline')
-    [index].attributes('points')
+    .findAll('polyline')[index].attributes('points')
     .split(' ')
     .map((pt) => pt.split(',').map(Number))
 }
