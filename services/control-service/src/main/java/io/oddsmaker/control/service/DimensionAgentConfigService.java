@@ -214,7 +214,7 @@ public class DimensionAgentConfigService {
         try {
             return cipher.encrypt(MAPPER.writeValueAsString(secrets));
         } catch (Exception e) {
-            throw new IllegalArgumentException("secrets 序列化失败: " + e.getMessage());
+            throw new IllegalArgumentException("secrets 序列化失败: " + e.getMessage(), e);
         }
     }
 
@@ -225,7 +225,7 @@ public class DimensionAgentConfigService {
         } catch (IllegalArgumentException e) {
             throw e;
         } catch (Exception e) {
-            throw new IllegalArgumentException("secrets 密文损坏: " + e.getMessage());
+            throw new IllegalArgumentException("secrets 密文损坏: " + e.getMessage(), e);
         }
     }
 
@@ -237,7 +237,7 @@ public class DimensionAgentConfigService {
         } catch (IllegalArgumentException e) {
             throw e;
         } catch (Exception e) {
-            throw new IllegalArgumentException("secrets 密文损坏: " + e.getMessage());
+            throw new IllegalArgumentException("secrets 密文损坏: " + e.getMessage(), e);
         }
     }
 }

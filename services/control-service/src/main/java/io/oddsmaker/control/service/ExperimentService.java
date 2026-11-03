@@ -400,7 +400,7 @@ public class ExperimentService {
         try {
             return objectMapper.readTree(configJson);
         } catch (JsonProcessingException ex) {
-            throw new IllegalStateException("Experiment config is not valid JSON: " + ex.getMessage());
+            throw new IllegalStateException("Experiment config is not valid JSON: " + ex.getMessage(), ex);
         }
     }
 
@@ -408,7 +408,7 @@ public class ExperimentService {
         try {
             return objectMapper.writeValueAsString(config);
         } catch (JsonProcessingException ex) {
-            throw new IllegalArgumentException("Experiment config is not valid JSON: " + ex.getMessage());
+            throw new IllegalArgumentException("Experiment config is not valid JSON: " + ex.getMessage(), ex);
         }
     }
 

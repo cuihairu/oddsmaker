@@ -111,7 +111,7 @@ class EntitiesSmokeCoverageTest {
             }
             method.setAccessible(true);
             method.invoke(target, args);
-        } catch (Exception ignore) {
+        } catch (Exception ignored) {
             // 状态耦合方法（依赖非空字段）允许抛异常，方法入口行仍被覆盖
         }
     }

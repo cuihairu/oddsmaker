@@ -125,12 +125,12 @@ public class ReplayGuard {
         rotateLock.lock();
         try {
             if (isSignatures) {
-                if (current == signatures) {
+                if (current.equals(signatures)) {
                     signatures = new Generation(ttlMillis, maxEntries);
                 }
                 return signatures;
             }
-            if (current == eventIds) {
+            if (current.equals(eventIds)) {
                 eventIds = new Generation(ttlMillis, maxEntries);
             }
             return eventIds;

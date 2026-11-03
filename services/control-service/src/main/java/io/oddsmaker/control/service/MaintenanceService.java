@@ -425,7 +425,7 @@ public class MaintenanceService {
             JSON.readTree(value);
             return value;
         } catch (JsonProcessingException e) {
-            throw new IllegalArgumentException(field + " is not valid JSON: " + e.getMessage());
+            throw new IllegalArgumentException(field + " is not valid JSON: " + e.getMessage(), e);
         }
     }
 

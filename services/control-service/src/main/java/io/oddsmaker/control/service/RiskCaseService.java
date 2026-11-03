@@ -240,7 +240,7 @@ public class RiskCaseService {
         try {
             return Enum.valueOf(type, value);
         } catch (IllegalArgumentException e) {
-            throw new IllegalArgumentException("非法 " + field + " 取值: " + value);
+            throw new IllegalArgumentException("非法 " + field + " 取值: " + value, e);
         }
     }
 }

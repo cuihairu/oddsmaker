@@ -204,7 +204,7 @@ class JdbcSourcePollTest {
                         return System.identityHashCode(p);
                     }
                     if ("equals".equals(m.getName())) {
-                        return p == args[0];
+                        return p.equals(args[0]);
                     }
                     return h.invoke(p, m, args);
                 });

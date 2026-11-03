@@ -199,7 +199,7 @@ public class RetentionEnforcementService {
                 } else {
                     Integer actual = parseTtlDays(engineFull);
                     state.actualDays = actual;
-                    if (actual != null && actual == expected) {
+                    if (actual != null && actual.equals(expected)) {
                         state.status = RetentionEnforcementEntity.Status.IN_SYNC;
                     } else if (actual == null && engineFull.contains("TTL")) {
                         // 有 TTL 子句但不符合预期格式：拒绝盲改，防每轮反复 ALTER

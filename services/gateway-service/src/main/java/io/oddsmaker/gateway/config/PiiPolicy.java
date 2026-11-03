@@ -82,7 +82,7 @@ public class PiiPolicy {
             if (mk.contains(lk)) {
                 if (emailDetectable && EMAIL.matcher(s).find()) return maskEmail(s);
                 if (countDigits(s) >= 10) return maskPhone(s);
-                return maskAll(s);
+                return maskAll();
             }
             // email
             if (emailDetectable && EMAIL.matcher(s).find()) {
@@ -191,5 +191,5 @@ public class PiiPolicy {
         return out.toString();
     }
 
-    private String maskAll(String s) { return "***"; }
+    private String maskAll() { return "***"; }
 }

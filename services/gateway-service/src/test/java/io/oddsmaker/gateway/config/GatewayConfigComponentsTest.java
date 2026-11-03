@@ -309,7 +309,7 @@ class GatewayConfigComponentsTest {
             ReflectionTestUtils.setField(ce, "expireAt", java.time.Instant.now().getEpochSecond() + 60);
             cache.put("cached-key", ce);
             assertEquals(cached, service.getContext("cached-key"));
-        } catch (Exception ignore) {
+        } catch (Exception ignored) {
             // 结构变化时跳过缓存断言
         }
     }
@@ -500,7 +500,7 @@ class GatewayConfigComponentsTest {
             stale.context = fresh;
             stale.expireAt = java.time.Instant.now().getEpochSecond() - 1;
             cache.put("k_exp", stale);
-        } catch (Exception ignore) {
+        } catch (Exception ignored) {
             // 结构变化时跳过
         }
         // 过期条目不被命中：走重新拉取（not_configured）→ 本地密钥回退

@@ -19,7 +19,13 @@ allprojects {
 
 subprojects {
   apply(plugin = "java")
+  apply(plugin = "pmd")
   tasks.withType<JavaCompile> { options.release.set(21) }
+
+  extensions.configure<org.gradle.api.plugins.quality.PmdExtension> {
+    toolVersion = "7.0.0"
+    ruleSetFiles = rootProject.files("config/pmd/ruleset.xml")
+  }
 
   dependencies {
     // Gradle 9 不再自动把 JUnit Platform launcher 注入 test runtime classpath，
@@ -41,4 +47,5 @@ subprojects {
     useJUnitPlatform()
     finalizedBy("jacocoTestReport")
   }
+  tasks.named("check") { dependsOn(tasks.withType<org.gradle.api.plugins.quality.Pmd>()) }
 }

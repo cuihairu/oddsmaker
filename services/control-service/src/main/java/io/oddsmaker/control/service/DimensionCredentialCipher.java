@@ -57,7 +57,7 @@ public class DimensionCredentialCipher {
             System.arraycopy(encrypted, 0, packed, iv.length, encrypted.length);
             return Base64.getEncoder().encodeToString(packed);
         } catch (Exception e) {
-            throw new IllegalArgumentException("凭证加密失败: " + e.getMessage());
+            throw new IllegalArgumentException("凭证加密失败: " + e.getMessage(), e);
         }
     }
 
@@ -78,7 +78,7 @@ public class DimensionCredentialCipher {
             byte[] decrypted = cipher.doFinal(packed, IV_LENGTH_BYTES, packed.length - IV_LENGTH_BYTES);
             return new String(decrypted, StandardCharsets.UTF_8);
         } catch (Exception e) {
-            throw new IllegalArgumentException("凭证解密失败（密文损坏或密钥不匹配）");
+            throw new IllegalArgumentException("凭证解密失败（密文损坏或密钥不匹配）", e);
         }
     }
 

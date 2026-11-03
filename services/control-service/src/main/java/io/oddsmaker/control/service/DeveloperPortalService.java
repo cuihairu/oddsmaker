@@ -393,7 +393,7 @@ public class DeveloperPortalService {
                     "releasedAt", latest.releasedAt,
                     "totalDownloads", latest.totalDownloads
                 ));
-            } catch (Exception e) {
+            } catch (Exception ignored) {
                 // 没有该平台的版本
             }
         }

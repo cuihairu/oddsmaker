@@ -337,7 +337,7 @@ class RuleFetcherTest {
             assertNotNull(first);
 
             RuleFetcher.startOnce(base, "g1", "tok", 60_000L);   // 二次：已有实例直接返回
-            assertTrue(current.get() == first, "二次调用不得替换实例");
+            assertTrue(current.get().equals(first), "二次调用不得替换实例");
 
             first.stop();   // 停守护线程（fetch 404 会安静重试，不阻塞测试）
         } finally {

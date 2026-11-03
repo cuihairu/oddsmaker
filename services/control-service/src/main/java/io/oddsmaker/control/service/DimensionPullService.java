@@ -368,7 +368,7 @@ public class DimensionPullService {
         try {
             root = MAPPER.readTree(json);
         } catch (Exception e) {
-            throw new IllegalArgumentException("游戏 API 响应不是合法 JSON");
+            throw new IllegalArgumentException("游戏 API 响应不是合法 JSON", e);
         }
         if (!root.isObject()) {
             throw new IllegalArgumentException("游戏 API 响应不是 JSON 对象");
@@ -412,7 +412,7 @@ public class DimensionPullService {
             try {
                 sb.append(MAPPER.writeValueAsString(event));
             } catch (Exception e) {
-                throw new IllegalArgumentException("事件序列化失败: " + e.getMessage());
+                throw new IllegalArgumentException("事件序列化失败: " + e.getMessage(), e);
             }
         }
         return sb.toString();

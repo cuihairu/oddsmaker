@@ -117,7 +117,7 @@ public class ControlService {
         try {
             return ApiKeyEntity.ApiKeyType.valueOf(keyRole.trim().toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException ex) {
-            throw new IllegalArgumentException("Invalid keyRole: " + keyRole + " (expected client|server|admin)");
+            throw new IllegalArgumentException("Invalid keyRole: " + keyRole + " (expected client|server|admin)", ex);
         }
     }
 

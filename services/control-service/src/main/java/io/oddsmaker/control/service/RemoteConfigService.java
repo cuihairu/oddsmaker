@@ -139,7 +139,7 @@ public class RemoteConfigService {
         try {
             objectMapper.readTree(value);
         } catch (Exception e) {
-            throw new IllegalArgumentException("configValue is not valid JSON: " + e.getMessage());
+            throw new IllegalArgumentException("configValue is not valid JSON: " + e.getMessage(), e);
         }
     }
 

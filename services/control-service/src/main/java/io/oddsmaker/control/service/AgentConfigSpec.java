@@ -68,7 +68,7 @@ public final class AgentConfigSpec {
         try {
             p.load(new StringReader(text));
         } catch (IOException e) {
-            throw new IllegalArgumentException("props 不是合法的 properties 文本: " + e.getMessage());
+            throw new IllegalArgumentException("props 不是合法的 properties 文本: " + e.getMessage(), e);
         }
         TreeMap<String, String> m = new TreeMap<>();
         for (String key : p.stringPropertyNames()) {
@@ -193,7 +193,7 @@ public final class AgentConfigSpec {
                 throw new NumberFormatException();
             }
         } catch (NumberFormatException e) {
-            throw new IllegalArgumentException(key + " 必须为正整数，当前: " + v);
+            throw new IllegalArgumentException(key + " 必须为正整数，当前: " + v, e);
         }
     }
 

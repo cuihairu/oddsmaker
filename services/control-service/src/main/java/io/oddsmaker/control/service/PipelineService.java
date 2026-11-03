@@ -324,7 +324,7 @@ public class PipelineService {
             }
             return value;
         } catch (NumberFormatException e) {
-            throw new IllegalArgumentException("threshold must be an integer, got: " + raw);
+            throw new IllegalArgumentException("threshold must be an integer, got: " + raw, e);
         }
     }
 
@@ -335,7 +335,7 @@ public class PipelineService {
         try {
             return Double.parseDouble(raw.trim());
         } catch (NumberFormatException e) {
-            throw new IllegalArgumentException("threshold must be a number, got: " + raw);
+            throw new IllegalArgumentException("threshold must be a number, got: " + raw, e);
         }
     }
 

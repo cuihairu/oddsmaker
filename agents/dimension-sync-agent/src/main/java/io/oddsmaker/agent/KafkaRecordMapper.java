@@ -28,7 +28,7 @@ public final class KafkaRecordMapper {
         try {
             root = MAPPER.readTree(value);
         } catch (IOException e) {
-            throw new IOException("JSON 解析失败: " + e.getMessage());
+            throw new IOException("JSON 解析失败: " + e.getMessage(), e);
         }
         if (root == null || !root.isObject()) {
             throw new IOException("消息根节点须为 JSON 对象");

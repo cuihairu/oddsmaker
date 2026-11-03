@@ -560,7 +560,7 @@ public class ReportService {
         try {
             return objectMapper.readValue(json, new TypeReference<Map<String, Object>>() { });
         } catch (Exception e) {
-            throw new IllegalArgumentException("Invalid JSON config: " + e.getMessage());
+            throw new IllegalArgumentException("Invalid JSON config: " + e.getMessage(), e);
         }
     }
 
@@ -571,7 +571,7 @@ public class ReportService {
         try {
             return objectMapper.readValue(json, new TypeReference<List<String>>() { });
         } catch (Exception e) {
-            throw new IllegalArgumentException("Invalid JSON config: " + e.getMessage());
+            throw new IllegalArgumentException("Invalid JSON config: " + e.getMessage(), e);
         }
     }
 

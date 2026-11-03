@@ -90,7 +90,7 @@ public class DashboardService {
             try {
                 entity.status = DashboardEntity.DashboardStatus.valueOf(status.toUpperCase(Locale.ROOT));
             } catch (IllegalArgumentException e) {
-                throw new BusinessException("INVALID_STATUS: " + "非法状态: " + status);
+                throw new BusinessException("INVALID_STATUS: " + "非法状态: " + status, e);
             }
         }
         if (layoutJson != null) {
@@ -136,7 +136,7 @@ public class DashboardService {
         try {
             layout = JSON.readValue(layoutJson == null ? "" : layoutJson, Layout.class);
         } catch (Exception e) {
-            throw new BusinessException("INVALID_LAYOUT: " + "布局不是合法 JSON");
+            throw new BusinessException("INVALID_LAYOUT: " + "布局不是合法 JSON", e);
         }
         if (layout == null || layout.widgets == null || layout.widgets.isEmpty()) {
             throw new BusinessException("EMPTY_WIDGETS: " + "至少需要一个 widget");
@@ -209,7 +209,7 @@ public class DashboardService {
         try {
             return Integer.parseInt(String.valueOf(value));
         } catch (NumberFormatException e) {
-            throw new BusinessException("INVALID_PARAM: " + at + " " + key + " 不是整数");
+            throw new BusinessException("INVALID_PARAM: " + at + " " + key + " 不是整数", e);
         }
     }
 
@@ -224,7 +224,7 @@ public class DashboardService {
         try {
             return JSON.writeValueAsString(layout);
         } catch (Exception e) {
-            throw new BusinessException("LAYOUT_SERIALIZE_FAILED: " + "布局序列化失败");
+            throw new BusinessException("LAYOUT_SERIALIZE_FAILED: " + "布局序列化失败", e);
         }
     }
 }

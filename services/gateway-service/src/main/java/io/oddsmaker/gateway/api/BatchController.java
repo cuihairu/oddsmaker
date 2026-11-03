@@ -377,7 +377,7 @@ public class BatchController {
                         // readCompatEvent 对 null 令牌在返回前即抛（convertValue 得 null 引用后
                         // 的 event.gameId 访问 NPE），null 行走本 catch 跳过——返回值恒非 null
                         out.add(readCompatEvent(line));
-                    } catch (Exception e) {
+                    } catch (Exception ignored) {
                         // Skip malformed lines
                     }
                 }
@@ -393,7 +393,7 @@ public class BatchController {
                     }
                     try {
                         out.add(readCompatEvent(child));
-                    } catch (Exception e) {
+                    } catch (Exception ignored) {
                         // Skip malformed elements
                     }
                 }
@@ -403,7 +403,8 @@ public class BatchController {
         } catch (Exception e) {
             throw new ResponseStatusException(
                 org.springframework.http.HttpStatus.BAD_REQUEST,
-                "Invalid JSON payload: " + e.getMessage()
+                "Invalid JSON payload: " + e.getMessage(),
+                e
             );
         }
     }
@@ -733,7 +734,7 @@ public class BatchController {
     }
 
     private void reject(BatchResponse resp, Event event, AuthService.ApiKeyContext keyContext,
-                        String reason, String detail) {
+                        String reason, String ignoredDetail) {
         // 全部调用点均传入非 null event（循环内构造），无需判空
         HashMap<String, String> rej = new HashMap<>();
         rej.put("event_id", String.valueOf(event.eventId));

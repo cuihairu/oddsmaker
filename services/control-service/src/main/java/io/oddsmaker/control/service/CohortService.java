@@ -385,7 +385,7 @@ public class CohortService {
             try {
                 period = Integer.parseInt(String.valueOf(raw).trim());
             } catch (NumberFormatException e) {
-                throw new IllegalArgumentException("Invalid retention period '" + raw + "': must be an integer");
+                throw new IllegalArgumentException("Invalid retention period '" + raw + "': must be an integer", e);
             }
             if (period < 1 || period > MAX_RETENTION_PERIOD) {
                 throw new IllegalArgumentException("Retention period " + period + " out of range [1, " + MAX_RETENTION_PERIOD + "]");

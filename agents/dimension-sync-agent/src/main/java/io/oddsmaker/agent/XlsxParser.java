@@ -81,7 +81,7 @@ public final class XlsxParser {
                 try {
                     idx = Integer.parseInt(vs.item(0).getTextContent().trim());
                 } catch (NumberFormatException e) {
-                    throw new IOException("共享字符串索引非法: " + vs.item(0).getTextContent());
+                    throw new IOException("共享字符串索引非法: " + vs.item(0).getTextContent(), e);
                 }
                 if (idx < 0 || idx >= shared.size()) {
                     throw new IOException("共享字符串索引越界: " + idx + "（共 " + shared.size() + " 条）");

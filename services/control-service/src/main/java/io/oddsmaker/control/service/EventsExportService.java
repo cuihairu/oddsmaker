@@ -123,7 +123,7 @@ public class EventsExportService {
         } catch (Exception e) {
             cleanupQuietly(tmp);
             logger.error("Events export failed: game={} env={} date={}", gameId, environment, date, e);
-            throw new BusinessException("EXPORT_FAILED: " + "导出失败: " + e.getMessage());
+            throw new BusinessException("EXPORT_FAILED: " + "导出失败: " + e.getMessage(), e);
         }
 
         long bytes = target.toFile().length();
@@ -173,7 +173,7 @@ public class EventsExportService {
             Files.write(dir.resolve("manifest.json"), JSON.writerWithDefaultPrettyPrinter()
                     .writeValueAsBytes(manifest));
         } catch (Exception e) {
-            throw new BusinessException("MANIFEST_FAILED: " + "manifest 写入失败");
+            throw new BusinessException("MANIFEST_FAILED: " + "manifest 写入失败", e);
         }
         return manifest;
     }
@@ -237,14 +237,14 @@ public class EventsExportService {
         try {
             return LocalDate.parse(date, ISO_DATE);
         } catch (Exception e) {
-            throw new BusinessException("INVALID_DATE: " + "日期需为 yyyy-MM-dd: " + date);
+            throw new BusinessException("INVALID_DATE: " + "日期需为 yyyy-MM-dd: " + date, e);
         }
     }
 
     private void cleanupQuietly(Path tmp) {
         try {
             Files.deleteIfExists(tmp);
-        } catch (Exception ignore) {
+        } catch (Exception ignored) {
             // 清理失败不影响错误上报
         }
     }

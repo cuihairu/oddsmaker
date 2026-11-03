@@ -76,11 +76,11 @@ public class SymbolicationService {
                 }
                 try {
                     rules.add(new Rule(Pattern.compile(pattern), replacement));
-                } catch (IllegalArgumentException ignore) {
+                } catch (IllegalArgumentException ignored) {
                     // 非法正则跳过，不阻断整体符号化
                 }
             }
-        } catch (Exception ignore) {
+        } catch (Exception ignored) {
             // JSON 解析失败按无规则处理
         }
         return rules;

@@ -330,7 +330,7 @@ public class RiskLabReplayService {
             String type = rule.ruleType != null ? rule.ruleType.name() : "";
             RiskRuleEntity cur = byType.get(type);
             if (cur == null || rule.riskScore > cur.riskScore
-                    || (rule.riskScore == cur.riskScore && rule.id.compareTo(cur.id) < 0)) {
+                    || (rule.riskScore.equals(cur.riskScore) && rule.id.compareTo(cur.id) < 0)) {
                 byType.put(type, rule);
             }
         }

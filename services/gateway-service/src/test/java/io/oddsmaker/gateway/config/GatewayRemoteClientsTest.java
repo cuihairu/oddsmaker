@@ -226,7 +226,7 @@ class GatewayRemoteClientsTest {
             Object entry = cache.get("game_x:device_id:d_block");
             org.springframework.test.util.ReflectionTestUtils.setField(entry, "expireAt",
                 java.time.Instant.now().getEpochSecond() - 1);
-        } catch (Exception ignore) {
+        } catch (Exception ignored) {
             // 结构变化时跳过穿透断言
         }
         Map<String, Boolean> second = client.batchCheck("game_x", targets).block();

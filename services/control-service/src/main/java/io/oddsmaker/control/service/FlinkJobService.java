@@ -426,7 +426,7 @@ public class FlinkJobService {
             matches = entries.filter(p -> matcher.matches(p.getFileName())).collect(Collectors.toList());
         } catch (IOException e) {
             throw new IllegalStateException(
-                "Cannot list Flink jar dir " + dir.toAbsolutePath() + ": " + e.getMessage());
+                "Cannot list Flink jar dir " + dir.toAbsolutePath() + ": " + e.getMessage(), e);
         }
         if (matches.isEmpty()) {
             throw new IllegalStateException(

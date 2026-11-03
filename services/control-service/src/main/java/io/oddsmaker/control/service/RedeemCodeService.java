@@ -206,7 +206,7 @@ public class RedeemCodeService {
             return recordRepo.save(record);
         } catch (org.springframework.dao.DataIntegrityViolationException e) {
             // (batch, player, seq) 冲突：并发同次序请求，语义上兑换成功过
-            throw new IllegalStateException("duplicate_redeem");
+            throw new IllegalStateException("duplicate_redeem", e);
         }
     }
 

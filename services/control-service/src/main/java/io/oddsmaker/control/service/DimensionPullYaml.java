@@ -78,7 +78,7 @@ public final class DimensionPullYaml {
         try {
             loaded = new Yaml(new SafeConstructor(new LoaderOptions())).load(yaml);
         } catch (Exception e) {
-            throw new IllegalArgumentException("YAML 解析失败: " + e.getMessage());
+            throw new IllegalArgumentException("YAML 解析失败: " + e.getMessage(), e);
         }
         if (!(loaded instanceof Map<?, ?> root) || !(root.get("dimensions") instanceof Map<?, ?> dims)) {
             throw new IllegalArgumentException("YAML 需含 dimensions 根键（映射键为 sourceKey）");

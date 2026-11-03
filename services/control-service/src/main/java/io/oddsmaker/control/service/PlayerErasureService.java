@@ -749,7 +749,7 @@ public class PlayerErasureService {
             return PlayerErasureRequestEntity.RequestType.valueOf(requestType.trim().toUpperCase());
         } catch (IllegalArgumentException e) {
             throw new IllegalArgumentException(
-                "requestType must be one of PLAYER_ID, USER_ID, DEVICE_ID: " + requestType);
+                "requestType must be one of PLAYER_ID, USER_ID, DEVICE_ID: " + requestType, e);
         }
     }
 

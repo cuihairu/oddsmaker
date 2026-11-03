@@ -59,7 +59,7 @@ jobs:
           arguments: |
             --no-daemon
             --stacktrace
-            test
+            check
 
       - name: Upload Java test results
         uses: actions/upload-artifact@v7.0.2

@@ -166,9 +166,9 @@ class GatewaySinkTest {
             new GatewaySink(cfg(500)).push(List.of(change("a")));
         } catch (IllegalStateException ex) {
             assertTrue(ex.getMessage().contains("100"));
-        } catch (java.net.http.HttpTimeoutException ex) {
+        } catch (java.net.http.HttpTimeoutException ignored) {
             // 1xx 导致客户端挂起等待最终响应，属预期行为：说明 < 200 分支已执行
-        } catch (Exception ex) {
+        } catch (Exception ignored) {
             // 其他异常（如 IOException）也视为分支已达成
         }
     }

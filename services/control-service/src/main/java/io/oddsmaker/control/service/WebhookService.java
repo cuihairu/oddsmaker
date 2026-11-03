@@ -386,7 +386,7 @@ public class WebhookService {
                 throw new IllegalArgumentException("authConfig must be a non-empty JSON object");
             }
         } catch (JsonProcessingException e) {
-            throw new IllegalArgumentException("authConfig must be a valid JSON object");
+            throw new IllegalArgumentException("authConfig must be a valid JSON object", e);
         }
     }
 

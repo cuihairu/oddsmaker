@@ -232,7 +232,7 @@ public class SegmentService {
         try {
             def = JSON.readValue(definitionJson, Definition.class);
         } catch (Exception e) {
-            throw new BusinessException("SEGMENT_DEFINITION_INVALID: " + "分群定义不是合法 JSON: " + e.getMessage());
+            throw new BusinessException("SEGMENT_DEFINITION_INVALID: " + "分群定义不是合法 JSON: " + e.getMessage(), e);
         }
         if (def.conditions == null || def.conditions.isEmpty()) {
             throw new BusinessException("SEGMENT_DEFINITION_INVALID: " + "至少需要一条条件");
@@ -360,7 +360,7 @@ public class SegmentService {
         try {
             return JSON.writerWithDefaultPrettyPrinter().writeValueAsString(def);
         } catch (Exception e) {
-            throw new BusinessException("SEGMENT_DEFINITION_INVALID: " + "定义序列化失败");
+            throw new BusinessException("SEGMENT_DEFINITION_INVALID: " + "定义序列化失败", e);
         }
     }
 
@@ -394,7 +394,7 @@ public class SegmentService {
         try {
             return SegmentEntity.SegmentStatus.valueOf(status.toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException e) {
-            throw new BusinessException("SEGMENT_STATUS_INVALID: " + "状态仅支持 ACTIVE/INACTIVE");
+            throw new BusinessException("SEGMENT_STATUS_INVALID: " + "状态仅支持 ACTIVE/INACTIVE", e);
         }
     }
 
