@@ -21,7 +21,7 @@
 
 - [x] T-REV01 ReplayGuard 轮换竞态（P2）：——已修复：`rotateIfNeeded` 显式区分目标代并在锁内按目标字段双检，过期签名代并发轮换后不落入 `eventIds` 分支；新增过期签名代竞态回归测试（ReplayGuard.java:75-83/:90/:121-143、ReplayGuardRotationTest.java:62-84；gateway-service 测试 246 例 0 失败）
 - [x] T-REV02 FunnelsJob 可选步回退未验证中间步 optional（P2）：——已修复：optional 回退先计算最近必选下界，只允许锚定到未跨必选中间步的更早时间戳；新增必选中间步阻断与全 optional 中间步放行测试（ConfigurableFunnelsJob.java:450-466、ConfigurableFunnelsJobTest.java:483-506/:793-836；funnels-job 测试 48 例 0 失败）
-- [ ] T-REV03 risk-job FEATURE 广播状态无 TTL（P2）：广播 MapState 不能带 TTL，主体闲置一周后旧特征值仍参与评估（jobs/flink/risk-job/.../FeatureRuleFunction.java:30-31,119）
+- [x] T-REV03 risk-job FEATURE 广播状态无 TTL（P2）：——已修复：广播 MapState 不能带 Flink TTL，按特征行 as_of 做处理时间过期（缺省 24h，`risk.feature.broadcast-ttl-ms` 可调），陈旧值按无值不参与评估；新增过期判定与陈旧不命中测试（FeatureRuleFunction.java:30-44/:81-99、RiskFeatureTest.java:344-359；risk-job 测试 100 例 0 失败）
 - [ ] T-REV04 events-enrich dedup 的 DLQ 侧输出未接线（P2）：仅 validated.getSideOutput(DLQ) 接 DLQ sink，dedup 流 DLQ 输出被孤立（jobs/flink/events-enrich-job/.../EventsEnrichJob.java:158 vs 411-437）
 - [ ] T-REV05 ExportService 事务回滚毒化（P2）：类级 @Transactional 下 catch 内 markAsFailed+save 再抛 RuntimeException，API 代理路径整个回滚、FAILED 标记丢失、作业卡 PENDING，CH 查询+文件写在事务内持连接（services/control-service/.../ExportService.java:161-166）
 - [ ] T-REV06 CohortService 同型事务毒化（P2）：CohortController:95 外部调用下 CALCULATING/FAILED 双标记回滚、重 CH computeCohort 在事务内（services/control-service/.../CohortService.java:143-146）

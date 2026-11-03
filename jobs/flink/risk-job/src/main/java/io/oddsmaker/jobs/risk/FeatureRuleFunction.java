@@ -31,10 +31,15 @@ class FeatureRuleFunction extends KeyedBroadcastProcessFunction<
             new MapStateDescriptor<>("risk-feature-values", Types.STRING, Types.POJO(FeatureRow.class));
 
     private final RiskJob.RuleSource rules;
+    private final long featureTtlMs;
     private transient ValueState<String> lastIp;
 
     FeatureRuleFunction(RiskJob.RuleSource rules) {
         this.rules = rules;
+        // 广播 MapState 不能带 Flink TTL，应用层按产出时刻做处理时间过期：
+        // 特征行超龄后不再参与评估（否则闲置一周的旧特征值仍命中，T-REV03）。
+        // 缺省 24h 与最大特征窗口一致；滑动窗口正常刷新粒度分钟级，远小于该界。
+        this.featureTtlMs = Long.parseLong(System.getProperty("risk.feature.broadcast-ttl-ms", "86400000"));
     }
 
     @Override
@@ -61,7 +66,9 @@ class FeatureRuleFunction extends KeyedBroadcastProcessFunction<
         String ipScope = ip == null ? null : "IP:" + ip;
 
         ReadOnlyBroadcastState<String, FeatureRow> state = ctx.getBroadcastState(FEATURE_STATE);
-        Map<String, FeatureRow> snapshot = resolveSnapshot(spec, FeatureCalc.subjectScopeKey(in), ipScope, state);
+        Map<String, FeatureRow> snapshot = resolveSnapshot(
+                spec, FeatureCalc.subjectScopeKey(in), ipScope, state,
+                System.currentTimeMillis(), featureTtlMs);
         if (snapshot == null) return;
 
         out.collect(featureHit(spec, in, snapshot));
@@ -72,18 +79,25 @@ class FeatureRuleFunction extends KeyedBroadcastProcessFunction<
      * 命中返回 特征→特征行 快照供证据构造。IP 条件在主体无 IP（本事件与历史皆无）时按无值不判真。
      */
     static Map<String, FeatureRow> resolveSnapshot(RuleConfig.RuleSpec spec, String subjectScope, String ipScope,
-                                                   ReadOnlyBroadcastState<String, FeatureRow> state) throws Exception {
+                                                   ReadOnlyBroadcastState<String, FeatureRow> state,
+                                                   long nowMs, long ttlMs) throws Exception {
         Map<String, FeatureRow> snapshot = new HashMap<>();
         for (RuleConfig.FeatureCondition c : spec.features) {
             String scopeKey = "IP".equals(c.scope) ? ipScope : subjectScope;
             if (scopeKey == null) return null;
             FeatureRow row = state.get(FeatureRow.stateKey(scopeKey, c.feature));
-            // 特征行缺失按不满足计；窗口推进由最新广播覆盖自然接上
+            // 特征行缺失或超龄（处理时间过期）按不满足计；窗口推进由最新广播覆盖自然接上
             if (row == null) return null;
+            if (isStale(row, nowMs, ttlMs)) return null;
             if (!FeatureCalc.matches(c.op, row.value, c.threshold)) return null;
             snapshot.put(c.feature, row);
         }
         return snapshot;
+    }
+
+    /** 特征行处理时间过期判定：as_of 距今超过 ttl 视为陈旧（广播态不能带 TTL 的应用层兜底）。 */
+    static boolean isStale(FeatureRow row, long nowMs, long ttlMs) {
+        return row.asOfMs > 0 && nowMs - row.asOfMs > ttlMs;
     }
 
     /** FEATURE 命中事件构造：证据带特征值、窗口界与 scope_key，回溯可对上 risk_features 行 */

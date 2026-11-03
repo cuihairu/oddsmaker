@@ -326,20 +326,36 @@ class RiskFeatureTest {
 
         FakeState state = new FakeState();
         // 无值不判真
-        assertNull(FeatureRuleFunction.resolveSnapshot(spec, "PLAYER:u1", "IP:10.9.9.9", state));
+        assertNull(FeatureRuleFunction.resolveSnapshot(spec, "PLAYER:u1", "IP:10.9.9.9", state, 1_000L, 86_400_000L));
         // 只过第一条件不命中
-        state.put(subjectKey, new FeatureRow("g1", "prod", "PLAYER:u1", "gold_gain_1h", 0, 3_600_000L, 600_000, 1));
-        assertNull(FeatureRuleFunction.resolveSnapshot(spec, "PLAYER:u1", "IP:10.9.9.9", state));
+        state.put(subjectKey, new FeatureRow("g1", "prod", "PLAYER:u1", "gold_gain_1h", 0, 3_600_000L, 600_000, 500L));
+        assertNull(FeatureRuleFunction.resolveSnapshot(spec, "PLAYER:u1", "IP:10.9.9.9", state, 1_000L, 86_400_000L));
         // IP 条件阈值不过不命中
-        state.put(ipKey, new FeatureRow("g1", "prod", "IP:10.9.9.9", "account_count_per_ip", 0, 3_600_000L, 1, 1));
-        assertNull(FeatureRuleFunction.resolveSnapshot(spec, "PLAYER:u1", "IP:10.9.9.9", state));
+        state.put(ipKey, new FeatureRow("g1", "prod", "IP:10.9.9.9", "account_count_per_ip", 0, 3_600_000L, 1, 500L));
+        assertNull(FeatureRuleFunction.resolveSnapshot(spec, "PLAYER:u1", "IP:10.9.9.9", state, 1_000L, 86_400_000L));
         // 全条件满足 → 快照
-        state.put(ipKey, new FeatureRow("g1", "prod", "IP:10.9.9.9", "account_count_per_ip", 0, 3_600_000L, 2, 1));
-        Map<String, FeatureRow> snap = FeatureRuleFunction.resolveSnapshot(spec, "PLAYER:u1", "IP:10.9.9.9", state);
+        state.put(ipKey, new FeatureRow("g1", "prod", "IP:10.9.9.9", "account_count_per_ip", 0, 3_600_000L, 2, 500L));
+        Map<String, FeatureRow> snap = FeatureRuleFunction.resolveSnapshot(spec, "PLAYER:u1", "IP:10.9.9.9", state, 1_000L, 86_400_000L);
         assertNotNull(snap);
         assertEquals(600_000.0, snap.get("gold_gain_1h").value, 1e-9);
         // 主体无 IP（本事件与历史皆无）→ IP 条件无值不判真
-        assertNull(FeatureRuleFunction.resolveSnapshot(spec, "PLAYER:u1", null, state));
+        assertNull(FeatureRuleFunction.resolveSnapshot(spec, "PLAYER:u1", null, state, 1_000L, 86_400_000L));
+    }
+
+    @Test
+    @DisplayName("规则引用特征：广播特征按 as_of 过期，陈旧值不参与评估（T-REV03）")
+    void resolveSnapshotStaleFeatureDoesNotHit() throws Exception {
+        RuleConfig.RuleSpec spec = featureSpec(CONDITIONS_JSON);
+        assertNotNull(spec);
+        FakeState state = new FakeState();
+        state.put(FeatureRow.stateKey("PLAYER:u1", "gold_gain_1h"),
+                new FeatureRow("g1", "prod", "PLAYER:u1", "gold_gain_1h", 0, 3_600_000L, 600_000, 100L));
+        state.put(FeatureRow.stateKey("IP:10.9.9.9", "account_count_per_ip"),
+                new FeatureRow("g1", "prod", "IP:10.9.9.9", "account_count_per_ip", 0, 3_600_000L, 2, 100L));
+
+        long ttl = 86_400_000L;
+        assertNotNull(FeatureRuleFunction.resolveSnapshot(spec, "PLAYER:u1", "IP:10.9.9.9", state, 100L + ttl, ttl));
+        assertNull(FeatureRuleFunction.resolveSnapshot(spec, "PLAYER:u1", "IP:10.9.9.9", state, 101L + ttl, ttl));
     }
 
     @Test
