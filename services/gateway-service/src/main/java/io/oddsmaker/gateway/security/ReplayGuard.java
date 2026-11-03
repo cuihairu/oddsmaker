@@ -73,7 +73,7 @@ public class ReplayGuard {
      * 记录签名；返回 false 表示签名已被使用（重放攻击）。
      */
     public boolean consumeSignature(String signature) {
-        boolean fresh = rotateIfNeeded(signatures).mark(signature);
+        boolean fresh = rotateIfNeeded(signatures, true).mark(signature);
         if (!fresh) {
             log.warn("Replay detected: signature already used within window");
         }
@@ -88,7 +88,7 @@ public class ReplayGuard {
      * 裸拼接或分隔符，任意内容（含分隔符本身）都不产生键冲突。
      */
     public boolean consumeEventId(String gameId, String environment, String eventId) {
-        return rotateIfNeeded(eventIds).mark(eventKey(gameId, environment, eventId));
+        return rotateIfNeeded(eventIds, false).mark(eventKey(gameId, environment, eventId));
     }
 
     /** 长度前缀编码：hex(gameId.length):gameId + hex(environment.length):environment + eventId。 */
@@ -117,23 +117,23 @@ public class ReplayGuard {
         return Math.abs(nowMillis - tsClient) <= maxEventDriftMs;
     }
 
-    private Generation rotateIfNeeded(Generation current) {
+    private Generation rotateIfNeeded(Generation current, boolean isSignatures) {
         long now = System.currentTimeMillis();
         if (!current.isExpired(now)) {
             return current;
         }
         rotateLock.lock();
         try {
-            // 不做锁内双检：expireAt 为 final、isExpired 单调恒真，锁外判过 true 后不可能回退；
-            // 并发下重复轮换只是各自换新代并覆盖 volatile 引用，正确性不受影响
-            // 轮换：当前代直接丢弃（TTL 已覆盖签名时间窗的 2 倍）
-            Generation next = new Generation(ttlMillis, maxEntries);
-            if (current == signatures) {
-                signatures = next;
-            } else {
-                eventIds = next;
+            if (isSignatures) {
+                if (current == signatures) {
+                    signatures = new Generation(ttlMillis, maxEntries);
+                }
+                return signatures;
             }
-            return next;
+            if (current == eventIds) {
+                eventIds = new Generation(ttlMillis, maxEntries);
+            }
+            return eventIds;
         } finally {
             rotateLock.unlock();
         }

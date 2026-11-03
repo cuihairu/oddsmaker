@@ -3,6 +3,9 @@ package io.oddsmaker.gateway.security;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -49,6 +52,37 @@ class ReplayGuardRotationTest {
         // 轮换后新代：同 key 再次视为新签名/新事件
         assertTrue(guard.consumeSignature("sig-1"));
         assertTrue(guard.consumeEventId("game-a", "prod", "evt-1"));
+    }
+
+    @Test
+    @DisplayName("并发轮换签名代时不误清 event_id 幂等代")
+    void staleSignatureRotationKeepsEventGeneration() throws Exception {
+        ReplayGuard guard = new ReplayGuard(1, 100, 86_400_000);
+        assertTrue(guard.consumeSignature("sig-1"));
+        Thread.sleep(5);
+
+        // event_ids 已被并发轮换为全新未过期一代，且已含 evt-1 幂等位
+        Field eventIdsField = ReplayGuard.class.getDeclaredField("eventIds");
+        eventIdsField.setAccessible(true);
+        Class<?> genClass = Class.forName("io.oddsmaker.gateway.security.ReplayGuard$Generation");
+        Object freshEventGen = genClass.getDeclaredConstructor(long.class, int.class)
+                .newInstance(System.currentTimeMillis() + 600_000L, 100);
+        eventIdsField.set(guard, freshEventGen);
+        assertTrue(guard.consumeEventId("game-a", "prod", "evt-1"));
+
+        // 捕获过期 signatures 代引用，模拟两个签名消费者竞争：线程 B 先锁轮换，
+        // 线程 A 持过期引用进锁——只应返回新代，绝不落入 event_ids 轮换分支
+        Field signaturesField = ReplayGuard.class.getDeclaredField("signatures");
+        signaturesField.setAccessible(true);
+        Object stale = signaturesField.get(guard);
+        Method rotate = ReplayGuard.class.getDeclaredMethod(
+                "rotateIfNeeded", stale.getClass(), boolean.class);
+        rotate.setAccessible(true);
+        rotate.invoke(guard, stale, true);
+        rotate.invoke(guard, stale, true);
+
+        // evt-1 幂等位必须仍在（event_ids 未被误轮换丢代）
+        assertFalse(guard.consumeEventId("game-a", "prod", "evt-1"));
     }
 
     @Test
