@@ -22,7 +22,6 @@ import java.util.stream.Collectors;
  * totalRows/fileSizeBytes 均为实际值；CH 异常诚实 FAILED。
  */
 @Service
-@Transactional
 public class ExportService {
 
     private static final Logger logger = LoggerFactory.getLogger(ExportService.class);
@@ -66,6 +65,7 @@ public class ExportService {
     /**
      * 创建导出任务
      */
+    @Transactional
     public ExportJobEntity createExportJob(String gameId, String environmentId, String userId,
                                           String exportType, LocalDateTime startTime, LocalDateTime endTime,
                                           String exportFormat, Map<String, Object> filters,
@@ -196,6 +196,7 @@ public class ExportService {
     /**
      * 取消导出任务
      */
+    @Transactional
     public ExportJobEntity cancelExportJob(String exportJobId, String reason) {
         ExportJobEntity job = exportJobRepo.findById(exportJobId)
             .orElseThrow(() -> new IllegalArgumentException("Export job not found: " + exportJobId));
