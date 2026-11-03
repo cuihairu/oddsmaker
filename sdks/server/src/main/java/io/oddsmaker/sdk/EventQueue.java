@@ -164,6 +164,7 @@ final class EventQueue {
                 Path file = queueDir.resolve("spill-" + spillSeq + ".ndjson");
                 Files.write(file, rest, StandardCharsets.UTF_8);
                 spillSeq++;
+                diskEvents += rest.size();
             } catch (IOException e) {
                 dropped += rest.size();
                 warn.accept("spill-retry-write-failed",
