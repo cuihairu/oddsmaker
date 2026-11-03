@@ -1052,12 +1052,13 @@ public class RiskJob {
         sb.append(",\"score\":").append(h.score);
         sb.append(",\"action\":\"").append(h.action).append("\"");
         sb.append(",\"trust_level\":\"").append(h.trustLevel == null ? "" : h.trustLevel).append("\"");
-        sb.append(",\"reason\":\"").append(h.reason.replace("\"", "\\\"")).append("\"");
+        sb.append(",\"reason\":\"").append(jsonEscape(h.reason)).append("\"");
         sb.append(",\"evidence\":{");
         boolean first = true;
         for (Map.Entry<String, String> e : h.evidence.entrySet()) {
             if (!first) sb.append(",");
-            sb.append("\"").append(e.getKey()).append("\":\"").append(e.getValue().replace("\"", "\\\"")).append("\"");
+            sb.append("\"").append(jsonEscape(e.getKey())).append("\":\"")
+              .append(jsonEscape(e.getValue())).append("\"");
             first = false;
         }
         sb.append("}}");

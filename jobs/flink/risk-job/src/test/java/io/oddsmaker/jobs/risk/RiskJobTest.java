@@ -847,7 +847,7 @@ class RiskJobTest {
         assertTrue(json.contains("\"action\":\"ALERT\""));
         assertTrue(json.contains("\"trust_level\":\"HIGH\""));
         assertTrue(json.contains("\"reason\":\"says \\\"hi\\\"\""));
-        assertTrue(json.contains("\"evidence\":{\"k\"1\":\"v\\\"2\"}"));   // key 原样、value 转义（现状）
+        assertTrue(json.contains("\"evidence\":{\"k\\\"1\":\"v\\\"2\"}"));   // key/value 均转义
         assertTrue(json.endsWith("}}"));
     }
 

@@ -39,7 +39,7 @@
 - [x] T-REV18 MlRetrainScheduler 内部 http://（P3）：支持 JDBC ssl=true→https 派生，显式训练 URL 限制 http(s) scheme（services/control-service/src/main/java/io/oddsmaker/control/service/MlRetrainScheduler.java:198）；MlRetrainSchedulerTest 22 tests / 0 fail
 - [x] T-REV19 webhook/集成 URL 只查前缀（P3）：新增 UrlSecurityValidator（http/https + 拒绝私网/环回/链路本地，可配置 allow-private-networks 豁免），webhook/集成/维度拉取三处统一接入（services/control-service/src/main/java/io/oddsmaker/control/security/UrlSecurityValidator.java:1）；control-service check tests=2118 failures=0
 - [x] T-REV20 EventQueue diskEvents 少计（P3）：超大溢出文件分批读后余量写回时补记 diskEvents，防止计数下偏破坏 maxDiskEvents（sdks/server/src/main/java/io/oddsmaker/sdk/EventQueue.java:167）；sdks:server check tests=9 failures=0
-- [ ] T-REV21 RiskJob toJson 只转义 "（P3）：未转义 \，反斜杠/证据值致 risk_events 主题畸形 JSON（jobs/flink/risk-job/.../RiskJob.java:1055）
+- [x] T-REV21 RiskJob toJson 只转义 "（P3）：未转义 \，反斜杠/证据值致 risk_events 主题畸形 JSON（jobs/flink/risk-job/.../RiskJob.java:1055）；证据：RiskJob.java:1048 统一 jsonEscape，risk-job 100 tests 0 fail
 - [ ] T-REV22 RetentionJob 迟发 day<first 被忽略（P3）：队列已设后更早首日事件直接丢弃，无队列校正（jobs/flink/retention-job/.../RetentionJob.java:195-238）
 - [ ] T-REV23 窗口/键控键裸拼接无长度前缀（P3）：game_id|environment|subject 裸拼接，含 | 的 game_id 撞键并状态；RiskJob:988、RetentionJob:123、FunnelsJob:121、IdentityMergeJob:140 同型
 - [ ] T-REV24 QuotaEntity 可空列拆箱 NPE（P3）：currentUsage 为可空 BIGINT，isOverLimit/getUsagePercent/incrementUsage 未判空拆箱；RateLimitService:166-167 同型（services/control-service/.../jpa/QuotaEntity.java:98,113,133）
