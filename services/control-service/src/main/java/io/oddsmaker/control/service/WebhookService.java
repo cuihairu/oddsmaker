@@ -66,6 +66,9 @@ public class WebhookService {
     @Autowired(required = false)   // 与 asyncExecutor 同型：单测注入 SimpleMeterRegistry，缺 bean 时静默不记
     private MeterRegistry meterRegistry;
 
+    @org.springframework.beans.factory.annotation.Value("${oddsmaker.outbound.allow-private-networks:false}")
+    private boolean outboundAllowPrivateNetworks;
+
     /** 发送侧 buildHeaders 仅实现这三种鉴权（hmac/oauth2 无实现，校验拒绝防静默不生效） */
     private static final Set<String> SUPPORTED_HTTP_METHODS = Set.of("POST", "PUT", "PATCH");
     private static final Set<String> SUPPORTED_AUTH_TYPES = Set.of("none", "basic", "bearer", "api_key");
@@ -342,9 +345,7 @@ public class WebhookService {
             throw new IllegalArgumentException("webhookUrl is required");
         }
         String url = req.webhookUrl.trim();
-        if (!url.startsWith("http://") && !url.startsWith("https://")) {
-            throw new IllegalArgumentException("webhookUrl must start with http:// or https://");
-        }
+        io.oddsmaker.control.security.UrlSecurityValidator.validateHttpUrl(url, "webhookUrl", outboundAllowPrivateNetworks);
         if (url.length() > 500) {
             throw new IllegalArgumentException("webhookUrl must be at most 500 characters");
         }

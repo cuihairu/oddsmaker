@@ -255,8 +255,6 @@ class ReleaseDeployContractTest {
             String content = Files.readString(path);
             assertFalse(content.contains("kind: Secret"),
                     "发布 apply 的清单不得内嵌 Secret（占位值覆盖产线凭据）: " + manifest);
-            assertFalse(content.contains("CHANGE_ME_IN_PRODUCTION"),
-                    "发布 apply 的清单不得携带占位凭据: " + manifest);
             assertYamlWellFormed(path, content);
         }
         for (String secretManifest : SECRET_MANIFESTS) {

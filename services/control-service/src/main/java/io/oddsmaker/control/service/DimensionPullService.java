@@ -81,6 +81,7 @@ public class DimensionPullService {
     private final DimensionCredentialCipher cipher;
     private final RestTemplate restTemplate;
     private final String gatewayUrl;
+    private final boolean allowPrivateNetworks;
 
     public DimensionPullService(DimensionPullConfigRepo configRepo,
                                 DimensionSyncStatusRepo statusRepo,
@@ -89,7 +90,8 @@ public class DimensionPullService {
                                 ApiKeyRepo keyRepo,
                                 DimensionCredentialCipher cipher,
                                 RestTemplate restTemplate,
-                                @Value("${oddsmaker.gateway.url:http://localhost:8080}") String gatewayUrl) {
+                                @Value("${oddsmaker.gateway.url:http://localhost:8080}") String gatewayUrl,
+                                @Value("${oddsmaker.outbound.allow-private-networks:false}") boolean allowPrivateNetworks) {
         this.configRepo = configRepo;
         this.statusRepo = statusRepo;
         this.gameRepo = gameRepo;
@@ -98,6 +100,7 @@ public class DimensionPullService {
         this.cipher = cipher;
         this.restTemplate = restTemplate;
         this.gatewayUrl = gatewayUrl;
+        this.allowPrivateNetworks = allowPrivateNetworks;
     }
 
     // ===== 请求/响应体 =====

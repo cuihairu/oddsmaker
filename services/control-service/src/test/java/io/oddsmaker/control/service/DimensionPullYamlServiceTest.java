@@ -68,7 +68,7 @@ class DimensionPullYamlServiceTest {
     @BeforeEach
     void setUp() {
         DimensionPullService pullService = new DimensionPullService(configRepo, statusRepo, gameRepo, envRepo,
-                keyRepo, cipher, new RestTemplate(), "http://localhost:8080");
+                keyRepo, cipher, new RestTemplate(), "http://localhost:8080", true);
         yamlService = new DimensionPullYamlService(pullService, configRepo);
         when(gameRepo.findById(anyString())).thenReturn(Optional.of(new io.oddsmaker.control.jpa.GameEntity()));
         when(envRepo.findByGameIdAndNameAndDeletedAtIsNull(anyString(), anyString()))

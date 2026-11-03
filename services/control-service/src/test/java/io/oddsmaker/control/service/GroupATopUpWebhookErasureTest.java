@@ -391,6 +391,7 @@ class GroupATopUpWebhookErasureTest {
 
     @BeforeEach
     void erasureSetUp() {
+        ReflectionTestUtils.setField(webhookService, "outboundAllowPrivateNetworks", true);
         ReflectionTestUtils.setField(erasureService, "identityExpansionLimit", 500);
         ReflectionTestUtils.setField(erasureService, "processingTimeoutMinutes", 60);
         ReflectionTestUtils.setField(erasureService, "mutationTimeoutSeconds", 0);

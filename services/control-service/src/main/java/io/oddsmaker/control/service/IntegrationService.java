@@ -41,6 +41,9 @@ public class IntegrationService {
     @Autowired
     private ObjectMapper objectMapper;
 
+    @org.springframework.beans.factory.annotation.Value("${oddsmaker.outbound.allow-private-networks:false}")
+    private boolean outboundAllowPrivateNetworks;
+
     /** 通用调用模板（默认 30s 超时——裸 new RestTemplate() 是无限等待，慢 endpoint 会挂死调用方）。 */
     private final RestTemplate restTemplate = defaultRestTemplate();
 
@@ -185,10 +188,8 @@ public class IntegrationService {
                 + " is not supported: the API has no credential channel for it (request would silently go out unauthenticated). Use NONE or API_KEY");
         }
         String url = endpointUrl == null ? null : endpointUrl.trim();
-        if (url == null || url.isEmpty()
-                || !(url.startsWith("http://") || url.startsWith("https://"))) {
-            throw new IllegalArgumentException("endpointUrl must be a non-blank http(s) URL");
-        }
+        io.oddsmaker.control.security.UrlSecurityValidator.validateHttpUrl(
+            url, "endpointUrl", outboundAllowPrivateNetworks);
         if (timeoutSeconds != null && (timeoutSeconds < 1 || timeoutSeconds > 300)) {
             throw new IllegalArgumentException("timeoutSeconds must be between 1 and 300");
         }

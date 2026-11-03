@@ -114,7 +114,7 @@ class DimensionPullE2eTest {
 
     private DimensionPullService service(DimensionPullConfigEntity config) {
         DimensionPullService svc = new DimensionPullService(configRepo, statusRepo, gameRepo, envRepo, keyRepo,
-                cipher, restTemplate, "http://127.0.0.1:" + port);
+                cipher, restTemplate, "http://127.0.0.1:" + port, true);
         // 配置与仓储行为
         config.credentialEncrypted = cipher.encrypt("token-xyz");
         when(configRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));

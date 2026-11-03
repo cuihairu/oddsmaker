@@ -58,6 +58,7 @@ class IntegrationServiceDeepTest {
         ReflectionTestUtils.setField(real, "auditLogService", auditLogService);
         ReflectionTestUtils.setField(real, "restTemplate", callTemplate);
         ReflectionTestUtils.setField(real, "objectMapper", new ObjectMapper());
+        ReflectionTestUtils.setField(real, "outboundAllowPrivateNetworks", true);
         service = spy(real);
         // restTemplateFor 按集成现建模板——stub 掉以捕获探测请求
         doReturn(probeTemplate).when(service).restTemplateFor(any(IntegrationEntity.class));
