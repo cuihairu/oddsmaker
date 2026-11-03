@@ -235,9 +235,10 @@ class ReleaseDeployContractTest {
     }
 
     /**
-     * 发布流水线 apply 的清单不得携带 Secret：manifest 内是 CHANGE_ME 占位值，
-     * 每次 apply 都会用占位值覆盖产线真实凭据。占位 Secret 拆到 *-secrets.yaml
-     * （运维首次部署填真值后手工 apply 一次），并要求这些文件存在、可解析。
+     * 发布流水线 apply 的清单不得携带 Secret：manifest 内是占位值，
+     * 每次 apply 都会用占位值覆盖产线真实凭据。凭据 Secret 拆到 *-secrets.yaml
+     * （运维首次部署填真值后手工 apply 一次），并要求这些文件存在、可解析，
+     * 且口令键必须为空模板（留空则中间件拒绝启动，fail-closed）。
      */
     @Test
     void appliedManifestsCarryNoPlaceholderSecrets() throws IOException {
@@ -263,6 +264,10 @@ class ReleaseDeployContractTest {
             assertTrue(Files.exists(path), "占位 Secret 独立文件缺失（运维首次部署入口）: " + secretManifest);
             String content = Files.readString(path);
             assertTrue(content.contains("kind: Secret"), secretManifest + " 应是 Secret 清单");
+            if (secretManifest.contains("postgres-secrets") || secretManifest.contains("redis-secrets")) {
+                assertFalse(content.contains("CHANGE_ME_IN_PRODUCTION"),
+                        secretManifest + " 不得携带 CHANGE_ME 占位值（改为空模板，留空则中间件拒绝启动）");
+            }
             assertYamlWellFormed(path, content);
         }
     }

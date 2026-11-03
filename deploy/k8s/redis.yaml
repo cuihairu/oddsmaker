@@ -39,6 +39,19 @@ spec:
         app: oddsmaker-redis
         component: cache
     spec:
+      initContainers:
+        - name: redis-secret-check
+          image: busybox:1.36
+          command: ['sh', '-ec', '
+            test -n "$REDIS_PASSWORD" || { echo "FATAL: REDIS_PASSWORD 为空（redis-secrets.yaml 未填真实口令）"; exit 1; }
+            case "$REDIS_PASSWORD" in CHANGE_ME_IN_PRODUCTION*) echo "FATAL: REDIS_PASSWORD 仍为占位值"; exit 1;; esac
+          ']
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: oddsmaker-redis-secrets
+                  key: password
       containers:
         - name: redis
           image: redis:7-alpine

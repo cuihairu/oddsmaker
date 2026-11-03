@@ -34,8 +34,8 @@
 - [x] T-REV13 web eslint 门已坏（P2）：新增 ESLint9 flat config（essential + 核心错误规则），修复 16 个 lint 错误；lint 脚本去除 --ext/--ignore-path，CI 接入 lint，并将测试线程池/超时调稳（web/eslint.config.js:1，web/package.json:10，web/vitest.config.js:21，.github/workflows/ci.yaml:137）；lint/build/tests 202 passed / 0 failed
 - [x] T-REV14 死配置 oddsmaker.security.jwt.*（P3）：删除零消费者的 security.jwt 块（含硬编码默认密钥）；真实密钥走 oddsmaker.auth.jwt-secret（services/control-service/src/main/resources/application.yaml:96）；control-service check tests=2115 failures=0
 - [x] T-REV15 gateway 配置测试密钥对（P3）：测试密钥对移至并仅保留于 src/test/resources/application.yaml，主配置删除全部 pk_/sk_ 对（services/gateway-service/src/main/resources/application.yaml:32，services/gateway-service/src/test/resources/application.yaml:9）；gateway-service check tests=248 failures=0
-- [ ] T-REV16 k8s postgres 占位口令（P3）：CHANGE_ME_IN_PRODUCTION 占位，未改即应用则 DB 认证用占位（deploy/k8s/postgres-secrets.yaml:14）
-- [ ] T-REV17 k8s redis 占位口令（P3）：同上（deploy/k8s/redis-secrets.yaml:13）
+- [x] T-REV16 k8s postgres 占位口令（P3）：Secret 改空模板 + Deployment initContainer 校验非空且非占位，漏配 fail-closed 拒绝启动（deploy/k8s/postgres-secrets.yaml:14，deploy/k8s/postgres.yaml:64）；ReleaseDeployContractTest 钉空模板；docker 实证 POSTGRES_PASSWORD="" → exit 1
+- [x] T-REV17 k8s redis 占位口令（P3）：Secret 改空模板 + Deployment initContainer 校验非空且非占位，漏配 fail-closed 拒绝启动（deploy/k8s/redis-secrets.yaml:13，deploy/k8s/redis.yaml:43）；ReleaseDeployContractTest 钉空模板
 - [ ] T-REV18 MlRetrainScheduler 内部 http://（P3）：配置派生非用户输入，非 TLS 拉取（services/control-service/.../MlRetrainScheduler.java:225）
 - [ ] T-REV19 webhook/集成 URL 只查前缀（P3）：admin 提供端点仅验 http(s):// 前缀，允许 http:// 到内网主机（services/control-service/.../WebhookService.java:345、IntegrationService:189、DimensionPullService:615）
 - [ ] T-REV20 EventQueue diskEvents 少计（P3）：重溢盘后未加回 rest.size()，diskEvents 下计致磁盘超 maxDiskEvents（sdks/server/.../EventQueue.java:153-166）

@@ -22,8 +22,8 @@ helm upgrade --install oddsmaker ./infra/helm/oddsmaker -n oddsmaker --create-na
 
 Option 2: Raw YAML (`deploy/k8s/`)
 ```bash
-# 首次部署一次性：Secret 已拆至独立 *-secrets.yaml（内含 CHANGE_ME 占位值），
-# 填入真实值后手工 apply 一次；发布流水线不 apply 占位 Secret（覆盖即毁产线真实凭据）
+# 首次部署一次性：Secret 已拆至独立 *-secrets.yaml（空凭据模板，留空则中间件拒绝启动），
+# 填入真实值后手工 apply 一次；发布流水线不 apply 凭据文件（覆盖即毁产线真实凭据）
 kubectl apply -f deploy/k8s/postgres-secrets.yaml
 kubectl apply -f deploy/k8s/redis-secrets.yaml
 kubectl apply -f deploy/k8s/control-service-secrets.yaml
@@ -38,7 +38,7 @@ kubectl apply -f deploy/k8s/gateway-service.yaml
 
 Notes
 - Admin token: `oddsmaker.admin.token` (Control), access /api/** via `x-admin-token`
-- Credentials: Secret docs are split into `deploy/k8s/*-secrets.yaml` (CHANGE_ME placeholders) — fill real values and apply once manually on first deploy; the release pipeline never applies placeholder Secrets
+- Credentials: Secret docs are split into `deploy/k8s/*-secrets.yaml` (empty templates; leave blank to make middleware refuse startup) — fill real values and apply once manually on first deploy; the release pipeline never applies credential files
 - Endpoint exposure: `oddsmaker-gateway` and `oddsmaker-control` can be exposed via Ingress/LoadBalancer
 - Downstream addresses: change the ConfigMaps in `deploy/k8s/control-service.yaml` and `gateway-service.yaml` (Kafka/Registry/ClickHouse)
 - Authentication and security: put behind an enterprise gateway/WAF; use a strong token or OIDC for the control plane; enable TLS (Ingress/ServiceMesh)

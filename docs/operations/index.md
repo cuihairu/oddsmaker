@@ -46,9 +46,9 @@ podman compose down
 ### Kubernetes (Production)
 
 ```bash
-# First-time only: Secret docs are split into *-secrets.yaml files carrying CHANGE_ME
-# placeholders — fill real values, then apply once manually. The release pipeline never
-# applies placeholder Secrets (it would clobber real production credentials)
+# First-time only: Secret docs are split into *-secrets.yaml files carrying empty credential
+# templates — fill real values, then apply once manually. The release pipeline never
+# applies credential files (it would clobber real production credentials)
 kubectl apply -f deploy/k8s/postgres-secrets.yaml
 kubectl apply -f deploy/k8s/redis-secrets.yaml
 kubectl apply -f deploy/k8s/control-service-secrets.yaml
