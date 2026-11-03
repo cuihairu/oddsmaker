@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.LongAdder;
 
 /**
  * B10 数据质量进程内计数器（设计定稿 07-b10 §4.2）。
@@ -32,7 +33,7 @@ public class DataQualityCounters {
 
     private final Clock clock;
     /** key = gameId|environment|windowEpochSec。game_id/environment 为业务标识，不含 '|'。 */
-    private final ConcurrentHashMap<String, long[]> windows = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, LongAdder[]> windows = new ConcurrentHashMap<>();
 
     public DataQualityCounters() {
         this(Clock.systemUTC());
@@ -51,8 +52,11 @@ public class DataQualityCounters {
         String g = gameId == null || gameId.isBlank() ? "unknown" : gameId;
         String e = environment == null || environment.isBlank() ? "unknown" : environment;
         long window = currentWindow();
-        long[] arr = windows.computeIfAbsent(g + "|" + e + "|" + window, k -> new long[Counter.values().length]);
-        arr[counter.ordinal()]++;
+        LongAdder[] arr = windows.computeIfAbsent(g + "|" + e + "|" + window,
+            k -> java.util.Arrays.stream(Counter.values())
+                .map(ignored -> new LongAdder())
+                .toArray(LongAdder[]::new));
+        arr[counter.ordinal()].increment();
     }
 
     /**
@@ -62,7 +66,7 @@ public class DataQualityCounters {
     public List<WindowSnapshot> snapshotAndEvict() {
         long keepFrom = currentWindow() - WINDOW_SEC;
         List<WindowSnapshot> out = new ArrayList<>();
-        for (Map.Entry<String, long[]> en : windows.entrySet()) {
+        for (Map.Entry<String, LongAdder[]> en : windows.entrySet()) {
             String[] parts = en.getKey().split("\\|", 3);
             long window;
             if (parts.length < 3) {
@@ -79,7 +83,11 @@ public class DataQualityCounters {
                 windows.remove(en.getKey());
                 continue;
             }
-            out.add(new WindowSnapshot(parts[0], parts[1], window, en.getValue().clone()));
+            long[] counts = new long[Counter.values().length];
+            for (int i = 0; i < counts.length; i++) {
+                counts[i] = en.getValue()[i].sum();
+            }
+            out.add(new WindowSnapshot(parts[0], parts[1], window, counts));
         }
         return out;
     }

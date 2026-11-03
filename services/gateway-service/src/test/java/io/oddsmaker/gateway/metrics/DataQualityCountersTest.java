@@ -10,6 +10,11 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -95,5 +100,33 @@ class DataQualityCountersTest {
         counters.record("g1", "prod", Counter.RECEIVED);
         counters.clear();
         assertTrue(counters.snapshotAndEvict().isEmpty());
+    }
+
+    @Test
+    @DisplayName("record：并发计数不丢失")
+    void concurrentRecordsDoNotLoseCounts() throws Exception {
+        int threads = 4;
+        int recordsPerThread = 10_000;
+        ExecutorService executor = Executors.newFixedThreadPool(threads);
+        CountDownLatch start = new CountDownLatch(1);
+        try {
+            Future<?>[] futures = IntStream.range(0, threads)
+                .mapToObj(thread -> executor.submit(() -> {
+                    start.await();
+                    for (int i = 0; i < recordsPerThread; i++) {
+                        counters.record("g1", "prod", Counter.RECEIVED);
+                    }
+                    return null;
+                }))
+                .toArray(Future[]::new);
+            start.countDown();
+            for (Future<?> future : futures) {
+                future.get();
+            }
+            WindowSnapshot snapshot = snap(counters, "g1", "prod");
+            assertEquals((long) threads * recordsPerThread, snapshot.count(Counter.RECEIVED));
+        } finally {
+            executor.shutdownNow();
+        }
     }
 }
