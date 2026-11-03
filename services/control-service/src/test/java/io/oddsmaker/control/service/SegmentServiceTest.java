@@ -225,15 +225,32 @@ class SegmentServiceTest {
         Map<String, Object> result = service.compute("seg123");
 
         assertEquals(42L, result.get("memberCount"));
-        // 先清旧成员
-        verify(ch).update(contains("ALTER TABLE segment_members DELETE"), eq("seg123"));
         // 再插入：INSERT INTO segment_members ... FROM events ... 环境/窗口/条件参数依序
         ArgumentCaptor<Object[]> args = ArgumentCaptor.forClass(Object[].class);
         verify(ch).update(contains("INSERT INTO segment_members"), (Object[]) args.capture());
         assertEquals("seg123", args.getValue()[0]);
         assertEquals("game_a", args.getValue()[1]);
         assertEquals("prod", args.getValue()[2]);
+        // 先 INSERT 后 DELETE 旧代（T-REV09：INSERT 失败不置空分群）
+        ArgumentCaptor<Object[]> delArgs = ArgumentCaptor.forClass(Object[].class);
+        verify(ch).update(contains("ALTER TABLE segment_members DELETE WHERE segment_id = ? AND computed_at <"),
+                (Object[]) delArgs.capture());
+        assertEquals("seg123", delArgs.getValue()[0]);
         verify(repo).save(any());
+    }
+
+    @Test
+    @DisplayName("compute：INSERT 失败时旧成员未被清（不置空分群），异常上抛")
+    void computeInsertFailureKeepsOldMembers() {
+        when(repo.findByIdAndDeletedAtIsNull("seg123")).thenReturn(Optional.of(saved("prod", null)));
+        when(ch.isAvailable()).thenReturn(true);
+        when(ch.update(contains("INSERT INTO segment_members"), any(Object[].class)))
+                .thenThrow(new RuntimeException("insert failed"));
+
+        assertThrows(RuntimeException.class, () -> service.compute("seg123"));
+        // 关键：INSERT 失败后绝不执行旧成员 DELETE
+        verify(ch, never()).update(contains("ALTER TABLE segment_members DELETE"), any(Object[].class));
+        verify(repo, never()).save(any());
     }
 
     @Test

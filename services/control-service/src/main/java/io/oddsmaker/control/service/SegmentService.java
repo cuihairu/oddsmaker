@@ -161,7 +161,12 @@ public class SegmentService {
         Compiled compiled = compile(def, entity.subject);
         String subjectExpr = subjectExpr(entity.subject);
 
-        ch.update("ALTER TABLE segment_members DELETE WHERE segment_id = ?", segmentId);
+        // 生成代标记（先于 INSERT 捕获）：新批 computed_at=now64(3) 恒 >= 此值，
+        // 后续 DELETE 只清「早于本代」的旧成员，不会误删刚插入的新批。
+        // 顺序改为先 INSERT 后 DELETE（T-REV09）：若 INSERT 失败，旧成员完整保留，
+        // 分群不再因一次失败而置空；DELETE 失败则新批已落、旧批残留由 ReplacingMergeTree
+        // 同主体新替旧 + 下次成功物化清除，属可自愈的中间态而非空集。
+        java.time.LocalDateTime generation = java.time.LocalDateTime.now();
 
         StringBuilder sql = new StringBuilder(
                 "INSERT INTO segment_members (segment_id, game_id, environment, subject_id, computed_at) "
@@ -180,6 +185,8 @@ public class SegmentService {
         sql.append(" AND (").append(compiled.whereFragment).append(")");
         args.addAll(compiled.args);
         ch.update(sql.toString(), args.toArray());
+        ch.update("ALTER TABLE segment_members DELETE WHERE segment_id = ? AND computed_at < toDateTime64(?, 3)",
+                segmentId, generation);
 
         long count = countMembers(entity);
         entity.memberCount = count;
