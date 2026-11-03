@@ -33,7 +33,7 @@
 - [x] T-REV12 无 JVM 静态分析门（P2）：全模块接入 PMD（errorprone EmptyCatchBlock/CompareObjectsWithEquals + bestpractices PreserveStackTrace），check 挂 PMD 门，CI/nightly/release 由 test 改 check；修复全仓 60+ 违规（build.gradle.kts:50，config/pmd/ruleset.xml:1，.github/workflows/ci.yaml:56）；全模块 check tests=2938 failures=0
 - [x] T-REV13 web eslint 门已坏（P2）：新增 ESLint9 flat config（essential + 核心错误规则），修复 16 个 lint 错误；lint 脚本去除 --ext/--ignore-path，CI 接入 lint，并将测试线程池/超时调稳（web/eslint.config.js:1，web/package.json:10，web/vitest.config.js:21，.github/workflows/ci.yaml:137）；lint/build/tests 202 passed / 0 failed
 - [x] T-REV14 死配置 oddsmaker.security.jwt.*（P3）：删除零消费者的 security.jwt 块（含硬编码默认密钥）；真实密钥走 oddsmaker.auth.jwt-secret（services/control-service/src/main/resources/application.yaml:96）；control-service check tests=2115 failures=0
-- [ ] T-REV15 gateway 配置测试密钥对（P3）：apiKey→secret 测试对随主配置，注释已标生产勿用（services/gateway-service/.../application.yaml:34）
+- [x] T-REV15 gateway 配置测试密钥对（P3）：测试密钥对移至并仅保留于 src/test/resources/application.yaml，主配置删除全部 pk_/sk_ 对（services/gateway-service/src/main/resources/application.yaml:32，services/gateway-service/src/test/resources/application.yaml:9）；gateway-service check tests=248 failures=0
 - [ ] T-REV16 k8s postgres 占位口令（P3）：CHANGE_ME_IN_PRODUCTION 占位，未改即应用则 DB 认证用占位（deploy/k8s/postgres-secrets.yaml:14）
 - [ ] T-REV17 k8s redis 占位口令（P3）：同上（deploy/k8s/redis-secrets.yaml:13）
 - [ ] T-REV18 MlRetrainScheduler 内部 http://（P3）：配置派生非用户输入，非 TLS 拉取（services/control-service/.../MlRetrainScheduler.java:225）

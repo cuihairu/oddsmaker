@@ -29,16 +29,7 @@ oddsmaker:
       linger-ms: 5
       batch-size: 65536
   auth:
-    # 示例: apiKey->secret，生产请使用数据库/控制面
-    keys:
-      pk_test_example: sk_test_secret
-      pk_test_rl: sk_test_secret
-      pk_test_pii: sk_test_secret
-      pk_iprl: sk_test_secret
-      pk_deny: sk_test_secret
-      pk_mask: sk_test_secret
-      pk_ipv6: sk_test_secret
-      pk_clamp: sk_test_secret
+    # 测试密钥对在 src/test/resources/application.yaml，主配置不携带（生产用数据库/控制面）
   ratelimit:
     rpm: 600          # per api key per minute
     ip-rpm: 300        # per client IP per minute
