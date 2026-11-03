@@ -138,10 +138,10 @@ class ConfigurableFunnelsJobTest {
         keyed.game_id = "g";
         keyed.environment = "dev";
         keyed.user_id = "u";
-        assertEquals("g|dev|u", ConfigurableFunnelsJob.funnelKey(keyed));
+        assertEquals("1:g3:dev1:u", ConfigurableFunnelsJob.funnelKey(keyed));
         keyed.user_id = null;
         keyed.device_id = "d9";
-        assertEquals("g|dev|d9", ConfigurableFunnelsJob.funnelKey(keyed));   // uidOf 回退 device_id
+        assertEquals("1:g3:dev2:d9", ConfigurableFunnelsJob.funnelKey(keyed));   // uidOf 回退 device_id
 
         assertNotNull(new ConfigurableFunnelsJob());   // 覆盖隐式构造器
     }

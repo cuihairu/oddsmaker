@@ -1,6 +1,7 @@
 package io.oddsmaker.jobs.retention;
 
 import io.oddsmaker.jobs.enrich.ApicurioAvroFlinkDeserializer;
+import io.oddsmaker.jobs.enrich.KeyCodec;
 import io.oddsmaker.jobs.enrich.RawEvent;
 import org.apache.flink.streaming.api.CheckpointingMode;
 import org.apache.flink.api.common.restartstrategy.RestartStrategies;
@@ -121,7 +122,7 @@ public class RetentionJob {
 
     /** 留存分组键：game|environment|subject。 */
     static String retentionKey(RawEvent r) {
-        return r.game_id + "|" + r.environment + "|" + subjectOf(r);
+        return KeyCodec.join(r.game_id, r.environment, subjectOf(r));
     }
 
     /** N-Day 输出行（rolling == 0）。 */

@@ -1,5 +1,7 @@
 package io.oddsmaker.jobs.risk;
 
+import io.oddsmaker.jobs.enrich.KeyCodec;
+
 /**
  * 特征行（B5 Feature 层，落 PostgreSQL risk_features 表）。
  * 时间字段用 long 毫秒（不持 Timestamp），让 Flink PojoSerializer 直接序列化；
@@ -32,7 +34,7 @@ public class FeatureRow {
 
     /** 广播状态键：scope|feature（规则评估按条件定位） */
     public static String stateKey(String scopeKey, String featureName) {
-        return scopeKey + "|" + featureName;
+        return KeyCodec.join(scopeKey, featureName);
     }
 
     public String stateKey() {

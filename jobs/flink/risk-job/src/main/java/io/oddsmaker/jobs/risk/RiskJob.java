@@ -1,6 +1,7 @@
 package io.oddsmaker.jobs.risk;
 
 import io.oddsmaker.jobs.enrich.ApicurioAvroFlinkDeserializer;
+import io.oddsmaker.jobs.enrich.KeyCodec;
 import io.oddsmaker.jobs.enrich.RawEvent;
 import org.apache.flink.streaming.api.CheckpointingMode;
 import org.apache.flink.api.common.restartstrategy.RestartStrategies;
@@ -421,7 +422,7 @@ public class RiskJob {
 
     /** account_count_per_ip 的分键：game|env|IP:<ip> */
     static String ipWindowKey(RiskInput i) {
-        return i.gameId + "|" + i.environment + "|" + FeatureCalc.ipScopeKey(i);
+        return KeyCodec.join(i.gameId, i.environment, FeatureCalc.ipScopeKey(i));
     }
 
     /** RawEvent → RiskInput 的算子封装（null 表示丢弃）。 */
@@ -920,7 +921,7 @@ public class RiskJob {
 
     /** risk_scores 的主体分键：game|env|subjectType:subjectId（与表 ORDER BY 主体维度对齐）。 */
     static String scoreKey(RiskHit h) {
-        return h.gameId + "|" + h.environment + "|" + h.subjectType + ":" + h.subjectId;
+        return KeyCodec.join(h.gameId, h.environment, h.subjectType + ":" + h.subjectId);
     }
 
     /** risk_scores 表写入绑定（7 列；reasons 为规则触发明细 JSON 数组）。 */
@@ -986,12 +987,12 @@ public class RiskJob {
 
     /** FREQUENCY/VELOCITY/RATIO/AD_REWARD 的分键：game|env|subject。 */
     static String subjectWindowKey(RiskInput i) {
-        return i.gameId + "|" + i.environment + "|" + subjectKey(i);
+        return KeyCodec.join(i.gameId, i.environment, subjectKey(i));
     }
 
     /** DUPLICATE_RECEIPT 的分键：主体键 + 收据键。 */
     static String receiptWindowKey(RiskInput i) {
-        return subjectWindowKey(i) + "|" + i.receiptKey;
+        return KeyCodec.join(i.gameId, i.environment, subjectKey(i), i.receiptKey);
     }
 
     /** 窗口口径信任档位：窗口内事件全为 HIGH 才收敛为 "HIGH"，否则 ""（混杂窗口 fail-closed）。 */

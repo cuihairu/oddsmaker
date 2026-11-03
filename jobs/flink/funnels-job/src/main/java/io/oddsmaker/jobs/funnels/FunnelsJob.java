@@ -1,6 +1,7 @@
 package io.oddsmaker.jobs.funnels;
 
 import io.oddsmaker.jobs.enrich.ApicurioAvroFlinkDeserializer;
+import io.oddsmaker.jobs.enrich.KeyCodec;
 import io.oddsmaker.jobs.enrich.RawEvent;
 import org.apache.flink.streaming.api.CheckpointingMode;
 import org.apache.flink.api.common.restartstrategy.RestartStrategies;
@@ -119,7 +120,7 @@ public class FunnelsJob {
 
     /** 漏斗分组键：game|environment|uid。 */
     static String funnelKey(RawEvent r) {
-        return r.game_id + "|" + r.environment + "|" + uidOf(r);
+        return KeyCodec.join(r.game_id, r.environment, uidOf(r));
     }
 
     /** funnels_2step 写入绑定。 */

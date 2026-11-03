@@ -117,10 +117,10 @@ class FunnelsJobTest {
         keyed.game_id = "g";
         keyed.environment = "prod";
         keyed.user_id = "u1";
-        assertEquals("g|prod|u1", FunnelsJob.funnelKey(keyed));
+        assertEquals("1:g4:prod2:u1", FunnelsJob.funnelKey(keyed));
         keyed.user_id = null;
         keyed.device_id = "d1";
-        assertEquals("g|prod|d1", FunnelsJob.funnelKey(keyed));
+        assertEquals("1:g4:prod2:d1", FunnelsJob.funnelKey(keyed));
         assertEquals("d1", FunnelsJob.uidOf(keyed));
     }
 

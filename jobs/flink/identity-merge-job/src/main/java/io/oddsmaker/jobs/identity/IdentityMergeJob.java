@@ -1,6 +1,7 @@
 package io.oddsmaker.jobs.identity;
 
 import io.oddsmaker.jobs.enrich.ApicurioAvroFlinkDeserializer;
+import io.oddsmaker.jobs.enrich.KeyCodec;
 import io.oddsmaker.jobs.enrich.RawEvent;
 import org.apache.flink.streaming.api.CheckpointingMode;
 import org.apache.flink.api.common.restartstrategy.RestartStrategies;
@@ -138,7 +139,7 @@ public class IdentityMergeJob {
 
     /** 身份分组键：game|environment|user。 */
     static String identityKey(RawEvent r) {
-        return nz(str(r.game_id)) + "|" + nz(str(r.environment)) + "|" + nz(str(r.user_id));
+        return KeyCodec.join(nz(str(r.game_id)), nz(str(r.environment)), nz(str(r.user_id)));
     }
 
     /** identities 写入绑定。 */

@@ -111,8 +111,8 @@ class IdentityMergeJobTest {
         keyed.game_id = "g";
         keyed.environment = "prod";
         keyed.user_id = "u1";
-        assertEquals("g|prod|u1", IdentityMergeJob.identityKey(keyed));
-        assertEquals("||", IdentityMergeJob.identityKey(new RawEvent()));   // 缺省全空
+        assertEquals("1:g4:prod2:u1", IdentityMergeJob.identityKey(keyed));
+        assertEquals("0:0:0:", IdentityMergeJob.identityKey(new RawEvent()));   // 缺省全空
 
         assertNull(IdentityMergeJob.str(null));
         assertEquals("7", IdentityMergeJob.str(7));

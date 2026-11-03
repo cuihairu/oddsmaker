@@ -147,8 +147,8 @@ class RiskJobTest {
         keyed.userId = "u1";
         keyed.deviceId = "d1";
         keyed.receiptKey = "rc_1";
-        assertEquals("g|prod|PLAYER:u1", RiskJob.subjectWindowKey(keyed));
-        assertEquals("g|prod|PLAYER:u1|rc_1", RiskJob.receiptWindowKey(keyed));
+        assertEquals("1:g4:prod9:PLAYER:u1", RiskJob.subjectWindowKey(keyed));
+        assertEquals("1:g4:prod9:PLAYER:u14:rc_1", RiskJob.receiptWindowKey(keyed));
 
         assertNull(RiskJob.str(null));
         assertEquals("7", RiskJob.str(7));

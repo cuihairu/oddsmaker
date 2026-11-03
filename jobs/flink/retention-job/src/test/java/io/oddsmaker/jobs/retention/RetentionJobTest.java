@@ -100,14 +100,14 @@ class RetentionJobTest {
         keyed.game_id = "g";
         keyed.environment = "prod";
         keyed.user_id = "u1";
-        assertEquals("g|prod|u1", RetentionJob.retentionKey(keyed));
+        assertEquals("1:g4:prod2:u1", RetentionJob.retentionKey(keyed));
         keyed.user_id = null;
         keyed.device_id = "d1";
-        assertEquals("g|prod|d1", RetentionJob.retentionKey(keyed));   // subjectOf 回退 device_id
+        assertEquals("1:g4:prod2:d1", RetentionJob.retentionKey(keyed));   // subjectOf 回退 device_id
         assertEquals("d1", RetentionJob.subjectOf(keyed));
         keyed.player_id = "p1";
         assertEquals("p1", RetentionJob.subjectOf(keyed));   // player_id 优先
-        assertEquals("g|prod|p1", RetentionJob.retentionKey(keyed));
+        assertEquals("1:g4:prod2:p1", RetentionJob.retentionKey(keyed));
 
         RetentionJob.RetentionEmit nDay = new RetentionJob.RetentionEmit();
         nDay.rolling = 0;
