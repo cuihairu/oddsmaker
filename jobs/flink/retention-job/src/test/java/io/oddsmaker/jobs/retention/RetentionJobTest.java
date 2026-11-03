@@ -336,6 +336,35 @@ class RetentionJobTest {
     }
 
     @Test
+    @DisplayName("RetentionProcess：迟发更早首日事件校正 cohort 并重算留存记账")
+    void lateEarlierEventCorrectsCohort() throws Exception {
+        TestMapState state = new TestMapState();
+        RetentionJob.RetentionProcess fn = processWithState(state);
+        List<RetentionJob.RetentionEmit> out = new ArrayList<>();
+
+        fn.processElement(event(1L), keyedContext(fn), sinkTo(out));
+        assertEquals(1, out.size());
+        assertEquals(1L, out.get(0).cohortEpochDay);
+
+        fn.processElement(event(0L), keyedContext(fn), sinkTo(out));
+        assertEquals(2, out.size());
+        assertEquals(0L, out.get(1).cohortEpochDay);
+        assertEquals(0, out.get(1).d);
+        assertEquals(0, out.get(1).rolling);
+        assertEquals(0L, state.m.get("first"));
+        assertEquals(1L, state.m.get("last"));
+        assertNull(state.m.get("seen_d_1"));
+
+        fn.processElement(event(1L), keyedContext(fn), sinkTo(out));
+        assertEquals(3, out.size());
+        assertEquals(0L, out.get(2).cohortEpochDay);
+        assertEquals(1, out.get(2).d);
+        assertEquals(0, out.get(2).rolling);
+        assertEquals(Long.valueOf(1L), state.m.get("seen_d_1"));
+        assertNull(state.m.get("seen_r_1"));
+    }
+
+    @Test
     @DisplayName("RetentionProcess：事件时间戳回退 ts_client → now")
     void timestampFallsBackToClientThenNow() throws Exception {
         List<RetentionJob.RetentionEmit> out = new ArrayList<>();

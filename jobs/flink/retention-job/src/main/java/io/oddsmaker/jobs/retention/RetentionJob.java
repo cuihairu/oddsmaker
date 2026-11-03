@@ -211,6 +211,29 @@ public class RetentionJob {
                 return;
             }
 
+            // 队列校正：更早首日事件（day < first）不应静默丢弃。
+            // 该事件把 cohort 向前修正，且旧 first 下所有 N-Day/Rolling 记账
+            // 相对偏移全部失效，须清空 seen 标记以便按新 cohort 重算。
+            if (day.toEpochDay() < first) {
+                long newFirst = day.toEpochDay();
+                state.put("first", newFirst);
+                java.util.List<String> stale = new java.util.ArrayList<>();
+                for (java.util.Map.Entry<String, Long> e : state.entries()) {
+                    String k = e.getKey();
+                    if (k.startsWith("seen_d_") || k.startsWith("seen_r_")) {
+                        stale.add(k);
+                    }
+                }
+                for (String k : stale) {
+                    state.remove(k);
+                }
+                RetentionEmit r0 = new RetentionEmit();
+                r0.gameId = gameId; r0.environment = environment; r0.subjectId = subjectId;
+                r0.cohortEpochDay = newFirst; r0.d = 0; r0.rolling = 0;
+                out.collect(r0);
+                return;
+            }
+
             long prevLast = state.get("last") == null ? first : state.get("last");
 
             // N-Day：恰好命中
