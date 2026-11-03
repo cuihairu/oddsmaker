@@ -120,7 +120,6 @@ public class PlayerDataQueryService {
     }
 
     /** 游戏服上报充值流水：(gameId, orderId) 幂等，重复上报返回既有记录并标记 duplicate */
-    @Transactional
     public PlayerPaymentEntity ingestPayment(PlayerPaymentEntity payment) {
         if (payment.gameId == null || payment.gameId.isBlank()) {
             throw new IllegalArgumentException("gameId is required");

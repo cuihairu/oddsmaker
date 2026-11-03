@@ -135,7 +135,6 @@ public class MailService {
      * 领取附件：幂等（重复领取返回原凭据），过期拒绝。
      * 返回 null 表示邮件不可领取。
      */
-    @Transactional
     public MailClaimEntity claim(String mailId, String playerKey) {
         if (playerKey == null || playerKey.isBlank()) {
             throw new IllegalArgumentException("playerKey is required");
