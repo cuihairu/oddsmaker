@@ -55,11 +55,13 @@ class GatewayRemoteClientsTest {
         server.createContext("/internal/block-lists/batch-check", ex -> {
             blockChecks.incrementAndGet();
             // 排空请求体：JdkHttpServer 不读 body 就响应会让客户端发送中断、响应被判失败
-            ex.getRequestBody().readAllBytes();
+            String reqBody = new String(ex.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+            // 跨游戏隔离测试：仅 game_x 封禁 d_block/u_block；game_y 同 target 放行
+            boolean gameX = reqBody.contains("\"gameId\":\"game_x\"");
             byte[] body = ("{\"results\":["
-                    + "{\"targetType\":\"device_id\",\"targetValue\":\"d_block\",\"blocked\":true},"
+                    + "{\"targetType\":\"device_id\",\"targetValue\":\"d_block\",\"blocked\":" + gameX + "},"
                     + "{\"targetType\":\"device_id\",\"targetValue\":\"d_free\",\"blocked\":false},"
-                    + "{\"targetType\":\"player_id\",\"targetValue\":\"u_block\",\"blocked\":true}"
+                    + "{\"targetType\":\"player_id\",\"targetValue\":\"u_block\",\"blocked\":" + gameX + "}"
                     + "]}").getBytes(StandardCharsets.UTF_8);
             ex.getResponseHeaders().add("Content-Type", "application/json");
             ex.sendResponseHeaders(200, body.length);
@@ -131,15 +133,30 @@ class GatewayRemoteClientsTest {
             new BlockListClient.BatchTarget("device_id", "d_free"),
             new BlockListClient.BatchTarget("player_id", "u_block"));
         Map<String, Boolean> result = client.batchCheck("game_x", targets).block();
-        assertEquals(Boolean.TRUE, result.get("device_id:d_block"));
-        assertEquals(Boolean.FALSE, result.get("device_id:d_free"));
-        assertEquals(Boolean.TRUE, result.get("player_id:u_block"));
+        assertEquals(Boolean.TRUE, result.get("game_x:device_id:d_block"));
+        assertEquals(Boolean.FALSE, result.get("game_x:device_id:d_free"));
+        assertEquals(Boolean.TRUE, result.get("game_x:player_id:u_block"));
         assertEquals(1, blockChecks.get());
 
         // TTL 内全部命中缓存，远端零请求
         Map<String, Boolean> again = client.batchCheck("game_x", targets).block();
-        assertEquals(Boolean.TRUE, again.get("device_id:d_block"));
+        assertEquals(Boolean.TRUE, again.get("game_x:device_id:d_block"));
         assertEquals(1, blockChecks.get());
+    }
+
+    @Test
+    @DisplayName("封禁：缓存键含 gameId，跨游戏同 target 不互串（T-REV10）")
+    void blockListCacheIsScopedByGame() {
+        BlockListClient client = new BlockListClient(envWithControl());
+        List<BlockListClient.BatchTarget> targets = List.of(
+            new BlockListClient.BatchTarget("device_id", "d_block"));
+        Map<String, Boolean> gameX = client.batchCheck("game_x", targets).block();
+        assertEquals(Boolean.TRUE, gameX.get("game_x:device_id:d_block"));
+
+        // 同 target 换游戏：不得命中 game_x 缓存，须重新请求远端（远端对 game_y 该 target 放行）
+        Map<String, Boolean> gameY = client.batchCheck("game_y", targets).block();
+        assertEquals(Boolean.FALSE, gameY.get("game_y:device_id:d_block"));
+        assertEquals(2, blockChecks.get());
     }
 
     @Test
@@ -169,7 +186,7 @@ class GatewayRemoteClientsTest {
         BlockListClient client = new BlockListClient(env);
         Map<String, Boolean> result = client.batchCheck("game_x",
             List.of(new BlockListClient.BatchTarget("device_id", "d_block"))).block();
-        assertEquals(Boolean.FALSE, result.get("device_id:d_block"));
+        assertEquals(Boolean.FALSE, result.get("game_x:device_id:d_block"));
     }
 
     @Test
@@ -197,7 +214,7 @@ class GatewayRemoteClientsTest {
         List<BlockListClient.BatchTarget> targets =
             List.of(new BlockListClient.BatchTarget("device_id", "d_block"));
         Map<String, Boolean> first = client.batchCheck("game_x", targets).block();
-        assertEquals(Boolean.TRUE, first.get("device_id:d_block"));
+        assertEquals(Boolean.TRUE, first.get("game_x:device_id:d_block"));
         assertEquals(1, blockChecks.get());
 
         // 缓存条目置为过期：下次查询必须穿透缓存重新请求
@@ -206,14 +223,14 @@ class GatewayRemoteClientsTest {
             java.util.concurrent.ConcurrentHashMap<String, Object> cache =
                 (java.util.concurrent.ConcurrentHashMap<String, Object>)
                     org.springframework.test.util.ReflectionTestUtils.getField(client, "cache");
-            Object entry = cache.get("device_id:d_block");
+            Object entry = cache.get("game_x:device_id:d_block");
             org.springframework.test.util.ReflectionTestUtils.setField(entry, "expireAt",
                 java.time.Instant.now().getEpochSecond() - 1);
         } catch (Exception ignore) {
             // 结构变化时跳过穿透断言
         }
         Map<String, Boolean> second = client.batchCheck("game_x", targets).block();
-        assertEquals(Boolean.TRUE, second.get("device_id:d_block"));
+        assertEquals(Boolean.TRUE, second.get("game_x:device_id:d_block"));
         assertEquals(2, blockChecks.get());
     }
 
@@ -235,7 +252,7 @@ class GatewayRemoteClientsTest {
         BlockListClient client = new BlockListClient(envWithControl());
         Map<String, Boolean> r = client.batchCheck("game_x",
             List.of(new BlockListClient.BatchTarget("device_id", "d1"))).block();
-        assertEquals(Boolean.FALSE, r.get("device_id:d1")); // 未识别 → 不封禁
+        assertEquals(Boolean.FALSE, r.get("game_x:device_id:d1")); // 未识别 → 不封禁
 
         // results 为列表但元素非 Map
         server.removeContext("/internal/block-lists/batch-check");
@@ -250,6 +267,6 @@ class GatewayRemoteClientsTest {
         BlockListClient client2 = new BlockListClient(envWithControl());
         Map<String, Boolean> r2 = client2.batchCheck("game_x",
             List.of(new BlockListClient.BatchTarget("device_id", "d2"))).block();
-        assertEquals(Boolean.FALSE, r2.get("device_id:d2"));
+        assertEquals(Boolean.FALSE, r2.get("game_x:device_id:d2"));
     }
 }

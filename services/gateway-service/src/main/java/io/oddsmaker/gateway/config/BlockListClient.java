@@ -38,7 +38,7 @@ public class BlockListClient {
     private final int cacheTtlSeconds;
     private final Duration timeout;
 
-    /** 缓存：key = "targetType:targetValue" → {blocked, expireAt} */
+    /** 缓存：key = "gameId:targetType:targetValue" → {blocked, expireAt}（跨游戏隔离，T-REV10） */
     private final ConcurrentHashMap<String, CacheEntry> cache = new ConcurrentHashMap<>();
 
     static class CacheEntry {
@@ -71,9 +71,9 @@ public class BlockListClient {
         Map<String, Boolean> result = new java.util.HashMap<>();
         List<BatchTarget> misses = new ArrayList<>();
         for (BatchTarget t : targets) {
-            CacheEntry ce = cache.get(cacheKey(t));
+            CacheEntry ce = cache.get(cacheKey(t, gameId));
             if (ce != null && ce.expireAt > now) {
-                result.put(cacheKey(t), ce.blocked);
+                result.put(cacheKey(t, gameId), ce.blocked);
             } else {
                 misses.add(t);
             }
@@ -92,12 +92,12 @@ public class BlockListClient {
                     // 更新缓存
                     long exp = now + cacheTtlSeconds;
                     for (BatchTarget t : misses) {
-                        boolean blocked = remote.getOrDefault(cacheKey(t), false);
+                        boolean blocked = remote.getOrDefault(remoteKey(t), false);
                         CacheEntry ne = new CacheEntry();
                         ne.blocked = blocked;
                         ne.expireAt = exp;
-                        cache.put(cacheKey(t), ne);
-                        result.put(cacheKey(t), blocked);
+                        cache.put(cacheKey(t, gameId), ne);
+                        result.put(cacheKey(t, gameId), blocked);
                     }
                     return result;
                 });
@@ -149,7 +149,13 @@ public class BlockListClient {
                 });
     }
 
-    private static String cacheKey(BatchTarget t) {
+    /** 缓存/结果键：含 gameId（跨游戏同一 targetType:targetValue 不互串）。 */
+    static String cacheKey(BatchTarget t, String gameId) {
+        return gameId + ":" + t.targetType + ":" + t.targetValue;
+    }
+
+    /** 远端响应键（control 返回不带 gameId，按 target 查表用）。 */
+    private static String remoteKey(BatchTarget t) {
         return t.targetType + ":" + t.targetValue;
     }
 

@@ -241,7 +241,7 @@ class BatchControllerCoverageTest {
     @DisplayName("设备封禁：blocked 拒绝，未封禁发布")
     void blockedDeviceRejected() {
         when(blockListClient.batchCheck(anyString(), anyList()))
-            .thenReturn(Mono.just(Map.of("device_id:d_block", true)));
+            .thenReturn(Mono.just(Map.of("game_demo:device_id:d_block", true)));
 
         client.post().uri("/v1/batch")
             .contentType(MediaType.APPLICATION_JSON)
@@ -259,7 +259,7 @@ class BatchControllerCoverageTest {
     @DisplayName("玩家封禁：user_id 命中 blocked")
     void blockedUserRejected() {
         when(blockListClient.batchCheck(anyString(), anyList()))
-            .thenReturn(Mono.just(Map.of("player_id:u_block", true)));
+            .thenReturn(Mono.just(Map.of("game_demo:player_id:u_block", true)));
 
         client.post().uri("/v1/batch")
             .contentType(MediaType.APPLICATION_JSON)

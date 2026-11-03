@@ -304,10 +304,12 @@ public class BatchController {
     }
 
     private boolean isBlocked(Event event, Map<String, Boolean> blockedMap) {
+        // 键含 gameId（与 BlockListClient.cacheKey 同构）：跨游戏同 target 不互串（T-REV10）
+        String gameId = event.gameId;
         // device_id 恒非 null（invalid_schema 前置校验保证），无需判空
-        if (Boolean.TRUE.equals(blockedMap.get("device_id:" + event.deviceId))) return true;
+        if (Boolean.TRUE.equals(blockedMap.get(gameId + ":device_id:" + event.deviceId))) return true;
         if (event.userId != null) {
-            Boolean b = blockedMap.get("player_id:" + event.userId);
+            Boolean b = blockedMap.get(gameId + ":player_id:" + event.userId);
             if (Boolean.TRUE.equals(b)) return true;
         }
         return false;
