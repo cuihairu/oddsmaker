@@ -127,7 +127,14 @@ services:
       - "host.docker.internal:host-gateway"
 
   redis-exporter:
-    image: oliver006/redis_exporter:v1.61.0
+    # 自建镜像：源码构建自 oliver006/redis_exporter（上游 tag v1.61.0，供应链治理
+    # 决策：不再依赖个人维护者的 Docker Hub 镜像；构建定义见 exporters/）
+    build:
+      context: ./exporters
+      dockerfile: Dockerfile.redis-exporter
+      args:
+        REDIS_EXPORTER_VERSION: v1.61.0
+    image: oddsmaker-redis-exporter:v1.61.0
     container_name: infra-redis-exporter
     environment:
       REDIS_ADDR: "redis://host.docker.internal:26379"
@@ -135,7 +142,14 @@ services:
       - "host.docker.internal:host-gateway"
 
   kafka-exporter:
-    image: danielqsj/kafka-exporter:v1.7.0
+    # 自建镜像：源码构建自 danielqsj/kafka_exporter（上游 tag v1.7.0，供应链治理
+    # 决策：不再依赖个人维护者的 Docker Hub 镜像；构建定义见 exporters/）
+    build:
+      context: ./exporters
+      dockerfile: Dockerfile.kafka-exporter
+      args:
+        KAFKA_EXPORTER_VERSION: v1.7.0
+    image: oddsmaker-kafka-exporter:v1.7.0
     container_name: infra-kafka-exporter
     command: ["--kafka.server=host.docker.internal:29092"]
     extra_hosts:

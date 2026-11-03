@@ -1,0 +1,40 @@
+# redis_exporter 自建镜像（供应链治理，替代个人维护者镜像 oliver006/redis_exporter）。
+#
+# 版本冻结在上游 tag v1.61.0（与 infra/docker-compose.yml 引用同一注记），构建参数
+# 改版本只动 ARG，不碰 Dockerfile 正文。构建层固定官方 golang:x-alpine digest，
+# 运行层固定官方 alpine digest——基础镜像升级是一次显式、可评审的改动。
+#
+# 版本号经 ldflags 注入 main.BuildVersion（与上游 release-github-binaries.sh 同一
+# 变量），故 `--version` 输出与官方发行二进制一致。
+#
+# 用法（在 infra/ 目录）：docker compose build redis-exporter
+FROM golang:1.22-alpine@sha256:1699c10032ca2582ec89a24a1312d986a3f094aed3d5c1147b19880afe40e052 AS build
+
+ARG REDIS_EXPORTER_VERSION=v1.61.0
+
+RUN apk add --no-cache git ca-certificates
+
+# 固定 tag 的浅克隆：拿到带版本注记的源码树，供 ldflags 取 commit sha
+RUN git clone --depth 1 --branch "${REDIS_EXPORTER_VERSION}" \
+      https://github.com/oliver006/redis_exporter /src
+WORKDIR /src
+
+RUN CGO_ENABLED=0 go build -trimpath \
+      -ldflags "-s -w \
+        -X main.BuildVersion=${REDIS_EXPORTER_VERSION} \
+        -X main.BuildCommitSha=$(git rev-parse HEAD) \
+        -X main.BuildDate=$(date -u +%Y%m%d-%H:%M:%S)" \
+      -o /out/redis_exporter .
+
+FROM alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
+
+# ca-certificates：REDIS_EXPORTER addr 走 rediss:// TLS 时需要
+RUN apk add --no-cache ca-certificates \
+    && adduser -D -H -u 9121 exporter
+
+COPY --from=build /out/redis_exporter /redis_exporter
+
+USER exporter
+EXPOSE 9121
+
+ENTRYPOINT ["/redis_exporter"]
