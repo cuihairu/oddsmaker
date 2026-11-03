@@ -621,7 +621,11 @@ public class PlayerErasureService {
             for (String[] m : mutations) {
                 String sql = "ALTER TABLE " + m[0] + " " + m[1] + " /* per:" + reqId + " */";
                 long estimate = estimateRows(gameId, m[0], m[1]);
-                clickHouse.execute(conn -> conn.createStatement().execute(sql));
+                clickHouse.execute(conn -> {
+                    try (java.sql.Statement st = conn.createStatement()) {
+                        return st.execute(sql);
+                    }
+                });
                 Map<String, Object> row = new LinkedHashMap<>();
                 row.put("table", m[0]);
                 row.put("estimate", estimate);

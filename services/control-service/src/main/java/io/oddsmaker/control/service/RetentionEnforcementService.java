@@ -234,8 +234,11 @@ public class RetentionEnforcementService {
 
     /** ALTER TABLE ... MODIFY TTL（metadata 操作立即返回；白名单表名/列名无注入面）。 */
     private void alterTtl(String table, String column, int days) {
-        clickHouse.execute(conn -> conn.createStatement().execute(
-                "ALTER TABLE `" + table + "` MODIFY TTL `" + column + "` + INTERVAL " + days + " DAY"));
+        clickHouse.execute(conn -> {
+            try (java.sql.Statement st = conn.createStatement()) {
+                return st.execute("ALTER TABLE `" + table + "` MODIFY TTL `" + column + "` + INTERVAL " + days + " DAY");
+            }
+        });
     }
 
     @SuppressWarnings("unchecked")
