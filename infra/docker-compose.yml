@@ -134,6 +134,7 @@ services:
       dockerfile: Dockerfile.redis-exporter
       args:
         REDIS_EXPORTER_VERSION: v1.61.0
+        REDIS_EXPORTER_COMMIT: e9871c1465679cd3543953f57bd4d015bc73c990
     image: oddsmaker-redis-exporter:v1.61.0
     container_name: infra-redis-exporter
     environment:
@@ -149,6 +150,7 @@ services:
       dockerfile: Dockerfile.kafka-exporter
       args:
         KAFKA_EXPORTER_VERSION: v1.7.0
+        KAFKA_EXPORTER_COMMIT: 7e840e81a0170375214e2c1e1dc7ce94aeff8712
     image: oddsmaker-kafka-exporter:v1.7.0
     container_name: infra-kafka-exporter
     command: ["--kafka.server=host.docker.internal:29092"]

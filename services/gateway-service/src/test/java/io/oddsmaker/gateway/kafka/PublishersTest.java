@@ -25,6 +25,7 @@ import java.util.Map;
 import java.util.concurrent.Future;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -60,7 +61,7 @@ class PublishersTest {
         ReflectionTestUtils.setField(dlqPublisher, "dlqTopic", "oddsmaker.deadletter");
 
         replayGuard = new ReplayGuard(600_000, 200_000, 86_400_000);
-        avroPublisher = new AvroPublisher(new ObjectMapper(), dlqPublisher, replayGuard);
+        avroPublisher = new AvroPublisher(new ObjectMapper(), dlqPublisher);
         Schema schema = new Schema.Parser().parse(
             new String(new ClassPathResource("schemas/oddsmaker-event.avsc").getInputStream().readAllBytes(),
                 java.nio.charset.StandardCharsets.UTF_8));
@@ -182,7 +183,7 @@ class PublishersTest {
         // 序列化异常 → "{}"（ObjectMapper mock 抛出）
         ObjectMapper throwing = mock(ObjectMapper.class);
         when(throwing.writeValueAsString(any())).thenThrow(new RuntimeException("boom"));
-        AvroPublisher bad = new AvroPublisher(throwing, dlqPublisher, replayGuard);
+        AvroPublisher bad = new AvroPublisher(throwing, dlqPublisher);
         ReflectionTestUtils.setField(bad, "schema",
             ReflectionTestUtils.getField(avroPublisher, "schema"));
         ReflectionTestUtils.setField(bad, "producer", producer);
@@ -227,13 +228,12 @@ class PublishersTest {
     }
 
     @Test
-    @DisplayName("DlqPublisher：broker 不可达时 send() 挂满 max.block.ms 后静默吞掉失败（future 被忽略）")
+    @DisplayName("DlqPublisher：broker 不可达时 send() 挂满 max.block.ms 后失败经回调日志+指标观测（非完全静默）")
     void dlqPublishBlocksSilentlyWhenBrokerUnreachable() {
         // fire-and-forget 的实测语义（kafka-clients 3.7，运维发现）：
         // 1) 阻塞：KafkaProducer#send 在调用线程等 metadata（waitOnMetadata），broker 不可达时
         //    挂满 max.block.ms——生产默认 60s，即 Gateway API 线程的最坏拖挂时长；
-        // 2) 静默：TimeoutException 属 ApiException 族，doSend 不抛而是返回 FutureFailure——
-        //    失败经回调日志 + 指标（oddsmaker.dlq.publish.failures）观测，不再是完全静默。
+        // 2) 失败经回调日志 + 指标（oddsmaker.dlq.publish.failures）观测，不再是完全静默。
         // 此处用死端口 + 2s max.block.ms 离线锁定该行为；真实回路见 PublishersBrokerE2ETest
         java.util.Properties p = new java.util.Properties();
         p.put("bootstrap.servers", "127.0.0.1:19092");
@@ -263,13 +263,29 @@ class PublishersTest {
             return future;
         }).when(producer).send(any(ProducerRecord.class), any(org.apache.kafka.clients.producer.Callback.class));
 
-        dlqPublisher.publish("evt_dlq_fail", "kafka_send_failed", "{}");
+        dlqPublisher.publish("evt_dlq_fail", "kafka_error", "{}");
 
-        assertEquals(1, meters.counter("oddsmaker.dlq.publish.failures", "reason", "kafka_send_failed").count());
+        assertEquals(1, meters.counter("oddsmaker.dlq.publish.failures", "reason", "kafka_error").count());
     }
 
     @Test
-    @DisplayName("AvroPublisher publish：异步发送失败经回调路由 DLQ（不静默丢失，审计 C2026-11-02）")
+    @DisplayName("DLQ 发布：异步投递成功不增 oddsmaker.dlq.publish.failures 指标（成功路径零失败）")
+    void dlqPublishSuccessDoesNotIncrementFailureMetric() {
+        MeterRegistry meters = new SimpleMeterRegistry();
+        ReflectionTestUtils.setField(dlqPublisher, "meters", meters);
+        org.mockito.Mockito.doAnswer(invocation -> {
+            org.apache.kafka.clients.producer.Callback callback = invocation.getArgument(1);
+            callback.onCompletion(new RecordMetadata(null, 0, 0, 0, 0, 0), null);
+            return future;
+        }).when(producer).send(any(ProducerRecord.class), any(org.apache.kafka.clients.producer.Callback.class));
+
+        dlqPublisher.publish("evt_dlq_ok", "kafka_error", "{}");
+
+        assertEquals(0, meters.counter("oddsmaker.dlq.publish.failures", "reason", "kafka_error").count());
+    }
+
+    @Test
+    @DisplayName("AvroPublisher publish：异步发送失败经回调路由 DLQ 且不释放幂等位（C2026-11-02）")
     void publishRoutesAsyncFailureToDlq() {
         assertTrue(replayGuard.consumeEventId("game_demo", "prod", "evt_12345678"));
         org.mockito.Mockito.doAnswer(invocation -> {
@@ -282,8 +298,30 @@ class PublishersTest {
 
         // 失败回调应把同一事件写到 deadletter topic（1 参 send：DlqPublisher 投递路径）
         verify(producer).send(org.mockito.ArgumentMatchers.argThat(r ->
-            "oddsmaker.deadletter".equals(r.topic())), any(org.apache.kafka.clients.producer.Callback.class));
-        assertTrue(replayGuard.consumeEventId("game_demo", "prod", "evt_12345678"));
+            "oddsmaker.deadletter".equals(r.topic())
+                && String.valueOf(r.value()).contains("\"reason\":\"kafka_error\"")), any(org.apache.kafka.clients.producer.Callback.class));
+        // 异步失败回调不释放幂等位：acks=all 下 TimeoutException 不保证未投递，释放可致 SDK 重试重发已入 events_raw 的事件
+        assertFalse(replayGuard.consumeEventId("game_demo", "prod", "evt_12345678"));
+    }
+
+    @Test
+    @DisplayName("AvroPublisher publish：异步发送成功回调不释放幂等位且不写 DLQ（契约 ReplayGuard 成功路径）")
+    void publishSuccessDoesNotReleaseIdempotencyBit() {
+        assertTrue(replayGuard.consumeEventId("game_demo", "prod", "evt_success_1"));
+        org.mockito.Mockito.doAnswer(invocation -> {
+            org.apache.kafka.clients.producer.Callback cb = invocation.getArgument(1);
+            cb.onCompletion(new RecordMetadata(null, 0, 0, 0, 0, 0), null);
+            return future;
+        }).when(producer).send(any(ProducerRecord.class), any(org.apache.kafka.clients.producer.Callback.class));
+
+        Event e = fullEvent();
+        e.eventId = "evt_success_1";
+        avroPublisher.publish(e);
+
+        // 成功路径不释放：幂等位仍占用（consumeEventId 返回 false = 已被吸收）
+        assertFalse(replayGuard.consumeEventId("game_demo", "prod", "evt_success_1"));
+        // 成功路径不写 DLQ：仅 events_raw 一次 send
+        verify(producer, org.mockito.Mockito.times(1)).send(any(ProducerRecord.class), any(org.apache.kafka.clients.producer.Callback.class));
     }
 
     @Test
@@ -302,7 +340,7 @@ class PublishersTest {
     @Test
     @DisplayName("AvroPublisher init：加载 avsc + Apicurio 序列化器装配（惰性建连）")
     void avroPublisherInitLoadsSchemaAndProducer() throws Exception {
-        AvroPublisher avro = new AvroPublisher(new ObjectMapper(), dlqPublisher, new ReplayGuard(600_000, 200_000, 86_400_000));
+        AvroPublisher avro = new AvroPublisher(new ObjectMapper(), dlqPublisher);
         ReflectionTestUtils.setField(avro, "bootstrap", "127.0.0.1:19092");
         ReflectionTestUtils.setField(avro, "eventsTopic", "oddsmaker.events_raw");
         ReflectionTestUtils.setField(avro, "registryUrl", "http://127.0.0.1:18081/apis/registry/v2");

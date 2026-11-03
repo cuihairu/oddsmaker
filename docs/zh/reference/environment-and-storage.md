@@ -291,7 +291,8 @@ Oddsmaker 的推荐模型是：
 逻辑事件身份 = `game_id + environment + event_id`，长度前缀编码（长度定界，杜绝分隔符撞键）。
 两处同口径：
 
-- 网关 `ReplayGuard`（Redis，入口幂等）——第一道，挡住采集端重发；
+- 网关 `ReplayGuard`（本地分代缓存，入口幂等）——第一道，挡住采集端重发；窗口为单实例局部，
+  共享 Redis 属后续硬化；
 - 富化作业 `DedupFunction`（Flink keyed state，7 天 TTL）——第二道，挡住 Kafka 重投与
   重启重放。
 
@@ -325,9 +326,10 @@ AggregatingMergeTree 类聚合表随之重复计数。
 
 ### 观测口径
 
-作业内被判重复的事件走 DLQ 侧输出（Kafka 文本主题，消息含 `duplicate` 标记）——DLQ 中的
-duplicate 计数是「上游去重拦截量」的直接读数。注意它只是上界信号：**第 1 类窗口下重复会
-直接入表且不留 DLQ 痕迹**，DLQ 静默不等于下游无重复。
+作业内被判重复的事件会输出到 `DedupFunction` 的 `duplicate` 侧输出，但当前作业图未把该侧输出
+接到 DLQ sink——只接了 `ValidateFunction` 的 DLQ 侧输出（见 T-REV04），因此重复事件当前不会
+到达 DLQ，DLQ 的 `duplicates_enrich` 计数也不是上游去重拦截量的直接读数。这是已知缺口
+（todo T-REV04），不是设计好的观测口径；只有把去重侧输出接线后，该计数才是上界信号。
 
 ### 验证面
 

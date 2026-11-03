@@ -11,12 +11,18 @@
 FROM golang:1.22-alpine@sha256:1699c10032ca2582ec89a24a1312d986a3f094aed3d5c1147b19880afe40e052 AS build
 
 ARG KAFKA_EXPORTER_VERSION=v1.7.0
+ARG KAFKA_EXPORTER_COMMIT=7e840e81a0170375214e2c1e1dc7ce94aeff8712
 
 RUN apk add --no-cache git ca-certificates
 
-# 固定 tag 的浅克隆；上游 vendor/ 目录随源码树一并取得，依赖解析离线完成
-RUN git clone --depth 1 --branch "${KAFKA_EXPORTER_VERSION}" \
-      https://github.com/danielqsj/kafka_exporter /src
+# 固定 commit SHA 的浅克隆；上游 vendor/ 目录随源码树一并取得，依赖解析离线完成。
+# 源码冻结在不可变 commit 而非 tag 名：tag 可被移动/覆盖，commit 不可变，供应链治理才算闭环。
+RUN git init /src \
+    && cd /src \
+    && git remote add origin https://github.com/danielqsj/kafka_exporter.git \
+    && git fetch --depth 1 origin "${KAFKA_EXPORTER_COMMIT}" \
+    && git checkout --quiet FETCH_HEAD \
+    && git submodule update --init --recursive
 WORKDIR /src
 
 RUN CGO_ENABLED=0 go build -trimpath \
@@ -30,7 +36,9 @@ RUN CGO_ENABLED=0 go build -trimpath \
 
 FROM alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
 
-RUN adduser -D -H -u 9308 exporter
+# ca-certificates：kafka_exporter --tls.enabled/--server.tls.enabled 需要 CA 证书，alpine 基础镜像默认不含
+RUN apk add --no-cache ca-certificates \
+    && adduser -D -H -u 9308 exporter
 
 COPY --from=build /out/kafka_exporter /kafka_exporter
 

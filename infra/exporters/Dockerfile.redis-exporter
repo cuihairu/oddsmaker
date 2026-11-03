@@ -11,12 +11,17 @@
 FROM golang:1.22-alpine@sha256:1699c10032ca2582ec89a24a1312d986a3f094aed3d5c1147b19880afe40e052 AS build
 
 ARG REDIS_EXPORTER_VERSION=v1.61.0
+ARG REDIS_EXPORTER_COMMIT=e9871c1465679cd3543953f57bd4d015bc73c990
 
 RUN apk add --no-cache git ca-certificates
 
-# 固定 tag 的浅克隆：拿到带版本注记的源码树，供 ldflags 取 commit sha
-RUN git clone --depth 1 --branch "${REDIS_EXPORTER_VERSION}" \
-      https://github.com/oliver006/redis_exporter /src
+# 固定 commit SHA 的浅克隆：tag 可被移动/覆盖，commit 不可变，供应链治理才算闭环。
+RUN git init /src \
+    && cd /src \
+    && git remote add origin https://github.com/oliver006/redis_exporter.git \
+    && git fetch --depth 1 origin "${REDIS_EXPORTER_COMMIT}" \
+    && git checkout --quiet FETCH_HEAD \
+    && git submodule update --init --recursive
 WORKDIR /src
 
 RUN CGO_ENABLED=0 go build -trimpath \

@@ -76,6 +76,15 @@ class DeadLetterConsumerTest {
     }
 
     @Test
+    @DisplayName("reason=kafka_error → 跳过双计（同步/异步 Kafka 故障同口径）")
+    void kafkaErrorReasonSkipped() {
+        consumer.onDeadLetter(msg("kafka_error",
+            "{\"game_id\":\"g1\",\"environment\":\"prod\"}"));
+
+        verify(dataQualityService, never()).mergeEnrichCounts(any(), any(), any(), anyLong(), anyLong());
+    }
+
+    @Test
     @DisplayName("坏 JSON 与缺 reason 静默跳过，不落计数")
     void malformedSkipped() {
         consumer.onDeadLetter("not-json{");
