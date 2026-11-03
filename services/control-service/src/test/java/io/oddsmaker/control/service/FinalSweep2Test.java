@@ -466,13 +466,14 @@ class FinalSweep2Test {
         verify(gameEnvironmentRepo, times(1))
             .findByGameIdAndNameAndDeletedAtIsNull("game_1", "prod");
 
-        // 上游落库异常被吞掉，不向 Kafka 抛出
+        // 上游落库异常必须向上传播：Kafka 容器按错误处理器重试，offset 不前进（T-REV08）。
         lenient().when(identityRepo.save(any(IdentityEntity.class)))
             .thenThrow(new RuntimeException("db down"));
         IdentityEventDto boom = new IdentityEventDto();
         boom.gameId = "game_1";
         boom.identityId = "id_err";
-        assertDoesNotThrow(() -> identityConsumer.onIdentityEvent(identityJson(boom)));
+        org.junit.jupiter.api.Assertions.assertThrows(RuntimeException.class,
+            () -> identityConsumer.onIdentityEvent(identityJson(boom)));
     }
 
     // =========================================================

@@ -69,19 +69,15 @@ public class IdentityConsumer {
             return;
         }
 
-        try {
-            boolean mergedTombstone = upsertIdentity(dto);
-            if (mergedTombstone) {
-                return;  // 合并墓碑：主表与 links 均不重建
-            }
-            upsertLinks(dto);
-            logger.info("Identity upserted: id={} game={} devices={} players={}",
-                    dto.identityId, dto.gameId,
-                    dto.deviceIds != null ? dto.deviceIds.size() : 0,
-                    dto.playerIds != null ? dto.playerIds.size() : 0);
-        } catch (Exception e) {
-            logger.error("Failed to handle identity event {}: {}", dto.identityId, e.getMessage(), e);
+        boolean mergedTombstone = upsertIdentity(dto);
+        if (mergedTombstone) {
+            return;  // 合并墓碑：主表与 links 均不重建
         }
+        upsertLinks(dto);
+        logger.info("Identity upserted: id={} game={} devices={} players={}",
+                dto.identityId, dto.gameId,
+                dto.deviceIds != null ? dto.deviceIds.size() : 0,
+                dto.playerIds != null ? dto.playerIds.size() : 0);
     }
 
     // ========== 主表 upsert ==========

@@ -24,6 +24,7 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -178,6 +179,21 @@ class IdentityConsumerTest {
 
         verify(identityRepo, never()).save(any(IdentityEntity.class));
         verify(identityLinkRepo, never()).save(any(IdentityLinkEntity.class));
+    }
+
+    @Test
+    @DisplayName("链接写入失败不吞：异常向上传播供 Kafka 重试（T-REV08）")
+    void linkFailurePropagatesForRetry() {
+        String id = identityId();
+        when(identityRepo.findById(id)).thenReturn(Optional.empty());
+        when(identityLinkRepo.findActiveByIdentityIdAndTypeAndLinkedId(eq(id), anyString(), anyString()))
+                .thenReturn(Optional.empty());
+        when(identityLinkRepo.save(any(IdentityLinkEntity.class)))
+                .thenThrow(new RuntimeException("link insert failed"));
+
+        // 旧行为：catch 吞掉异常并提交，offset 前进、链接静默丢失、不重试；
+        // 修复后：异常向上传播，Kafka 容器按错误处理器重试。
+        assertThrows(RuntimeException.class, () -> consumer.onIdentityEvent(identityEventJson()));
     }
 
     // ===== 分支对侧补充（BRANCH 收口）=====
