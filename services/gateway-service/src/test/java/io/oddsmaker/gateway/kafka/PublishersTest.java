@@ -299,7 +299,7 @@ class PublishersTest {
         // 失败回调应把同一事件写到 deadletter topic（1 参 send：DlqPublisher 投递路径）
         verify(producer).send(org.mockito.ArgumentMatchers.argThat(r ->
             "oddsmaker.deadletter".equals(r.topic())
-                && String.valueOf(r.value()).contains("\"reason\":\"kafka_error\"")), any(org.apache.kafka.clients.producer.Callback.class));
+                && String.valueOf(r.value()).contains("\"reason\":\"kafka_send_failed\"")), any(org.apache.kafka.clients.producer.Callback.class));
         // 异步失败回调不释放幂等位：acks=all 下 TimeoutException 不保证未投递，释放可致 SDK 重试重发已入 events_raw 的事件
         assertFalse(replayGuard.consumeEventId("game_demo", "prod", "evt_12345678"));
     }

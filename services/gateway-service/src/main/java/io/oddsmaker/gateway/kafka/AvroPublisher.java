@@ -98,12 +98,13 @@ public class AvroPublisher {
         // 已到期，acks=all 下 TimeoutException 不保证未投递（broker 可能已提交但 ack 丢失/ISR 慢），
         // 故此处不释放幂等位——释放会让 SDK 重试重发可能已入 events_raw 的事件（重复写入）。
         // 与同步 catch 路径（BatchController）不同：同步抛错时记录必然未进 Kafka，才释放。
-        // DLQ reason 用 kafka_error（与同步路径同值，属 GATEWAY_REASONS，consumer 侧跳过双计）。
+        // DLQ reason 必须避开 GATEWAY_REASONS：异步路径已被计 ACCEPTED，不经 BatchController.reject()，
+        // 若复用 kafka_error，consumer 会按同步拒绝防双计口径跳过，异步故障反而完全不可见。
         return producer.send(new ProducerRecord<>(eventsTopic, routingKey, gr), (metadata, exception) -> {
             if (exception != null) {
                 log.warn("Kafka send failed, routed to DLQ: eventId={} topic={}", e.eventId, eventsTopic, exception);
                 try {
-                    dlq.publish(e.eventId, "kafka_error", om.writeValueAsString(e));
+                    dlq.publish(e.eventId, "kafka_send_failed", om.writeValueAsString(e));
                 } catch (Exception inner) {
                     log.error("Failed to route event to DLQ: eventId={}", e.eventId, inner);
                 }

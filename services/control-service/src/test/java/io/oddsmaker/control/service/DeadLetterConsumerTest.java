@@ -76,7 +76,7 @@ class DeadLetterConsumerTest {
     }
 
     @Test
-    @DisplayName("reason=kafka_error → 跳过双计（同步/异步 Kafka 故障同口径）")
+    @DisplayName("reason=kafka_error → 跳过双计（仅网关同步拒绝路径，异步不可复用）")
     void kafkaErrorReasonSkipped() {
         consumer.onDeadLetter(msg("kafka_error",
             "{\"game_id\":\"g1\",\"environment\":\"prod\"}"));
@@ -90,5 +90,15 @@ class DeadLetterConsumerTest {
         consumer.onDeadLetter("not-json{");
         consumer.onDeadLetter("{\"event_id\":\"e1\",\"raw\":{}}");
         verify(dataQualityService, never()).mergeEnrichCounts(any(), any(), any(), anyLong(), anyLong());
+    }
+
+    @Test
+    @DisplayName("reason=kafka_send_failed → 落 dlq_other（异步故障已计 accepted，必须保留观测）")
+    void kafkaSendFailedCountsToDlqOther() {
+        consumer.onDeadLetter(msg("kafka_send_failed",
+            "{\"game_id\":\"g1\",\"environment\":\"prod\"}"));
+
+        verify(dataQualityService).mergeEnrichCounts(
+            eq("g1"), eq("prod"), any(), eq(0L), eq(1L));
     }
 }
