@@ -43,7 +43,12 @@ class EventsEnrichJobTest {
         StreamExecutionEnvironment env = StreamExecutionEnvironment.createLocalEnvironment(1);
         SingleOutputStreamOperator<EventsEnrichJob.EventRow> tail = EventsEnrichJob.buildPipeline(env, EventsEnrichJob.config());
         assertNotNull(tail);
-        assertTrue(env.getTransformations().size() >= 5, "expect >= 5 transformations, got " + env.getTransformations().size());
+        // source + validate + keyBy/dedup + map + CH sink + 2 DLQ 侧输出 sink（validated+dedup）
+        assertTrue(env.getTransformations().size() >= 6, "expect >= 6 transformations, got " + env.getTransformations().size());
+        long dlqSinks = env.getTransformations().stream()
+                .filter(t -> t.getName().equals("dlq-sink") || t.getName().equals("dlq-sink-dedup"))
+                .count();
+        assertEquals(2, dlqSinks, "validate 与 dedup 两处 DLQ 侧输出都应接线");
         // 容错三件套生效:无 checkpoint 时 Kafka offset 从不提交,重启丢停机窗口数据(state 全空)
         assertTrue(env.getCheckpointConfig().isCheckpointingEnabled());
         assertEquals(30_000L, env.getCheckpointConfig().getCheckpointInterval());

@@ -111,7 +111,8 @@ public class EventsEnrichJob {
         SingleOutputStreamOperator<RawEvent> validated = stream.process(new ValidateFunction(DLQ));
 
         // 去重（键=game_id+environment+event_id，7 天 TTL；与网关 ReplayGuard 幂等键同口径）
-        DataStream<RawEvent> deduped = validated
+        // 去重算子同样把重复事件打到 DLQ 侧输出，须显式接线（T-REV04）。
+        SingleOutputStreamOperator<RawEvent> deduped = validated
                 .keyBy(EventsEnrichJob::dedupKey)
                 .process(new DedupFunction(DLQ));
 
@@ -156,6 +157,7 @@ public class EventsEnrichJob {
                 .build();
 
         validated.getSideOutput(DLQ).sinkTo(dlqSink).name("dlq-sink");
+        deduped.getSideOutput(DLQ).sinkTo(dlqSink).name("dlq-sink-dedup");
 
         return mapped;
     }
