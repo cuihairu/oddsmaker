@@ -191,12 +191,22 @@ public class MlRetrainScheduler {
         return resolveClickhouseHttpUrl() != null ? "clickhouse" : "synthetic";
     }
 
-    /** 训练用 HTTP url：显式配置优先，否则从 JDBC url 推导（jdbc:clickhouse://host:port/db → http://host:port/?database=db）。 */
+    /** 训练用 HTTP(S) url：显式配置优先，否则从 JDBC url 推导
+     * （jdbc:clickhouse://host:port/db[?ssl=true] → http[s]://host:port/?database=db）。 */
     String resolveClickhouseHttpUrl() {
         if (clickhouseUrl != null && !clickhouseUrl.isBlank()) {
-            return clickhouseUrl.trim();
+            return validateScheme(clickhouseUrl.trim());
         }
         return httpFromJdbc(jdbcUrl);
+    }
+
+    /** 显式训练 url 只允许 http/https（拒绝 file:/ftp: 等注入面）。 */
+    private static String validateScheme(String url) {
+        String lower = url.toLowerCase(java.util.Locale.ROOT);
+        if (lower.startsWith("http://") || lower.startsWith("https://")) {
+            return url;
+        }
+        throw new IllegalArgumentException("oddsmaker.ml.retrain.clickhouse-url 只支持 http(s)://，当前: " + url);
     }
 
     static String httpFromJdbc(String jdbcUrl) {
@@ -204,6 +214,7 @@ public class MlRetrainScheduler {
             return null;
         }
         String rest = jdbcUrl.substring("jdbc:clickhouse://".length());
+        boolean ssl = rest.matches("(?s).*ssl=true.*");
         String query = "";
         int q = rest.indexOf('?');
         if (q >= 0) {
@@ -222,13 +233,17 @@ public class MlRetrainScheduler {
         if (rest.isEmpty()) {
             return null;
         }
-        String url = "http://" + rest;
+        String url = (ssl ? "https://" : "http://") + rest;
         List<String> params = new ArrayList<>();
         if (!database.isBlank()) {
             params.add("database=" + database);
         }
         if (!query.isBlank()) {
-            params.add(query);
+            for (String param : query.split("&")) {
+                if (!param.equalsIgnoreCase("ssl=true")) {
+                    params.add(param);
+                }
+            }
         }
         return params.isEmpty() ? url : url + "/?" + String.join("&", params);
     }

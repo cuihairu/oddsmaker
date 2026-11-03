@@ -36,7 +36,7 @@
 - [x] T-REV15 gateway 配置测试密钥对（P3）：测试密钥对移至并仅保留于 src/test/resources/application.yaml，主配置删除全部 pk_/sk_ 对（services/gateway-service/src/main/resources/application.yaml:32，services/gateway-service/src/test/resources/application.yaml:9）；gateway-service check tests=248 failures=0
 - [x] T-REV16 k8s postgres 占位口令（P3）：Secret 改空模板 + Deployment initContainer 校验非空且非占位，漏配 fail-closed 拒绝启动（deploy/k8s/postgres-secrets.yaml:14，deploy/k8s/postgres.yaml:64）；ReleaseDeployContractTest 钉空模板；docker 实证 POSTGRES_PASSWORD="" → exit 1
 - [x] T-REV17 k8s redis 占位口令（P3）：Secret 改空模板 + Deployment initContainer 校验非空且非占位，漏配 fail-closed 拒绝启动（deploy/k8s/redis-secrets.yaml:13，deploy/k8s/redis.yaml:43）；ReleaseDeployContractTest 钉空模板
-- [ ] T-REV18 MlRetrainScheduler 内部 http://（P3）：配置派生非用户输入，非 TLS 拉取（services/control-service/.../MlRetrainScheduler.java:225）
+- [x] T-REV18 MlRetrainScheduler 内部 http://（P3）：支持 JDBC ssl=true→https 派生，显式训练 URL 限制 http(s) scheme（services/control-service/src/main/java/io/oddsmaker/control/service/MlRetrainScheduler.java:198）；MlRetrainSchedulerTest 22 tests / 0 fail
 - [ ] T-REV19 webhook/集成 URL 只查前缀（P3）：admin 提供端点仅验 http(s):// 前缀，允许 http:// 到内网主机（services/control-service/.../WebhookService.java:345、IntegrationService:189、DimensionPullService:615）
 - [ ] T-REV20 EventQueue diskEvents 少计（P3）：重溢盘后未加回 rest.size()，diskEvents 下计致磁盘超 maxDiskEvents（sdks/server/.../EventQueue.java:153-166）
 - [ ] T-REV21 RiskJob toJson 只转义 "（P3）：未转义 \，反斜杠/证据值致 risk_events 主题畸形 JSON（jobs/flink/risk-job/.../RiskJob.java:1055）

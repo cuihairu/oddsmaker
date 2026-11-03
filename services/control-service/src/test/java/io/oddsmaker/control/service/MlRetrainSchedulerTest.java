@@ -407,8 +407,26 @@ class MlRetrainSchedulerTest {
                 MlRetrainScheduler.httpFromJdbc("jdbc:clickhouse://ch:8123/db?wait_end_of_query=1"));
         assertEquals("http://ch:8123/?database=db",
                 MlRetrainScheduler.httpFromJdbc("jdbc:clickhouse://ch:8123/db/"));
+        assertEquals("https://ch:8443/?database=db",
+                MlRetrainScheduler.httpFromJdbc("jdbc:clickhouse://ch:8443/db?ssl=true"));
+        assertEquals("https://ch:8443/?database=db&x=1",
+                MlRetrainScheduler.httpFromJdbc("jdbc:clickhouse://ch:8443/db?ssl=true&x=1"));
         assertEquals(null, MlRetrainScheduler.httpFromJdbc("jdbc:mysql://localhost/db"));
         assertEquals(null, MlRetrainScheduler.httpFromJdbc(null));
+    }
+
+    @Test
+    @DisplayName("显式训练 url 仅允许 http(s)：ftp/file 等拒绝")
+    void explicitUrlSchemeValidation() {
+        assertEquals("https://ch:8443/?database=db",
+                scheduler(true, true, "prod", "https://ch:8443/?database=db",
+                        "jdbc:clickhouse://ch:8123/oddsmaker").resolveClickhouseHttpUrl());
+        assertThrows(IllegalArgumentException.class,
+                () -> scheduler(true, true, "prod", "ftp://ch:8443/",
+                        "jdbc:clickhouse://ch:8123/oddsmaker").resolveClickhouseHttpUrl());
+        assertThrows(IllegalArgumentException.class,
+                () -> scheduler(true, true, "prod", "file:///etc/passwd",
+                        "jdbc:clickhouse://ch:8123/oddsmaker").resolveClickhouseHttpUrl());
     }
 
     @Test
