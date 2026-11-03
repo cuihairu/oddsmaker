@@ -94,8 +94,13 @@ public class QuotaEntity {
 
     // 辅助方法
 
+    /** 当前使用量（可空 BIGINT 兜底为 0）。 */
+    public long usage() {
+        return currentUsage == null ? 0L : currentUsage;
+    }
+
     public boolean isOverLimit() {
-        return currentUsage >= quotaLimit;
+        return usage() >= quotaLimit;
     }
 
     public boolean isNearWarningThreshold() {
@@ -110,7 +115,7 @@ public class QuotaEntity {
         if (quotaLimit == null || quotaLimit == 0) {
             return 0.0;
         }
-        return (currentUsage * 100.0) / quotaLimit;
+        return (usage() * 100.0) / quotaLimit;
     }
 
     public boolean shouldSendWarning() {
@@ -130,7 +135,7 @@ public class QuotaEntity {
     }
 
     public void incrementUsage(long amount) {
-        this.currentUsage += amount;
+        this.currentUsage = usage() + amount;
         this.usagePercent = getUsagePercent();
     }
 

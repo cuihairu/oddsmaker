@@ -958,6 +958,15 @@ class EntitiesDeepTest {
         assertFalse(q.warningSent);
         assertFalse(q.alertSent);
         assertNotNull(q.lastCalculatedAt);
+
+        // 可空 currentUsage 拆箱兜底：不抛 NPE，按 0 处理
+        q.currentUsage = null;
+        assertEquals(0L, q.usage());
+        assertEquals(0.0, q.getUsagePercent(), 0.001);
+        assertFalse(q.isOverLimit());
+        q.incrementUsage(25);
+        assertEquals(25L, q.currentUsage);
+        assertEquals(25.0, q.usagePercent, 0.001);
     }
 
     @Test

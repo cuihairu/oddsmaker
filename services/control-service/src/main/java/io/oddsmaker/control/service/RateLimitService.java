@@ -164,7 +164,7 @@ public class RateLimitService {
 
         QuotaEntity quota = quotaOpt.get();
         boolean allowed = !quota.hardLimit || !quota.isOverLimit();
-        long remaining = Math.max(0, quota.quotaLimit - quota.currentUsage);
+        long remaining = Math.max(0, quota.quotaLimit - quota.usage());
         double percent = quota.getUsagePercent();
 
         return new QuotaCheckResult(allowed, quota.id, remaining, percent);
