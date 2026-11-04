@@ -11,8 +11,9 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** EventQueue 磁盘溢出计数回归：分批读取后 diskEvents 与盘上剩余事件一致。 */
+/** EventQueue 磁盘溢出计数回归：diskEvents 与盘上剩余事件一致（T-REV20）。 */
 class EventQueueTest {
 
     @TempDir
@@ -45,5 +46,44 @@ class EventQueueTest {
         assertEquals(List.of("e5"), third);
         // 全部读完后 isEmpty
         assertEquals(true, q.isEmpty());
+    }
+
+    @Test
+    @DisplayName("diskEvents 经真实溢写路径计数：enqueue 溢写加计、take 读走减计（T-REV20 保真）")
+    void diskEventsCountsThroughRealSpillPath() {
+        AtomicInteger warns = new AtomicInteger();
+        // maxMemoryEvents=1：每次 enqueue 超过 1 即溢写最旧 1 条到磁盘
+        EventQueue q = new EventQueue(dir, 1, 1000, (k, m) -> warns.incrementAndGet());
+        q.enqueue("a");
+        q.enqueue("b");
+        q.enqueue("c");
+        // maxMemoryEvents=1，每次溢出溢写 1 条：a、b 已溢写（c 尚在 memory）
+        assertEquals(2, q.diskEventCount());
+
+        // take(1) 读 memory（c），diskEvents 不变
+        assertEquals(List.of("c"), q.take(1));
+        assertEquals(2, q.diskEventCount());
+
+        // 再 take 清空磁盘：逐文件整读 → 0
+        List<String> all = q.take(10);
+        assertEquals(List.of("a", "b"), all);
+        assertEquals(0, q.diskEventCount());
+        assertTrue(q.isEmpty());
+    }
+
+    @Test
+    @DisplayName("enforceDiskCap：超 maxDiskEvents 删最旧文件，diskEvents 压回上限内")
+    void diskCapTrimsOldest() {
+        AtomicInteger warns = new AtomicInteger();
+        // maxDiskEvents=2：溢写超过 2 条时删最旧文件
+        EventQueue q = new EventQueue(dir, 1, 2, (k, m) -> warns.incrementAndGet());
+        q.enqueue("a");
+        q.enqueue("b");
+        q.enqueue("c");
+        q.enqueue("d");
+        assertTrue(q.diskEventCount() <= 2, "enforceDiskCap 应把 diskEvents 压到 maxDiskEvents 以内");
+        assertTrue(warns.get() >= 1, "超上限应触发 disk-cap 告警");
+        // 最旧 spill-0(a) 被 cap 删除；剩余 disk 为 b、c，memory 为 d（take 内存优先）
+        assertEquals(List.of("d", "b", "c"), q.take(10));
     }
 }

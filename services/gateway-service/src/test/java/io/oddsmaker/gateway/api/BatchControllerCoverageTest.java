@@ -23,6 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -253,6 +254,31 @@ class BatchControllerCoverageTest {
             .expectBody()
             .jsonPath("$.rejected[0].reason").isEqualTo("blocked")
             .jsonPath("$.accepted[0]").isEqualTo("01JBLOCK00002");
+    }
+
+    @Test
+    @DisplayName("混合游戏批次：按各事件 gameId 分组检查，非首事件游戏的封禁不漏检（T-REV10 跨游戏键）")
+    void mixedGameBatchChecksEachGame() {
+        // game_a 的 d_block 封禁，game_b 同 target 不封禁——若只按首事件 gameId 检查，
+        // game_b 事件键不在返回 map 中会被放行（fail-open）
+        when(blockListClient.batchCheck(eq("game_a"), anyList()))
+            .thenReturn(Mono.just(Map.of("game_a:device_id:d_block", true)));
+        when(blockListClient.batchCheck(eq("game_b"), anyList()))
+            .thenReturn(Mono.just(Map.of("game_b:device_id:d_block", false)));
+
+        client.post().uri("/v1/batch")
+            .contentType(MediaType.APPLICATION_JSON)
+            .header("x-api-key", "pk_test_example")
+            .bodyValue("[" + event("01JMIXGA00001", "game_a", "d_block", null) + ","
+                + event("01JMIXGB00001", "game_b", "d_block", null) + "]")
+            .exchange()
+            .expectStatus().is2xxSuccessful()
+            .expectBody()
+            .jsonPath("$.rejected[0].reason").isEqualTo("blocked")
+            .jsonPath("$.accepted[0]").isEqualTo("01JMIXGB00001");
+        // 每个游戏各发一次 batchCheck
+        verify(blockListClient).batchCheck(eq("game_a"), anyList());
+        verify(blockListClient).batchCheck(eq("game_b"), anyList());
     }
 
     @Test

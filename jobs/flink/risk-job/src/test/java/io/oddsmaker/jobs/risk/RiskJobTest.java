@@ -852,6 +852,28 @@ class RiskJobTest {
     }
 
     @Test
+    @DisplayName("jsonEscape：转义反斜杠/引号与全部控制字符（换行/制表/CR/BS/FF/其余 <0x20）")
+    void jsonEscapeControlChars() {
+        assertEquals("", RiskJob.jsonEscape(null));
+        // 反斜杠与引号
+        assertEquals("\\\\", RiskJob.jsonEscape("\\"));
+        assertEquals("\\\"", RiskJob.jsonEscape("\""));
+        // 控制字符
+        assertEquals("\\n", RiskJob.jsonEscape("\n"));
+        assertEquals("\\r", RiskJob.jsonEscape("\r"));
+        assertEquals("\\t", RiskJob.jsonEscape("\t"));
+        assertEquals("\\b", RiskJob.jsonEscape("\b"));
+        assertEquals("\\f", RiskJob.jsonEscape("\f"));
+        // 其余 <0x20 用 unicode-escape
+        assertEquals("\\u0001", RiskJob.jsonEscape("\u0001"));
+        // 普通字符不动
+        assertEquals("plain", RiskJob.jsonEscape("plain"));
+        // 组合：reason 含裸换行/制表不产非法 JSON
+        String escaped = RiskJob.jsonEscape("line1\nline2\t\"q\"");
+        assertEquals("line1\\nline2\\t\\\"q\\\"", escaped);
+    }
+
+    @Test
     @DisplayName("bindRiskHit：14 个参数按序绑定")
     void bindRiskHitSetsAllParameters() throws Exception {
         Map<String, String> ev = Map.of("k", "v");

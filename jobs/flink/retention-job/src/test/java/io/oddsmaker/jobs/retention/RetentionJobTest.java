@@ -352,16 +352,20 @@ class RetentionJobTest {
         assertEquals(0, out.get(1).d);
         assertEquals(0, out.get(1).rolling);
         assertEquals(0L, state.m.get("first"));
-        assertEquals(1L, state.m.get("last"));
+        assertEquals(0L, state.m.get("last"), "cohort 前移后 last 应回退到新 first，否则新 first 下的早阈值漏记");
         assertNull(state.m.get("seen_d_1"));
 
         fn.processElement(event(1L), keyedContext(fn), sinkTo(out));
-        assertEquals(3, out.size());
+        // 校正后 last 回退到新 first=0，day1 事件相对新 cohort 偏移 1：
+        // N-Day 1 命中 + Rolling 1 跨越补记（旧实现 last 未回退 → Rolling 1 漏记）
+        assertEquals(4, out.size());
         assertEquals(0L, out.get(2).cohortEpochDay);
         assertEquals(1, out.get(2).d);
         assertEquals(0, out.get(2).rolling);
+        assertEquals(0L, out.get(3).cohortEpochDay);
+        assertEquals(1, out.get(3).rolling);
         assertEquals(Long.valueOf(1L), state.m.get("seen_d_1"));
-        assertNull(state.m.get("seen_r_1"));
+        assertEquals(Long.valueOf(1L), state.m.get("seen_r_1"));
     }
 
     @Test

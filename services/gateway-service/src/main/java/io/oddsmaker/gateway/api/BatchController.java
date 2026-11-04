@@ -25,6 +25,7 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.io.ByteArrayInputStream;
@@ -33,6 +34,7 @@ import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -240,11 +242,14 @@ public class BatchController {
                 eventsToPublish = validEvents;
             }
 
-            // 2) 构建封禁检查目标（device_id + user_id）
-            String gameId = eventsToPublish.get(0).gameId;
-            List<BlockListClient.BatchTarget> targets = new ArrayList<>();
+            // 2) 构建封禁检查目标（device_id + user_id），按 gameId 分组——
+            // 每个事件用自身 gameId 发起 batchCheck（T-REV10 跨游戏隔离键），
+            // 避免混合游戏批次下非首事件游戏的事件键不在返回 map 中→跳过封禁检查（fail-open）。
+            Map<String, List<BlockListClient.BatchTarget>> targetsByGame = new LinkedHashMap<>();
             for (Event event : eventsToPublish) {
                 // device_id 过 invalid_schema + schema minLength=1 后恒非 null 且非空（见下方注释）
+                List<BlockListClient.BatchTarget> targets =
+                        targetsByGame.computeIfAbsent(event.gameId, k -> new ArrayList<>());
                 targets.add(new BlockListClient.BatchTarget("device_id", event.deviceId));
                 if (event.userId != null && !event.userId.isEmpty()) {
                     targets.add(new BlockListClient.BatchTarget("player_id", event.userId));
@@ -254,8 +259,10 @@ public class BatchController {
             // 注：不设 targets 空快路径——device_id 过 schema minLength=1 后 targets 恒非空，
             // 空列表场景由 BlockListClient.batchCheck 直接返回空结果兜底
 
-            // 3) 批量检查封禁
-            return blockListClient.batchCheck(gameId, targets)
+            // 3) 逐游戏批量检查封禁，合并结果（键为 gameId:targetType:targetValue）
+            return Flux.fromIterable(targetsByGame.entrySet())
+                    .flatMap(entry -> blockListClient.batchCheck(entry.getKey(), entry.getValue()))
+                    .reduce(new HashMap<String, Boolean>(), (acc, m) -> { acc.putAll(m); return acc; })
                     .map(blockedMap -> {
                         // 4) 处理事件：封禁的拒绝，非封禁的发布
                         for (Event event : eventsToPublish) {

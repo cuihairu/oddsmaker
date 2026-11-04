@@ -112,6 +112,11 @@ final class EventQueue {
         return dropped;
     }
 
+    /** 当前磁盘滞留事件数（近似，供诊断/测试断言）。 */
+    synchronized long diskEventCount() {
+        return diskEvents;
+    }
+
     private void spillOldest() {
         int move = Math.max(1, maxMemoryEvents / 2);
         List<String> head = new ArrayList<>(move);

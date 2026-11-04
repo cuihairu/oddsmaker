@@ -299,6 +299,9 @@ public class DimensionPullService {
 
     /** 拉一页：GET {endpoint}?updated_after={cursor}&limit={n}，Bearer 鉴权。 */
     PullPage fetchPage(DimensionPullConfigEntity config, String credential) {
+        // 拉取前再校验一次（配置可能来自旧库/导入路径绕过写时校验；深度防御）
+        io.oddsmaker.control.security.UrlSecurityValidator.validateHttpUrl(
+            config.endpoint, "endpoint", allowPrivateNetworks);
         String url = buildEndpointUrl(config.endpoint, config.lastCursor, config.pageLimit);
         HttpHeaders headers = new HttpHeaders();
         headers.set("Authorization", "Bearer " + credential);
@@ -613,11 +616,12 @@ public class DimensionPullService {
                 });
     }
 
-    private static String requireEndpoint(String endpoint) {
-        String lower = endpoint.toLowerCase();
-        if (!lower.startsWith("http://") && !lower.startsWith("https://")) {
-            throw new IllegalArgumentException("endpoint 必须以 http:// 或 https:// 开头");
-        }
+    private String requireEndpoint(String endpoint) {
+        // SSRF 防护：endpoint 由受信运维配置，仍统一走 UrlSecurityValidator 的
+        // 私网/环回/链路本地拦截（与 IntegrationService/WebhookService 同型），
+        // 防止维度拉取端点指向云元数据等内网地址。allowPrivateNetworks 显式豁免。
+        io.oddsmaker.control.security.UrlSecurityValidator.validateHttpUrl(
+            endpoint, "endpoint", allowPrivateNetworks);
         return endpoint;
     }
 

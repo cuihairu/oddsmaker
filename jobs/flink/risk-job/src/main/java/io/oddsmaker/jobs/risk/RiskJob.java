@@ -935,9 +935,33 @@ public class RiskJob {
         ps.setArray(7, ps.getConnection().createArrayOf("String", r.reasons.toArray(new String[0])));
     }
 
-    /** JSON 字符串字面量转义（ruleId 等标识符防御性转义）。 */
+    /** JSON 字符串字面量转义（ruleId/reason/evidence 值防御性转义）。 */
     static String jsonEscape(String s) {
-        return s == null ? "" : s.replace("\\", "\\\\").replace("\"", "\\\"");
+        if (s == null) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder(s.length() + 8);
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            switch (c) {
+                case '\\' -> sb.append("\\\\");
+                case '"' -> sb.append("\\\"");
+                case '\n' -> sb.append("\\n");
+                case '\r' -> sb.append("\\r");
+                case '\t' -> sb.append("\\t");
+                case '\b' -> sb.append("\\b");
+                case '\f' -> sb.append("\\f");
+                default -> {
+                    if (c < 0x20) {
+                        // 其余控制字符（0x00-0x1F 未列出的）用 unicode-escape 转义
+                        sb.append(String.format("\\u%04x", (int) c));
+                    } else {
+                        sb.append(c);
+                    }
+                }
+            }
+        }
+        return sb.toString();
     }
 
     /** 控制面规则拉取参数（窗口算子 open 时启动单例 fetcher）。 */

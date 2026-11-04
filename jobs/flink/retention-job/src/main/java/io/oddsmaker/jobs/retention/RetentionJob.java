@@ -218,6 +218,8 @@ public class RetentionJob {
             if (day.toEpochDay() < first) {
                 long newFirst = day.toEpochDay();
                 state.put("first", newFirst);
+                // cohort 前移后 last 相对阈值全变：退回 first，由后续事件重新推进（避免漏过新 first 下的早阈值）
+                state.put("last", newFirst);
                 java.util.List<String> stale = new java.util.ArrayList<>();
                 for (java.util.Map.Entry<String, Long> e : state.entries()) {
                     String k = e.getKey();
@@ -232,6 +234,10 @@ public class RetentionJob {
                 r0.gameId = gameId; r0.environment = environment; r0.subjectId = subjectId;
                 r0.cohortEpochDay = newFirst; r0.d = 0; r0.rolling = 0;
                 out.collect(r0);
+
+                // 说明：旧 cohort 下已发出的 N-Day/Rolling 行无法在本 sink 内撤销——SummingMergeTree
+                // 的 users 为 UInt64，不支持负数；完整撤回需引入带 generation/token 的表结构并用
+                // REPLACE/增量列（后续独立改造）。此处只修 last 回退，避免漏过新 cohort 的早阈值。
                 return;
             }
 
