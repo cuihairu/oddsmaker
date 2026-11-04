@@ -1,11 +1,12 @@
 # kafka_exporter 自建镜像（供应链治理，替代个人维护者镜像 danielqsj/kafka_exporter）。
 #
-# 版本冻结在上游 tag v1.7.0（与 infra/docker-compose.yml 引用同一注记），构建参数
-# 改版本只动 ARG，不碰 Dockerfile 正文。构建层固定官方 golang:x-alpine digest，
+# 版本经 KAFKA_EXPORTER_VERSION 构建参数注入 main/version 变量组（与
+# infra/docker-compose.yml 同一注记），构建参数改版本即生效。构建层固定官方
+# golang:x-alpine digest，
 # 运行层固定官方 alpine digest——基础镜像升级是一次显式、可评审的改动。
 #
 # 版本号经 ldflags 注入 prometheus/common/version（与上游 Makefile/promu 同一
-# 变量组），故 `--version` 输出与官方发行二进制一致。
+# 变量组），故 `--version` 输出与构建参数一致。
 #
 # 用法（在 infra/ 目录）：docker compose build kafka-exporter
 FROM golang:1.22-alpine@sha256:1699c10032ca2582ec89a24a1312d986a3f094aed3d5c1147b19880afe40e052 AS build
@@ -27,7 +28,7 @@ WORKDIR /src
 
 RUN CGO_ENABLED=0 go build -trimpath \
       -ldflags "-s -w \
-        -X github.com/prometheus/common/version.Version=$(cat VERSION | sed 's/^v//') \
+        -X github.com/prometheus/common/version.Version=$(echo "${KAFKA_EXPORTER_VERSION}" | sed 's/^v//') \
         -X github.com/prometheus/common/version.Revision=$(git rev-parse HEAD) \
         -X github.com/prometheus/common/version.Branch=HEAD \
         -X github.com/prometheus/common/version.BuildUser=oddsmaker-infra \

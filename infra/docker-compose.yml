@@ -143,7 +143,7 @@ services:
       - "host.docker.internal:host-gateway"
 
   kafka-exporter:
-    # 自建镜像：源码构建自 danielqsj/kafka_exporter（上游 tag v1.7.0，供应链治理
+    # 自建镜像：源码构建自 danielqsj/kafka_exporter commit 7e840e8，供应链治理
     # 决策：不再依赖个人维护者的 Docker Hub 镜像；构建定义见 exporters/）
     build:
       context: ./exporters
