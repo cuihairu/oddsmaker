@@ -61,7 +61,11 @@ class PublishersTest {
         ReflectionTestUtils.setField(dlqPublisher, "dlqTopic", "oddsmaker.deadletter");
 
         replayGuard = new ReplayGuard(600_000, 200_000, 86_400_000);
-        avroPublisher = new AvroPublisher(new ObjectMapper(), dlqPublisher);
+        // 与生产 JacksonConfig 的 SNAKE_CASE 策略一致：DLQ 载荷字段名必须对齐
+        // DeadLetterConsumer 的 raw.game_id/environment/ts_server 解析（否则落 unknown 桶）。
+        ObjectMapper snakeCase = new ObjectMapper();
+        snakeCase.setPropertyNamingStrategy(com.fasterxml.jackson.databind.PropertyNamingStrategies.SNAKE_CASE);
+        avroPublisher = new AvroPublisher(snakeCase, dlqPublisher);
         Schema schema = new Schema.Parser().parse(
             new String(new ClassPathResource("schemas/oddsmaker-event.avsc").getInputStream().readAllBytes(),
                 java.nio.charset.StandardCharsets.UTF_8));
@@ -299,7 +303,11 @@ class PublishersTest {
         // 失败回调应把同一事件写到 deadletter topic（1 参 send：DlqPublisher 投递路径）
         verify(producer).send(org.mockito.ArgumentMatchers.argThat(r ->
             "oddsmaker.deadletter".equals(r.topic())
-                && String.valueOf(r.value()).contains("\"reason\":\"kafka_send_failed\"")), any(org.apache.kafka.clients.producer.Callback.class));
+                && String.valueOf(r.value()).contains("\"reason\":\"kafka_send_failed\"")
+                && String.valueOf(r.value()).contains("\"game_id\":\"game_demo\"")
+                && String.valueOf(r.value()).contains("\"environment\":\"prod\"")
+                && String.valueOf(r.value()).contains("\"event_id\":\"evt_12345678\"")
+                && String.valueOf(r.value()).contains("\"ts_server\":")), any(org.apache.kafka.clients.producer.Callback.class));
         // 异步失败回调不释放幂等位：acks=all 下 TimeoutException 不保证未投递，释放可致 SDK 重试重发已入 events_raw 的事件
         assertFalse(replayGuard.consumeEventId("game_demo", "prod", "evt_12345678"));
     }
