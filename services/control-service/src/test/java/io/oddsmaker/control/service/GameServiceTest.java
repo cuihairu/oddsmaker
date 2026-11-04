@@ -73,6 +73,9 @@ class GameServiceTest {
         assertEquals("UTC", created.defaultTimezone);
         assertEquals("USD", created.defaultCurrency);
         assertEquals(GameEntity.GameStatus.DEVELOPMENT, created.status);
+        // @CreationTimestamp 不回填时须显式兜底，返回 DTO 不得为 null
+        assertNotNull(created.createdAt);
+        assertNotNull(created.updatedAt);
         verify(auditLog).logCreate(eq("game"), eq(created.id), eq("Demo RPG"),
             eq("api"), eq("api"), isNull(), anyMap());
     }

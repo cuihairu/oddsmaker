@@ -83,6 +83,14 @@ public class GameService {
         validateTimezone(dto.defaultTimezone);
         GameEntity entity = dto.toEntity();
         entity = gameRepo.save(entity);
+        // Hibernate 的 @CreationTimestamp/@UpdateTimestamp 只在 flush 时回填；
+        // save 未强制 flush 时返回的内存实体时间戳仍为 null，须显式兜底后再转 DTO。
+        if (entity.createdAt == null) {
+            entity.createdAt = java.time.LocalDateTime.now();
+        }
+        if (entity.updatedAt == null) {
+            entity.updatedAt = entity.createdAt;
+        }
 
         // 创建默认存储策略和环境
         ensureDefaultStorageProfiles();
@@ -239,6 +247,12 @@ public class GameService {
         entity.databaseName = entity.databaseName != null ? entity.databaseName : generateDatabaseName(gameId, environmentName);
 
         GameEnvironmentEntity saved = gameEnvironmentRepo.save(entity);
+        if (saved.createdAt == null) {
+            saved.createdAt = java.time.LocalDateTime.now();
+        }
+        if (saved.updatedAt == null) {
+            saved.updatedAt = saved.createdAt;
+        }
         auditLog.logCreate("environment", saved.id, saved.name, "api", "api", null,
             Map.of("gameId", gameId, "type", String.valueOf(saved.type),
                 "sampleRate", String.valueOf(saved.sampleRate),
