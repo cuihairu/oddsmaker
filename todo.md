@@ -46,7 +46,7 @@
 - [x] T-REV25 ClickHouse Statement 未关（P3）：execute(conn -> conn.createStatement().execute(...)) 只关连接不关 Statement；PlayerErasureService:624 同型（services/control-service/.../RetentionEnforcementService.java:237）；证据：RetentionEnforcementService.java:238 try-with-resources、PlayerErasureService.java:625 同型，control-service 2118 tests 0 fail
 - [x] T-REV26 @CreationTimestamp 不回填内存实体（P3）：createGame 返回 GameDTO 时 createdAt/updatedAt 仍 null；GameService:247 同型（services/control-service/.../GameService.java:97）；证据：GameService.java:88/92 时间戳兜底，createEnvironment 同型（:251），control-service 2118 tests 0 fail
 - [x] T-REV27 ReportService timeRange NumberFormatException（P3）：TIME_RANGE_PATTERN 允许无界数字，20+ 位 timeRange 抛未捕获 NumberFormatException→500（services/control-service/.../ReportService.java:508）；证据：ReportService.java:510 位数上限，control-service 2119 tests 0 fail
-- [ ] T-REV28 RiskEventConsumer 吞异常致 BLOCK 未强制（P3）：handleBlock 瞬时失败被吞、offset 提交、BLOCK 永不执行；risk_case 已显 BLOCK 决策（services/control-service/.../RiskEventConsumer.java:162-165）
+- [x] T-REV28 RiskEventConsumer 吞异常致 BLOCK 未强制（P3）：handleBlock 瞬时失败被吞、offset 提交、BLOCK 永不执行；risk_case 已显 BLOCK 决策（services/control-service/.../RiskEventConsumer.java:162-165）；证据：RiskEventConsumer.java:168 BLOCK 失败重抛，:213 同判定幂等，control-service 2120 tests 0 fail
 
 ## 已完成需求
 

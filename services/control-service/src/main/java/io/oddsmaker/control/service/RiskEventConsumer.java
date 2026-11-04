@@ -162,6 +162,12 @@ public class RiskEventConsumer {
         } catch (Exception e) {
             logger.error("Failed to handle risk event {}: {}", event.riskEventId, e.getMessage(), e);
             recordActionOutcome(event, "failed");
+            // BLOCK 是不可丢弃的强制动作：失败不能吞异常并提交 offset。
+            // 先记录失败指标再向上抛，交给容器错误处理/offset 语义决定重投递；
+            // decide() 状态机需先同值幂等，避免 BLOCK 已判定后动作失败的重放被拒绝。
+            if ("BLOCK".equalsIgnoreCase(event.action)) {
+                throw e;
+            }
         }
     }
 
@@ -210,6 +216,10 @@ public class RiskEventConsumer {
         RiskCaseEntity riskCase = findOpenCase(event);
         if (riskCase == null) {
             riskCase = newCase(event);
+        } else if (riskCase.status == decision) {
+            // 同判定幂等：判定已落定但动作瞬时失败并重投递时，不拒绝同一 Decision，
+            // 返回既有案件让动作重试（BLOCK 强制闭环不因状态机被吞）。
+            return riskCase;
         }
         if (!RiskCaseEntity.canTransition(riskCase.status, decision)) {
             logger.warn("Illegal decision transition {} -> {} for subject {}:{} (event {}), action rejected",

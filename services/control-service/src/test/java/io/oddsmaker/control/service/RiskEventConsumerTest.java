@@ -16,6 +16,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
@@ -143,6 +144,27 @@ class RiskEventConsumerTest {
             anyString(), eq("fraud"), eq(BlockListEntity.BlockType.HARD),
             eq(false), eq(240),
             eq("risk-automation"), isNull(), anyString());
+    }
+
+    @Test
+    @DisplayName("BLOCK 瞬时失败向上抛（不吞异常、不提交 offset），供容器重投递强制闭环")
+    void blockFailureRethrows() {
+        when(riskCaseRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        BlockListEntity recovered = new BlockListEntity();
+        org.mockito.Mockito.doThrow(new RuntimeException("block store down"))
+            .doReturn(recovered)
+            .when(blockListService).addBlock(
+                any(), any(), any(), any(), any(), any(), any(), anyBoolean(),
+                any(), any(), any(), any());
+
+        RuntimeException ex = assertThrows(RuntimeException.class,
+            () -> consumer.onRiskEvent(riskEventJson("BLOCK", "HIGH", "DEVICE", "dev_rethrow", "rr_threshold")));
+        assertTrue(ex.getMessage().contains("block store down"));
+        // 同一事件重投递：BLOCK 判定已落定 → 幂等返回既有案件，动作重试不因状态机被拒
+        consumer.onRiskEvent(riskEventJson("BLOCK", "HIGH", "DEVICE", "dev_rethrow", "rr_threshold"));
+        verify(blockListService, times(2)).addBlock(
+            any(), any(), any(), any(), any(), any(), any(), anyBoolean(),
+            any(), any(), any(), any());
     }
 
     @Test
