@@ -289,6 +289,17 @@ class ReportServiceDeepTest {
     }
 
     @Test
+    @DisplayName("超长数字 timeRange 诚实失败而非 NumberFormatException 500")
+    void overlongTimeRangeFailsHonestly() {
+        ReportEntity r = report();
+        r.defaultTimeRange = "99999999999999999999d";
+        ReportExecutionEntity execution = run(r);
+        assertEquals(ReportExecutionEntity.ExecutionStatus.FAILED, execution.executionStatus);
+        assertTrue(execution.errorMessage.contains("exceeds max"),
+            "expected max-range failure, got: " + execution.errorMessage);
+    }
+
+    @Test
     @DisplayName("软删报表拒绝执行（与 IntegrationService verify 同款）")
     void deletedReportRefused() {
         ReportEntity r = report();

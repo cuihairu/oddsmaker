@@ -505,6 +505,11 @@ public class ReportService {
         if (!matcher.matches()) {
             throw new IllegalArgumentException("Invalid timeRange '" + spec + "': expected <n>h or <n>d");
         }
+        // \d+ 允许无界位数，Long.parseLong 对 20+ 位抛 NumberFormatException（未捕获→500）；
+        // 提前拒绝超出最大合法值上限的数值前缀，统一走 IllegalArgumentException 的诚实失败。
+        if (matcher.group(1).length() > 4) {
+            throw new IllegalArgumentException("timeRange '" + spec + "' exceeds max " + MAX_RANGE_DAYS + "d");
+        }
         long n = Long.parseLong(matcher.group(1));
         boolean hours = matcher.group(2).equals("h");
         if (hours ? n > MAX_RANGE_DAYS * 24L : n > MAX_RANGE_DAYS) {
