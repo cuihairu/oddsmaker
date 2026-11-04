@@ -15,7 +15,7 @@
 - [ ] T-DEMO502 Demo 站公网 502（P1，owner=用户侧）：解锁=用户在 CF 面板把 `oddsmaker.cuihairu.site` 的 origin A 记录改指 `106.14.216.177`（保持橙云），并把源站 443 换回受信证书或把 CF SSL 临时改为 Full。2026-11-01 复核：经 CF=502；`curl --resolve` 直连源站 :443=200（`-k`）；TLS 信任态未核验（仓内取证腿仅 `openssl x509 -noout -subject -dates`）。仓内与源站无可修项。【已代决暂缓（需用户输入），按 docs/review/2026-10-30-decisions.md 执行】
 - [ ] T-CDC Debezium CDC 维度同步（P3，owner=等外部输入）：解锁=游戏方开 binlog + 部署 Kafka Connect + 提供 CDC 事件格式与目标表映射，三者齐备即开工。2026-11-01 复核：`grep -rl binlog deploy/`=0、`grep -rn debezium deploy/`=0，三项外部输入仍未到；仓内预备面已备（dimension-sync.md CDC 节三选项对比 + 信封→`RawDimensionChange` 映射表，实证选项 C 不可行）。【已代决暂缓（需外部输入）】
 - [ ] T-ML ML 异常检测进评估批次（P3，owner=等部署面）：解锁=四项触发条件任一达标；条件 a 需 infra 栈部署 + 带网关流量的部署面，自指标落库满 7 天（7d）/28 天（28d 分位基线）；条件 b/c（阈值调整次数/误杀率）缺记录面。2026-11-01 复核：infra-prometheus 未运行（Exited 11 天前）、demo compose 服务面仍=postgres/redis/control-service（无 gateway）、127.0.0.1:9090 由 Cockpit 占用——条件 a 时钟未起。【已代决暂缓（需部署面输入）】
-- [ ] DOC-GIF 配置开关效果动态图（P2，文档）：枚举全部「开启后有效果」的开关/配置项，自动流水线生成证据（GUI 类 off/on 截图 + 切换录屏，CLI 类终端录屏，ffmpeg 缝合 GIF）；docs「配置效果」页（双语）逐开关嵌入说明 + off 图 + on 图 + GIF；流水线可重跑，兼作配置效果回归测试（参考 kode todo C-24 同款模式，2026-11-01 用户令全舰队推广）。
+- [ ] DOC-GIF 配置开关效果动态图（P2，文档，BLOCKED）：枚举全部「开启后有效果」的开关/配置项，自动流水线生成证据（GUI 类 off/on 截图 + 切换录屏，CLI 类终端录屏，ffmpeg 缝合 GIF）；docs「配置效果」页（双语）逐开关嵌入说明 + off 图 + on 图 + GIF；流水线可重跑，兼作配置效果回归测试（参考 kode todo C-24 同款模式，2026-11-01 用户令全舰队推广）。【已代决暂缓（需真实部署机 + GUI 浏览器会话 + 用户圈定开关范围）：demo compose 服务面仍=postgres/redis/control-service（无 gateway），127.0.0.1:9090 由 Cockpit 占用，无可用 GUI 会话截图/录屏；ffmpeg 未验证】
 
 ## 代码深审 2026-11-02 挂账（T-REV，来源 docs/review/2026-11-01-code-review.md；P0/P1 已当场修，此处仅 P2/P3）
 
