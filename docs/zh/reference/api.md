@@ -87,8 +87,28 @@
 NDJSON：
 
 ```json
-{"event_id":"01JE2E0001","game_id":"game_demo","environment":"prod","event_type":"progression","event_name":"progression:level:start","device_id":"d1","player_id":"p1001","level_id":"level_1","ts_client":1730000000000}
-{"event_id":"01JE2E0002","game_id":"game_demo","environment":"prod","event_type":"progression","event_name":"progression:level:complete","device_id":"d1","player_id":"p1001","level_id":"level_1","ts_client":1730000001000}
+{
+  "event_id": "01JE2E0001",
+  "game_id": "game_demo",
+  "environment": "prod",
+  "event_type": "progression",
+  "event_name": "progression:level:start",
+  "device_id": "d1",
+  "player_id": "p1001",
+  "level_id": "level_1",
+  "ts_client": 1730000000000
+}
+{
+  "event_id": "01JE2E0002",
+  "game_id": "game_demo",
+  "environment": "prod",
+  "event_type": "progression",
+  "event_name": "progression:level:complete",
+  "device_id": "d1",
+  "player_id": "p1001",
+  "level_id": "level_1",
+  "ts_client": 1730000001000
+}
 ```
 
 ## 响应体

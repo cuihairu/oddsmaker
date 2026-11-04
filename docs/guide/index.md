@@ -118,7 +118,16 @@ Ingest goes to the **gateway**, not control: `/v1/batch` on port 38080 (NDJSON o
 curl -X POST http://localhost:38080/v1/batch \
   -H "Content-Type: application/x-ndjson" \
   -H "x-api-key: YOUR_API_KEY" \
-  -d '{"event_id": "evt_001", "game_id": "GAME_ID", "environment": "prod", "event_type": "session", "event_name": "session_start", "device_id": "device_123", "user_id": "user_456", "ts_client": 1700000000000}'
+  -d '{
+          "event_id": "evt_001",
+          "game_id": "GAME_ID",
+          "environment": "prod",
+          "event_type": "session",
+          "event_name": "session_start",
+          "device_id": "device_123",
+          "user_id": "user_456",
+          "ts_client": 1700000000000
+        }'
 ```
 
 ## Next Steps
