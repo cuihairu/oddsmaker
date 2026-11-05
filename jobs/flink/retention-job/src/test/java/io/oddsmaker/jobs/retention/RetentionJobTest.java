@@ -282,6 +282,18 @@ class RetentionJobTest {
     private static RetentionJob.RetentionProcess processWithState(TestMapState state) throws Exception {
         RetentionJob.RetentionProcess fn = new RetentionJob.RetentionProcess(
                 new RetentionPolicy(new int[]{1, 7}, new int[]{1, 3}));
+        return wireState(fn, state);
+    }
+
+    private static RetentionJob.RetentionProcess processWithStateAndPolicy(TestMapState state,
+            int[] nDays, int[] rollingDays) throws Exception {
+        RetentionJob.RetentionProcess fn = new RetentionJob.RetentionProcess(
+                new RetentionPolicy(nDays, rollingDays));
+        return wireState(fn, state);
+    }
+
+    private static RetentionJob.RetentionProcess wireState(RetentionJob.RetentionProcess fn,
+            TestMapState state) throws Exception {
         Field f = RetentionJob.RetentionProcess.class.getDeclaredField("state");
         f.setAccessible(true);
         f.set(fn, state);
@@ -347,25 +359,63 @@ class RetentionJobTest {
         assertEquals(1L, out.get(0).cohortEpochDay);
 
         fn.processElement(event(0L), keyedContext(fn), sinkTo(out));
-        assertEquals(2, out.size());
+        // 校正事件本身 d=0 + 新 cohort 下已观测最晚活跃日（=day1）立即补记 N-Day1/Rolling1
+        assertEquals(4, out.size());
         assertEquals(0L, out.get(1).cohortEpochDay);
         assertEquals(0, out.get(1).d);
         assertEquals(0, out.get(1).rolling);
-        assertEquals(0L, state.m.get("first"));
-        assertEquals(0L, state.m.get("last"), "cohort 前移后 last 应回退到新 first，否则新 first 下的早阈值漏记");
-        assertNull(state.m.get("seen_d_1"));
-
-        fn.processElement(event(1L), keyedContext(fn), sinkTo(out));
-        // 校正后 last 回退到新 first=0，day1 事件相对新 cohort 偏移 1：
-        // N-Day 1 命中 + Rolling 1 跨越补记（旧实现 last 未回退 → Rolling 1 漏记）
-        assertEquals(4, out.size());
         assertEquals(0L, out.get(2).cohortEpochDay);
         assertEquals(1, out.get(2).d);
         assertEquals(0, out.get(2).rolling);
         assertEquals(0L, out.get(3).cohortEpochDay);
         assertEquals(1, out.get(3).rolling);
+        assertEquals(0L, state.m.get("first"));
+        assertEquals(1L, state.m.get("last"), "cohort 前移后 last 应保留已观测最晚活跃日，避免新 cohort 漏记");
         assertEquals(Long.valueOf(1L), state.m.get("seen_d_1"));
         assertEquals(Long.valueOf(1L), state.m.get("seen_r_1"));
+
+        fn.processElement(event(1L), keyedContext(fn), sinkTo(out));
+        // 校正时已补记 N-Day1/Rolling1（seen 已置），同日重复事件不再输出
+        assertEquals(4, out.size());
+    }
+
+    @Test
+    @DisplayName("RetentionProcess：更早事件重置 cohort 后保留已观测最晚活跃日，无后续事件也不丢 N-Day/Rolling")
+    void earlierEventPreservesLatestActiveDay() throws Exception {
+        TestMapState state = new TestMapState();
+        RetentionJob.RetentionProcess fn = processWithStateAndPolicy(state,
+                new int[]{1, 7}, new int[]{1, 3, 7});
+        List<RetentionJob.RetentionEmit> out = new ArrayList<>();
+
+        fn.processElement(event(7L), keyedContext(fn), sinkTo(out));   // 首事件 cohort day7
+        assertEquals(1, out.size());
+        assertEquals(7L, out.get(0).cohortEpochDay);
+
+        fn.processElement(event(0L), keyedContext(fn), sinkTo(out));   // 更早首日校正 cohort 至 day0
+        // 已观测最晚活跃日 = day7：新 cohort 补记 d=0、N-Day 7、Rolling 1/3/7（不再依赖后续事件）
+        assertEquals(6, out.size());
+        assertEquals(0L, out.get(1).cohortEpochDay);
+        assertEquals(0, out.get(1).d);
+        assertEquals(0L, out.get(2).cohortEpochDay);   // N-Day 7 属新 cohort（day0）
+        assertEquals(7, out.get(2).d);
+        assertEquals(0, out.get(2).rolling);
+        assertEquals(0L, out.get(3).cohortEpochDay);
+        assertEquals(1, out.get(3).rolling);
+        assertEquals(0L, out.get(4).cohortEpochDay);
+        assertEquals(3, out.get(4).rolling);
+        assertEquals(0L, out.get(5).cohortEpochDay);
+        assertEquals(7, out.get(5).rolling);
+        assertEquals(Long.valueOf(7L), state.m.get("last"));
+        assertEquals(Long.valueOf(1L), state.m.get("seen_d_7"));
+        assertEquals(Long.valueOf(1L), state.m.get("seen_r_1"));
+        assertEquals(Long.valueOf(1L), state.m.get("seen_r_3"));
+        assertEquals(Long.valueOf(1L), state.m.get("seen_r_7"));
+
+        // 此后无事件 Rolling 也已补记；再来 day1 只补 N-Day1，不重复补记 Rolling
+        fn.processElement(event(1L), keyedContext(fn), sinkTo(out));
+        assertEquals(7, out.size());
+        assertEquals(Long.valueOf(1L), state.m.get("seen_d_1"));   // day1 相对新 cohort 偏移1 补记 N-Day1
+        assertEquals(Long.valueOf(7L), state.m.get("last"));       // last 不回退
     }
 
     @Test

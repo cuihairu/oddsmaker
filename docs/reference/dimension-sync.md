@@ -115,11 +115,11 @@ POST /v1/batch
 X-Api-Key: pk_game_xxx
 Content-Type: application/x-ndjson
 
-{"event_id":"01JE...","event_type":"dimension","event_name":"dimension_define","game_id":"game_x","environment":"prod","dim_type":"item","resource_id":"sword_001","name":"铁剑","rarity":"common","op":"upsert","version_ts":1760000000000,"ts_client":1760000000000}
-{"event_id":"01JE...","event_type":"dimension","event_name":"dimension_define","game_id":"game_x","environment":"prod","dim_type":"item","resource_id":"sword_002","name":"钢剑","rarity":"rare","op":"upsert","version_ts":1760000000001,"ts_client":1760000000001}
+{"event_id":"01JE2E0003","event_type":"dimension","event_name":"dimension_define","game_id":"game_x","environment":"prod","dim_type":"item","resource_id":"sword_001","name":"铁剑","rarity":"common","op":"upsert","version_ts":1760000000000,"ts_client":1760000000000}
+{"event_id":"01JE2E0004","event_type":"dimension","event_name":"dimension_define","game_id":"game_x","environment":"prod","dim_type":"item","resource_id":"sword_002","name":"钢剑","rarity":"rare","op":"upsert","version_ts":1760000000001,"ts_client":1760000000001}
 ```
 
-> Each NDJSON event must be a single complete JSON object on one line — the gateway parses the body line by line and skips invalid lines; a pretty-printed multi-line event is silently dropped.
+> Each NDJSON event must be a single complete JSON object on one line. The gateway parses the body line by line: a syntactically invalid line (malformed JSON) is silently skipped, while a line that parses but fails schema validation is rejected in the response (`invalid_schema`), not silently dropped. Each `event_id` must be unique — the gateway deduplicates by `event_id` (idempotency), so two events sharing an ID silently drop the second.
 
 There is no separate `/v1/dimension` endpoint—dimension events go through `/v1/batch` alongside ordinary events, distinguished by `event_type=dimension`, reusing the existing auth, rate limiting, and PII governance.
 

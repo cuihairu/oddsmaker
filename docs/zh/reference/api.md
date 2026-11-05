@@ -91,7 +91,7 @@ NDJSON（每个事件占一行）：
 {"event_id":"01JE2E0002","game_id":"game_demo","environment":"prod","event_type":"progression","event_name":"progression:level:complete","device_id":"d1","player_id":"p1001","level_id":"level_1","ts_client":1730000001000}
 ```
 
-> 每个 NDJSON 事件必须是单行完整 JSON 对象——网关逐行解析请求体并跳过无效行，多行美化排版的事件会被静默丢弃。
+> 每个 NDJSON 事件必须是单行完整 JSON 对象。网关逐行解析请求体：语法无效行（JSON 畸变）被静默跳过，解析成功但未通过 schema 校验的行在响应中上报 `invalid_schema`（非静默丢弃）。每个 `event_id` 必须唯一——重复 ID 会被网关幂等去重。
 
 ## 响应体
 

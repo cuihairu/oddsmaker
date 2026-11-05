@@ -217,9 +217,12 @@ public class RetentionJob {
             // 相对偏移全部失效，须清空 seen 标记以便按新 cohort 重算。
             if (day.toEpochDay() < first) {
                 long newFirst = day.toEpochDay();
+                // cohort 前移后 seen 标记全部失效，但已观测的最后活跃日仍真实存在；
+                // 保留 max(prevLast, current day) 供新 cohort 补记 N-Day/Rolling。
+                Long previousLast = state.get("last");
+                long preservedLast = previousLast == null ? newFirst : Math.max(previousLast, day.toEpochDay());
                 state.put("first", newFirst);
-                // cohort 前移后 last 相对阈值全变：退回 first，由后续事件重新推进（避免漏过新 first 下的早阈值）
-                state.put("last", newFirst);
+                state.put("last", preservedLast);
                 java.util.List<String> stale = new java.util.ArrayList<>();
                 for (java.util.Map.Entry<String, Long> e : state.entries()) {
                     String k = e.getKey();
@@ -235,9 +238,31 @@ public class RetentionJob {
                 r0.cohortEpochDay = newFirst; r0.d = 0; r0.rolling = 0;
                 out.collect(r0);
 
+                // 新 cohort 下已观测的最晚活跃日（preservedLast）补记：
+                // - N-Day：preservedLast 恰为某阈值时记一次（该日确凿被观测）；
+                // - Rolling：last 活跃日 = preservedLast，凡阈值 ≤ preservedLast-newFirst 均已跨越。
+                int preservedN = policy.nDayHit(newFirst, preservedLast);
+                if (preservedN > 0 && state.get("seen_d_" + preservedN) == null) {
+                    state.put("seen_d_" + preservedN, 1L);
+                    RetentionEmit r = new RetentionEmit();
+                    r.gameId = gameId; r.environment = environment; r.subjectId = subjectId;
+                    r.cohortEpochDay = newFirst; r.d = preservedN; r.rolling = 0;
+                    out.collect(r);
+                }
+                for (int rn : policy.rollingCrossed(newFirst, newFirst, preservedLast)) {
+                    if (state.get("seen_r_" + rn) == null) {
+                        state.put("seen_r_" + rn, 1L);
+                        RetentionEmit r = new RetentionEmit();
+                        r.gameId = gameId; r.environment = environment; r.subjectId = subjectId;
+                        r.cohortEpochDay = newFirst; r.d = rn; r.rolling = rn;
+                        out.collect(r);
+                    }
+                }
+
                 // 说明：旧 cohort 下已发出的 N-Day/Rolling 行无法在本 sink 内撤销——SummingMergeTree
                 // 的 users 为 UInt64，不支持负数；完整撤回需引入带 generation/token 的表结构并用
-                // REPLACE/增量列（后续独立改造）。此处只修 last 回退，避免漏过新 cohort 的早阈值。
+                // REPLACE/增量列（后续独立改造）。此处保留已观测最晚活跃日并补记新 cohort 下
+                // 已跨越的 N-Day/Rolling，避免更早事件重置后永久丢失最晚活跃日的留存记录。
                 return;
             }
 

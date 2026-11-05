@@ -121,7 +121,7 @@ curl -X POST http://localhost:38080/v1/batch \
   -d '{"event_id":"evt_001","game_id":"GAME_ID","environment":"prod","event_type":"session","event_name":"session_start","device_id":"device_123","user_id":"user_456","ts_client":1700000000000}'
 ```
 
-> NDJSON requires **one complete JSON object per line** — the gateway parses the body line by line and skips invalid lines, so a pretty-printed multi-line event is silently dropped.
+> NDJSON requires **one complete JSON object per line**. The gateway parses the body line by line: a syntactically invalid line (malformed JSON) is silently skipped, while a line that parses but fails schema validation is rejected in the response (`invalid_schema`), not silently dropped. Use a single-line compact JSON object per event.
 
 ## Next Steps
 

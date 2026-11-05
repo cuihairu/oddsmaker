@@ -274,6 +274,40 @@ class DimensionPullE2eTest {
         assertEquals(0L, disabled.pushedCount);
     }
 
+    @Test
+    @DisplayName("SSRF：公网 endpoint 返回指向内网的 3xx 重定向时不被自动跟随（DONT_FOLLOW）")
+    void redirectToPrivateAddressNotFollowed() throws Exception {
+        // 模拟公网 endpoint 302 到内网被禁地址；重定向目标 127.0.0.1 无监听，若被自动跟随会连接失败/泄漏
+        server.createContext("/v1/redirect", exchange -> {
+            exchange.getResponseHeaders().set("Location", "http://127.0.0.1:9/internal");
+            exchange.sendResponseHeaders(302, -1);
+            exchange.close();
+        });
+
+        DimensionPullConfigEntity config = config();
+        config.endpoint = "http://127.0.0.1:" + port + "/v1/redirect";
+        // 用生产同款配置：禁重定向（HttpRedirects.DONT_FOLLOW），与 RestClientConfig.restTemplate 一致
+        org.springframework.boot.http.client.HttpRedirects redirects = org.springframework.boot.http.client.HttpRedirects.DONT_FOLLOW;
+        RestTemplate noFollow = new org.springframework.boot.restclient.RestTemplateBuilder()
+                .redirects(redirects).build();
+        DimensionPullService svc = new DimensionPullService(configRepo, statusRepo, gameRepo, envRepo, keyRepo,
+                cipher, noFollow, "http://127.0.0.1:" + port, true);
+        config.credentialEncrypted = cipher.encrypt("token-xyz");
+        when(configRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(statusRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(statusRepo.findByGameIdAndEnvironmentAndSourceKey(config.gameId, config.environment, config.sourceKey))
+                .thenReturn(Optional.empty());
+        when(keyRepo.findByGameIdAndStatus("game_x", ApiKeyEntity.ApiKeyStatus.ACTIVE))
+                .thenReturn(List.of());
+
+        DimensionPullService.PullRunResult r = svc.runPull(config);
+        // 302 非 2xx：重定向不被跟随，按失败记账（无内网请求、无推送）
+        assertFalse(r.success());
+        assertTrue(batchCalls.isEmpty());
+        assertEquals(1L, config.errorCount);
+        assertTrue(config.lastError.contains("302"), "lastError=" + config.lastError);
+    }
+
     private static void respond(com.sun.net.httpserver.HttpExchange exchange, int status, String body) throws java.io.IOException {
         byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().set("Content-Type", "application/json");
