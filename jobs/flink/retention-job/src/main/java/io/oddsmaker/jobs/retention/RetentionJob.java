@@ -199,15 +199,18 @@ public class RetentionJob {
             String subjectId = subjectOf(value);
             long ms = tsMs(value);
             LocalDate day = LocalDate.ofEpochDay(ms / 86_400_000L);
+            long epochDay = day.toEpochDay();
+            // 记录绝对观测日（obs_<epochDay>）：任何被观测的日子都保留事实，
+            // cohort 前移时中间日期不随 seen 清空丢失，后续校正可据此重推 N-Day。
+            state.put("obs_" + epochDay, 1L);
 
             Long first = state.get("first");
             if (first == null) {
-                long epochDay = day.toEpochDay();
                 state.put("first", epochDay);
                 state.put("last", epochDay);
                 RetentionEmit r0 = new RetentionEmit();
                 r0.gameId = gameId; r0.environment = environment; r0.subjectId = subjectId;
-                r0.cohortEpochDay = day.toEpochDay(); r0.d = 0; r0.rolling = 0;
+                r0.cohortEpochDay = epochDay; r0.d = 0; r0.rolling = 0;
                 out.collect(r0);
                 return;
             }
@@ -215,24 +218,21 @@ public class RetentionJob {
             // 队列校正：更早首日事件（day < first）不应静默丢弃。
             // 该事件把 cohort 向前修正，且旧 first 下所有 N-Day/Rolling 记账
             // 相对偏移全部失效，须清空 seen 标记以便按新 cohort 重算。
-            if (day.toEpochDay() < first) {
-                long newFirst = day.toEpochDay();
+            if (epochDay < first) {
+                long newFirst = epochDay;
                 // cohort 前移后 seen 标记全部失效，但已观测的最后活跃日仍真实存在；
                 // 保留 max(prevLast, current day) 供新 cohort 补记 N-Day/Rolling。
                 Long previousLast = state.get("last");
-                long preservedLast = previousLast == null ? newFirst : Math.max(previousLast, day.toEpochDay());
-                // 旧 cohort 下已观测的 N-Day 阈值日：seen_d_<n> 表示 day (oldFirst+n) 确凿被观测。
-                // cohort 前移后这些观测日的相对偏移增大 shift = oldFirst - newFirst，可能命中
-                // 新 cohort 的另一个 N-Day 阈值——必须在清空 seen 前换算保留，否则仅靠 preservedLast
-                // 会漏掉非最晚活跃日的已观测阈值日（更早事件重置后 N-Day 永久丢失）。
-                long oldFirst = first;
-                long shift = oldFirst - newFirst;
-                java.util.List<Integer> oldSeenD = new java.util.ArrayList<>();
+                long preservedLast = previousLast == null ? newFirst : Math.max(previousLast, epochDay);
+                // 绝对观测日（obs_<epochDay>）跨校正保留：cohort 前移只清空相对偏移的 seen 标记，
+                // 观测事实本身不丢。再次校正时据全部绝对观测日重推 N-Day，避免中间日期
+                // （某次校正后偏移不命中阈值而被丢弃）在后续校正中永久漏计。
+                java.util.List<Long> observedDays = new java.util.ArrayList<>();
                 for (java.util.Map.Entry<String, Long> e : state.entries()) {
                     String k = e.getKey();
-                    if (k.startsWith("seen_d_")) {
+                    if (k.startsWith("obs_")) {
                         try {
-                            oldSeenD.add(Integer.parseInt(k.substring("seen_d_".length())));
+                            observedDays.add(Long.parseLong(k.substring("obs_".length())));
                         } catch (NumberFormatException ignored) {
                             // 非法后缀不影响校正
                         }
@@ -240,6 +240,7 @@ public class RetentionJob {
                 }
                 state.put("first", newFirst);
                 state.put("last", preservedLast);
+                // 清空相对偏移的 seen 标记（obs_* 保留，跨校正累积观测事实）
                 java.util.List<String> stale = new java.util.ArrayList<>();
                 for (java.util.Map.Entry<String, Long> e : state.entries()) {
                     String k = e.getKey();
@@ -255,10 +256,8 @@ public class RetentionJob {
                 r0.cohortEpochDay = newFirst; r0.d = 0; r0.rolling = 0;
                 out.collect(r0);
 
-                // 换算旧阈值日到新 cohort：观测日 oldFirst+oldN 在新 cohort 下偏移 = oldN + shift。
-                // 命中新阈值则补记（该日确凿被观测，且为新 cohort 的 N-Day 阈值日）。
-                for (int oldN : oldSeenD) {
-                    long observedDay = oldFirst + oldN;
+                // 重推 N-Day：所有绝对观测日相对新 cohort 的偏移命中阈值即补记（该日确凿被观测）。
+                for (long observedDay : observedDays) {
                     int newN = policy.nDayHit(newFirst, observedDay);
                     if (newN > 0 && state.get("seen_d_" + newN) == null) {
                         state.put("seen_d_" + newN, 1L);

@@ -455,6 +455,54 @@ class RetentionJobTest {
     }
 
     @Test
+    @DisplayName("RetentionProcess：连续两次校正时中间观测日（旧阈值日）经绝对观测日保留并在最终 cohort 补记")
+    void continuousCorrectionsPreserveIntermediateObservedDay() throws Exception {
+        TestMapState state = new TestMapState();
+        RetentionJob.RetentionProcess fn = processWithStateAndPolicy(state,
+                new int[]{1, 7}, new int[]{1, 3});
+        List<RetentionJob.RetentionEmit> out = new ArrayList<>();
+
+        // 场景：阈值为 1、7。依次到 day7（首日）、day8（N-Day1）、day9、day6（首次校正），
+        // day8 相对 day6 偏移 2 不命中、相对 seen 清空丢失；再校正到 day1 时
+        // 若没有绝对观测日记录，day1 cohort 的 N-Day7（=day8）将永久漏计。
+        fn.processElement(event(7L), keyedContext(fn), sinkTo(out));   // cohort day7
+        assertEquals(1, out.size());
+
+        fn.processElement(event(8L), keyedContext(fn), sinkTo(out));   // day8：N-Day1 + Rolling1
+        assertEquals(3, out.size());
+        assertEquals(Long.valueOf(1L), state.m.get("seen_d_1"));
+
+        fn.processElement(event(9L), keyedContext(fn), sinkTo(out));   // day9：仅推进 last
+        assertEquals(3, out.size());
+        assertEquals(Long.valueOf(9L), state.m.get("last"));
+
+        fn.processElement(event(6L), keyedContext(fn), sinkTo(out));   // 首次校正 cohort 至 day6
+        // day8 相对 day6 偏移 2：不命中 N-Day（旧 seen_d_1 换算后不补记、被清空）；
+        // 但绝对观测日 obs_8 保留，为二次校正恢复 N-Day7 留证据。
+        assertFalse(state.m.containsKey("seen_d_2"));   // day8 偏移 2 非阈值，未补记
+        assertEquals(Long.valueOf(1L), state.m.get("obs_8"));
+        int rollingAfterFirstShift = 0;
+        for (RetentionJob.RetentionEmit e : out) {
+            if (e.cohortEpochDay == 6L && e.rolling > 0) rollingAfterFirstShift++;
+        }
+        assertEquals(2, rollingAfterFirstShift);   // Rolling 1/3
+        // day7 相对 day6 偏移 1 命中 N-Day1（旧 seen_d_1 换算补记），这是正确行为；
+        // 关键缺口是 day8（偏移 2）在旧实现被永久丢弃，此处断言其经 obs_8 保留。
+        assertEquals(Long.valueOf(1L), state.m.get("seen_d_1"));
+
+        fn.processElement(event(1L), keyedContext(fn), sinkTo(out));   // 二次校正 cohort 至 day1
+        // 绝对观测日 day8 相对 day1 偏移 7：恰命中 N-Day7，必须补记。
+        boolean nDay7Recovered = false;
+        for (RetentionJob.RetentionEmit e : out) {
+            if (e.cohortEpochDay == 1L && e.rolling == 0 && e.d == 7) nDay7Recovered = true;
+        }
+        assertTrue(nDay7Recovered, "连续校正后中间观测日 day8 应换算为新 cohort N-Day7，实际未补记");
+        assertEquals(Long.valueOf(1L), state.m.get("seen_d_7"));
+        assertEquals(Long.valueOf(1L), state.m.get("obs_8"));
+        assertEquals(Long.valueOf(1L), state.m.get("first"));
+    }
+
+    @Test
     @DisplayName("RetentionProcess：事件时间戳回退 ts_client → now")
     void timestampFallsBackToClientThenNow() throws Exception {
         List<RetentionJob.RetentionEmit> out = new ArrayList<>();
@@ -508,7 +556,7 @@ class RetentionJobTest {
         List<RetentionJob.RetentionEmit> out = new ArrayList<>();
         fn.processElement(event(0L), keyedContext(fn), sinkTo(out));   // open 接线的状态可写
         assertEquals(1, out.size());
-        assertEquals(2, state.m.size());   // first + last
+        assertEquals(3, state.m.size());   // first + last + obs_<day>
         assertNull(state.m.get("seen_d_1"));
     }
 
