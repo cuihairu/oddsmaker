@@ -84,32 +84,14 @@ The reason for these self-escalation rejections is `trust_escalation` (details: 
 
 ## Request Example
 
-NDJSON:
+NDJSON (one event per line):
 
 ```json
-{
-  "event_id": "01JE2E0001",
-  "game_id": "game_demo",
-  "environment": "prod",
-  "event_type": "progression",
-  "event_name": "progression:level:start",
-  "device_id": "d1",
-  "player_id": "p1001",
-  "level_id": "level_1",
-  "ts_client": 1730000000000
-}
-{
-  "event_id": "01JE2E0002",
-  "game_id": "game_demo",
-  "environment": "prod",
-  "event_type": "progression",
-  "event_name": "progression:level:complete",
-  "device_id": "d1",
-  "player_id": "p1001",
-  "level_id": "level_1",
-  "ts_client": 1730000001000
-}
+{"event_id":"01JE2E0001","game_id":"game_demo","environment":"prod","event_type":"progression","event_name":"progression:level:start","device_id":"d1","player_id":"p1001","level_id":"level_1","ts_client":1730000000000}
+{"event_id":"01JE2E0002","game_id":"game_demo","environment":"prod","event_type":"progression","event_name":"progression:level:complete","device_id":"d1","player_id":"p1001","level_id":"level_1","ts_client":1730000001000}
 ```
+
+> Each NDJSON event must be a single complete JSON object on one line — the gateway parses the body line by line and skips invalid lines; a pretty-printed multi-line event is silently dropped.
 
 ## Response Body
 

@@ -84,32 +84,14 @@
 
 ## 请求示例
 
-NDJSON：
+NDJSON（每个事件占一行）：
 
 ```json
-{
-  "event_id": "01JE2E0001",
-  "game_id": "game_demo",
-  "environment": "prod",
-  "event_type": "progression",
-  "event_name": "progression:level:start",
-  "device_id": "d1",
-  "player_id": "p1001",
-  "level_id": "level_1",
-  "ts_client": 1730000000000
-}
-{
-  "event_id": "01JE2E0002",
-  "game_id": "game_demo",
-  "environment": "prod",
-  "event_type": "progression",
-  "event_name": "progression:level:complete",
-  "device_id": "d1",
-  "player_id": "p1001",
-  "level_id": "level_1",
-  "ts_client": 1730000001000
-}
+{"event_id":"01JE2E0001","game_id":"game_demo","environment":"prod","event_type":"progression","event_name":"progression:level:start","device_id":"d1","player_id":"p1001","level_id":"level_1","ts_client":1730000000000}
+{"event_id":"01JE2E0002","game_id":"game_demo","environment":"prod","event_type":"progression","event_name":"progression:level:complete","device_id":"d1","player_id":"p1001","level_id":"level_1","ts_client":1730000001000}
 ```
+
+> 每个 NDJSON 事件必须是单行完整 JSON 对象——网关逐行解析请求体并跳过无效行，多行美化排版的事件会被静默丢弃。
 
 ## 响应体
 

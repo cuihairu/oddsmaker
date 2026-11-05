@@ -115,35 +115,11 @@ POST /v1/batch
 X-Api-Key: pk_game_xxx
 Content-Type: application/x-ndjson
 
-{
-  "event_id": "01JE...",
-  "event_type": "dimension",
-  "event_name": "dimension_define",
-  "game_id": "game_x",
-  "environment": "prod",
-  "dim_type": "item",
-  "resource_id": "sword_001",
-  "name": "铁剑",
-  "rarity": "common",
-  "op": "upsert",
-  "version_ts": 1760000000000,
-  "ts_client": 1760000000000
-}
-{
-  "event_id": "01JE...",
-  "event_type": "dimension",
-  "event_name": "dimension_define",
-  "game_id": "game_x",
-  "environment": "prod",
-  "dim_type": "item",
-  "resource_id": "sword_002",
-  "name": "钢剑",
-  "rarity": "rare",
-  "op": "upsert",
-  "version_ts": 1760000000001,
-  "ts_client": 1760000000001
-}
+{"event_id":"01JE...","event_type":"dimension","event_name":"dimension_define","game_id":"game_x","environment":"prod","dim_type":"item","resource_id":"sword_001","name":"铁剑","rarity":"common","op":"upsert","version_ts":1760000000000,"ts_client":1760000000000}
+{"event_id":"01JE...","event_type":"dimension","event_name":"dimension_define","game_id":"game_x","environment":"prod","dim_type":"item","resource_id":"sword_002","name":"钢剑","rarity":"rare","op":"upsert","version_ts":1760000000001,"ts_client":1760000000001}
 ```
+
+> 每个 NDJSON 事件必须是单行完整 JSON 对象——网关逐行解析请求体并跳过无效行，多行美化排版的事件会被静默丢弃。
 
 没有独立的 `/v1/dimension` 端点——维度事件与普通事件同走 `/v1/batch`，用 `event_type=dimension` 区分，复用现有鉴权、限流、PII 治理。
 

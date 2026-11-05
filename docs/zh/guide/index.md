@@ -118,17 +118,10 @@ curl -X POST http://localhost:38085/api/api-keys \
 curl -X POST http://localhost:38080/v1/batch \
   -H "Content-Type: application/x-ndjson" \
   -H "x-api-key: YOUR_API_KEY" \
-  -d '{
-          "event_id": "evt_001",
-          "game_id": "GAME_ID",
-          "environment": "prod",
-          "event_type": "session",
-          "event_name": "session_start",
-          "device_id": "device_123",
-          "user_id": "user_456",
-          "ts_client": 1700000000000
-        }'
+  -d '{"event_id":"evt_001","game_id":"GAME_ID","environment":"prod","event_type":"session","event_name":"session_start","device_id":"device_123","user_id":"user_456","ts_client":1700000000000}'
 ```
+
+> NDJSON 要求**每个事件占一行（完整的 JSON 对象）**——网关逐行解析请求体并跳过无效行，多行美化排版的事件会被静默丢弃。
 
 ## 下一步
 
