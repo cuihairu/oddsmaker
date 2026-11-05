@@ -478,16 +478,16 @@ class RetentionJobTest {
 
         fn.processElement(event(6L), keyedContext(fn), sinkTo(out));   // 首次校正 cohort 至 day6
         // day8 相对 day6 偏移 2：不命中 N-Day（旧 seen_d_1 换算后不补记、被清空）；
-        // 但绝对观测日 obs_8 保留，为二次校正恢复 N-Day7 留证据。
+        // 但绝对观测日位图中的 day8 保留，为二次校正恢复 N-Day7 留证据。
         assertFalse(state.m.containsKey("seen_d_2"));   // day8 偏移 2 非阈值，未补记
-        assertEquals(Long.valueOf(1L), state.m.get("obs_8"));
+        assertTrue((state.m.get("obs_bits_0") & (1L << 8)) != 0);
         int rollingAfterFirstShift = 0;
         for (RetentionJob.RetentionEmit e : out) {
             if (e.cohortEpochDay == 6L && e.rolling > 0) rollingAfterFirstShift++;
         }
         assertEquals(2, rollingAfterFirstShift);   // Rolling 1/3
-        // day7 相对 day6 偏移 1 命中 N-Day1（旧 seen_d_1 换算补记），这是正确行为；
-        // 关键缺口是 day8（偏移 2）在旧实现被永久丢弃，此处断言其经 obs_8 保留。
+        // day7 相对 day6 偏移 1 命中 N-Day1（由 obs_7 重推补记），这是正确行为；
+        // 关键缺口是 day8（偏移 2）在旧实现被永久丢弃，此处断言其经绝对观测日位图保留。
         assertEquals(Long.valueOf(1L), state.m.get("seen_d_1"));
 
         fn.processElement(event(1L), keyedContext(fn), sinkTo(out));   // 二次校正 cohort 至 day1
@@ -498,7 +498,7 @@ class RetentionJobTest {
         }
         assertTrue(nDay7Recovered, "连续校正后中间观测日 day8 应换算为新 cohort N-Day7，实际未补记");
         assertEquals(Long.valueOf(1L), state.m.get("seen_d_7"));
-        assertEquals(Long.valueOf(1L), state.m.get("obs_8"));
+        assertTrue((state.m.get("obs_bits_0") & (1L << 8)) != 0);
         assertEquals(Long.valueOf(1L), state.m.get("first"));
     }
 
@@ -523,6 +523,28 @@ class RetentionJobTest {
         fnNow.processElement(noTs, keyedContext(fnNow), sinkTo(out));
         assertEquals(2, out.size());
         assertTrue(out.get(1).cohortEpochDay >= before / 86_400_000L);
+    }
+
+    @Test
+    @DisplayName("RetentionProcess：绝对观测日按 64 天窗口位图存储，键数有界不随活跃日线性膨胀")
+    void observedDaysStayBoundedInWindowBitmaps() throws Exception {
+        TestMapState state = new TestMapState();
+        RetentionJob.RetentionProcess fn = processWithStateAndPolicy(state,
+                new int[]{1, 7}, new int[]{1, 3});
+        List<RetentionJob.RetentionEmit> out = new ArrayList<>();
+
+        // 300 个连续活跃日（远超 40 天 TTL 窗口），每个观测日都须保留事实。
+        for (long d = 0; d < 300; d++) {
+            fn.processElement(event(d), keyedContext(fn), sinkTo(out));
+        }
+
+        int obsKeys = 0;
+        for (Map.Entry<String, Long> e : state.m.entrySet()) {
+            if (e.getKey().startsWith("obs_bits_")) obsKeys++;
+        }
+        // 旧逐日 obs_<epochDay> 会累积 300 个键；位图窗口化后 300 天至多跨 5 个 64 天窗口。
+        assertTrue(obsKeys <= 5, "绝对观测日键应窗口化有界，实得 " + obsKeys + " 个");
+        assertTrue(obsKeys < 10, "绝对观测日键不得逐日线性膨胀，实得 " + obsKeys + " 个");
     }
 
     /** Proxy RuntimeContext：getMapState 返回注入状态，其余按返回类型给默认值。 */
@@ -556,7 +578,7 @@ class RetentionJobTest {
         List<RetentionJob.RetentionEmit> out = new ArrayList<>();
         fn.processElement(event(0L), keyedContext(fn), sinkTo(out));   // open 接线的状态可写
         assertEquals(1, out.size());
-        assertEquals(3, state.m.size());   // first + last + obs_<day>
+        assertEquals(3, state.m.size());   // first + last + obs_bits_<window>
         assertNull(state.m.get("seen_d_1"));
     }
 

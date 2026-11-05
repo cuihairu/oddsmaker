@@ -174,7 +174,7 @@ public class RetentionJob {
 
     static class RetentionProcess extends KeyedProcessFunction<String, RawEvent, RetentionEmit> {
         private final RetentionPolicy policy;
-        private transient MapState<String, Long> state; // keys: first, last, seen_d_<n>, seen_r_<n>
+        private transient MapState<String, Long> state; // keys: first, last, obs_bits_<window>, seen_d_<n>, seen_r_<n>
 
         RetentionProcess(RetentionPolicy policy) {
             this.policy = policy;
@@ -200,9 +200,10 @@ public class RetentionJob {
             long ms = tsMs(value);
             LocalDate day = LocalDate.ofEpochDay(ms / 86_400_000L);
             long epochDay = day.toEpochDay();
-            // 记录绝对观测日（obs_<epochDay>）：任何被观测的日子都保留事实，
+            // 记录绝对观测日（64 天窗口位图）：任何被观测的日子都保留事实，
             // cohort 前移时中间日期不随 seen 清空丢失，后续校正可据此重推 N-Day。
-            state.put("obs_" + epochDay, 1L);
+            compactLegacyObservedDays(state);
+            recordObservedDay(state, epochDay);
 
             Long first = state.get("first");
             if (first == null) {
@@ -224,15 +225,21 @@ public class RetentionJob {
                 // 保留 max(prevLast, current day) 供新 cohort 补记 N-Day/Rolling。
                 Long previousLast = state.get("last");
                 long preservedLast = previousLast == null ? newFirst : Math.max(previousLast, epochDay);
-                // 绝对观测日（obs_<epochDay>）跨校正保留：cohort 前移只清空相对偏移的 seen 标记，
+                // 绝对观测日位图跨校正保留：cohort 前移只清空相对偏移的 seen 标记，
                 // 观测事实本身不丢。再次校正时据全部绝对观测日重推 N-Day，避免中间日期
                 // （某次校正后偏移不命中阈值而被丢弃）在后续校正中永久漏计。
                 java.util.List<Long> observedDays = new java.util.ArrayList<>();
                 for (java.util.Map.Entry<String, Long> e : state.entries()) {
                     String k = e.getKey();
-                    if (k.startsWith("obs_")) {
+                    if (k.startsWith("obs_bits_")) {
                         try {
-                            observedDays.add(Long.parseLong(k.substring("obs_".length())));
+                            long window = Long.parseLong(k.substring("obs_bits_".length()));
+                            long bits = e.getValue();
+                            for (int bit = 0; bit < Long.SIZE; bit++) {
+                                if ((bits & (1L << bit)) != 0) {
+                                    observedDays.add(window * Long.SIZE + bit);
+                                }
+                            }
                         } catch (NumberFormatException ignored) {
                             // 非法后缀不影响校正
                         }
@@ -240,7 +247,7 @@ public class RetentionJob {
                 }
                 state.put("first", newFirst);
                 state.put("last", preservedLast);
-                // 清空相对偏移的 seen 标记（obs_* 保留，跨校正累积观测事实）
+                // 清空相对偏移的 seen 标记（obs_bits_* 保留，跨校正累积观测事实）
                 java.util.List<String> stale = new java.util.ArrayList<>();
                 for (java.util.Map.Entry<String, Long> e : state.entries()) {
                     String k = e.getKey();
@@ -321,6 +328,36 @@ public class RetentionJob {
                     }
                 }
             }
+        }
+
+        /** 将旧版逐日 obs_<epochDay> 键合并为窗口位图，避免升级后状态继续逐日膨胀。 */
+        private static void compactLegacyObservedDays(MapState<String, Long> state) throws Exception {
+            java.util.List<String> legacyKeys = new java.util.ArrayList<>();
+            java.util.List<Long> legacyDays = new java.util.ArrayList<>();
+            for (java.util.Map.Entry<String, Long> e : state.entries()) {
+                String k = e.getKey();
+                if (!k.startsWith("obs_") || k.startsWith("obs_bits_")) continue;
+                try {
+                    legacyDays.add(Long.parseLong(k.substring("obs_".length())));
+                    legacyKeys.add(k);
+                } catch (NumberFormatException ignored) {
+                    // 非法旧键不参与压缩
+                }
+            }
+            for (long day : legacyDays) {
+                recordObservedDay(state, day);
+            }
+            for (String k : legacyKeys) {
+                state.remove(k);
+            }
+        }
+
+        private static void recordObservedDay(MapState<String, Long> state, long epochDay) throws Exception {
+            long window = Math.floorDiv(epochDay, Long.SIZE);
+            int bit = Math.floorMod(epochDay, Long.SIZE);
+            String key = "obs_bits_" + window;
+            Long existing = state.get(key);
+            state.put(key, existing == null ? (1L << bit) : (existing | (1L << bit)));
         }
 
         private long tsMs(RawEvent r) {
