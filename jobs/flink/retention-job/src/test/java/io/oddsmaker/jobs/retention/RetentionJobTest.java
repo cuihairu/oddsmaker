@@ -419,6 +419,42 @@ class RetentionJobTest {
     }
 
     @Test
+    @DisplayName("RetentionProcess：cohort 前移时旧已观测非最晚活跃阈值日换算到新 cohort 补记 N-Day")
+    void cohortShiftPreservesIntermediateNDay() throws Exception {
+        TestMapState state = new TestMapState();
+        RetentionJob.RetentionProcess fn = processWithStateAndPolicy(state,
+                new int[]{1, 7}, new int[]{1, 3});
+        List<RetentionJob.RetentionEmit> out = new ArrayList<>();
+
+        // 场景：cohort=day7，先到 day8（记 seen_d_1、last=8）、day9（last=9），
+        // 再校正到 day1（newFirst=1）。旧 seen_d_1（day8 被观测）在新 cohort 下偏移=7，
+        // 恰命中 N-Day7，必须补记；仅靠 preservedLast=9 则 nDayHit(1,9)=8 未命中而丢失。
+        fn.processElement(event(7L), keyedContext(fn), sinkTo(out));   // 首事件 cohort day7
+        assertEquals(1, out.size());
+        assertEquals(7L, out.get(0).cohortEpochDay);
+
+        fn.processElement(event(8L), keyedContext(fn), sinkTo(out));   // day8：N-Day1 + Rolling1
+        assertEquals(3, out.size());
+        assertEquals(1, out.get(2).d);         // N-Day1（cohort7 下）
+        assertEquals(Long.valueOf(1L), state.m.get("seen_d_1"));
+
+        fn.processElement(event(9L), keyedContext(fn), sinkTo(out));   // day9：last 推进，无新 N-Day
+        assertEquals(3, out.size());
+        assertEquals(Long.valueOf(9L), state.m.get("last"));
+
+        fn.processElement(event(1L), keyedContext(fn), sinkTo(out));   // 更早首日校正 cohort 至 day1
+        // d=0 行 + N-Day7（旧 seen_d_1 换算，day8 在新 cohort 偏移7）+ Rolling 1/3（preservedLast=9）。
+        assertTrue(out.size() >= 4, "校正后应至少补记 N-Day7 与 Rolling，实得 " + out.size());
+        boolean nDay7 = false;
+        for (RetentionJob.RetentionEmit e : out) {
+            if (e.cohortEpochDay == 1L && e.rolling == 0 && e.d == 7) { nDay7 = true; }
+        }
+        assertTrue(nDay7, "cohort 前移后旧 seen_d_1 应换算为新 cohort N-Day7，实际未补记");
+        assertEquals(Long.valueOf(1L), state.m.get("seen_d_7"));
+        assertEquals(Long.valueOf(1L), state.m.get("first"));
+    }
+
+    @Test
     @DisplayName("RetentionProcess：事件时间戳回退 ts_client → now")
     void timestampFallsBackToClientThenNow() throws Exception {
         List<RetentionJob.RetentionEmit> out = new ArrayList<>();

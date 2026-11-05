@@ -221,6 +221,23 @@ public class RetentionJob {
                 // 保留 max(prevLast, current day) 供新 cohort 补记 N-Day/Rolling。
                 Long previousLast = state.get("last");
                 long preservedLast = previousLast == null ? newFirst : Math.max(previousLast, day.toEpochDay());
+                // 旧 cohort 下已观测的 N-Day 阈值日：seen_d_<n> 表示 day (oldFirst+n) 确凿被观测。
+                // cohort 前移后这些观测日的相对偏移增大 shift = oldFirst - newFirst，可能命中
+                // 新 cohort 的另一个 N-Day 阈值——必须在清空 seen 前换算保留，否则仅靠 preservedLast
+                // 会漏掉非最晚活跃日的已观测阈值日（更早事件重置后 N-Day 永久丢失）。
+                long oldFirst = first;
+                long shift = oldFirst - newFirst;
+                java.util.List<Integer> oldSeenD = new java.util.ArrayList<>();
+                for (java.util.Map.Entry<String, Long> e : state.entries()) {
+                    String k = e.getKey();
+                    if (k.startsWith("seen_d_")) {
+                        try {
+                            oldSeenD.add(Integer.parseInt(k.substring("seen_d_".length())));
+                        } catch (NumberFormatException ignored) {
+                            // 非法后缀不影响校正
+                        }
+                    }
+                }
                 state.put("first", newFirst);
                 state.put("last", preservedLast);
                 java.util.List<String> stale = new java.util.ArrayList<>();
@@ -237,6 +254,20 @@ public class RetentionJob {
                 r0.gameId = gameId; r0.environment = environment; r0.subjectId = subjectId;
                 r0.cohortEpochDay = newFirst; r0.d = 0; r0.rolling = 0;
                 out.collect(r0);
+
+                // 换算旧阈值日到新 cohort：观测日 oldFirst+oldN 在新 cohort 下偏移 = oldN + shift。
+                // 命中新阈值则补记（该日确凿被观测，且为新 cohort 的 N-Day 阈值日）。
+                for (int oldN : oldSeenD) {
+                    long observedDay = oldFirst + oldN;
+                    int newN = policy.nDayHit(newFirst, observedDay);
+                    if (newN > 0 && state.get("seen_d_" + newN) == null) {
+                        state.put("seen_d_" + newN, 1L);
+                        RetentionEmit r = new RetentionEmit();
+                        r.gameId = gameId; r.environment = environment; r.subjectId = subjectId;
+                        r.cohortEpochDay = newFirst; r.d = newN; r.rolling = 0;
+                        out.collect(r);
+                    }
+                }
 
                 // 新 cohort 下已观测的最晚活跃日（preservedLast）补记：
                 // - N-Day：preservedLast 恰为某阈值时记一次（该日确凿被观测）；

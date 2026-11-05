@@ -277,19 +277,33 @@ class DimensionPullE2eTest {
     @Test
     @DisplayName("SSRF：公网 endpoint 返回指向内网的 3xx 重定向时不被自动跟随（DONT_FOLLOW）")
     void redirectToPrivateAddressNotFollowed() throws Exception {
-        // 模拟公网 endpoint 302 到内网被禁地址；重定向目标 127.0.0.1 无监听，若被自动跟随会连接失败/泄漏
+        // 模拟公网 endpoint 302 到内网被禁地址；重定向目标监听在 127.0.0.1 上并返回 200——
+        // 若客户端自动跟随重定向，fetchPage 拿到 2xx 而按成功记账（无内网防护）；DONT_FOLLOW
+        // 下 302 按失败记账，可明确区分是否真的禁用了重定向。
+        HttpServer internal = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        int internalPort = internal.getAddress().getPort();
+        internal.createContext("/internal", exchange -> respond(exchange, 200, "{\"items\":[]}"));
+        internal.start();
         server.createContext("/v1/redirect", exchange -> {
-            exchange.getResponseHeaders().set("Location", "http://127.0.0.1:9/internal");
+            exchange.getResponseHeaders().set("Location", "http://127.0.0.1:" + internalPort + "/internal");
             exchange.sendResponseHeaders(302, -1);
             exchange.close();
         });
 
         DimensionPullConfigEntity config = config();
         config.endpoint = "http://127.0.0.1:" + port + "/v1/redirect";
-        // 用生产同款配置：禁重定向（HttpRedirects.DONT_FOLLOW），与 RestClientConfig.restTemplate 一致
-        org.springframework.boot.http.client.HttpRedirects redirects = org.springframework.boot.http.client.HttpRedirects.DONT_FOLLOW;
-        RestTemplate noFollow = new org.springframework.boot.restclient.RestTemplateBuilder()
-                .redirects(redirects).build();
+        // 用生产 RestClientConfig Bean（含 DONT_FOLLOW 与生产超时配置）。
+        // 注：DimensionPullService 请求带 Authorization 头，Apache HttpClient 默认即不跨
+        // 端口跟随 302，故本用例无法单独守护 RestClientConfig 的 redirects(DONT_FOLLOW)；
+        // 该配置由 ConfigMiscCoverageTest.restTemplateBeanDoesNotFollowRedirects 以无鉴权
+        // 纯 GET 守护（删除配置会令该测试失败）。
+        org.springframework.boot.restclient.RestTemplateBuilder builder =
+                new org.springframework.boot.restclient.RestTemplateBuilder();
+        io.oddsmaker.control.config.RestClientConfig restConfig =
+                new io.oddsmaker.control.config.RestClientConfig();
+        org.springframework.test.util.ReflectionTestUtils.setField(restConfig, "connectTimeoutMs", 3000);
+        org.springframework.test.util.ReflectionTestUtils.setField(restConfig, "readTimeoutMs", 5000);
+        RestTemplate noFollow = restConfig.restTemplate(builder);
         DimensionPullService svc = new DimensionPullService(configRepo, statusRepo, gameRepo, envRepo, keyRepo,
                 cipher, noFollow, "http://127.0.0.1:" + port, true);
         config.credentialEncrypted = cipher.encrypt("token-xyz");
@@ -306,6 +320,7 @@ class DimensionPullE2eTest {
         assertTrue(batchCalls.isEmpty());
         assertEquals(1L, config.errorCount);
         assertTrue(config.lastError.contains("302"), "lastError=" + config.lastError);
+        internal.stop(0);
     }
 
     private static void respond(com.sun.net.httpserver.HttpExchange exchange, int status, String body) throws java.io.IOException {
