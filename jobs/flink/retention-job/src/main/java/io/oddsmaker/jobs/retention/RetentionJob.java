@@ -180,15 +180,22 @@ public class RetentionJob {
             this.policy = policy;
         }
 
+        /** TTL 必须刷新在读取上（OnReadAndWrite）：first/last 仅在 cohort 建立/校正时写入，
+         *  普通活跃事件只读它们；默认 OnCreateAndWrite 会让活跃用户的 first 在 40 天后过期，
+         *  下一普通事件误建新 cohort，随后更早日迟到事件触发校正重推已记过的 N-Day（重复写入）。
+         *  OnReadAndWrite 使每次事件读取 first/last 都刷新其 TTL，活跃用户状态不会静默过期。 */
+        static StateTtlConfig retentionTtlConfig() {
+            return StateTtlConfig.newBuilder(Time.days(40)).updateTtlOnReadAndWrite().build();
+        }
+
         @Override
         public void open(org.apache.flink.configuration.Configuration parameters) {
-            StateTtlConfig ttl = StateTtlConfig.newBuilder(Time.days(40)).build();
             MapStateDescriptor<String, Long> desc = new MapStateDescriptor<>(
                     "retention_state",
                     TypeInformation.of(String.class),
                     TypeInformation.of(Long.class)
             );
-            desc.enableTimeToLive(ttl);
+            desc.enableTimeToLive(retentionTtlConfig());
             state = getRuntimeContext().getMapState(desc);
         }
 

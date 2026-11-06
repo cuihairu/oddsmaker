@@ -602,6 +602,14 @@ class RetentionJobTest {
         assertNull(state.m.get("seen_d_1"));
     }
 
+    @Test
+    @DisplayName("RetentionProcess：TTL 配置刷新在读取上（OnReadAndWrite），活跃用户 first 不因 40 天无写过期误重置 cohort")
+    void retentionTtlRefreshesOnReadAndWrite() {
+        org.apache.flink.api.common.state.StateTtlConfig cfg = RetentionJob.RetentionProcess.retentionTtlConfig();
+        assertEquals(org.apache.flink.api.common.state.StateTtlConfig.UpdateType.OnReadAndWrite, cfg.getUpdateType());
+        assertEquals(org.apache.flink.api.common.time.Time.days(40), cfg.getTtl());
+    }
+
     // ===== 覆盖缺口补充 =====
 
     @Test
