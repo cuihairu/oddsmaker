@@ -348,6 +348,26 @@ class RetentionJobTest {
     }
 
     @Test
+    @DisplayName("RetentionProcess：迟到事件等于首日时不触发 cohort 校正或重推")
+    void lateEventEqualToFirstDoesNotReEmit() throws Exception {
+        TestMapState state = new TestMapState();
+        RetentionJob.RetentionProcess fn = processWithStateAndPolicy(state,
+                new int[]{1, 7}, new int[]{1, 3});
+        List<RetentionJob.RetentionEmit> out = new ArrayList<>();
+
+        fn.processElement(event(0L), keyedContext(fn), sinkTo(out));    // 首事件 cohort day0
+        fn.processElement(event(1L), keyedContext(fn), sinkTo(out));    // N-Day1 + Rolling1
+        fn.processElement(event(40L), keyedContext(fn), sinkTo(out));   // Rolling3
+        int beforeLateEvent = out.size();
+
+        // day0 迟到但 first 已为 0：epochDay < first 不成立，不得进入校正分支重推。
+        fn.processElement(event(0L), keyedContext(fn), sinkTo(out));
+        assertEquals(beforeLateEvent, out.size());
+        assertEquals(Long.valueOf(0L), state.m.get("first"));
+        assertEquals(Long.valueOf(40L), state.m.get("last"));
+    }
+
+    @Test
     @DisplayName("RetentionProcess：迟发更早首日事件校正 cohort 并重算留存记账")
     void lateEarlierEventCorrectsCohort() throws Exception {
         TestMapState state = new TestMapState();
