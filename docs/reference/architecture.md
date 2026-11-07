@@ -181,6 +181,59 @@ Risk-control outputs:
 - `infra/`: local and deployment orchestration
 - `docs/`: architecture, API, operations, roadmap
 
+## Source-Layer Analysis
+
+The 2026-11-07 source-layer analysis defines 20 abstract layers by responsibility, not by directory name. Each layer's evidence is at the current HEAD `0c0141b`. See the [source-layer glossary](/reference/source-layer-glossary) for the term table.
+
+| Layer | Responsibility | Representative code |
+|---|---|---|
+| SDK Client | Buffer, retry queue, identity/event ID generation, POST to `/v1/batch` | `sdks/web/src/index.ts:107`, `sdks/unity/Runtime/Oddsmaker.cs:139` |
+| Gateway Ingress | Auth, rate limit, schema validation, PII sanitize, idempotency, sampling, block, Avro publish/DLQ | `services/gateway-service/.../BatchController.java:98`, `services/gateway-service/.../DlqPublisher.java:41` |
+| Message Transport | Kafka topics + Apicurio Avro serialization | `docker-compose.quickstart.yml:93`, `services/gateway-service/.../AvroPublisher.java:72` |
+| Stream Processing | Seven Flink 1.19 jobs consume `events_raw` → ClickHouse/PG/Kafka | `jobs/flink/events-enrich-job/.../EventsEnrichJob.java:97`, `jobs/flink/risk-job/.../RiskJob.java:148` |
+| Analytics Storage | ClickHouse events/sessions/retention/funnels/identities/dimensions/risk aggregates | `schema/sql/clickhouse/schema.sql:4`, `schema/sql/clickhouse/analytics.sql:10` |
+| Metadata and Control | 80 JPA entities in PostgreSQL, API surface, Flyway, ClickHouse queries | `services/control-service/.../Application.java:8`, `services/control-service/.../ClickHouseClient.java:37` |
+| Control Consumer | Kafka listeners: risk cases/blocks/webhooks, identity links, DQ counters | `services/control-service/.../RiskEventConsumer.java:85`, `services/control-service/.../IdentityConsumer.java:56` |
+| Scheduling and Background | Scheduled reconcile: retention, alerts, exports/erasure, webhook retry, Flink status, ML trainer | `services/control-service/.../RetentionEnforcementService.java:160`, `services/control-service/.../MLModelService.java:927` |
+| ML Training | Python feature engineering → churn/PLTV/risk/propensity models → versioned JSON artifacts | `ml/oddsmaker_ml/cli.py:33`, `ml/oddsmaker_ml/artifact.py:25` |
+| Dimension Sync | Agent polls CSV/Excel/JDBC/Kafka; control HTTP-pulls; Flink writes dimensions | `agents/dimension-sync-agent/.../AgentMain.java:104`, `jobs/flink/dimension-sync-job/.../DimensionSyncJob.java:110` |
+| Observability and Ops | Prometheus/OTel/Grafana/compose/helm lifecycle | `infra/prometheus.yml:14`, `infra/otel-collector.yaml:12` |
+| Web Console | Vue SPA: JWT auth state, routes, ~120 axios endpoints | `web/src/main.js:5`, `web/src/stores/auth.js:24`, `web/src/services/api.js:3` |
+| Shared Common | Event model, HMAC, Kafka producer, OTel init in Gradle libs | `libs/common-model/.../Event.java:1`, `libs/common-auth/.../HmacSigner.java:1` |
+| Single-Company Boundary | Company is deployment metadata; `game_id + environment` is logical boundary | `services/control-service/.../application.yaml:80`, `services/control-service/.../GameEntity.java:1` |
+| Storage Routing | `storage_profile` targets + isolation strategy; only CRUD/default wired | `services/control-service/.../StorageProfileEntity.java:30`, `services/control-service/.../StorageProfileService.java:45` |
+| Gateway Idempotency State | In-memory API-key context; instance-local TTL maps; Redis is future work | `services/gateway-service/.../AuthService.java:109`, `services/gateway-service/.../ReplayGuard.java:90` |
+| Flink Processing State | Keyed ValueState, session windows, TTL, checkpoint; no external backend yet | `jobs/flink/events-enrich-job/.../EventsEnrichJob.java:88`, `jobs/flink/sessions-job/.../SessionsJob.java:97` |
+| Control-plane Rule Cache | RiskJob polls active rules into in-process atomic map | `jobs/flink/risk-job/.../RuleFetcher.java:78`, `jobs/flink/risk-job/.../RuleConfig.java:46` |
+| File Export and Agent State | Control export directory; agent JSON checkpoints; Unity persistent queues | `services/control-service/.../PlayerExportService.java:83`, `agents/dimension-sync-agent/.../CheckpointStore.java:34` |
+| Observability Data State | Gateway in-memory quality counters → 60s snapshot to control | `services/gateway-service/.../DataQualityReporter.java:42`, `services/control-service/.../InternalDataQualityController.java:1` |
+
+### Implementation, Configuration, and Protocol
+
+- Gateway config: `services/gateway-service/src/main/resources/application.yaml`; Avro/JSON schema in `schema/avro/*.avsc`, `schema/json/*.json`, and `services/gateway-service/src/main/resources/schemas/`.
+- Control config: `services/control-service/src/main/resources/application.yaml`; experiment config JSON in `services/control-service/src/main/resources/schemas/experiment-config.schema.json`.
+- Flink jobs: each job has its own `build.gradle.kts`; Kafka/Apicurio settings come from compose environment (`docker-compose.yml:283`).
+- SDK protocol: `/v1/batch` is defined by `schema/json/oddsmaker-event-schema.json`; SDK docs in `docs/reference/sdk-design.md`.
+- Ops: `infra/prometheus.yml`, `infra/otel-collector.yaml`, `infra/helm/oddsmaker/templates/configmap.yaml`.
+
+### Why These Layers Are Separate
+
+1. SDKs and gateway have different failure/retry semantics: clients hold local queues and retry, the gateway must be stateless for ingestion (`sdks/web/src/index.ts:107`, `services/gateway-service/.../BatchController.java:98`).
+2. Auth and schema validation run before any persistence, so the gateway can reject without touching Kafka (`services/gateway-service/.../BatchController.java:156`, `services/gateway-service/.../DlqPublisher.java:41`).
+3. Transport is decoupled from business logic: producers/consumers only deal with Avro records (`services/gateway-service/.../AvroPublisher.java:72`, `jobs/flink/risk-job/.../RiskJob.java:148`).
+4. Flink jobs are independently scalable and restartable, so stream state is keyed and checkpointed (`jobs/flink/events-enrich-job/.../EventsEnrichJob.java:88`).
+5. ClickHouse is optimized for analytical scans; control-plane metadata in PostgreSQL is OLTP (`schema/sql/clickhouse/schema.sql:4`, `services/control-service/.../Application.java:8`).
+6. Control-plane API is the single source of truth for configuration, kept separate from ingestion data path (`services/control-service/.../ClickHouseClient.java:37`, `services/control-service/.../application.yaml:33`).
+7. Consumers handle side effects (cases, links, DQ) independently so a consumer failure does not block ingestion (`services/control-service/.../RiskEventConsumer.java:85`, `services/control-service/.../IdentityConsumer.java:56`).
+8. Scheduled work is batch-oriented and idempotent; it must not run in the request path (`services/control-service/.../RetentionEnforcementService.java:160`).
+9. ML is a separate process (Python) with its own artifact lifecycle, invoked asynchronously (`ml/oddsmaker_ml/cli.py:33`, `ml/oddsmaker_ml/artifact.py:25`).
+10. Dimension sync is a different data source than events, so it has a dedicated agent and job (`agents/dimension-sync-agent/.../AgentMain.java:104`, `jobs/flink/dimension-sync-job/.../DimensionSyncJob.java:110`).
+11. Observability is cross-cutting and defined by deployment files, not application code (`infra/prometheus.yml:14`, `infra/otel-collector.yaml:12`).
+12. Web console is a separate runtime (browser) with no direct data access; all state flows through control API (`web/src/main.js:5`, `web/src/services/api.js:3`).
+13. Shared libs avoid duplicating model/auth/transport across gateway, services, jobs (`libs/common-model/.../Event.java:1`, `libs/common-auth/.../HmacSigner.java:1`).
+14. Storage routing is an explicit indirection so future per-game isolation does not require rewriting ingest (`services/control-service/.../StorageProfileEntity.java:30`, `services/control-service/.../StorageProfileService.java:45`).
+15. Idempotency and rule caching are process-local to keep hot paths fast, with Redis explicitly deferred (`services/gateway-service/.../ReplayGuard.java:90`, `jobs/flink/risk-job/.../RuleFetcher.java:78`).
+
 ## Evolution Order
 
 1. Per-game database architecture (not implemented): current shared tables are partitioned by `(game_id, environment)`; the dedicated-database form goes through the storage profile's `isolationStrategy`.

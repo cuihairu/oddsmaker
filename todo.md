@@ -213,3 +213,58 @@
 > 审核发现（不属实，已排除）：同一 64 天位图中的任一日期更新都会刷新整个位图的 40 天 TTL，使其他早已过期的观测日继续参与 cohort 校正并重复计数，例如第 0、1 天活跃后第 40 天活跃、在第 42 天收到第 0 天迟到事件时，原应过期的第 1 天仍会重推并重复写入该 cohort 的 N-Day1——不属实：第 42 天收到 day0 时 first 仍为 0，`epochDay < first` 不成立（RetentionJob.java:222），不会进入校正或重推；位图 TTL 粒度若造成陈旧重推，其效果已归入 211 的撤回缺口。
 - [x] 审核发现：新增位图 TTL 审查发现（todo.md:213）示例不可复现——第 42 天收到第 0 天迟到事件时 first 仍为 0，epochDay=0 不满足校正分支触发条件 `epochDay < first`（jobs/flink/retention-job/src/main/java/io/oddsmaker/jobs/retention/RetentionJob.java:222），不会进入 cohort 校正，「原应过期的第 1 天仍会重推并重复写入该 cohort 的 N-Day1」并不发生；且该发现所述「重复计数」实为既有已挂账的「校正重推多发出中间 cohort 下 N-Day 行」发现（todo.md:211-212）的子集，未揭示独立新机制（todo.md:213）。——已核实：属实；213 已按不属实排除，新增 lateEventEqualToFirstDoesNotReEmit 回归测试钉住同日迟到事件无输出（RetentionJobTest.java:351-367；retention-job 27 例 0 失败）。
 - [x] 审核发现：排除位图 TTL 问题时假定第 42 天 first 仍为 0，但 first 按处理时间在首次写入 40 天后过期且普通活跃事件不会刷新它，例如第 0、1 天活跃、第 39 天刷新同一位图、第 41 天事件建立新 first 后第 42 天收到 day0，校正会重推仍留在位图中的过期 day1 并再次写入原 cohort 的 N-Day1，新增测试的内存状态不模拟 TTL 无法覆盖此路径（todo.md:213）。——已修复：TTL 配置改 OnReadAndWrite，first/last 每次事件读取即刷新 40 天窗口，活跃用户不再因 first 静默过期误重置 cohort（RetentionJob.java:183-195）；新增 retentionTtlRefreshesOnReadAndWrite 钉住 OnReadAndWrite 配置（RetentionJobTest.java:600-604；retention-job 28 例 0 失败）。
+
+## 源码分层分析 2026-11-07
+
+### 抽象层清单
+
+- 采集客户端层：SDK 本地缓冲/重试后 POST `/v1/batch`（`sdks/web/src/index.ts:107`）
+- 网关边缘接入层：认证/限流/schema/PII/幂等/采样/封禁后发布 Avro 或进 DLQ（`services/gateway-service/.../BatchController.java:98`）
+- 消息传输层：Kafka topic + Apicurio Avro（`services/gateway-service/.../AvroPublisher.java:72`）
+- 流处理层：七个 Flink 1.19 作业消费 `events_raw` 产出 CH/PG/Kafka（`jobs/flink/events-enrich-job/.../EventsEnrichJob.java:97`）
+- 分析存储层：ClickHouse 事件/会话/留存/漏斗/身份/维度/风控聚合（`schema/sql/clickhouse/schema.sql:4`）
+- 元数据与控制层：control-service 80 个 JPA 实体、API 面、Flyway、CH 查询（`services/control-service/.../Application.java:8`）
+- 控制面消费层：风控案例/封禁/webhook、身份关联、DQ 计数（`services/control-service/.../RiskEventConsumer.java:85`）
+- 调度与后台执行层：保留对账、告警、导出/擦除、webhook 重试、Flink 状态、ML 训练（`services/control-service/.../RetentionEnforcementService.java:160`）
+- ML 训练层：Python 特征工程→模型→版本化 JSON 产物（`ml/oddsmaker_ml/cli.py:33`）
+- 维度同步层：agent 轮询源/control HTTP 拉取/Flink 写维度（`agents/dimension-sync-agent/.../AgentMain.java:104`）
+- 观测与运维层：Prometheus/OTel/Grafana/compose/helm（`infra/prometheus.yml:14`）
+- Web 控制台层：Vue SPA 认证状态、路由、~120 个 API 端点（`web/src/main.js:5`）
+- 共享公共层：事件模型/HMAC/Kafka/OTel 公共库（`libs/common-model/.../Event.java:1`）
+- 单公司边界：company 是部署元数据，`game_id+environment` 为逻辑边界（`services/control-service/.../application.yaml:80`）
+- 存储路由：`storage_profile` 目标+隔离策略，仅 CRUD/默认接线（`services/control-service/.../StorageProfileEntity.java:30`）
+- 网关幂等状态：内存 API-key 上下文、实例本地 TTL map，Redis 未来工作（`services/gateway-service/.../ReplayGuard.java:90`）
+- Flink 处理状态：keyed ValueState/会话窗口/TTL/checkpoint，缺外部后端（`jobs/flink/events-enrich-job/.../EventsEnrichJob.java:88`）
+- 控制面规则缓存：RiskJob 轮询活动规则到进程内原子 map（`jobs/flink/risk-job/.../RuleFetcher.java:78`）
+- 文件导出与代理状态：control 导出目录、agent JSON checkpoint、Unity 持久队列（`services/control-service/.../PlayerExportService.java:83`）
+- 观测数据状态：gateway 内存质量计数→60s 快照到 control（`services/gateway-service/.../DataQualityReporter.java:42`）
+
+### 超大文件候选（>1000 行）
+
+- [ ] LAY-001 [P1] 拆分 `jobs/flink/risk-job/src/main/java/io/oddsmaker/jobs/risk/RiskJob.java`（1159 行）——配置、pipeline、8 类规则、sink、序列化耦合（RiskJob.java:148）
+- [ ] LAY-002 [P2] 拆分 `services/control-service/src/test/java/io/oddsmaker/control/jpa/EntitiesSweep2Test.java`（2406 行）——约 49 个实体集中在一个 sweep 类
+- [ ] LAY-003 [P2] 拆分 `services/control-service/src/test/java/io/oddsmaker/control/service/FinalSweep3Test.java`（1891 行）——跨服务 sweep
+- [ ] LAY-004 [P3] 拆分 `services/control-service/src/test/java/io/oddsmaker/control/service/SecurityGameDeepTest.java`（1790 行）——MFA/SSO/密钥/权限混杂
+- [ ] LAY-005 [P3] 拆分 `services/control-service/src/test/java/io/oddsmaker/control/service/MlExperimentDeepTest.java`（1672 行）——ML 与实验混杂
+- [ ] LAY-006 [P3] 拆分 `services/control-service/src/test/java/io/oddsmaker/control/service/ServicesFinalSweepTest.java`（1528 行）——跨服务 sweep
+- [ ] LAY-007 [P3] 拆分 `services/control-service/src/test/java/io/oddsmaker/control/service/FinalSweep6Test.java`（1455 行）——sweep 聚合
+- [ ] LAY-008 [P3] 拆分 `services/control-service/src/test/java/io/oddsmaker/control/service/InfraServicesDeepTest2.java`（1344 行）——多服务混杂
+- [ ] LAY-009 [P3] 拆分 `sdks/android/jvm-coverage/src/test/kotlin/io/oddsmaker/android/OddsmakerJvmTests.kt`（1246 行）——SDK 子系统混杂
+- [ ] LAY-010 [P3] 拆分 `services/control-service/src/test/java/io/oddsmaker/control/jpa/EntitiesDeepTest.java`（1237 行）——实体生命周期集中
+- [ ] LAY-011 [P3] 拆分 `jobs/flink/risk-job/src/test/java/io/oddsmaker/jobs/risk/RiskJobTest.java`（1173 行）——规则族测试
+- [ ] LAY-012 [P3] 拆分 `services/control-service/src/test/java/io/oddsmaker/control/service/OpsServicesDeepTest.java`（1097 行）——多服务运维
+- [ ] LAY-013 [P3] 拆分 `agents/dimension-sync-agent/src/test/java/io/oddsmaker/agent/AgentConfigTest.java`（1045 行）——配置与 Kafka TLS 混杂
+- [ ] LAY-014 [P3] 拆分 `services/control-service/src/test/java/io/oddsmaker/control/service/PlayerErasureServiceTest.java`（1043 行）——GDPR 阶段
+- [ ] LAY-015 [P3] 拆分 `sdks/unity/Runtime/Oddsmaker.cs`（1037 行）——Mono+协议+缓存
+- [ ] LAY-016 [P3] 拆分 `services/control-service/src/test/java/io/oddsmaker/control/service/FinalSweep2Test.java`（1023 行）——sweep 聚合
+- [ ] LAY-017 [P3] 拆分 `services/control-service/src/test/java/io/oddsmaker/control/jpa/EntitiesBranchTopUpTest.java`（1009 行）——35 个实体集中
+
+### 目录/分类问题
+
+- 根目录的评审 MD 应迁入 `docs/review/`（如 `review-*.md`）
+- `bi/superset/playtics_dashboard_bundle.zip` 是构建产物（旁边有 `build_bundle.sh`），不应入库
+- 三个 compose 文件横跨两个根（`docker-compose.yml`、`docker-compose.quickstart.yml`、`infra/docker-compose.yml`）；`deploy/MODES.md` 已索引部署模式
+- 双 Dockerfile（根 `Dockerfile` 与 `services/control-service/Dockerfile`）职责边界不清
+- `tests/` 只有 e2e 文档，实际 e2e 在 `scripts/e2e.sh`
+- `sdks/android/jvm-coverage` 命名未反映其仅测试用途
+- `docs/reference/` 与 `docs/zh/reference/` 的 locale 后缀混杂（`.zh.md`、`.en.md`、无后缀等）
