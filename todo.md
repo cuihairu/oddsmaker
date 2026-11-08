@@ -241,7 +241,7 @@
 
 ### 超大文件候选（>1000 行）
 
-- [ ] LAY-001 [P1] 拆分 `jobs/flink/risk-job/src/main/java/io/oddsmaker/jobs/risk/RiskJob.java`（1159 行）——配置、pipeline、8 类规则、sink、序列化耦合（RiskJob.java:148）
+- [x] LAY-001 [P1] 拆分 `jobs/flink/risk-job/src/main/java/io/oddsmaker/jobs/risk/RiskJob.java`（1159 行）——配置、pipeline、8 类规则、sink、序列化耦合（RiskJob.java:148）——已完成：拆出 RiskJobConfig（参数/配置/水位线/步长）、RiskPipeline（窗口/特征分支）、RiskRules（口径谓词、5 个窗口函数、PATTERN 状态机、主体与信任门槛）、RiskScore（评估产出）、RiskSinks（SQL/sink/行绑定）、RiskJson（序列化）、RiskInputMapper（输入映射）；RiskJob 降为装配薄壳 + 模型 + 委托面，既有单测与兄弟类零改动（RiskJob.java、RiskJobConfig.java、RiskPipeline.java、RiskRules.java、RiskScore.java、RiskSinks.java、RiskJson.java、RiskInputMapper.java；commit 9930e20；risk-job 测试 101 例 0 失败）
 - [ ] LAY-002 [P2] 拆分 `services/control-service/src/test/java/io/oddsmaker/control/jpa/EntitiesSweep2Test.java`（2406 行）——约 49 个实体集中在一个 sweep 类
 - [ ] LAY-003 [P2] 拆分 `services/control-service/src/test/java/io/oddsmaker/control/service/FinalSweep3Test.java`（1891 行）——跨服务 sweep
 - [ ] LAY-004 [P3] 拆分 `services/control-service/src/test/java/io/oddsmaker/control/service/SecurityGameDeepTest.java`（1790 行）——MFA/SSO/密钥/权限混杂
