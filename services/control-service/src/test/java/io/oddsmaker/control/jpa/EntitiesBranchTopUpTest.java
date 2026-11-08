@@ -14,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * BRANCH 收口补测：按 jacoco miss 分支逐行补对侧。
- * 与 EntitiesDeepTest/EntitiesSweep2Test 互补——本类只打已miss的分支侧
+ * 与 EntitiesDeepTest/EntitiesSweep2 系列拆分类互补——本类只打已miss的分支侧
  * （三元 null 侧、装箱 Boolean null 侧、枚举 == 对侧、@PrePersist false 侧、
  * 多值 || 的未测值、名单/灰度/条件求值的短路侧）。
  * 字段全 public：null 侧直接赋 null（Hibernate 加载 NULL 列在生产可达）。
