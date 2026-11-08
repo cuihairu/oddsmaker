@@ -242,7 +242,7 @@
 ### 超大文件候选（>1000 行）
 
 - [x] LAY-001 [P1] 拆分 `jobs/flink/risk-job/src/main/java/io/oddsmaker/jobs/risk/RiskJob.java`（1159 行）——配置、pipeline、8 类规则、sink、序列化耦合（RiskJob.java:148）——已完成：拆出 RiskJobConfig（参数/配置/水位线/步长）、RiskPipeline（窗口/特征分支）、RiskRules（口径谓词、5 个窗口函数、PATTERN 状态机、主体与信任门槛）、RiskScore（评估产出）、RiskSinks（SQL/sink/行绑定）、RiskJson（序列化）、RiskInputMapper（输入映射）；RiskJob 降为装配薄壳 + 模型 + 委托面，既有单测与兄弟类零改动（RiskJob.java、RiskJobConfig.java、RiskPipeline.java、RiskRules.java、RiskScore.java、RiskSinks.java、RiskJson.java、RiskInputMapper.java；commit 9930e20；risk-job 测试 101 例 0 失败）
-- [ ] LAY-002 [P2] 拆分 `services/control-service/src/test/java/io/oddsmaker/control/jpa/EntitiesSweep2Test.java`（2406 行）——约 49 个实体集中在一个 sweep 类
+- [x] LAY-002 [P2] 拆分 `services/control-service/src/test/java/io/oddsmaker/control/jpa/EntitiesSweep2Test.java`（2406 行）——约 49 个实体集中在一个 sweep 类——已完成：按域拆为 4 个类（Ops 16 例：维护窗口/告警/数据质量/报表/Flink 作业/集成/管道/限流/SDK 版本/存储/系统配置/埋点/webhook；Security 13 例：审计/身份/黑名单/风控案件与规则/角色权限/SSO/MFA/安全策略/会话；Analytics 12 例：社交/广告/漏斗/ML 预测与训练/性能/收入/邮件/事件定义/ML 制品；PlayerDto 7 例：导出作业/兑换码/生命周期回调/DTO 分支），测试方法逐字搬运零改动，EntitiesBranchTopUpTest 互补注释同步指向新名（commit edb8e73；control-service 测试 2126 例 0 失败）
 - [ ] LAY-003 [P2] 拆分 `services/control-service/src/test/java/io/oddsmaker/control/service/FinalSweep3Test.java`（1891 行）——跨服务 sweep
 - [ ] LAY-004 [P3] 拆分 `services/control-service/src/test/java/io/oddsmaker/control/service/SecurityGameDeepTest.java`（1790 行）——MFA/SSO/密钥/权限混杂
 - [ ] LAY-005 [P3] 拆分 `services/control-service/src/test/java/io/oddsmaker/control/service/MlExperimentDeepTest.java`（1672 行）——ML 与实验混杂
