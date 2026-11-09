@@ -120,8 +120,8 @@ import static org.mockito.Mockito.when;
 
 /**
  * Service 层覆盖率收尾测试（第二轮）：与 AuditLogServiceTest / GameServiceTest /
- * SecurityServiceDeepTest / GameServiceDeepTest / HealthMonitorDeepTest / PipelineRiskDashboardDeepTest / RiskEventConsumerTest / MLModelServiceTest / MlExperimentDeepTest /
- * ExperimentServiceTest / TrackingPlanServiceTest / DeveloperPortalServiceTest /
+ * SecurityServiceDeepTest / GameServiceDeepTest / HealthMonitorDeepTest / PipelineRiskDashboardDeepTest / RiskEventConsumerTest / MLModelServiceTest / MLModelServiceDeepTest / ExperimentServiceDeepTest /
+ * TrackingPlanServiceDeepTest / PermissionServiceDeepTest / ExperimentServiceTest / TrackingPlanServiceTest / DeveloperPortalServiceTest /
  * UserPortalDeepTest / InfraServicesTest / InfraServicesDeepTest2 / RiskServicesDeepTest /
  * FunnelConfigServiceTest / RedeemCodeServiceTest /
  * PlayerExportServiceTest 互补，覆盖各自尚未触及的分支。
