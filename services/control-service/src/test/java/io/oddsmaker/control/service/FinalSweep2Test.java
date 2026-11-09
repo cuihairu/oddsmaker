@@ -79,7 +79,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 /**
- * 覆盖率最终冲刺（第三轮）：与 ServicesFinalSweepTest / AnnouncementServiceTest /
+ * 覆盖率最终冲刺（第三轮）：与 ServicesFinalSweep*Test 系列 / AnnouncementServiceTest /
  * IdentityConsumerTest / RiskActionRecorderTest / SecurityServiceDeepTest / GameServiceDeepTest /
  * RiskControllersTest / ControlServiceTest / UserPortalDeepTest 互补，
  * 覆盖 AnnouncementService 生命周期残余、SecurityService.disableMFA、

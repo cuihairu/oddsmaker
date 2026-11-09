@@ -67,7 +67,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 /**
- * 覆盖率收尾（第四轮·LAY-003 拆分）：PermissionService、RiskRuleService、DTO updateEntity、内部 API Key/Mail/Redeem/角色分配/风控规则控制器、RateLimitExceededException。与 FinalSweep2Test / ServicesFinalSweepTest / 各专项 Service 测试互补。
+ * 覆盖率收尾（第四轮·LAY-003 拆分）：PermissionService、RiskRuleService、DTO updateEntity、内部 API Key/Mail/Redeem/角色分配/风控规则控制器、RateLimitExceededException。与 FinalSweep2Test / ServicesFinalSweep*Test 系列 / 各专项 Service 测试互补。
  */
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
