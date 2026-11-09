@@ -3,7 +3,7 @@
 Contains 7 jobs:
 - events-enrich-job: validation/deduplication/enrichment (UA/GeoIP) → ClickHouse events
 - sessions-job: 30-minute session window → ClickHouse sessions
-- retention-job: D1/D7/D30 retention (`-Dretention.ndays` configurable) → ClickHouse retention_daily (includes the subject_id subject dimension, player>user>device, so that cohort filtering goes through pre-aggregation; for deployments on the old structure see the migration `schema/sql/clickhouse/migrations/2026-09-retention-daily-subject-id.sql`) / retention_rolling
+- retention-job: D1/D7/D30 retention (`-Dretention.ndays` configurable) → ClickHouse retention_daily (includes the subject_id subject dimension, player>user>device, so that cohort filtering goes through pre-aggregation; for deployments on the old structure see the migration `schema/sql/clickhouse/migrations/2026-09-retention-daily-subject-id.sql`) / retention_rolling. Cohort correction (a late earlier first-day event, `day < first`) retracts the superseded cohort's emitted rows with `users=-1` (SummingMergeTree negative-row protocol, users column is Int64; see migration `schema/sql/clickhouse/migrations/2026-11-retention-users-int64.sql`) so multi-level corrections no longer accumulate phantom-cohort rows.
 - funnels-job: two-step funnel (level_start→level_complete, 24h timeout configurable) → ClickHouse funnels_2step
 - risk-job: real-time risk detection → Kafka `oddsmaker.risk_events` + ClickHouse risk_events
 - identity-merge-job: consumes `$identify` events and merges device_id/player_id into identity_id → ClickHouse identities

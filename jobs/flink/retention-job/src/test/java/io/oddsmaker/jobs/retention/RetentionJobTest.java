@@ -179,6 +179,46 @@ class RetentionJobTest {
         assertEquals(6, calls.size());
     }
 
+    @Test
+    @DisplayName("bindRetention/bindRetentionDaily：撤回行写入 users=-1（负值对消），正发行 users=+1")
+    void bindRetractRowWritesNegativeUsers() throws Exception {
+        RetentionJob.RetentionEmit retract = new RetentionJob.RetentionEmit();
+        retract.gameId = "g";
+        retract.environment = "prod";
+        retract.subjectId = "p1";
+        retract.cohortEpochDay = 20_000L;
+        retract.d = 7;
+        retract.retract = true;
+
+        Map<String, Object> daily = new LinkedHashMap<>();
+        PreparedStatement psDaily = (PreparedStatement) Proxy.newProxyInstance(
+                RetentionJobTest.class.getClassLoader(), new Class<?>[]{PreparedStatement.class},
+                (Object p, Method m, Object[] a) -> { daily.put(m.getName() + ":" + a[0], a[1]); return null; });
+        RetentionJob.bindRetentionDaily(psDaily, retract);
+        assertEquals(-1L, daily.get("setLong:6"));
+
+        Map<String, Object> rolling = new LinkedHashMap<>();
+        PreparedStatement psRolling = (PreparedStatement) Proxy.newProxyInstance(
+                RetentionJobTest.class.getClassLoader(), new Class<?>[]{PreparedStatement.class},
+                (Object p, Method m, Object[] a) -> { rolling.put(m.getName() + ":" + a[0], a[1]); return null; });
+        retract.rolling = 3;
+        RetentionJob.bindRetention(psRolling, retract);
+        assertEquals(-1L, rolling.get("setLong:5"));
+
+        RetentionJob.RetentionEmit positive = new RetentionJob.RetentionEmit();
+        positive.gameId = "g";
+        positive.environment = "prod";
+        positive.subjectId = "p1";
+        positive.cohortEpochDay = 20_000L;
+        positive.d = 7;
+        Map<String, Object> dailyPos = new LinkedHashMap<>();
+        PreparedStatement psDailyPos = (PreparedStatement) Proxy.newProxyInstance(
+                RetentionJobTest.class.getClassLoader(), new Class<?>[]{PreparedStatement.class},
+                (Object p, Method m, Object[] a) -> { dailyPos.put(m.getName() + ":" + a[0], a[1]); return null; });
+        RetentionJob.bindRetentionDaily(psDailyPos, positive);
+        assertEquals(1L, dailyPos.get("setLong:6"));
+    }
+
     // ===== RetentionProcess 直测（内存 MapState） =====
 
     /** Flink 1.19 MapState 的内存实现。 */
@@ -379,16 +419,21 @@ class RetentionJobTest {
         assertEquals(1L, out.get(0).cohortEpochDay);
 
         fn.processElement(event(0L), keyedContext(fn), sinkTo(out));
-        // 校正事件本身 d=0 + 新 cohort 下已观测最晚活跃日（=day1）立即补记 N-Day1/Rolling1
-        assertEquals(4, out.size());
-        assertEquals(0L, out.get(1).cohortEpochDay);
+        // 先撤回旧 cohort（day1）r0，再发新 cohort d=0 + 已观测最晚活跃日（=day1）补记 N-Day1/Rolling1
+        assertEquals(5, out.size());
+        assertEquals(1L, out.get(1).cohortEpochDay);   // 撤回行指向被取代旧 cohort
         assertEquals(0, out.get(1).d);
         assertEquals(0, out.get(1).rolling);
-        assertEquals(0L, out.get(2).cohortEpochDay);
-        assertEquals(1, out.get(2).d);
+        assertTrue(out.get(1).retract);
+        assertEquals(0L, out.get(2).cohortEpochDay);   // 新 cohort r0
+        assertEquals(0, out.get(2).d);
         assertEquals(0, out.get(2).rolling);
-        assertEquals(0L, out.get(3).cohortEpochDay);
-        assertEquals(1, out.get(3).rolling);
+        assertFalse(out.get(2).retract);
+        assertEquals(0L, out.get(3).cohortEpochDay);   // N-Day1（新 cohort）
+        assertEquals(1, out.get(3).d);
+        assertEquals(0, out.get(3).rolling);
+        assertEquals(0L, out.get(4).cohortEpochDay);   // Rolling1
+        assertEquals(1, out.get(4).rolling);
         assertEquals(0L, state.m.get("first"));
         assertEquals(1L, state.m.get("last"), "cohort 前移后 last 应保留已观测最晚活跃日，避免新 cohort 漏记");
         assertEquals(Long.valueOf(1L), state.m.get("seen_d_1"));
@@ -396,7 +441,7 @@ class RetentionJobTest {
 
         fn.processElement(event(1L), keyedContext(fn), sinkTo(out));
         // 校正时已补记 N-Day1/Rolling1（seen 已置），同日重复事件不再输出
-        assertEquals(4, out.size());
+        assertEquals(5, out.size());
     }
 
     @Test
@@ -412,19 +457,23 @@ class RetentionJobTest {
         assertEquals(7L, out.get(0).cohortEpochDay);
 
         fn.processElement(event(0L), keyedContext(fn), sinkTo(out));   // 更早首日校正 cohort 至 day0
-        // 已观测最晚活跃日 = day7：新 cohort 补记 d=0、N-Day 7、Rolling 1/3/7（不再依赖后续事件）
-        assertEquals(6, out.size());
-        assertEquals(0L, out.get(1).cohortEpochDay);
+        // 先撤回旧 cohort（day7）r0；新 cohort 补记 d=0、N-Day 7、Rolling 1/3/7（不再依赖后续事件）
+        assertEquals(7, out.size());
+        assertEquals(7L, out.get(1).cohortEpochDay);   // 撤回行指向被取代旧 cohort（day7）
         assertEquals(0, out.get(1).d);
-        assertEquals(0L, out.get(2).cohortEpochDay);   // N-Day 7 属新 cohort（day0）
-        assertEquals(7, out.get(2).d);
-        assertEquals(0, out.get(2).rolling);
-        assertEquals(0L, out.get(3).cohortEpochDay);
-        assertEquals(1, out.get(3).rolling);
+        assertTrue(out.get(1).retract);
+        assertEquals(0L, out.get(2).cohortEpochDay);   // 新 cohort r0
+        assertEquals(0, out.get(2).d);
+        assertFalse(out.get(2).retract);
+        assertEquals(0L, out.get(3).cohortEpochDay);   // N-Day 7 属新 cohort（day0）
+        assertEquals(7, out.get(3).d);
+        assertEquals(0, out.get(3).rolling);
         assertEquals(0L, out.get(4).cohortEpochDay);
-        assertEquals(3, out.get(4).rolling);
+        assertEquals(1, out.get(4).rolling);
         assertEquals(0L, out.get(5).cohortEpochDay);
-        assertEquals(7, out.get(5).rolling);
+        assertEquals(3, out.get(5).rolling);
+        assertEquals(0L, out.get(6).cohortEpochDay);
+        assertEquals(7, out.get(6).rolling);
         assertEquals(Long.valueOf(7L), state.m.get("last"));
         assertEquals(Long.valueOf(1L), state.m.get("seen_d_7"));
         assertEquals(Long.valueOf(1L), state.m.get("seen_r_1"));
@@ -433,7 +482,7 @@ class RetentionJobTest {
 
         // 此后无事件 Rolling 也已补记；再来 day1 只补 N-Day1，不重复补记 Rolling
         fn.processElement(event(1L), keyedContext(fn), sinkTo(out));
-        assertEquals(7, out.size());
+        assertEquals(8, out.size());
         assertEquals(Long.valueOf(1L), state.m.get("seen_d_1"));   // day1 相对新 cohort 偏移1 补记 N-Day1
         assertEquals(Long.valueOf(7L), state.m.get("last"));       // last 不回退
     }
@@ -520,6 +569,80 @@ class RetentionJobTest {
         assertEquals(Long.valueOf(1L), state.m.get("seen_d_7"));
         assertTrue((state.m.get("obs_bits_0") & (1L << 8)) != 0);
         assertEquals(Long.valueOf(1L), state.m.get("first"));
+    }
+
+    @Test
+    @DisplayName("RetentionProcess：cohort 校正对被取代旧 cohort 全部已发行撤回（users=-1），多级校正净留存不虚增")
+    void correctionRetractsSupersededCohortRows() throws Exception {
+        TestMapState state = new TestMapState();
+        RetentionJob.RetentionProcess fn = processWithStateAndPolicy(state,
+                new int[]{1, 7}, new int[]{1, 3});
+        List<RetentionJob.RetentionEmit> out = new ArrayList<>();
+
+        // 审核发现场景（2026-10）：阈值为 1、7。day7/8/9 → 校正 day6 → 校正 day1。
+        // 旧 cohort 行若不撤回，加法表（SummingMergeTree）将永久虚增中间 cohort 的留存。
+        fn.processElement(event(7L), keyedContext(fn), sinkTo(out));   // cohort day7：r0
+        fn.processElement(event(8L), keyedContext(fn), sinkTo(out));   // N-Day1 + Rolling1
+        fn.processElement(event(9L), keyedContext(fn), sinkTo(out));   // last 推进
+        fn.processElement(event(6L), keyedContext(fn), sinkTo(out));   // 校正至 day6：撤回 day7 三行，补记 day6
+        fn.processElement(event(1L), keyedContext(fn), sinkTo(out));   // 校正至 day1：撤回 day6 四行，补记 day1
+
+        // 净额模拟 SummingMergeTree + sum(users)：撤回行 -1、正发行 +1，合并/求和后对消。
+        Map<String, Long> net = new HashMap<>();
+        for (RetentionJob.RetentionEmit e : out) {
+            String key = e.cohortEpochDay + "|" + e.d + "|" + e.rolling;
+            net.merge(key, e.retract ? -1L : 1L, Long::sum);
+        }
+        // 被取代 cohort（day7、day6）全部归零——不再有幻影 cohort 留存
+        for (Map.Entry<String, Long> e : net.entrySet()) {
+            long cohort = Long.parseLong(e.getKey().split("\\|")[0]);
+            if (cohort == 7L || cohort == 6L) {
+                assertEquals(Long.valueOf(0L), e.getValue(), "被取代 cohort 行应撤回归零：" + e.getKey());
+            }
+        }
+        // 最终 cohort（day1）恰余真实留存：d=0 + N-Day7（day8 被观测）+ Rolling 1/3。
+        // rolling 行键 d==rolling==n；所有非零净额恰为这四行且均属最终 cohort。
+        assertEquals(Long.valueOf(1L), net.get("1|0|0"));
+        assertEquals(Long.valueOf(1L), net.get("1|7|0"));
+        assertEquals(Long.valueOf(1L), net.get("1|1|1"));
+        assertEquals(Long.valueOf(1L), net.get("1|3|3"));
+        int nonzero = 0;
+        for (Map.Entry<String, Long> e : net.entrySet()) {
+            if (e.getValue() != 0L) {
+                nonzero++;
+                assertEquals(1L, Long.parseLong(e.getKey().split("\\|")[0]),
+                        "非零净额行应全部属最终 cohort（day1），实得：" + e.getKey());
+            }
+        }
+        assertEquals(4, nonzero, "净表非零行应恰为最终 cohort 四行真实留存");
+    }
+
+    @Test
+    @DisplayName("RetentionProcess：撤回行按 rolling=0/>0 正确分流（N-Day 表与 Rolling 表各自对消）")
+    void retractRowsRouteToCorrectSinks() throws Exception {
+        TestMapState state = new TestMapState();
+        RetentionJob.RetentionProcess fn = processWithStateAndPolicy(state,
+                new int[]{1, 7}, new int[]{1, 3});
+        List<RetentionJob.RetentionEmit> out = new ArrayList<>();
+
+        fn.processElement(event(0L), keyedContext(fn), sinkTo(out));   // cohort day0：r0
+        fn.processElement(event(1L), keyedContext(fn), sinkTo(out));   // N-Day1 + Rolling1
+        fn.processElement(event(9L), keyedContext(fn), sinkTo(out));   // Rolling3（last 1→9 跨 3，1 已 seen）
+        out.clear();   // 只考察校正分支的输出
+
+        fn.processElement(event(-1L), keyedContext(fn), sinkTo(out));  // 校正至 day-1
+
+        int dailyRetracts = 0;
+        int rollingRetracts = 0;
+        for (RetentionJob.RetentionEmit e : out) {
+            if (!e.retract) continue;
+            if (RetentionJob.isNDay(e) && !RetentionJob.isRolling(e)) dailyRetracts++;
+            if (RetentionJob.isRolling(e) && !RetentionJob.isNDay(e)) rollingRetracts++;
+        }
+        // 撤回 day0 的 r0、N-Day1 → N-Day 表 2 行；Rolling1、Rolling3 → Rolling 表 2 行
+        assertEquals(2, dailyRetracts);
+        assertEquals(2, rollingRetracts);
+        assertEquals(Long.valueOf(-1L), state.m.get("first"));
     }
 
     @Test

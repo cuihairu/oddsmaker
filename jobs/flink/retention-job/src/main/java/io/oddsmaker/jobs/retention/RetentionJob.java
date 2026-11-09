@@ -135,23 +135,23 @@ public class RetentionJob {
         return e.rolling > 0;
     }
 
-    /** retention_daily 写入绑定（6 列，含主体维度）。 */
+    /** retention_daily 写入绑定（6 列，含主体维度）。撤回行 users=-1，正发行 users=+1。 */
     static void bindRetentionDaily(java.sql.PreparedStatement ps, RetentionEmit row) throws java.sql.SQLException {
         ps.setString(1, row.gameId);
         ps.setString(2, row.environment);
         ps.setString(3, row.subjectId);
         ps.setDate(4, new java.sql.Date(row.cohortEpochDay * 86400000L));
         ps.setInt(5, row.d);
-        ps.setLong(6, 1L);
+        ps.setLong(6, row.retract ? -1L : 1L);
     }
 
-    /** retention_rolling 写入绑定（5 列，无主体维度）。 */
+    /** retention_rolling 写入绑定（5 列，无主体维度）。撤回行 users=-1，正发行 users=+1。 */
     static void bindRetention(java.sql.PreparedStatement ps, RetentionEmit row) throws java.sql.SQLException {
         ps.setString(1, row.gameId);
         ps.setString(2, row.environment);
         ps.setDate(3, new java.sql.Date(row.cohortEpochDay * 86400000L));
         ps.setInt(4, row.d);
-        ps.setLong(5, 1L);
+        ps.setLong(5, row.retract ? -1L : 1L);
     }
 
     /** 主体口径（与 SegmentService.SUBJECT_PLAYER 对齐）：player_id → user_id → device_id。 */
@@ -163,13 +163,15 @@ public class RetentionJob {
 
     /**
      * rolling=0 为 N-Day 输出；rolling>0 表示 rolling 留存的 N。
+     * retract=true 为撤回行（users=-1）：cohort 校正时对被取代旧 cohort 的已发行负值对消，
+     * 前提是 retention_daily/retention_rolling.users 列为 Int64（SummingMergeTree 负值撤回协议）。
      * public class + public fields：Flink 只把 public 无参构造 + public 字段的类识别为 POJO，
      * 包私有类会退化成 Kryo 泛型序列化。
      * cohort 用 long epochDay 而非 LocalDate：LocalDate 字段走 Kryo 反射需要
      * --add-opens java.base/java.time，裸 JVM 直接炸（InaccessibleObjectException）
      */
     public static class RetentionEmit {
-        public String gameId; public String environment; public String subjectId; public long cohortEpochDay; public int d; public int rolling;
+        public String gameId; public String environment; public String subjectId; public long cohortEpochDay; public int d; public int rolling; public boolean retract;
     }
 
     static class RetentionProcess extends KeyedProcessFunction<String, RawEvent, RetentionEmit> {
@@ -262,6 +264,27 @@ public class RetentionJob {
                         stale.add(k);
                     }
                 }
+                // 撤回旧 cohort 的全部已发行（users=-1 负值行，与原 +1 行求和归零）：
+                // cohort 生命周期内每条正发行恰有一个记账凭证——d=0 规模行一次、N-Day/Rolling 各一个
+                // seen 标记——据此可精确对消。多级校正（day7→day6→day1）下中间 cohort 的行随下一次
+                // 校正全部撤回，不再虚增留存表（2026-10 审核发现：UInt64 时代旧 cohort 行永久滞留）。
+                // 表结构前提：users 列为 Int64（migrations/2026-11-retention-users-int64.sql）。
+                RetentionEmit r0Retract = new RetentionEmit();
+                r0Retract.gameId = gameId; r0Retract.environment = environment; r0Retract.subjectId = subjectId;
+                r0Retract.cohortEpochDay = first; r0Retract.d = 0; r0Retract.rolling = 0; r0Retract.retract = true;
+                out.collect(r0Retract);
+                for (String k : stale) {
+                    boolean rollingMark = k.startsWith("seen_r_");
+                    try {
+                        int n = Integer.parseInt(k.substring(rollingMark ? "seen_r_".length() : "seen_d_".length()));
+                        RetentionEmit rr = new RetentionEmit();
+                        rr.gameId = gameId; rr.environment = environment; rr.subjectId = subjectId;
+                        rr.cohortEpochDay = first; rr.d = n; rr.rolling = rollingMark ? n : 0; rr.retract = true;
+                        out.collect(rr);
+                    } catch (NumberFormatException ignored) {
+                        // 非法后缀标记不产生撤回行，仅照常删除
+                    }
+                }
                 for (String k : stale) {
                     state.remove(k);
                 }
@@ -303,10 +326,10 @@ public class RetentionJob {
                     }
                 }
 
-                // 说明：旧 cohort 下已发出的 N-Day/Rolling 行无法在本 sink 内撤销——SummingMergeTree
-                // 的 users 为 UInt64，不支持负数；完整撤回需引入带 generation/token 的表结构并用
-                // REPLACE/增量列（后续独立改造）。此处保留已观测最晚活跃日并补记新 cohort 下
-                // 已跨越的 N-Day/Rolling，避免更早事件重置后永久丢失最晚活跃日的留存记录。
+                // 说明：旧 cohort 行已在上方以 users=-1 撤回行精确对消（users 列 Int64），
+                // SummingMergeTree 合并时折叠正负行；未合并分片经上层 sum(users) 聚合同样正确。
+                // 此处保留已观测最晚活跃日并补记新 cohort 下已跨越的 N-Day/Rolling，
+                // 避免更早事件重置后永久丢失最晚活跃日的留存记录。
                 return;
             }
 

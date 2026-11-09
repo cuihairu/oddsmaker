@@ -11,15 +11,17 @@ CREATE TABLE IF NOT EXISTS retention_daily
   subject_id String,
   cohort_date Date,
   d UInt16,
-  users UInt64
+  users Int64
 )
 ENGINE = SummingMergeTree
 PARTITION BY (game_id, environment, toYYYYMM(cohort_date))
 -- subject_id 必须进排序键：SummingMergeTree 按 ORDER BY 键折叠同键行对 users 求和，
 -- 不进键会把不同主体合并成"去重前计数"。进键后每主体一行（users=1），
 -- 上层 sum(users) 聚合口径不变，且支持 subject_id IN (SELECT ... segment_members) 分群下推。
--- 已有部署需重建表迁移（SummingMergeTree 不支持修改排序键）：
--- 脚本见 migrations/2026-09-retention-daily-subject-id.sql（停旧 job → 迁移 → 换名 → 起新 job）。
+-- users 用 Int64 而非 UInt64：cohort 校正（更早首日事件）时旧 cohort 已发行以 users=-1
+-- 撤回行对消（见 RetentionJob 撤回协议），UInt64 不支持负数会使被取代 cohort 行永久虚增留存。
+-- 已有部署需重建表迁移（SummingMergeTree 不支持修改排序键/列类型）：
+-- 脚本见 migrations/2026-11-retention-users-int64.sql（停旧 job → 迁移 → 换名 → 起新 job）。
 ORDER BY (game_id, environment, cohort_date, d, subject_id);
 
 CREATE TABLE IF NOT EXISTS funnels_2step
@@ -37,13 +39,14 @@ PARTITION BY (game_id, environment, toYYYYMM(event_date))
 ORDER BY (game_id, environment, event_date, step1, step2);
 
 -- Rolling 留存：第 n 天及以后任意一天活跃（无界口径）
+-- users 同 retention_daily 用 Int64：cohort 校正撤回行（users=-1）需要负数。
 CREATE TABLE IF NOT EXISTS retention_rolling
 (
   game_id LowCardinality(String),
   environment LowCardinality(String),
   cohort_date Date,
   n UInt16,
-  users UInt64
+  users Int64
 )
 ENGINE = SummingMergeTree
 PARTITION BY (game_id, environment, toYYYYMM(cohort_date))

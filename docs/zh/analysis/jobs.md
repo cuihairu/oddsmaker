@@ -3,7 +3,7 @@
 包含 7 个作业：
 - events-enrich-job：校验/去重/富化（UA/GeoIP）→ ClickHouse events
 - sessions-job：30 分钟会话窗口 → ClickHouse sessions
-- retention-job：D1/D7/D30 留存（`-Dretention.ndays` 可配）→ ClickHouse retention_daily（含 subject_id 主体维度，player>user>device，支撑分群过滤走预聚合；旧结构部署迁移见 `schema/sql/clickhouse/migrations/2026-09-retention-daily-subject-id.sql`）/ retention_rolling
+- retention-job：D1/D7/D30 留存（`-Dretention.ndays` 可配）→ ClickHouse retention_daily（含 subject_id 主体维度，player>user>device，支撑分群过滤走预聚合；旧结构部署迁移见 `schema/sql/clickhouse/migrations/2026-09-retention-daily-subject-id.sql`）/ retention_rolling。cohort 校正（迟到的更早首日事件，`day < first`）以 `users=-1` 撤回被取代 cohort 的已发行行（SummingMergeTree 负值撤回协议，users 列 Int64；见迁移 `schema/sql/clickhouse/migrations/2026-11-retention-users-int64.sql`），多级校正不再累积幻影 cohort 行。
 - funnels-job：两步漏斗（level_start→level_complete，超时 24h 可配）→ ClickHouse funnels_2step
 - risk-job：实时风控检测 → Kafka `oddsmaker.risk_events` + ClickHouse risk_events
 - identity-merge-job：消费 `$identify` 事件归并 device_id/player_id 到 identity_id → ClickHouse identities
