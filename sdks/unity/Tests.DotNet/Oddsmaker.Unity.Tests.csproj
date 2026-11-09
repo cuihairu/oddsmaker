@@ -9,9 +9,11 @@
     <RootNamespace>Oddsmaker.Unity.Tests</RootNamespace>
   </PropertyGroup>
 
-  <!-- 直测 Runtime/Oddsmaker.cs 源文件(链接引用,不复制) -->
+  <!-- 直测 Runtime/Oddsmaker*.cs 源文件(链接引用,不复制;partial 拆分文件一并编译) -->
   <ItemGroup>
     <Compile Include="../Runtime/Oddsmaker.cs" Link="Oddsmaker.cs" />
+    <Compile Include="../Runtime/Oddsmaker.Protocol.cs" Link="Oddsmaker.Protocol.cs" />
+    <Compile Include="../Runtime/Oddsmaker.Cache.cs" Link="Oddsmaker.Cache.cs" />
   </ItemGroup>
 
   <ItemGroup>

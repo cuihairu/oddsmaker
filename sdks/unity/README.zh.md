@@ -1,7 +1,7 @@
 # Oddsmaker Unity SDK（C#）
 
 用法
-1) 将 `sdks/unity/Runtime/Oddsmaker.cs` 拷贝到你的 Unity 工程（建议 `Assets/Oddsmaker/Runtime/`）
+1) 将 `sdks/unity/Runtime/` 下全部 `.cs` 拷贝到你的 Unity 工程（建议 `Assets/Oddsmaker/Runtime/`；`Oddsmaker.cs` 为 Mono 核心，`Oddsmaker.Protocol.cs`/`Oddsmaker.Cache.cs` 为同 partial 类的协议与缓存拆分文件，需一并拷贝）
 2) 启动时初始化：
 ```csharp
 using Oddsmaker;
