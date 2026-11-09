@@ -13,7 +13,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 覆盖率冲刺第二轮·玩家运营/DTO 域（LAY-002 拆分）：玩家导出作业、兑换码三件套、覆盖实体生命周期回调、Game/Environment DTO 剩余分支。与 EntitiesSmokeCoverageTest（空构造冒烟）、EntitiesDeepTest（主要状态方法）互补。
+ * 覆盖率冲刺第二轮·玩家运营/DTO 域（LAY-002 拆分）：玩家导出作业、兑换码三件套、覆盖实体生命周期回调、Game/Environment DTO 剩余分支。与 EntitiesSmokeCoverageTest（空构造冒烟）、EntitiesDeep* 拆分类（主要状态方法）互补。
  */
 class EntitiesSweep2PlayerDtoTest {
 

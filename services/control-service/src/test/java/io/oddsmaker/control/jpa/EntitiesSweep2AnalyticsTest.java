@@ -11,7 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 覆盖率冲刺第二轮·分析/ML/消息域（LAY-002 拆分）：社分分析、广告分析、漏斗步、ML 预测与训练、性能与收入分析、邮件与领取、事件定义、ML 制品。与 EntitiesSmokeCoverageTest（空构造冒烟）、EntitiesDeepTest（主要状态方法）互补。
+ * 覆盖率冲刺第二轮·分析/ML/消息域（LAY-002 拆分）：社分分析、广告分析、漏斗步、ML 预测与训练、性能与收入分析、邮件与领取、事件定义、ML 制品。与 EntitiesSmokeCoverageTest（空构造冒烟）、EntitiesDeep* 拆分类（主要状态方法）互补。
  */
 class EntitiesSweep2AnalyticsTest {
 

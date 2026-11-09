@@ -11,7 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 覆盖率冲刺第二轮·基础设施/运维域（LAY-002 拆分）：维护窗口、告警、数据质量、报表、Flink 作业、健康指标、集成、管道、限流、SDK 版本、存储、系统配置、埋点计划、webhook。与 EntitiesSmokeCoverageTest（空构造冒烟）、EntitiesDeepTest（主要状态方法）互补。
+ * 覆盖率冲刺第二轮·基础设施/运维域（LAY-002 拆分）：维护窗口、告警、数据质量、报表、Flink 作业、健康指标、集成、管道、限流、SDK 版本、存储、系统配置、埋点计划、webhook。与 EntitiesSmokeCoverageTest（空构造冒烟）、EntitiesDeep* 拆分类（主要状态方法）互补。
  */
 class EntitiesSweep2OpsTest {
 

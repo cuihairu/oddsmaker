@@ -12,7 +12,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 覆盖率冲刺第二轮·身份/安全/风控域（LAY-002 拆分）：审计日志、身份、黑名单、风控案件与规则、角色权限、SSO/MFA、安全策略、会话分析。与 EntitiesSmokeCoverageTest（空构造冒烟）、EntitiesDeepTest（主要状态方法）互补。
+ * 覆盖率冲刺第二轮·身份/安全/风控域（LAY-002 拆分）：审计日志、身份、黑名单、风控案件与规则、角色权限、SSO/MFA、安全策略、会话分析。与 EntitiesSmokeCoverageTest（空构造冒烟）、EntitiesDeep* 拆分类（主要状态方法）互补。
  */
 class EntitiesSweep2SecurityTest {
 
