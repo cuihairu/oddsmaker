@@ -145,19 +145,19 @@ class RuleFetcherTest {
     @Test
     @DisplayName("startOnce：单例只启动一次；stop 置停并中断后台线程")
     void startOnceStartsSingleInstance() throws Exception {
-        RiskJobTest.stopRuleFetcher();   // 清场
+        RiskJobTestSupport.stopRuleFetcher();   // 清场
         try {
             String deadUrl = "http://127.0.0.1:1";
             RuleFetcher.startOnce(deadUrl, "g", "", 999_999_999L);
-            Object first = RiskJobTest.ruleFetcherInstance();
+            Object first = RiskJobTestSupport.ruleFetcherInstance();
             assertNotNull(first);
 
             RuleFetcher.startOnce(deadUrl, "g", "", 999_999_999L);   // 二次：单例 no-op
-            assertEquals(first, RiskJobTest.ruleFetcherInstance());
+            assertEquals(first, RiskJobTestSupport.ruleFetcherInstance());
         } finally {
-            RiskJobTest.stopRuleFetcher();   // stop：running=false + thread.interrupt
+            RiskJobTestSupport.stopRuleFetcher();   // stop：running=false + thread.interrupt
         }
-        assertNull(RiskJobTest.ruleFetcherInstance());
+        assertNull(RiskJobTestSupport.ruleFetcherInstance());
     }
 
     @Test
