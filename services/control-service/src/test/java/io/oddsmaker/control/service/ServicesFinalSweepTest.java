@@ -120,7 +120,7 @@ import static org.mockito.Mockito.when;
 
 /**
  * Service 层覆盖率收尾测试（第二轮）：与 AuditLogServiceTest / GameServiceTest /
- * SecurityGameDeepTest / RiskEventConsumerTest / MLModelServiceTest / MlExperimentDeepTest /
+ * SecurityServiceDeepTest / GameServiceDeepTest / HealthMonitorDeepTest / PipelineRiskDashboardDeepTest / RiskEventConsumerTest / MLModelServiceTest / MlExperimentDeepTest /
  * ExperimentServiceTest / TrackingPlanServiceTest / DeveloperPortalServiceTest /
  * UserPortalDeepTest / InfraServicesTest / InfraServicesDeepTest2 / RiskServicesDeepTest /
  * FunnelConfigServiceTest / RedeemCodeServiceTest /

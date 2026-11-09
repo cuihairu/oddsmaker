@@ -80,7 +80,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 
 /**
  * 覆盖率最终冲刺（第三轮）：与 ServicesFinalSweepTest / AnnouncementServiceTest /
- * IdentityConsumerTest / RiskActionRecorderTest / SecurityGameDeepTest /
+ * IdentityConsumerTest / RiskActionRecorderTest / SecurityServiceDeepTest / GameServiceDeepTest /
  * RiskControllersTest / ControlServiceTest / UserPortalDeepTest 互补，
  * 覆盖 AnnouncementService 生命周期残余、SecurityService.disableMFA、
  * IdentityConsumer 合并与 primaryId 回退、RiskActionRecorder 的 risk_actions 归档（risk_scores 归评估侧）、
