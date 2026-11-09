@@ -58,9 +58,14 @@ FROM retention_rolling
 WHERE EXISTS (SELECT 1 FROM system.tables
               WHERE database = currentDatabase() AND name = 'retention_rolling');
 
--- 3) 原子换名（ClickHouse RENAME 为原子操作，同一条语句内完成交换）
-RENAME TABLE retention_daily TO retention_daily_old, retention_daily_new TO retention_daily;
-RENAME TABLE retention_rolling TO retention_rolling_old, retention_rolling_new TO retention_rolling;
+-- 3) 原子换名：单对 EXCHANGE TABLES 原子交换（retention_daily ↔ retention_daily_new），交换后
+--    _new 名持旧数据，再单表 RENAME 到 *_old 保留观察期回退。ClickHouse 多表 RENAME 非原子
+--    （文档明确 "may only be partially executed"，其他会话可能收到 Table ... does not exist），
+--    多对 EXCHANGE 亦为顺序非原子，故每对各用一条 EXCHANGE 独立执行，保证换名原子性。
+EXCHANGE TABLES retention_daily AND retention_daily_new;
+RENAME TABLE retention_daily_new TO retention_daily_old;
+EXCHANGE TABLES retention_rolling AND retention_rolling_new;
+RENAME TABLE retention_rolling_new TO retention_rolling_old;
 
 -- 4) 验证新版 retention-job 写入正常、留存报表口径比对无误后，清理旧表（建议观察 1-2 周）
 -- DROP TABLE IF EXISTS retention_daily_old;

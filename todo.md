@@ -268,3 +268,5 @@
 - `tests/` 只有 e2e 文档，实际 e2e 在 `scripts/e2e.sh`
 - `sdks/android/jvm-coverage` 命名未反映其仅测试用途
 - `docs/reference/` 与 `docs/zh/reference/` 的 locale 后缀混杂（`.zh.md`、`.en.md`、无后缀等）
+- [x] 审核发现：迁移注释错误声明多表 RENAME 为原子交换，ClickHouse 文档明确多表 RENAME 非原子且可能部分执行，此处应使用 EXCHANGE TABLES 才能保证换名原子性（schema/sql/clickhouse/migrations/2026-11-retention-users-int64.sql:61-63）——已修复：官方文档核实属实（RENAME 文档「may only be partially executed，其他会话可能收到 Table ... does not exist」；EXCHANGE 文档「单对原子，多对顺序非原子」）；迁移 3) 改用每对各一条 EXCHANGE TABLES 原子交换 + 单表 RENAME 到 *_old（2026-11-retention-users-int64.sql:61-68），24.8 Atomic 引擎实机验证交换+数据保留（scratch drill：rd/rd_new 交换后 rd=Int64、rd_old=UInt64，sum 均 5）；retention-job 31 例 0 失败。
+- [x] 审核发现：analytics.sql 注释仍宣称字段与 BI 数据集 yaml 保持一致，但 active bundle 的 retention_daily dataset 中 users 类型仍是 UInt64，未随表列改为 Int64 同步，导入后元数据与实际表类型漂移（schema/sql/clickhouse/analytics.sql:5、bi/superset/bundle/datasets/retention_daily.yaml:20-22）——已修复：属实（yaml:22 仍 UInt64）；retention_daily.yaml users type 改 Int64（bi/superset/bundle/datasets/retention_daily.yaml:22），与 analytics.sql:14 表列一致，注释 5 行「保持一致」恢复为真；无 retention_rolling.yaml（其余 UInt64 属 funnels/视图，其表列本为 UInt64，不属本发现）；retention-job 31 例 0 失败。

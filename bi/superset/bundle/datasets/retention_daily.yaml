@@ -19,7 +19,7 @@ columns:
     type: UInt16
   - column_name: users
     is_dttm: false
-    type: UInt64
+    type: Int64
 metrics:
   - metric_name: sum_users
     expression: sum(users)
