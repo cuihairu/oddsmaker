@@ -108,7 +108,11 @@ public class AuthService {
     private static final int STALE_TTL_SECONDS = 15;
 
     /** control 不可达（连接失败/超时/响应异常）——区别于 404 的确定性「键不存在」。 */
-    static class ControlUnavailableException extends RuntimeException {}
+    static class ControlUnavailableException extends RuntimeException {
+        ControlUnavailableException(Throwable cause) {
+            super(cause);
+        }
+    }
 
     public ApiKeyContext getContext(String apiKey) {
         if (apiKey == null || apiKey.isBlank()) {
@@ -207,7 +211,7 @@ public class AuthService {
             meters.counter(REMOTE_LOOKUP_METRIC, "outcome", "exception", "code", "none").increment();
             logger.warn("Remote key lookup error for {}: {}", redact(apiKey), e.toString());
             // control 不可达：向上抛出让 getContext 走 stale 回退/负缓存（区别于 404 的确定性 miss）
-            throw new ControlUnavailableException();
+            throw new ControlUnavailableException(e);
         }
     }
 
