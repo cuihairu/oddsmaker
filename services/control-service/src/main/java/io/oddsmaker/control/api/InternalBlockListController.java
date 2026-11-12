@@ -35,10 +35,13 @@ public class InternalBlockListController {
 
         List<Map<String, Object>> results = new ArrayList<>();
         for (BatchCheckTarget t : request.targets) {
-            boolean blocked = blockListService.isBlocked(request.gameId, t.targetType, t.targetValue);
+            // 4 参版本带 environment：网关事件携带环境（风险自动封禁一律按 event.environment 落库，
+            // environmentId 恒非 null），仅查全局封禁会漏掉环境维度封禁→风控自动封禁在接入层失效。
+            boolean blocked = blockListService.isBlocked(request.gameId, t.environment, t.targetType, t.targetValue);
             Map<String, Object> item = new HashMap<>();
             item.put("targetType", t.targetType);
             item.put("targetValue", t.targetValue);
+            item.put("environment", t.environment);
             item.put("blocked", blocked);
             results.add(item);
         }
@@ -54,5 +57,6 @@ public class InternalBlockListController {
     public static class BatchCheckTarget {
         public String targetType;  // device_id, player_id, user_id
         public String targetValue;
+        public String environment;  // 网关事件环境；null 时仅命中全局封禁
     }
 }

@@ -244,15 +244,16 @@ public class BatchController {
 
             // 2) 构建封禁检查目标（device_id + user_id），按 gameId 分组——
             // 每个事件用自身 gameId 发起 batchCheck（T-REV10 跨游戏隔离键），
+            // 每个 target 携带自身 environment（风险自动封禁按环境落库，见 RiskEventConsumer 自动 BLOCK），
             // 避免混合游戏批次下非首事件游戏的事件键不在返回 map 中→跳过封禁检查（fail-open）。
             Map<String, List<BlockListClient.BatchTarget>> targetsByGame = new LinkedHashMap<>();
             for (Event event : eventsToPublish) {
                 // device_id 过 invalid_schema + schema minLength=1 后恒非 null 且非空（见下方注释）
                 List<BlockListClient.BatchTarget> targets =
                         targetsByGame.computeIfAbsent(event.gameId, k -> new ArrayList<>());
-                targets.add(new BlockListClient.BatchTarget("device_id", event.deviceId));
+                targets.add(new BlockListClient.BatchTarget(event.environment, "device_id", event.deviceId));
                 if (event.userId != null && !event.userId.isEmpty()) {
-                    targets.add(new BlockListClient.BatchTarget("player_id", event.userId));
+                    targets.add(new BlockListClient.BatchTarget(event.environment, "player_id", event.userId));
                 }
             }
 
@@ -311,12 +312,13 @@ public class BatchController {
     }
 
     private boolean isBlocked(Event event, Map<String, Boolean> blockedMap) {
-        // 键含 gameId（与 BlockListClient.cacheKey 同构）：跨游戏同 target 不互串（T-REV10）
+        // 键含 gameId + environment（与 BlockListClient.cacheKey 同构）：跨游戏、跨环境同 target 不互串（T-REV10）
         String gameId = event.gameId;
+        String env = event.environment;
         // device_id 恒非 null（invalid_schema 前置校验保证），无需判空
-        if (Boolean.TRUE.equals(blockedMap.get(gameId + ":device_id:" + event.deviceId))) return true;
+        if (Boolean.TRUE.equals(blockedMap.get(gameId + ":" + env + ":device_id:" + event.deviceId))) return true;
         if (event.userId != null) {
-            Boolean b = blockedMap.get(gameId + ":player_id:" + event.userId);
+            Boolean b = blockedMap.get(gameId + ":" + env + ":player_id:" + event.userId);
             if (Boolean.TRUE.equals(b)) return true;
         }
         return false;

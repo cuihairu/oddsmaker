@@ -154,7 +154,10 @@ class RiskControllersTest {
     @Test
     @DisplayName("黑名单：10 个运营端点 + 内部批量检查")
     void blockListEndpoints() {
+        // 运营端点 checkBlock 走 3 参（全局封禁）；内部 batch-check 走 4 参（环境维度）
         when(blockListService.isBlocked("g", "device", "d1")).thenReturn(true);
+        when(blockListService.isBlocked("g", "env1", "device", "d1")).thenReturn(true);
+        when(blockListService.isBlocked("g", "env2", "device", "d1")).thenReturn(false);
         // getBlock 反查实体后按其 gameId 鉴权（原注解引用签名中不存在的 #gameId，SpEL 求值即抛）
         BlockListEntity stored = new BlockListEntity();
         stored.gameId = "g";
@@ -177,8 +180,24 @@ class RiskControllersTest {
         InternalBlockListController.BatchCheckTarget target = new InternalBlockListController.BatchCheckTarget();
         target.targetType = "device";
         target.targetValue = "d1";
+        target.environment = "env1";
         req.targets = List.of(target);
         assertEquals(200, internalBlockListController.batchCheck(req).getStatusCode().value());
+        // 回归（P0 封禁环境维度断裂）：内部 batch-check 把 target.environment 传给 4 参 isBlocked，
+        // 环境维度封禁（风险自动 BLOCK 一律带 environment）在网关路径可见；不同环境同 target 不互串
+        verify(blockListService).isBlocked("g", "env1", "device", "d1");
+        List<Map<String, Object>> results = (List<Map<String, Object>>) internalBlockListController.batchCheck(req).getBody().get("results");
+        assertEquals(Boolean.TRUE, results.get(0).get("blocked"));
+        assertEquals("env1", results.get(0).get("environment"));
+        InternalBlockListController.BatchCheckTarget otherEnv = new InternalBlockListController.BatchCheckTarget();
+        otherEnv.targetType = "device";
+        otherEnv.targetValue = "d1";
+        otherEnv.environment = "env2";
+        InternalBlockListController.BatchCheckRequest req2 = new InternalBlockListController.BatchCheckRequest();
+        req2.gameId = "g";
+        req2.targets = List.of(otherEnv);
+        List<Map<String, Object>> results2 = (List<Map<String, Object>>) internalBlockListController.batchCheck(req2).getBody().get("results");
+        assertEquals(Boolean.FALSE, results2.get(0).get("blocked"));
         // 缺参 400
         assertEquals(400, internalBlockListController.batchCheck(new InternalBlockListController.BatchCheckRequest()).getStatusCode().value());
         // game:read 7（checkBlock×2/active/getBlock/stats/search/byType）+ risk:manage 4（add 为 null gameId + unblock/batch/fromRiskCase）

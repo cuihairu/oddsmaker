@@ -242,7 +242,7 @@ class BatchControllerCoverageTest {
     @DisplayName("设备封禁：blocked 拒绝，未封禁发布")
     void blockedDeviceRejected() {
         when(blockListClient.batchCheck(anyString(), anyList()))
-            .thenReturn(Mono.just(Map.of("game_demo:device_id:d_block", true)));
+            .thenReturn(Mono.just(Map.of("game_demo:prod:device_id:d_block", true)));
 
         client.post().uri("/v1/batch")
             .contentType(MediaType.APPLICATION_JSON)
@@ -262,9 +262,9 @@ class BatchControllerCoverageTest {
         // game_a 的 d_block 封禁，game_b 同 target 不封禁——若只按首事件 gameId 检查，
         // game_b 事件键不在返回 map 中会被放行（fail-open）
         when(blockListClient.batchCheck(eq("game_a"), anyList()))
-            .thenReturn(Mono.just(Map.of("game_a:device_id:d_block", true)));
+            .thenReturn(Mono.just(Map.of("game_a:prod:device_id:d_block", true)));
         when(blockListClient.batchCheck(eq("game_b"), anyList()))
-            .thenReturn(Mono.just(Map.of("game_b:device_id:d_block", false)));
+            .thenReturn(Mono.just(Map.of("game_b:prod:device_id:d_block", false)));
 
         client.post().uri("/v1/batch")
             .contentType(MediaType.APPLICATION_JSON)
@@ -285,12 +285,39 @@ class BatchControllerCoverageTest {
     @DisplayName("玩家封禁：user_id 命中 blocked")
     void blockedUserRejected() {
         when(blockListClient.batchCheck(anyString(), anyList()))
-            .thenReturn(Mono.just(Map.of("game_demo:player_id:u_block", true)));
+            .thenReturn(Mono.just(Map.of("game_demo:prod:player_id:u_block", true)));
 
         client.post().uri("/v1/batch")
             .contentType(MediaType.APPLICATION_JSON)
             .header("x-api-key", "pk_test_example")
             .bodyValue("[" + event("01JBLOCK00003", "game_demo", "d_ok", "u_block") + "]")
+            .exchange()
+            .expectStatus().is2xxSuccessful()
+            .expectBody()
+            .jsonPath("$.rejected[0].reason").isEqualTo("blocked");
+    }
+
+    @Test
+    @DisplayName("设备封禁：prod 环境封禁不拦截 dev 环境同设备（P0 封禁环境维度）")
+    void blockScopedToProdDoesNotBlockDev() {
+        // 仅 prod 键在 blockedMap：dev 事件同设备不得命中（环境维度封禁不跨环境泄漏）
+        when(blockListClient.batchCheck(anyString(), anyList()))
+            .thenReturn(Mono.just(Map.of("game_demo:prod:device_id:d_block", true)));
+
+        client.post().uri("/v1/batch")
+            .contentType(MediaType.APPLICATION_JSON)
+            .header("x-api-key", "pk_test_example")
+            .bodyValue("[" + event("01JBLOCKDEV01", "game_demo", "d_block", null)
+                .replace("\"environment\":\"prod\"", "\"environment\":\"dev\"") + "]")
+            .exchange()
+            .expectStatus().is2xxSuccessful()
+            .expectBody()
+            .jsonPath("$.accepted[0]").isEqualTo("01JBLOCKDEV01");
+        // 同设备 prod 事件仍被拒（同目标、同环境命中）
+        client.post().uri("/v1/batch")
+            .contentType(MediaType.APPLICATION_JSON)
+            .header("x-api-key", "pk_test_example")
+            .bodyValue("[" + event("01JBLOCKPROD01", "game_demo", "d_block", null) + "]")
             .exchange()
             .expectStatus().is2xxSuccessful()
             .expectBody()

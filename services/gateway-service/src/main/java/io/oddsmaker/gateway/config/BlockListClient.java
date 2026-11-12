@@ -118,7 +118,7 @@ public class BlockListClient {
     private Mono<Map<String, Boolean>> doBatchCheckRequest(String gameId, List<BatchTarget> targets) {
         Map<String, Object> body = Map.of(
                 "gameId", gameId,
-                "targets", targets.stream().map(t -> Map.of("targetType", t.targetType, "targetValue", t.targetValue)).collect(Collectors.toList())
+                "targets", targets.stream().map(t -> Map.of("targetType", t.targetType, "targetValue", t.targetValue, "environment", envOf(t))).collect(Collectors.toList())
         );
 
         return client.post()
@@ -136,7 +136,9 @@ public class BlockListClient {
                         for (Object item : (List) rawResults) {
                             if (item instanceof Map) {
                                 Map m = (Map) item;
-                                String key = m.get("targetType") + ":" + m.get("targetValue");
+                                // 远端回显 target 的 environment：同 target 跨环境不互串（风险自动封禁按环境落库）
+                                String env = m.get("environment") == null ? "" : String.valueOf(m.get("environment"));
+                                String key = env + ":" + m.get("targetType") + ":" + m.get("targetValue");
                                 result.put(key, Boolean.TRUE.equals(m.get("blocked")));
                             }
                         }
@@ -149,23 +151,34 @@ public class BlockListClient {
                 });
     }
 
-    /** 缓存/结果键：含 gameId（跨游戏同一 targetType:targetValue 不互串）。 */
+    /** 缓存/结果键：含 gameId + environment（跨游戏、跨环境同一 targetType:targetValue 不互串，T-REV10）。 */
     static String cacheKey(BatchTarget t, String gameId) {
-        return gameId + ":" + t.targetType + ":" + t.targetValue;
+        return gameId + ":" + envOf(t) + ":" + t.targetType + ":" + t.targetValue;
     }
 
-    /** 远端响应键（control 返回不带 gameId，按 target 查表用）。 */
+    /** 远端响应键（control 返回不带 gameId，按 target 查表用；含 environment）。 */
     private static String remoteKey(BatchTarget t) {
-        return t.targetType + ":" + t.targetValue;
+        return envOf(t) + ":" + t.targetType + ":" + t.targetValue;
+    }
+
+    /** 环境归一化：网关事件 environment 恒非 null，但测试/防御路径可能为 null → 以空串参与键。 */
+    private static String envOf(BatchTarget t) {
+        return t.environment == null ? "" : t.environment;
     }
 
     public static class BatchTarget {
         public String targetType;
         public String targetValue;
+        public String environment;
 
         public BatchTarget() {}
 
         public BatchTarget(String targetType, String targetValue) {
+            this(null, targetType, targetValue);
+        }
+
+        public BatchTarget(String environment, String targetType, String targetValue) {
+            this.environment = environment;
             this.targetType = targetType;
             this.targetValue = targetValue;
         }
