@@ -20,6 +20,12 @@ import static org.mockito.Mockito.*;
 @AutoConfigureWebTestClient
 class RateLimitAndPolicyTest {
 
+    // RANDOM_PORT 下对端=127.0.0.1；配置其为受信代理，XFF 才被采信（allowlistAndPiiApplied 断言 clientIp=XFF 粗化）
+    @org.springframework.test.context.DynamicPropertySource
+    static void trustedProxy(org.springframework.test.context.DynamicPropertyRegistry r) {
+        r.add("oddsmaker.gateway.trusted-proxies", () -> "127.0.0.1");
+    }
+
     @Autowired
     WebTestClient client;
 

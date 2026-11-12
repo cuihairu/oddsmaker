@@ -45,7 +45,9 @@ class GatewayFiltersCoverageTest {
 
     @BeforeEach
     void setUp() {
-        filter = new RateLimitFilter(limiter, policies);
+        // 受信代理 127.0.0.1：XFF 仅对该对端采信（rateLimitedReturns429 用真实对端 127.0.0.1 配 XFF）
+        filter = new RateLimitFilter(limiter, policies,
+            new io.oddsmaker.gateway.config.ClientIpResolver(java.util.Set.of("127.0.0.1")));
         lenient().when(policies.getPolicy(anyString())).thenReturn(null);
         lenient().when(limiter.allowApiKey(anyString())).thenReturn(true);
         lenient().when(limiter.allowIp(anyString())).thenReturn(true);
@@ -116,12 +118,30 @@ class GatewayFiltersCoverageTest {
         when(limiter.allowApiKey(anyString())).thenReturn(false);
         MockServerWebExchange ex = MockServerWebExchange.from(
             MockServerHttpRequest.post("/v1/batch")
+                .remoteAddress(new java.net.InetSocketAddress("127.0.0.1", 8080))
                 .header("x-api-key", "pk_rl")
                 .header("x-forwarded-for", "9.9.9.9")
                 .contentType(org.springframework.http.MediaType.APPLICATION_JSON).body("[]"));
         filter.filter(ex, chain).block();
         assertEquals(429, status(ex));
-        verify(limiter).allowIp("9.9.9.9"); // XFF 首跳
+        verify(limiter).allowIp("9.9.9.9"); // 受信对端 127.0.0.1 → XFF 首跳
+    }
+
+    @Test
+    @DisplayName("XFF 仅受信代理采信：非受信对端伪造 XFF 被忽略，回落真实对端（P1 防伪造）")
+    void xffIgnoredWhenPeerNotTrusted() {
+        // 受信集仅 127.0.0.1；对端 10.0.0.9 非受信 → XFF 9.9.9.9 不采信 → IP 限流用真实对端 10.0.0.9
+        RateLimitFilter strict = new RateLimitFilter(limiter, policies,
+            new io.oddsmaker.gateway.config.ClientIpResolver(java.util.Set.of("127.0.0.1")));
+        MockServerWebExchange ex = MockServerWebExchange.from(
+            MockServerHttpRequest.post("/v1/batch")
+                .remoteAddress(new java.net.InetSocketAddress("10.0.0.9", 1234))
+                .header("x-api-key", "pk_x")
+                .header("x-forwarded-for", "9.9.9.9")
+                .contentType(org.springframework.http.MediaType.APPLICATION_JSON).body("[]"));
+        strict.filter(ex, chain).block();
+        assertEquals(200, status(ex));
+        verify(limiter).allowIp("10.0.0.9"); // 非受信对端：XFF 被忽略，用真实 TCP 对端
     }
 
     @Test

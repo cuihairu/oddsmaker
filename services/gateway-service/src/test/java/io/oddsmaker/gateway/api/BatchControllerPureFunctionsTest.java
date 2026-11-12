@@ -31,7 +31,8 @@ class BatchControllerPureFunctionsTest {
                     com.fasterxml.jackson.databind.PropertyNamingStrategies.SNAKE_CASE),
             null, null, null, null, null, null, null, null,
             new io.oddsmaker.gateway.inspector.EventInspectorBuffer(10, 4, 600_000L),
-                new io.oddsmaker.gateway.metrics.DataQualityCounters());
+                new io.oddsmaker.gateway.metrics.DataQualityCounters(),
+                new io.oddsmaker.gateway.config.ClientIpResolver(java.util.Set.of()));
 
     private String infer(String eventName) {
         return ReflectionTestUtils.invokeMethod(controller, "inferEventType", eventName);
@@ -307,7 +308,8 @@ class BatchControllerPureFunctionsTest {
                         new ObjectMapper()),
                 null, null, null, null, null,
                 new io.oddsmaker.gateway.inspector.EventInspectorBuffer(10, 4, 600_000L),
-                new io.oddsmaker.gateway.metrics.DataQualityCounters());
+                new io.oddsmaker.gateway.metrics.DataQualityCounters(),
+                new io.oddsmaker.gateway.config.ClientIpResolver(java.util.Set.of()));
         // policy null → 回落通用 allowlist 过滤
         io.oddsmaker.common.model.Event e = new io.oddsmaker.common.model.Event();
         e.props = new java.util.HashMap<>(Map.of("keep", "v", "junk", "w"));

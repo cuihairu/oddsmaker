@@ -57,6 +57,7 @@ public class BatchController {
     private final io.oddsmaker.gateway.security.ReplayGuard replayGuard;
     private final EventInspectorBuffer inspector;
     private final DataQualityCounters counters;
+    private final io.oddsmaker.gateway.config.ClientIpResolver clientIpResolver;
 
     /** 迟到阈值 5min，对齐 enrich 侧 BoundedOutOfOrderness（EventsEnrichJob watermark）。 */
     static final long LATE_THRESHOLD_MS = 300_000L;
@@ -72,7 +73,8 @@ public class BatchController {
             BlockListClient blockListClient,
             io.oddsmaker.gateway.security.ReplayGuard replayGuard,
             EventInspectorBuffer inspector,
-            DataQualityCounters counters
+            DataQualityCounters counters,
+            io.oddsmaker.gateway.config.ClientIpResolver clientIpResolver
     ) {
         this.om = om;
         this.publisher = publisher;
@@ -85,6 +87,7 @@ public class BatchController {
         this.replayGuard = replayGuard;
         this.inspector = inspector;
         this.counters = counters;
+        this.clientIpResolver = clientIpResolver;
     }
 
     public static class BatchResponse {
@@ -622,14 +625,9 @@ public class BatchController {
     }
 
     private String extractClientIp(org.springframework.http.server.reactive.ServerHttpRequest req) {
-        String xff = req.getHeaders().getFirst("x-forwarded-for");
-        if (xff != null && !xff.isBlank()) {
-            return xff.split(",")[0].trim();
-        }
-        if (req.getRemoteAddress() != null) {
-            return req.getRemoteAddress().getAddress().getHostAddress();
-        }
-        return null;
+        // P1：X-Forwarded-For 仅在直接对端是受信代理时采信（取最左原始客户端），否则用真实对端——
+        // 防客户端伪造 XFF 污染 client_ip（风控/PII 主体）。无对端返回 null。
+        return clientIpResolver.resolve(req);
     }
 
     private PiiPolicy.Overrides policyToOverrides(PolicyService.Policy policy) {

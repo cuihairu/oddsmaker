@@ -38,6 +38,12 @@ import static org.mockito.Mockito.when;
 @DisplayName("批量入口端到端分支测试")
 class BatchControllerCoverageTest {
 
+    // RANDOM_PORT 下对端=127.0.0.1；配置其为受信代理，XFF 才被采信（PII 策略测试以 XFF 注入 client_ip）
+    @org.springframework.test.context.DynamicPropertySource
+    static void trustedProxy(org.springframework.test.context.DynamicPropertyRegistry r) {
+        r.add("oddsmaker.gateway.trusted-proxies", () -> "127.0.0.1");
+    }
+
     @Autowired
     WebTestClient client;
 

@@ -2,6 +2,7 @@ package io.oddsmaker.gateway.security;
 
 import io.oddsmaker.gateway.config.RateLimiterService;
 import io.oddsmaker.gateway.config.PolicyService;
+import io.oddsmaker.gateway.config.ClientIpResolver;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
@@ -16,8 +17,11 @@ import java.nio.charset.StandardCharsets;
 public class RateLimitFilter implements WebFilter {
     private final RateLimiterService limiter;
     private final PolicyService policies;
+    private final ClientIpResolver clientIpResolver;
 
-    public RateLimitFilter(RateLimiterService limiter, PolicyService policies) { this.limiter = limiter; this.policies = policies; }
+    public RateLimitFilter(RateLimiterService limiter, PolicyService policies, ClientIpResolver clientIpResolver) {
+        this.limiter = limiter; this.policies = policies; this.clientIpResolver = clientIpResolver;
+    }
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, WebFilterChain chain) {
@@ -42,10 +46,8 @@ public class RateLimitFilter implements WebFilter {
     }
 
     private String clientIp(ServerWebExchange exchange) {
-        String xff = exchange.getRequest().getHeaders().getFirst("x-forwarded-for");
-        if (xff != null && !xff.isEmpty()) {
-            return xff.split(",")[0].trim();
-        }
-        return exchange.getRequest().getRemoteAddress() != null ? exchange.getRequest().getRemoteAddress().getAddress().getHostAddress() : "unknown";
+        // P1：X-Forwarded-For 仅在直接对端是受信代理时采信，否则用真实对端——防伪造 XFF 绕过 IP 限流桶
+        String ip = clientIpResolver.resolve(exchange.getRequest());
+        return ip != null ? ip : "unknown";
     }
 }

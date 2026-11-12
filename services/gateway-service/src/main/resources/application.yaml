@@ -33,6 +33,10 @@ oddsmaker:
   ratelimit:
     rpm: 600          # per api key per minute
     ip-rpm: 300        # per client IP per minute
+  gateway:
+    # 受信反向代理（直接对端 IP 列表，逗号分隔）：仅在直接对端是受信代理时采信 X-Forwarded-For
+    # 取最左客户端地址——防客户端伪造 XFF 绕过 IP 限流/污染 client_ip（PII 主体）。默认空=忽略一切 XFF。
+    trusted-proxies: ${ODDSMAKER_TRUSTED_PROXIES:}
   control:
     url: http://localhost:8085
     internal-token: ${ODDSMAKER_INTERNAL_TOKEN:}
