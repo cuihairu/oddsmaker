@@ -77,4 +77,7 @@ public class PropsPolicy {
     }
 
     public boolean exceedsRequestLimit(byte[] raw) { return raw != null && raw.length > maxRequestBytes; }
+
+    /** 解压限界依据：解压输出超过该值即视为请求过大，防 gzip 炸弹撑爆堆内存（P1）。 */
+    public int maxRequestBytes() { return maxRequestBytes; }
 }

@@ -104,7 +104,7 @@ public class BatchController {
             @RequestBody Mono<byte[]> bodyBytesMono
     ) {
         return bodyBytesMono.flatMap(bytes -> {
-            byte[] raw = maybeGunzip(bytes, encoding);
+            byte[] raw = maybeGunzip(bytes, encoding, propsPolicy.maxRequestBytes());
             if (propsPolicy.exceedsRequestLimit(raw)) {
                 throw new ResponseStatusException(org.springframework.http.HttpStatus.PAYLOAD_TOO_LARGE, "request_too_large");
             }
@@ -800,16 +800,34 @@ public class BatchController {
         }
     }
 
-    private byte[] maybeGunzip(byte[] raw, String encoding) {
+    private byte[] maybeGunzip(byte[] raw, String encoding, int maxBytes) {
         try {
             if (encoding != null && encoding.toLowerCase(Locale.ROOT).contains("gzip")) {
                 try (InputStream gis = new GZIPInputStream(new ByteArrayInputStream(raw))) {
-                    return gis.readAllBytes();
+                    // P1：gzip 炸弹——先查压缩后大小再限界解压。readBounded 在解压输出超过 maxBytes
+                    // 时提前停止（不把炸弹全量展开进堆内存），返回超限数组让调用方 exceedsRequestLimit 判 413。
+                    return readBounded(gis, maxBytes);
                 }
             }
         } catch (Exception ignored) {
         }
         return raw;
+    }
+
+    /** 限界读取：输出一旦超过 maxBytes 即停止并返回超限哨兵数组（长度 maxBytes+1），调用方据此判 413。 */
+    private byte[] readBounded(InputStream in, int maxBytes) throws java.io.IOException {
+        byte[] buf = new byte[8192];
+        java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+        int total = 0;
+        int n;
+        while ((n = in.read(buf)) != -1) {
+            total += n;
+            if (total > maxBytes) {
+                return new byte[maxBytes + 1];
+            }
+            out.write(buf, 0, n);
+        }
+        return out.toByteArray();
     }
 
     private PiiPolicy.Mode parseMode(String s) {

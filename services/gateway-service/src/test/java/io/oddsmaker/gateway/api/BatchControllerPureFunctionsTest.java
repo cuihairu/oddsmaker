@@ -243,13 +243,27 @@ class BatchControllerPureFunctionsTest {
     }
 
     @Test
-    @DisplayName("maybeGunzip：identity 编码与 null 编码直通原字节")
-    void maybeGunzipPassthroughSides() {
+    @DisplayName("maybeGunzip：identity 编码与 null 编码直通原字节（3 参带解压限界）")
+    void maybeGunzipPassthroughSides() throws Exception {
         byte[] raw = "plain".getBytes();
-        Object keptIdentity = ReflectionTestUtils.invokeMethod(controller, "maybeGunzip", raw, "identity");
+        // 非 gzip/无编码：原字节直通（限界参数不参与）
+        Object keptIdentity = ReflectionTestUtils.invokeMethod(controller, "maybeGunzip", raw, "identity", 1024);
         assertEquals("plain", new String((byte[]) keptIdentity));
-        Object keptNull = ReflectionTestUtils.invokeMethod(controller, "maybeGunzip", raw, (Object) null);
+        Object keptNull = ReflectionTestUtils.invokeMethod(controller, "maybeGunzip", raw, (Object) null, 1024);
         assertEquals("plain", new String((byte[]) keptNull));
+        // 限界内解压：gzip 小体量原样还原（未超 maxBytes 不截断）
+        byte[] small = "hello".getBytes();
+        byte[] gz = gzip(small);
+        Object keptGz = ReflectionTestUtils.invokeMethod(controller, "maybeGunzip", gz, "gzip", 1024);
+        assertEquals("hello", new String((byte[]) keptGz));
+    }
+
+    private static byte[] gzip(byte[] data) throws Exception {
+        java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
+        try (java.util.zip.GZIPOutputStream gz = new java.util.zip.GZIPOutputStream(bos)) {
+            gz.write(data);
+        }
+        return bos.toByteArray();
     }
 
     @Test

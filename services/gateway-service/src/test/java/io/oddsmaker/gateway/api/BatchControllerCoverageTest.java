@@ -689,6 +689,29 @@ class BatchControllerCoverageTest {
     }
 
     @Test
+    @DisplayName("gzip 炸弹：压缩后小体积解压超请求上限→413 不撑爆内存")
+    void gzipBombRejectedBeforeDecompression() throws Exception {
+        // 2MB 重复字节 gzip 后仅约 2KB 体积；旧实现 readAllBytes 把炸弹全量展开进堆内存再查限，
+        // 现实现限界解压：输出一超 maxRequestBytes 即停，返回超限数组→413，不做 parseEvents
+        byte[] bomb = new byte[2 * 1024 * 1024];
+        java.util.Arrays.fill(bomb, (byte) 'a');
+        java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
+        try (java.util.zip.GZIPOutputStream gz = new java.util.zip.GZIPOutputStream(bos)) {
+            gz.write(bomb);
+        }
+        client.post().uri("/v1/batch")
+            .contentType(MediaType.APPLICATION_JSON)
+            .header("content-encoding", "gzip")
+            .header("x-api-key", "pk_test_example")
+            .bodyValue(bos.toByteArray())
+            .exchange()
+            .expectStatus().isEqualTo(413)  // 413（PAYLOAD_TOO_LARGE/CONTENT_TOO_LARGE 同值，Spring 6.1 更名，按值断言）
+            .expectBody()
+            .jsonPath("$.code").isEqualTo("payload_too_large")
+            .jsonPath("$.message").isEqualTo("request_too_large");
+    }
+
+    @Test
     @DisplayName("app_id 兼容变体：__production 后缀、无后缀回退、空 app_id 拒绝")
     void appIdSuffixVariants() {
         // 可解析变体：__production 后缀 → prod；无后缀 → gameId 原值 + environment_id 兜底
