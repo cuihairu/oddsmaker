@@ -100,6 +100,16 @@ public class AuthService {
             .build();
     }
 
+    /** 负缓存 TTL：无效 key 短窗口内不再重复打远端（无效 key 洪泛会把 3s 同步 HTTP 打到 reactor 事件循环）。 */
+    private static final int NEGATIVE_TTL_SECONDS = 10;
+    /** 负缓存容量上限：不同 key 洪泛也不撑爆缓存（超限后不再写负缓存，退化为每请求查询）。 */
+    private static final int NEGATIVE_CACHE_MAX = 10_000;
+    /** stale 回退刷新窗口：control 不可达时回退上个周期上下文，并顺延刷新——outage 内请求不反复等 3s 超时。 */
+    private static final int STALE_TTL_SECONDS = 15;
+
+    /** control 不可达（连接失败/超时/响应异常）——区别于 404 的确定性「键不存在」。 */
+    static class ControlUnavailableException extends RuntimeException {}
+
     public ApiKeyContext getContext(String apiKey) {
         if (apiKey == null || apiKey.isBlank()) {
             return null;
@@ -111,7 +121,13 @@ public class AuthService {
             return cached.context;
         }
 
-        ApiKeyContext remote = fetchRemoteContext(apiKey);
+        ApiKeyContext remote = null;
+        boolean unavailable = false;
+        try {
+            remote = fetchRemoteContext(apiKey);
+        } catch (ControlUnavailableException e) {
+            unavailable = true;
+        }
         if (remote != null) {
             CacheEntry entry = new CacheEntry();
             entry.context = remote;
@@ -121,14 +137,32 @@ public class AuthService {
         }
 
         String localSecret = localSecrets.get(apiKey);
-        if (localSecret == null) {
-            return null;
+        if (localSecret != null) {
+            ApiKeyContext local = new ApiKeyContext();
+            local.apiKey = apiKey;
+            local.secret = localSecret;
+            local.canWrite = true;
+            return local;
         }
-        ApiKeyContext local = new ApiKeyContext();
-        local.apiKey = apiKey;
-        local.secret = localSecret;
-        local.canWrite = true;
-        return local;
+
+        // P1 stale 回退：control 不可达（超时/连不上）且已有过期正向条目 → 用上个周期的上下文，
+        // control 重启窗口内不因 60s 缓存过期而全量 401。仅 exception 路径；404（键不存在/已吊销）
+        // 是确定性判定，不回退。顺延刷新 STALE_TTL 让 outage 内后续请求直接命中，不反复等 3s。
+        if (unavailable && cached != null && cached.context != null) {
+            logger.info("Serving stale key context for {} (control unavailable)", redact(apiKey));
+            cached.expireAt = now + STALE_TTL_SECONDS;
+            return cached.context;
+        }
+
+        // P1 负缓存：无效 key 或 control 暂不可用 → 短 TTL 缓存 null，防同一 key 反复触发同步 HTTP。
+        // 上限防不同 key 洪泛撑爆缓存（超限退化为每请求查询，不写负缓存）。
+        if (cache.size() < NEGATIVE_CACHE_MAX) {
+            CacheEntry negative = new CacheEntry();
+            negative.context = null;
+            negative.expireAt = now + NEGATIVE_TTL_SECONDS;
+            cache.put(apiKey, negative);
+        }
+        return null;
     }
 
     /**
@@ -172,7 +206,8 @@ public class AuthService {
         } catch (Exception e) {
             meters.counter(REMOTE_LOOKUP_METRIC, "outcome", "exception", "code", "none").increment();
             logger.warn("Remote key lookup error for {}: {}", redact(apiKey), e.toString());
-            return null;
+            // control 不可达：向上抛出让 getContext 走 stale 回退/负缓存（区别于 404 的确定性 miss）
+            throw new ControlUnavailableException();
         }
     }
 

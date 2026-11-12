@@ -41,7 +41,7 @@ class GatewayRemoteClientsTest {
             keyLookups.incrementAndGet();
             String path = ex.getRequestURI().getPath();
             byte[] body;
-            if (path.endsWith("/k_remote")) {
+            if (path.endsWith("/k_remote") || path.endsWith("/k_stale")) {
                 body = ("{\"apiKey\":\"k_remote\",\"secret\":\"sk\",\"gameId\":\"game_x\",\"environment\":\"prod\","
                         + "\"canWrite\":true,\"envStatus\":\"active\"}").getBytes(StandardCharsets.UTF_8);
                 ex.getResponseHeaders().add("Content-Type", "application/json");
@@ -78,7 +78,9 @@ class GatewayRemoteClientsTest {
 
     @AfterEach
     void stop() {
-        server.stop(0);
+        if (server != null) {
+            server.stop(0);
+        }
     }
 
     private MockEnvironment envWithControl() {
@@ -125,6 +127,50 @@ class GatewayRemoteClientsTest {
         assertNotNull(local);
         assertEquals("sk_local", local.secret);
         assertEquals(2, keyLookups.get()); // k_unknown + k_local 各查一次远端
+    }
+
+    @Test
+    @DisplayName("Auth：无效 key 负缓存——10s 窗口内重复查询不再打远端（防洪泛打爆事件循环）")
+    void authServiceNegativeCachesInvalidKey() {
+        AuthService service = new AuthService(envWithControl(), new SimpleMeterRegistry());
+        assertNull(service.getContext("k_unknown"));
+        assertNull(service.getContext("k_unknown"));
+        // 负缓存命中：第二次不再发远端（旧实现每次都对无效 key 打 3s 同步 HTTP）
+        assertEquals(1, keyLookups.get());
+    }
+
+    @Test
+    @DisplayName("Auth：control 不可达时 stale 回退上个周期上下文（仅 exception 路径，非 404）")
+    void authServiceServesStaleWhenControlUnavailable() throws Exception {
+        AuthService service = new AuthService(envWithControl(), new SimpleMeterRegistry());
+        AuthService.ApiKeyContext first = service.getContext("k_stale");
+        assertNotNull(first);
+        assertEquals("game_x", first.gameId);
+        assertEquals(1, keyLookups.get());
+
+        // 模拟 control 宕机超过 60s TTL 后的首个请求：让缓存条目过期但仍在 cache（未清除）
+        java.lang.reflect.Field f = AuthService.class.getDeclaredField("cache");
+        f.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        java.util.concurrent.ConcurrentHashMap<String, AuthService.CacheEntry> cache =
+            (java.util.concurrent.ConcurrentHashMap<String, AuthService.CacheEntry>) f.get(service);
+        AuthService.CacheEntry entry = cache.get("k_stale");
+        assertNotNull(entry);
+        entry.expireAt = java.time.Instant.now().getEpochSecond() - 1;
+
+        // control 不可达：停掉服务器 → 连接失败/中断 → ControlUnavailable → stale 回退
+        server.stop(0);
+        server = null;
+        AuthService.ApiKeyContext stale = service.getContext("k_stale");
+        assertNotNull(stale);
+        assertEquals("game_x", stale.gameId);
+        assertEquals("prod", stale.environment);
+
+        // stale 顺延刷新：outage 内再请求直接命中缓存，不再打远端（避免每请求都等 3s 超时）
+        AuthService.ApiKeyContext again = service.getContext("k_stale");
+        assertNotNull(again);
+        assertEquals("game_x", again.gameId);
+        assertEquals(1, keyLookups.get());
     }
 
     // ===== BlockListClient =====
