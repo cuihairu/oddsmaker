@@ -665,7 +665,7 @@ Built-in roles (seeded in `V0.2.3`, the `roles` table is the single source of tr
 
 ### Other Resource Groups
 
-All of the following are implemented and exposed through the same auth model; see `/v3/api-docs` for per-endpoint parameters:
+All of the following are implemented and exposed through the same auth model; see `/v3/api-docs` for per-endpoint parameters. The six report-metrics groups (online / retention / payment-funnel / finance / crash / risk) accept an optional `segment_id` query parameter that filters by segment member key; dashboards do not forward `segment_id`.
 
 | Group | Base path | What it covers |
 |---|---|---|
