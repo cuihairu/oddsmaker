@@ -46,7 +46,7 @@ Oddsmaker 是一套面向单个游戏公司的实时分析与风控平台。
 
 - Gateway 前置校验：API Key、HMAC、时间窗、重放、限流、PII
 - 实时检测：脚本行为、异常资源增长、支付异常、广告奖励异常、账号/设备/IP 聚集
-- 风险输出：`mark`、`alert`、`block`、`review`、`throttle`、Webhook
+- 风险输出：规则动作 `ignore`、`alert`、`log_only`、`challenge`、`throttle`、`block`、`review`、Webhook；案级处置追加 `mark`
 - 风险事件与证据落库，支持回溯分析
 
 ### 3. Data Governance

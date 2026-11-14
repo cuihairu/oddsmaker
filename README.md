@@ -46,7 +46,7 @@ The name fits this project because the platform's goal is likewise not merely to
 
 - Gateway pre-validation: API key, HMAC, time window, replay, rate limiting, PII
 - Real-time detection: scripting behavior, abnormal resource growth, payment anomalies, ad-reward anomalies, and account/device/IP clustering
-- Risk outputs: `mark`, `alert`, `block`, `review`, `throttle`, and webhooks
+- Risk outputs: rule actions `ignore`, `alert`, `log_only`, `challenge`, `throttle`, `block`, `review`, and webhooks; case-level dispositions add `mark`
 - Risk events and evidence persisted for retrospective analysis
 
 ### 3. Data Governance
@@ -244,12 +244,12 @@ The current priorities are:
 ## Documentation
 
 - [Documentation index](docs/README.md)
-- [System architecture](docs/zh/reference/architecture.md)
-- [Environment and storage routing design](docs/zh/reference/environment-and-storage.md)
-- [Redesign plan](docs/zh/redesign/index.md)
-- [Ingestion API](docs/zh/reference/api.md)
-- [Control plane](docs/zh/reference/control.md)
-- [Roadmap](docs/zh/analysis/roadmap.md)
+- [System architecture](docs/reference/architecture.md)
+- [Environment and storage routing design](docs/reference/environment-and-storage.md)
+- [Redesign plan](docs/redesign/index.md)
+- [Ingestion API](docs/reference/api.md)
+- [Control plane](docs/reference/control.md)
+- [Roadmap](docs/analysis/roadmap.md)
 - [Operations](docs/operations/index.md)
 
 ## Tech Stack

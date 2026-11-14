@@ -86,6 +86,8 @@ Ingest on the gateway is rate-limited per key and per client IP:
 
 Over-limit requests get HTTP 429 with `Retry-After: 60` and the JSON body above. There are no `X-RateLimit-*` response headers. The rate-limited routes are gateway-only; control-service list endpoints are paginated rather than rate-limited.
 
+The per-IP bucket is keyed by the client address resolved by `ClientIpResolver`: an `X-Forwarded-For` header is trusted only when the direct TCP peer is listed in `oddsmaker.gateway.trusted-proxies` (`ODDSMAKER_TRUSTED_PROXIES`, empty by default, which ignores all XFF and uses the real peer); deployments behind a reverse proxy must add the proxy's address there, otherwise every request behind the proxy shares one bucket.
+
 ## API Sections
 
 ### Core APIs

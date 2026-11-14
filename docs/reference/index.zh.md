@@ -86,6 +86,8 @@ gateway 上的摄入按 key 与客户端 IP 限流：
 
 超限请求会收到 HTTP 429，带 `Retry-After: 60` 与上面的 JSON 响应体。没有 `X-RateLimit-*` 响应头。限流路由仅存在于 gateway；control 服务的列表端点是分页而非限流。
 
+按 IP 分桶所用的客户端地址由 `ClientIpResolver` 解析：仅当直接 TCP 对端在 `oddsmaker.gateway.trusted-proxies`（`ODDSMAKER_TRUSTED_PROXIES`，逗号分隔，默认空集，即忽略一切 XFF、回落真实对端）中时才采信 `X-Forwarded-For` 最左条目；部署在反向代理之后时必须把代理地址加入该配置，否则代理之后的所有请求共用一个限流桶。
+
 ## API 分节
 
 ### 核心 API
