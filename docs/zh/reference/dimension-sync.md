@@ -29,7 +29,7 @@ Oddsmaker 不强制游戏方用某种接入方式。本文档定义四类同步�
 |---|---|---|---|---|
 | **Webhook Push** | 游戏方代码 | 游戏方调 API | 在物品变更时调 Gateway 上报 `dimension_define` 事件 | 实时 |
 | **Sync Agent** | Agent（游戏方内网） | Agent 推 Gateway | 部署一个 binary + 填连接串 | 分钟级 |
-| **HTTP Pull** | Oddsmaker | Oddsmaker 拉 | 暴露 `/items?since=...` 增量查询接口 | 分钟级 |
+| **HTTP Pull** | Oddsmaker | Oddsmaker 拉 | 暴露 `/items?updated_after=...` 增量查询接口 | 分钟级 |
 | **Debezium CDC** | Debezium 读 binlog | Debezium 写 Kafka | 部署 Kafka Connect + 开 binlog | 秒级 |
 
 无论哪种方案，落到 ClickHouse 的都是统一的 `item_dim` 表，后续分析、风控、BI 的查询逻辑完全一致。
@@ -121,7 +121,8 @@ Content-Type: application/x-ndjson
 
 > `device_id` 是事件 schema 必填字段——Sync Agent 固定填 `oddsmaker-agent`（维度数据不按设备作用域）。维度载荷放在 `props` 里：`dim_type`、`resource_id`、`op`、`version_ts`，以及 `attributes`（自由键值对）；这就是 Agent 的出事件形态，也是同步作业归一化时的读法。
 
-> 每个 NDJSON 事件必须是单行完整 JSON 对象。网关逐行解析请求体：语法无效行（JSON 畸变）被静默跳过，解析成功但未通过 schema 校验的行在响应中上报 `invalid_schema`（非静默丢弃）。每个 `event_id` 必须唯一——网关按 `event_id` 幂等去重，两个事件共用同一 ID 时第二个被静默去重。
+> 每个 NDJSON 事件必须是单行完整 JSON 对象。
+> 网关的未知事件闸门同样适用：`rejectUnknownEvents` 启用时，`dimension_define` 必须登记在该 key 作用域 ACTIVE schema 的事件面里，否则事件按 `unknown_event` 拒绝（dev 环境豁免）。网关逐行解析请求体：语法无效行（JSON 畸变）被静默跳过，解析成功但未通过 schema 校验的行在响应中上报 `invalid_schema`（非静默丢弃）。每个 `event_id` 必须唯一——网关按 `event_id` 幂等去重，两个事件共用同一 ID 时第二个被静默去重。
 
 没有独立的 `/v1/dimension` 端点——维度事件与普通事件同走 `/v1/batch`，用 `event_type=dimension` 区分，复用现有鉴权、限流、PII 治理。
 
@@ -155,7 +156,7 @@ game.id=game_demo
 game.environment=prod
 dimension.type=item
 
-# 数据源之一：mysql / postgres（增量查询——单 ? 占位，必须以 ORDER BY <水位列> 结尾）
+# 数据源之一：mysql / postgres（增量查询——单 ? 占位；查询应以 ORDER BY <水位列> 结尾，否则增量翻页会错乱——这是建议而非强制，服务端不校验查询形状）
 source.type=mysql
 source.jdbc.url=jdbc:mysql://replica.internal:3306/game?useSSL=true
 source.jdbc.user=oddsmaker_ro

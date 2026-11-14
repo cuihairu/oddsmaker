@@ -29,7 +29,7 @@ The right approach: **the game business database is the source of dimensions, th
 |---|---|---|---|---|
 | **Webhook Push** | Game-side code | Game side calls the API | Call the Gateway to report a `dimension_define` event when an item changes | Real-time |
 | **Sync Agent** | Agent (inside the game side's network) | Agent pushes to Gateway | Deploy a binary + fill in the connection string | Minute-level |
-| **HTTP Pull** | Oddsmaker | Oddsmaker pulls | Expose an `/items?since=...` incremental query API | Minute-level |
+| **HTTP Pull** | Oddsmaker | Oddsmaker pulls | Expose an `/items?updated_after=...` incremental query API | Minute-level |
 | **Debezium CDC** | Debezium reads binlog | Debezium writes to Kafka | Deploy Kafka Connect + enable binlog | Second-level |
 
 Whichever approach is used, what lands in ClickHouse is the same unified `item_dim` table, and the downstream query logic for analytics, risk control, and BI is completely identical.
@@ -91,17 +91,17 @@ Game teams at different stages differ in technical capability, willingness to in
 ### Decision Tree
 
 ```
-游戏方愿意写代码吗？
-├─ 是 → 愿意开 binlog + 有 Kafka 吗？
-│       ├─ 是 → Debezium CDC（成熟期）
-│       └─ 否 → Webhook Push（成长期）
-└─ 否 → 愿意暴露查询 API 吗？
-        ├─ 是 → HTTP Pull（成长期）
-        └─ 否 → 愿意部署 Agent 吗？
-                ├─ 是 → Sync Agent（独立游戏/存量）
-                │        └─ 数据源是 DB？→ MySQL/PG source
-                │        └─ 数据源是文件？→ CSV/Excel source
-                └─ 否 → Webhook Push 手动上报（仅 POC 可接受）
+Can the game side write code?
+├─ Yes → Can they enable binlog and do they run Kafka?
+│       ├─ Yes → Debezium CDC (mature stage)
+│       └─ No → Webhook Push (growth stage)
+└─ No → Will they expose a query API?
+        ├─ Yes → HTTP Pull (growth stage)
+        └─ No → Will they deploy an Agent?
+                ├─ Yes → Sync Agent (indie games / legacy stacks)
+                │        └─ Source is a database? → MySQL/PG source
+                │        └─ Source is files? → CSV/Excel source
+                └─ No → Webhook Push with manual reporting (POC only)
 ```
 
 ## Approach Details
@@ -115,13 +115,14 @@ POST /v1/batch
 X-Api-Key: pk_game_xxx
 Content-Type: application/x-ndjson
 
-{"event_id":"01JE2E0003","event_name":"dimension_define","event_type":"dimension","game_id":"game_x","environment":"prod","device_id":"oddsmaker-agent","ts_client":1760000000000,"props":{"dim_type":"item","resource_id":"sword_001","op":"upsert","version_ts":1760000000000,"attributes":{"name":"铁剑","rarity":"common"}}}
-{"event_id":"01JE2E0004","event_name":"dimension_define","event_type":"dimension","game_id":"game_x","environment":"prod","device_id":"oddsmaker-agent","ts_client":1760000000001,"props":{"dim_type":"item","resource_id":"sword_002","op":"upsert","version_ts":1760000000001,"attributes":{"name":"钢剑","rarity":"rare"}}}
+{"event_id":"01JE2E0003","event_name":"dimension_define","event_type":"dimension","game_id":"game_x","environment":"prod","device_id":"oddsmaker-agent","ts_client":1760000000000,"props":{"dim_type":"item","resource_id":"sword_001","op":"upsert","version_ts":1760000000000,"attributes":{"name":"Iron Sword","rarity":"common"}}}
+{"event_id":"01JE2E0004","event_name":"dimension_define","event_type":"dimension","game_id":"game_x","environment":"prod","device_id":"oddsmaker-agent","ts_client":1760000000001,"props":{"dim_type":"item","resource_id":"sword_002","op":"upsert","version_ts":1760000000001,"attributes":{"name":"Steel Sword","rarity":"rare"}}}
 ```
 
 > `device_id` is required by the event schema — the Sync Agent sets it to `oddsmaker-agent`, because dimension data is not device-scoped. The dimension payload goes inside `props`: `dim_type`, `resource_id`, `op`, `version_ts`, and `attributes` (free-form key/value pairs), which is the shape the Agent emits and the sync job normalizes.
 
-> Each NDJSON event must be a single complete JSON object on one line. The gateway parses the body line by line: a syntactically invalid line (malformed JSON) is silently skipped, while a line that parses but fails schema validation is rejected in the response (`invalid_schema`), not silently dropped. Each `event_id` must be unique — the gateway deduplicates by `event_id` (idempotency), so two events sharing an ID silently drop the second.
+> Each NDJSON event must be a single complete JSON object on one line.
+> The gateway's unknown-event gate still applies: when `rejectUnknownEvents` is enabled, `dimension_define` must be registered in the ACTIVE schema's event surface for the key's scope, otherwise the event is rejected with `unknown_event` (the dev environment is exempt). The gateway parses the body line by line: a syntactically invalid line (malformed JSON) is silently skipped, while a line that parses but fails schema validation is rejected in the response (`invalid_schema`), not silently dropped. Each `event_id` must be unique — the gateway deduplicates by `event_id` (idempotency), so two events sharing an ID silently drop the second.
 
 There is no separate `/v1/dimension` endpoint—dimension events go through `/v1/batch` alongside ordinary events, distinguished by `event_type=dimension`, reusing the existing auth, rate limiting, and PII governance.
 
@@ -135,27 +136,27 @@ There is no separate `/v1/dimension` endpoint—dimension events go through `/v1
 The open-source sync Agent provided by Oddsmaker, deployed by the game side inside its own network. The Agent reads local sources and pushes to the Gateway over HTTPS. **Implemented**: repository `agents/dimension-sync-agent/`—a standalone Gradle module with zero in-repo dependencies (only Jackson + kafka-clients + JDK HttpClient + runtimeOnly JDBC drivers), supporting five source types `mysql` / `postgres` / `csv` / `excel` / `kafka` (excel uses the standard library's zip+xml for minimal xlsx parsing, no POI; kafka manages its own offset checkpoint, and real-broker end-to-end has been tested), and the whole directory can be split out into a standalone repository via git subtree.
 
 ```
-游戏方内网:
+Game-side intranet:
   oddsmaker-agent
     ├─ source: mysql | postgres | csv | excel | kafka
-    ├─ transform: 控制列映射（dim_type/resource_id/op/version_ts，其余列进 attributes）
-    ├─ checkpoint: 本地 checkpoint.json（原子落盘；kafka 位点同为 checkpoint 自管）
+    ├─ transform: control-column mapping (dim_type/resource_id/op/version_ts; remaining columns go into attributes)
+    ├─ checkpoint: local checkpoint.json (atomically written; the Kafka offset is self-managed in the same checkpoint)
     └─ sink: HTTPS POST /v1/batch（NDJSON，event_name=dimension_define）
 ```
 
 Configuration example (`agent.properties`; a System property of the same name can override the file value key by key, which makes it convenient to keep secrets off disk with `-Dgateway.api-key=...`). Configuring `control.config-url` enables Control custody (see "Agent Property Surface Custody" below); delivered keys override local values key by key, and configuring `control.config-refresh-seconds` additionally enables polling for hot updates:
 
 ```properties
-# 推送目标（Gateway /v1/batch）
+# Push target (Gateway /v1/batch)
 gateway.endpoint=https://ingest.oddsmaker.local
 gateway.api-key=pk_game_xxx
 
-# 维度归属
+# Dimension ownership
 game.id=game_demo
 game.environment=prod
 dimension.type=item
 
-# 数据源之一：mysql / postgres（增量查询——单 ? 占位，必须以 ORDER BY <水位列> 结尾）
+# Source option 1: mysql / postgres (incremental query — a single ? placeholder; the query should end with ORDER BY <watermark column> or incremental paging breaks — a recommendation, not enforced: the server does not validate query shape)
 source.type=mysql
 source.jdbc.url=jdbc:mysql://replica.internal:3306/game?useSSL=true
 source.jdbc.user=oddsmaker_ro
@@ -163,43 +164,43 @@ source.jdbc.password=***
 source.jdbc.query=SELECT item_code AS resource_id, item_name AS name, category, rarity, updated_at, UNIX_TIMESTAMP(updated_at)*1000 AS version_ts FROM items WHERE updated_at > ? ORDER BY updated_at LIMIT 1000
 source.jdbc.cursor-column=updated_at
 
-# 数据源之二：csv 目录（按文件名序扫 *.csv，处理完整文件才记断点；增量 = 投递新文件）
+# Source option 2: csv directory (scans *.csv in filename order; a checkpoint is recorded only after a file is fully processed; incremental = drop in new files)
 # source.type=csv
 # source.csv.dir=/data/dimension-exports
 
-# 数据源之三：excel 目录（扫 *.xlsx 取首个工作表，首行为表头；断点语义同 CSV）
+# Source option 3: excel directory (scans *.xlsx, takes the first worksheet, first row is the header; checkpoint semantics same as CSV)
 # source.type=excel
 # source.excel.dir=/data/dimension-exports
 
-# 数据源之四：kafka topic（消息体 = JSON 对象，控制列语义同上；位点 checkpoint 自管）
+# Source option 4: kafka topic (message body is a JSON object; control-column semantics as above; the offset is self-managed in the checkpoint)
 # source.type=kafka
 # source.kafka.bootstrap-servers=broker1:9092,broker2:9092
 # source.kafka.topic=game-dimensions
 # source.kafka.group-id=oddsmaker-dimension-sync
 # source.kafka.poll-timeout-ms=3000
 # source.kafka.cursor-initial=0=42;1=57
-# 鉴权（可选）：SASL_* 协议时 sasl-mechanism/username/password 必填（机制仅 SCRAM-SHA-256/512）
+# Auth (optional): with SASL_* protocols sasl-mechanism/username/password are required (SCRAM-SHA-256/512 only)
 # source.kafka.security-protocol=SASL_PLAINTEXT
 # source.kafka.sasl-mechanism=SCRAM-SHA-256
 # source.kafka.username=oddsmaker_ro
 # source.kafka.password=***
-# TLS 证书模式（security-protocol=SSL / SASL_SSL）：自签或私有 CA 需配客户端信任库；
-# 不配走 JVM 默认信任库（公有 CA）。明文协议下配置信任库启动即拒（配置漂移防护）
+# TLS certificate mode (security-protocol=SSL / SASL_SSL): self-signed or private CAs need a client truststore;
+# without one the JVM default truststore (public CAs) is used. Configuring a truststore under plaintext protocols fails at startup (config-drift guard)
 # source.kafka.ssl-truststore-path=/etc/oddsmaker/kafka-client.truststore.p12
 # source.kafka.ssl-truststore-password=***
 # source.kafka.ssl-truststore-type=PKCS12
-# mTLS（broker ssl.client.auth=required）另配客户端证书库三键，单向 TLS 不配即可；
-# 私钥口令复用证书库口令（PKCS12 单一口令语义），校验口径同信任库
+# mTLS (broker ssl.client.auth=required) additionally needs the three client-keystore keys; one-way TLS needs none of them;
+# the key password reuses the keystore password (PKCS12 single-password semantics), validated like the truststore
 # source.kafka.ssl-keystore-path=/etc/oddsmaker/kafka-client.keystore.p12
 # source.kafka.ssl-keystore-password=***
 # source.kafka.ssl-keystore-type=PKCS12
 
-# Agent 行为
+# Agent behavior
 agent.batch-size=500
 agent.poll-seconds=300
 agent.checkpoint-path=/var/lib/oddsmaker-agent/checkpoint.json
 
-# 同步状态上报（Control /api/dimensions/sync-status；url 缺省则跳过）
+# Sync status reporting (Control /api/dimensions/sync-status; skipped when url is unset)
 status.url=https://control.oddsmaker.local/api/dimensions/sync-status
 status.token=<admin-token>
 status.source-key=agent-mysql-main
@@ -246,11 +247,11 @@ Control-side behavior (all implemented):
 Configuration API (`dimension:read` to read / `dimension:manage` to write):
 
 ```http
-GET    /api/games/{gameId}/dimension-pulls           列出该游戏全部 Pull 配置
-POST   /api/games/{gameId}/dimension-pulls           建档（environment/sourceKey/endpoint/credential 必填）
-PUT    /api/games/{gameId}/dimension-pulls/{id}      更新（credential 缺省=保留既有凭证）
-DELETE /api/games/{gameId}/dimension-pulls/{id}      删除
-POST   /api/games/{gameId}/dimension-pulls/{id}/run  手动触发一轮拉取
+GET    /api/games/{gameId}/dimension-pulls           List all Pull configs for the game
+POST   /api/games/{gameId}/dimension-pulls           Create one (environment/sourceKey/endpoint/credential required)
+PUT    /api/games/{gameId}/dimension-pulls/{id}      Update (credential unset = keep the existing credential)
+DELETE /api/games/{gameId}/dimension-pulls/{id}      Delete
+POST   /api/games/{gameId}/dimension-pulls/{id}/run  Trigger one pull round manually
 ```
 
 Console entry: the "HTTP Pull Source Config" lower half of the `/dimensions` page—create/edit (leaving the credential blank = keep the existing one)/delete/pull now (both success and failure produce result text), plus YAML bulk import/export (the export never writes credentials to disk; you can edit it and paste the whole thing back to import for a bulk update). The API can also be used directly; both are gated by the same permissions.
@@ -277,9 +278,9 @@ Example create request body:
 The game side deploys Kafka Connect + the Debezium Source Connector to write binlog changes of the `items` table to a Kafka topic, and Oddsmaker subscribes to that topic and does the transformation. This approach currently has no corresponding implementation and is planned; when it lands, the consumer side can reuse the `dimension-sync-job` event entry point.
 
 ```
-游戏 MySQL → Debezium → Kafka topic: game_x.db.items
+Game MySQL → Debezium → Kafka topic: game_x.db.items
                                     ↓
-                  Oddsmaker dimension-consumer (Flink job 或独立服务)
+                  Oddsmaker dimension-consumer (Flink job or standalone service)
                                     ↓
                            ClickHouse item_dim
 ```
@@ -325,7 +326,7 @@ Whichever approach is used, the intermediate format that lands and the output sc
   "dim_type": "item",
   "op": "upsert | delete",
   "resource_id": "sword_001",
-  "attributes": { "name": "铁剑", "rarity": "common", "type": "weapon" },
+  "attributes": { "name": "Iron Sword", "rarity": "common", "type": "weapon" },
   "version_ts": 1760000000000,
   "game_id": "game_x",
   "environment": "prod"
@@ -381,16 +382,16 @@ Each game's dimension sync is configured in the Control Service; onboarding a ne
 ### Pull Config YAML (Implemented Shape)
 
 ```yaml
-# oddsmaker 维度同步 Pull 配置导出（凭证不回显；导入时 credential 缺省=保留既有）
+# oddsmaker dimension sync Pull config export (credentials are not echoed; on import, credential unset = keep the existing)
 dimensions:
   items:
-    environment: prod                          # 必填，须属于该游戏
-    dimType: item                              # 可缺省，缺省 item
-    endpoint: https://api.game-c.com/v1/items  # 必填，须 http/https
-    credential: bearer-token                   # 仅首建必填；更新缺省=保留既有
-    intervalSeconds: 300                       # 可缺省，缺省 300（10..86400 秒）
-    pageLimit: 1000                            # 可缺省，缺省 1000（1..5000）
-    enabled: true                              # 可缺省，缺省 true
+    environment: prod                          # required, must belong to the game
+    dimType: item                              # optional, defaults to item
+    endpoint: https://api.game-c.com/v1/items  # required, must be http/https
+    credential: bearer-token                   # required only on first create; on update unset = keep existing
+    intervalSeconds: 300                       # optional, defaults to 300 (10..86400 seconds)
+    pageLimit: 1000                            # optional, defaults to 1000 (1..5000)
+    enabled: true                              # optional, defaults to true
 ```
 
 The `dimensions` mapping key is the `sourceKey`, aligned with the table's unique constraint (game, environment, sourceKey)—changing `environment` means a new record for another environment. Field whitelist validation: unknown fields produce a precise error (to prevent typos like `endpont` from failing silently). The export contains no credential ciphertext; export→import can write back non-credential fields as-is, but importing into a new record for an (env, sourceKey) that has never been configured requires supplying `credential` (credentials never leave Control's plaintext custody boundary).
@@ -425,7 +426,7 @@ Console entry: the "Agent Managed Config" area of the `/dimensions` page—creat
 The shape described below, "one YAML describing all dimension sources for the game", is currently not implemented; only Pull has landed:
 
 ```yaml
-# 游戏 A：大厂、走 CDC
+# Game A: large studio, CDC path
 dimensions:
   item_dim:
     provider: debezium
@@ -436,14 +437,14 @@ dimensions:
       name: "${after.item_name}"
       rarity: "${after.rarity}"
 
-# 游戏 B：独立工作室、走 Agent
+# Game B: indie studio, Agent path
 dimensions:
   item_dim:
     provider: agent
-    # Agent 在游戏方部署，Oddsmaker 只收事件
+    # The Agent runs on the game side; Oddsmaker only receives events
     auth_token_ref: game_b_dim_token
 
-# 游戏 C：成长期、走 Pull
+# Game C: growth stage, Pull path
 dimensions:
   item_dim:
     provider: pull
