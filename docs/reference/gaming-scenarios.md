@@ -17,7 +17,7 @@ Six core scenarios and five extended scenarios are itemized below with their fea
 | Feature | Status | Description |
 |------|------|------|
 | Multi-platform SDK | ✅ | Web, Android, iOS, Unity, Server (HMAC signature) |
-| Batch/realtime modes | ✅ | Flexible event reporting methods |
+| Batch mode | ✅ | All ingestion goes through `POST /v1/batch` (there is no realtime/single-event endpoint) |
 | Event Schema | ✅ | Standard events + custom properties |
 | Data validation | ✅ | Tracking Plan validation |
 | PII handling | ✅ | Desensitization, masking, dropping strategies |
@@ -54,7 +54,7 @@ Six core scenarios and five extended scenarios are itemized below with their fea
 | N-step funnels | ✅ | Any number of steps |
 | Time windows | ✅ | Time limits between steps |
 | Ordered/unordered | ✅ | Strict sequence or loose matching |
-| Dimension drill-down | ✅ | Analyze by user attributes |
+| Dimension drill-down | ⚠️ | Not implemented — results endpoints accept only `gameId` / `environment` / `days` |
 | Conversion rate calculation | ✅ | Overall conversion rate + per-step conversion rate |
 
 **Typical funnel scenarios:**
@@ -110,8 +110,8 @@ Six core scenarios and five extended scenarios are itemized below with their fea
 |------|------|------|
 | Cohort analysis | ✅ | Grouped by registration date |
 | LTV calculation | ✅ | Cumulative/predicted LTV |
-| Payer segmentation | ✅ | Payers/non-payers |
-| Activity segmentation | ✅ | Active/dormant/churned |
+| Payer segmentation | ✅ | No prebuilt groups — build custom segment conditions over the attribute whitelist (payment events can drive the condition) |
+| Activity segmentation | ✅ | No prebuilt groups — build custom segment conditions over the attribute whitelist (activity windows can drive the condition) |
 
 ---
 
@@ -136,7 +136,7 @@ Six core scenarios and five extended scenarios are itemized below with their fea
 |------|------|----------|
 | eCPM | ✅ | `/api/analytics/ads/{gameId}/overview` |
 | Fill rate | ✅ | Statistics by ad network |
-| Click-through rate (CTR) | ✅ | Statistics by ad format |
+| Click-through rate (CTR) | ⚠️ | Data-layer column only — no endpoint exposes it (the ads API is by-network only) |
 | Ad network comparison | ✅ | `/api/analytics/ads/{gameId}/by-network` |
 
 ### 2.3 Session Analysis
@@ -145,10 +145,10 @@ Six core scenarios and five extended scenarios are itemized below with their fea
 
 | Feature | Status | API Endpoint |
 |------|------|----------|
-| Session duration distribution | ✅ | P50/P95/P99 statistics |
+| Session duration distribution | ⚠️ | Averages only — the `p95SessionDuration` column exists but nothing writes or reads it |
 | Session depth | ✅ | Events per session |
 | Bounce rate | ✅ | `/api/analytics/sessions/{gameId}/overview` |
-| Session quality scoring | ✅ | High/medium/low quality distribution |
+| Session quality scoring | ⚠️ | Columns only, pipeline not wired — no writer and no endpoint exposes a quality distribution |
 
 ### 2.4 Performance Monitoring
 

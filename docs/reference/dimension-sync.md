@@ -82,9 +82,9 @@ Game teams at different stages differ in technical capability, willingness to in
 
 **Characteristics**: old tech stack (may still manage config with Excel/CSV), no API, old database version, no binlog.
 
-**Recommended**: **Sync Agent + file source** (CSV/Excel/Parquet).
+**Recommended**: **Sync Agent + file source** (CSV/Excel).
 
-- Designers periodically export item tables to a shared directory or object storage.
+- Designers periodically export item tables to a shared local directory.
 - The Agent watches the directory for changes and pushes to the Gateway automatically.
 - These games usually change items infrequently; day-level latency is acceptable.
 
@@ -460,10 +460,9 @@ dimensions:
 The Control Service exposes each game's dimension sync status:
 
 - Last successful sync time
-- Sync latency (end-to-end time from a source change to landing in ClickHouse)
+- Seconds since the last successful push (`sinceLastPushSeconds`) and since the last ingested source event (`sinceLastEventSeconds`) — these are the two latency measures that exist; there is no end-to-end source-change-to-ClickHouse measure
 - Error count and the most recent error message
 - Checkpoint position (local checkpoint in Agent mode; `next_cursor` breakpoint in HTTP Pull mode, same table, same measure)
-- Change in total dimension record count (alert on abnormal swings, which may indicate a problem at the source)
 
 When integration has problems, both the game side and Oddsmaker operations can quickly locate which step is at fault.
 

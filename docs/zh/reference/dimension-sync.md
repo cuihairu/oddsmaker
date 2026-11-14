@@ -82,9 +82,9 @@ Oddsmaker 不强制游戏方用某种接入方式。本文档定义四类同步�
 
 **特征**：技术栈老旧（可能还在用 Excel/CSV 管理配置）、没有 API、数据库版本旧、没有 binlog。
 
-**推荐**：**Sync Agent + 文件 source**（CSV/Excel/Parquet）。
+**推荐**：**Sync Agent + 文件 source**（CSV/Excel）。
 
-- 策划定期导出物品表到共享目录或对象存储。
+- 策划定期导出物品表到共享本地目录。
 - Agent watch 目录变更，自动推送到 Gateway。
 - 这类游戏通常物品变更不频繁，天级延迟可接受。
 
@@ -460,10 +460,9 @@ dimensions:
 Control Service 暴露每个游戏的维度同步状态：
 
 - 最后成功同步时间
-- 同步延迟（源头变更 → 落 ClickHouse 的端到端时间）
+- 距上次成功推送的秒数（`sinceLastPushSeconds`）与距上次摄入源事件的秒数（`sinceLastEventSeconds`）——现存的两个延迟度量；并无「源头变更 → ClickHouse」端到端度量
 - 错误计数和最近错误信息
 - Checkpoint 位点（Agent 模式本地 checkpoint；HTTP Pull 模式 `next_cursor` 断点，同表同口径）
-- 维度记录总数变化（异常波动告警，可能是源头出问题）
 
 接入出问题时，游戏方和 Oddsmaker 运营都能快速定位是哪个环节。
 
