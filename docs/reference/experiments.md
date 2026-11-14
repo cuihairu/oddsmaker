@@ -13,7 +13,7 @@ A/B test analytics API, used to analyze experiment data and conversion rates.
 | DELETE | `/api/experiments/{id}` | Delete experiment |
 | POST | `/api/experiments/{id}/publish` | Publish experiment |
 | POST | `/api/experiments/{id}/pause` | Pause experiment |
-| GET | `/api/experiments/{id}/assign?userId=&deviceId=` | Server-side deterministic split |
+| GET | `/api/experiments/{id}/assign?subjectId=` | Server-side deterministic split |
 | POST | `/api/experiments/{id}/metrics` | Receive metric snapshots |
 | POST | `/api/experiments/{id}/metrics/aggregate` | Aggregate metrics by window |
 | GET | `/api/experiments/{id}/results` | Experiment results (lift, confidence interval, p-value, SRM) |

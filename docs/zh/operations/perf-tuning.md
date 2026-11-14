@@ -10,13 +10,13 @@ JVM/GC
 Reactor Netty（服务端）
 - EventLoop 线程数：默认≈CPU 核数 x 2；一般无需修改
 - 响应压缩：已开启 `server.compression.enabled=true`（对较大错误/诊断响应有益）
-- 大请求：限制 `oddsmaker.request.maxBytes`（默认 1MB），避免单请求过大带来延迟尖峰
+- 大请求：限制 `oddsmaker.request.max-bytes`（默认 1MB），避免单请求过大带来延迟尖峰
 - JSON 解析：优先 NDJSON；客户端批量 50–100，减少系统调用与序列化开销
 
 Kafka Producer（Avro）
 - 调参：
-  - `oddsmaker.kafka.producer.lingerMs`：5–20ms（批量更大、吞吐更高，但延迟上升）
-  - `oddsmaker.kafka.producer.batchSize`：64–256KB（视事件大小而定）
+  - `oddsmaker.kafka.producer.linger-ms`：5–20ms（批量更大、吞吐更高，但延迟上升）
+  - `oddsmaker.kafka.producer.batch-size`：64–256KB（视事件大小而定）
   - 其他：`acks=all`（已设），`compression=zstd` 可在 Broker 允许时考虑（需同时在 Producer 上开启）
 - 分区：确保 `events_raw` 分区数与消费并行度对齐，否则下游会形成热点
 

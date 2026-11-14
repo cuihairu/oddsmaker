@@ -10,13 +10,13 @@ JVM/GC
 Reactor Netty (server side)
 - EventLoop thread count: default ≈ CPU cores x 2; generally no modification needed
 - Response compression: `server.compression.enabled=true` is already enabled (beneficial for large error/diagnostic responses)
-- Large requests: limit `oddsmaker.request.maxBytes` (default 1MB) to avoid latency spikes from oversized single requests
+- Large requests: limit `oddsmaker.request.max-bytes` (default 1MB) to avoid latency spikes from oversized single requests
 - JSON parsing: prefer NDJSON; client-side batches of 50–100 reduce system calls and serialization overhead
 
 Kafka Producer (Avro)
 - Tuning:
-  - `oddsmaker.kafka.producer.lingerMs`: 5–20ms (larger batches, higher throughput, but higher latency)
-  - `oddsmaker.kafka.producer.batchSize`: 64–256KB (depending on event size)
+  - `oddsmaker.kafka.producer.linger-ms`: 5–20ms (larger batches, higher throughput, but higher latency)
+  - `oddsmaker.kafka.producer.batch-size`: 64–256KB (depending on event size)
   - Other: `acks=all` (already set), `compression=zstd` can be considered when the Broker allows it (must be enabled on the Producer as well)
 - Partitions: ensure the `events_raw` partition count aligns with consumer parallelism, otherwise hotspots will form downstream
 
