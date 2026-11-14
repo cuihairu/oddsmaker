@@ -20,6 +20,8 @@ kubectl get events -n oddsmaker --sort-by='.lastTimestamp' | tail -20
 
 ### 服务状态检查
 
+> 端口说明：独立管理端口 8086 只在 Kubernetes 清单里配置（`MANAGEMENT_SERVER_PORT`）。Compose 部署下 actuator 与应用同端口（8085；宿主机 28085），在 Compose 部署时请把 8086 读作该服务的应用端口。
+
 ```bash
 # Control Service health
 curl -s http://localhost:8086/actuator/health | jq .
@@ -225,7 +227,7 @@ kubectl exec -it <postgres-pod> -n oddsmaker -- psql -U oddsmaker -d oddsmaker \
 
 # Check failed logins
 kubectl exec -it <postgres-pod> -n oddsmaker -- psql -U oddsmaker -d oddsmaker \
-  -c "SELECT * FROM audit_logs WHERE action = 'LOGIN' AND result = 'FAILURE' ORDER BY created_at DESC LIMIT 20;"
+  -c "SELECT * FROM audit_logs WHERE action = 'LOGIN_FAILED' AND status = 'FAILURE' ORDER BY created_at DESC LIMIT 20;"
 
 # Check account lockouts
 kubectl exec -it <postgres-pod> -n oddsmaker -- psql -U oddsmaker -d oddsmaker \

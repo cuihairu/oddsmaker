@@ -35,9 +35,9 @@ Component recommendations
   - For production, use an external DB (PostgreSQL) instead of in-memory storage; enable compatibility validation
 
 Observability and alerts
-- Metric sources: OpenTelemetry (gateway/jobs/control plane) → OTel Collector → Prometheus (or remote storage)
-- Core alerts (the following are example thresholds; the repo's alert rules are in deploy/monitoring/alerts/oddsmaker-alerts.yml, currently covering five groups: control-service/database/cache/messaging/stream-processing)
-  - Control plane `HTTP 5xx` ratio > 5% (5m window, lasting 2m) — this is the repo's `HighErrorRate` rule, covering only control-service (the gateway has no equivalent alert)
+- Metric sources: business services export native actuator metrics (`/actuator/prometheus`) and are scraped directly by Prometheus — the OTel Collector → Prometheus pipeline is in place, but wiring business-side OTLP is a pending item (Flink jobs in local-executor mode expose no metrics endpoint, see DEPLOY-002)
+- Core alerts (the following are example thresholds; the repo's alert rules are in deploy/monitoring/alerts/oddsmaker-alerts.yml, currently 24 rules in six groups: control-service/database/cache/messaging/stream-processing/analytics-db)
+  - Control plane `HTTP 5xx` ratio > 5% (5m window, lasting 2m) — this is the repo's `HighErrorRate` rule — it aggregates by `instance` with no job filter, so it covers both control-service and the gateway (gateway 401 rejections are 4xx and not counted)
   - Gateway `429` > 5% (5m) (cross-check Key/IP; may be rate limiting/traffic spike) [example, not configured in the repo]
   - Kafka `Consumer Lag` continuously rising (> 10k messages/partition) [example; the repo uses `KafkaHighConsumerLag` (lag > 10000, lasting 5m)]
   - Flink `Checkpoint Failed` 3 consecutive times; or `Duration` > 2 x Interval [example, not configured in the repo]

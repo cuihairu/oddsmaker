@@ -20,6 +20,8 @@ kubectl get events -n oddsmaker --sort-by='.lastTimestamp' | tail -20
 
 ### Service Status Check
 
+> Port note: the dedicated management port 8086 is set only in the Kubernetes manifest (`MANAGEMENT_SERVER_PORT`). Under Compose the actuator shares the application port (8085; host 28085), so on a Compose deployment read 8086 as that service's API port.
+
 ```bash
 # Control Service health
 curl -s http://localhost:8086/actuator/health | jq .
@@ -225,7 +227,7 @@ kubectl exec -it <postgres-pod> -n oddsmaker -- psql -U oddsmaker -d oddsmaker \
 
 # Check failed logins
 kubectl exec -it <postgres-pod> -n oddsmaker -- psql -U oddsmaker -d oddsmaker \
-  -c "SELECT * FROM audit_logs WHERE action = 'LOGIN' AND result = 'FAILURE' ORDER BY created_at DESC LIMIT 20;"
+  -c "SELECT * FROM audit_logs WHERE action = 'LOGIN_FAILED' AND status = 'FAILURE' ORDER BY created_at DESC LIMIT 20;"
 
 # Check account lockouts
 kubectl exec -it <postgres-pod> -n oddsmaker -- psql -U oddsmaker -d oddsmaker \

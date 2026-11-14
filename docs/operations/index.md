@@ -218,6 +218,8 @@ cat backup.sql | kubectl exec -i deployment/oddsmaker-postgres -n oddsmaker -- p
 
 ### Application
 
+A dedicated management port (8086) exists only in the Kubernetes manifest; the Compose stacks expose the actuator on the same port as the API (8085 in Compose, 28085 on the host). Forward it first with `kubectl port-forward -n oddsmaker deployment/oddsmaker-control 8086:8086`.
+
 ```bash
 # View application logs
 kubectl logs -f deployment/oddsmaker-control -n oddsmaker

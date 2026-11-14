@@ -248,10 +248,10 @@ jmap -histo <pid> | head -20
 kubectl logs -l app=oddsmaker-control -n oddsmaker | grep -i "security\|unauthorized\|breach"
 
 # Check failed login attempts
-psql -c "SELECT * FROM audit_logs WHERE action = 'LOGIN' AND result = 'FAILURE' ORDER BY created_at DESC LIMIT 100;"
+psql -c "SELECT * FROM audit_logs WHERE action = 'LOGIN_FAILED' AND status = 'FAILURE' ORDER BY created_at DESC LIMIT 100;"
 
 # Check suspicious IPs
-psql -c "SELECT client_ip, count(*) FROM audit_logs WHERE result = 'FAILURE' GROUP BY client_ip ORDER BY count DESC LIMIT 20;"
+psql -c "SELECT ip_address, count(*) FROM audit_logs WHERE status = 'FAILURE' GROUP BY ip_address ORDER BY count DESC LIMIT 20;"
 ```
 
 **Resolution:**
@@ -356,8 +356,8 @@ We apologize for any inconvenience.
 ## Tools and Resources
 
 ### Monitoring
-- Grafana: https://grafana.oddsmaker.local
-- Prometheus: https://prometheus.oddsmaker.local
+- Grafana / Prometheus: the repo ships no ingress for these, so no fixed hostname — under Compose read `http://localhost:13000` (Grafana, published 13000 → container 3000) and `http://localhost:9090` (Prometheus). Fill in the real hostnames per deployment.
+- Ingress hosts that do exist: `control.oddsmaker.local` (control service) and `ingest.oddsmaker.local` (gateway)
 - Logs: OTel collector → Grafana (no Elasticsearch/Kibana stack in this repo)
 
 ### Communication
@@ -366,7 +366,7 @@ We apologize for any inconvenience.
 - Status Page: https://status.oddsmaker.local
 
 ### Documentation
-- Architecture: /zh/reference/architecture
+- Architecture: /reference/architecture
 - API Reference: /reference/
 - Runbooks: /operations/
 

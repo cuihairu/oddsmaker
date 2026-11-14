@@ -218,6 +218,8 @@ cat backup.sql | kubectl exec -i deployment/oddsmaker-postgres -n oddsmaker -- p
 
 ### Application
 
+独立管理端口（8086）只存在于 Kubernetes 清单里；Compose 栈把 actuator 暴露在与应用同端口（Compose 为 8085，宿主机为 28085）。请先用 `kubectl port-forward -n oddsmaker deployment/oddsmaker-control 8086:8086` 转发。
+
 ```bash
 # View application logs
 kubectl logs -f deployment/oddsmaker-control -n oddsmaker

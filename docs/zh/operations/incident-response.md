@@ -248,10 +248,10 @@ jmap -histo <pid> | head -20
 kubectl logs -l app=oddsmaker-control -n oddsmaker | grep -i "security\|unauthorized\|breach"
 
 # Check failed login attempts
-psql -c "SELECT * FROM audit_logs WHERE action = 'LOGIN' AND result = 'FAILURE' ORDER BY created_at DESC LIMIT 100;"
+psql -c "SELECT * FROM audit_logs WHERE action = 'LOGIN_FAILED' AND status = 'FAILURE' ORDER BY created_at DESC LIMIT 100;"
 
 # Check suspicious IPs
-psql -c "SELECT client_ip, count(*) FROM audit_logs WHERE result = 'FAILURE' GROUP BY client_ip ORDER BY count DESC LIMIT 20;"
+psql -c "SELECT ip_address, count(*) FROM audit_logs WHERE status = 'FAILURE' GROUP BY ip_address ORDER BY count DESC LIMIT 20;"
 ```
 
 **解决：**
@@ -356,8 +356,8 @@ We apologize for any inconvenience.
 ## 工具与资源
 
 ### 监控
-- Grafana: https://grafana.oddsmaker.local
-- Prometheus: https://prometheus.oddsmaker.local
+- Grafana / Prometheus：仓库里没有为它们配置 ingress，因此没有固定域名——Compose 部署下读 `http://localhost:13000`（Grafana，发布端口 13000 → 容器 3000）与 `http://localhost:9090`（Prometheus）。请按实际部署填写真实域名。
+- 仓内确实存在的 ingress host：`control.oddsmaker.local`（控制面）与 `ingest.oddsmaker.local`（网关）
 - 日志：OTel collector → Grafana（本仓库不含 Elasticsearch/Kibana 技术栈）
 
 ### 沟通
