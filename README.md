@@ -142,7 +142,7 @@ Events, partitions, queries, experiments, and risk rules all use `game_id + envi
 - `schema/`: Avro, JSON Schema, ClickHouse DDL, and query scripts
 - `sdks/`: Web, Android, iOS, Unity, and Server SDKs
 - `bi/`: Superset resources
-- `infra/`: Docker Compose, K8s, Helm, Grafana, Prometheus
+- `infra/`: Docker Compose, K8s, Helm, Grafana, Prometheus, and the exporter image builds (Kafka / Redis)
 - `docs/`: architecture, API, operations, redesign, and roadmap
 - `web/`: Vue 3 operations console (source under `web/src/`, built assets ship with releases)
 - `scripts/`: helper scripts (quickstart, e2e, superset import, perf tooling)

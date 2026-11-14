@@ -19,6 +19,8 @@ curl -sS 'http://localhost:8080/v1/batch' \
   --data-binary $'{"event_id":"01J..1","event_name":"level_start","game_id":"game_demo","environment":"production","device_id":"d1","ts_client":'$(date +%s000)'}\n'{"event_id":"01J..2","event_name":"level_complete","game_id":"game_demo","environment":"production","device_id":"d1","ts_client":'$(date +%s000)'}'
 ```
 
+`pk_test_example` is a static key that only exists in the gateway's *test* resources (`services/gateway-service/src/test/resources/application.yaml`); the main config carries no static keys. A source-run gateway started by `scripts/quickstart.sh` therefore has no local key at all and that curl is a best-effort smoke sample (a 401 there is expected). The Docker Compose stacks instead define a dev key via `ODDSMAKER_AUTH_KEYS_DEVKEY` (key `devkey`, default secret `dev-secret`); for anything beyond a local smoke test, create a key in the control plane and use that.
+
 BI dashboards
 - Build the import bundle: `cd bi/superset && ./build_bundle.sh`
 - Import the zip bundle in the Superset UI (see bi/superset/IMPORT.zh.md)

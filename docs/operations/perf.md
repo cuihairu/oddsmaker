@@ -3,7 +3,7 @@
 Goal: verify the throughput, latency, and error rate of the gateway /v1/batch under different batch sizes and rates; evaluate the stability of downstream (Kafka/CH/Flink) under load testing.
 
 Preparation
-- Locally: use `infra/docker-compose.yml` to start Kafka/Apicurio/ClickHouse; `scripts/quickstart.sh` starts the gateway and injects a sample Key
+- Locally: use `infra/docker-compose.yml` to start Kafka/Apicurio/ClickHouse; `scripts/quickstart.sh` starts the gateway, fires a best-effort sample batch with the test-only key `pk_test_example` (a 401 there is expected — that key exists only in test resources), then builds the enrich/sessions Flink jars and prints the two `flink run` hints. It creates no key.
 - k6:
   - Can be run via Docker:
     ```bash
@@ -12,6 +12,8 @@ Preparation
       -e API_KEY=pk_test_example -e GAME_ID=p1 -e ENVIRONMENT=dev \
       -e RATE=200 -e DURATION=60s -e BATCH=50
     ```
+
+  The example substitutes the test-only key `pk_test_example` for brevity; pass a real key created in the control plane (and raise its rpm/ipRpm as below), otherwise every request is rejected before any measurement is meaningful.
 
 Recommended scenarios
 - Fixed arrival rate: `RATE=200`, `BATCH=50` (10k evts/s) → verify gateway P95/P99 and 429 rate. Prerequisite: first raise this Key's rpm/ipRpm in the control plane (e.g., 60000); otherwise, at the default rpm=600 (~10 rps), the arrival rate will trigger 429 for the entire run and real P95/P99 cannot be measured

@@ -142,7 +142,7 @@ event_id     = 单事件唯一 ID
 - `schema/`：Avro、JSON Schema、ClickHouse DDL、查询脚本
 - `sdks/`：Web、Android、iOS、Unity、Server SDK
 - `bi/`：Superset 资源
-- `infra/`：Docker Compose、K8s、Helm、Grafana、Prometheus
+- `infra/`：Docker Compose、K8s、Helm、Grafana、Prometheus、导出器镜像构建（Kafka / Redis）
 - `docs/`：架构、API、运维、重设计、路线图
 - `web/`：Vue 3 运营控制台（源码在 `web/src/`，构建产物随 release 发布）
 - `scripts/`：辅助脚本（quickstart、e2e、superset 导入、性能工具）

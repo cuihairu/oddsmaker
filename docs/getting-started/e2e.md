@@ -23,6 +23,6 @@ Dependencies
 - Optional: Flink CLI (in PATH), used to verify writes to ClickHouse; otherwise CH verification is skipped
 
 FAQ
-- Port conflicts: check whether 8080/8085/8123/9092 are occupied by other processes
+- Port conflicts: the e2e path binds host ports 8080 (gateway) / 8085 (control) / 29192 (Kafka) / 29123 (ClickHouse) / 29081 (Apicurio) / 18088 (Superset) / 4317 + 4318 + 9464 (OTel) — 8123 and 9092 are container-internal ports and are not published, so check the host ports above
 - Flink unavailable: the script will only verify gateway acceptance; for CH verification, install Flink and add it to PATH
 - Control-plane token: defaults to admin; can be changed in services/control-service/application.yaml

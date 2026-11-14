@@ -3,7 +3,7 @@
 目标：验证网关 /v1/batch 在不同批量大小与速率下的吞吐、时延与错误率；评估下游（Kafka/CH/Flink）压测时的稳定性。
 
 准备
-- 本地：`infra/docker-compose.yml` 启动 Kafka/Apicurio/ClickHouse；`scripts/quickstart.sh` 启动网关并注入样例 Key
+- 本地：`infra/docker-compose.yml` 启动 Kafka/Apicurio/ClickHouse；`scripts/quickstart.sh` 启动网关、用仅测试态的 key `pk_test_example` 发一批尽力而为的样例（返回 401 属预期——该 key 只存在于测试资源）、再构建 enrich/sessions 两个 Flink 作业 jar 并打印两条 `flink run` 提示。该脚本不会创建任何 key。
 - k6：
   - 可使用 Docker 运行：
     ```bash
@@ -12,6 +12,8 @@
       -e API_KEY=pk_test_example -e GAME_ID=p1 -e ENVIRONMENT=dev \
       -e RATE=200 -e DURATION=60s -e BATCH=50
     ```
+
+  示例为简洁起见代填了仅测试态的 key `pk_test_example`；请改用在控制面创建的真实 key（并按下文调高其 rpm/ipRpm），否则每个请求都会被拒绝，测不到任何有意义的结果。
 
 建议场景
 - 固定到达率：`RATE=200`、`BATCH=50`（10k evts/s）→ 验证网关 P95/P99 与 429 率。前置条件：先在控制面把该 Key 的 rpm/ipRpm 调高（如 60000），否则默认 rpm=600（约 10 rps）下到达率将全程触发 429，测不到真实 P95/P99

@@ -23,6 +23,6 @@ bash scripts/superset-import.sh
 - 可选：Flink CLI（在 PATH），用于校验写入 ClickHouse；否则跳过 CH 验证
 
 常见问题
-- 端口占用：检查 8080/8085/8123/9092 是否被其他进程占用
+- 端口占用：e2e 路径实际绑定的宿主端口为 8080（gateway）/ 8085（control）/ 29192（Kafka）/ 29123（ClickHouse）/ 29081（Apicurio）/ 18088（Superset）/ 4317 + 4318 + 9464（OTel）——8123 与 9092 是容器内部端口、并未发布到宿主，请按上述宿主端口排查
 - Flink 不可用：脚本将只验证网关接受；如需 CH 校验，请安装 Flink 并加入 PATH
 - 控制面令牌：默认 admin；可在 services/control-service/application.yaml 修改
