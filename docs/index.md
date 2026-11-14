@@ -33,7 +33,7 @@ features:
   - icon:
       src: /icons/ml.svg
     title: Predictive Models
-    details: Churn prediction, risk scoring, LTV forecasting, and payment propensity
+    details: Churn and LTV prediction with trainable models; cheating risk control is real-time rules and bans (not a prediction model)
   - icon:
       src: /icons/security.svg
     title: Enterprise Security
