@@ -39,7 +39,7 @@
 
 | 功能 | 状态 | 说明 |
 |------|------|------|
-| N-Day 留存 | ✅ | D1/D3/D7/D14/D30/D60/D90 |
+| N-Day 留存 | ✅ | 默认 D1/D7/D30（N-Day）与 D1/D3/D7/D14/D30（Rolling），可用 `retention.ndays` / `retention.rolling.ndays` 配置 |
 | Rolling 留存 | ✅ | 滚动留存计算 |
 | 自定义窗口 | ✅ | 灵活的留存窗口配置 |
 | 维度下钻 | ✅ | 按平台、渠道、版本等维度 |
@@ -168,7 +168,7 @@
 | 功能 | 状态 | API 端点 |
 |------|------|----------|
 | 好友系统 | ✅ | `/api/analytics/social/{gameId}/overview` |
-| 公会分析 | ✅ | 公会数量、规模 |
+| 公会分析 | ✅ | 公会数量与病毒系数（`totalGuilds` / `avgViralCoefficient`）——无规模指标 |
 | 病毒系数 | ✅ | 邀请转化率 |
 | 社交留存影响 | ✅ | `/api/analytics/social/{gameId}/retention-impact` |
 

@@ -39,7 +39,7 @@ Six core scenarios and five extended scenarios are itemized below with their fea
 
 | Feature | Status | Description |
 |------|------|------|
-| N-Day retention | ✅ | D1/D3/D7/D14/D30/D60/D90 |
+| N-Day retention | ✅ | Defaults D1/D7/D30 (N-Day) and D1/D3/D7/D14/D30 (Rolling), configurable via `retention.ndays` / `retention.rolling.ndays` |
 | Rolling retention | ✅ | Rolling retention computation |
 | Custom windows | ✅ | Flexible retention window configuration |
 | Dimension drill-down | ✅ | By platform, channel, version, and other dimensions |
@@ -168,7 +168,7 @@ Six core scenarios and five extended scenarios are itemized below with their fea
 | Feature | Status | API Endpoint |
 |------|------|----------|
 | Friends system | ✅ | `/api/analytics/social/{gameId}/overview` |
-| Guild analysis | ✅ | Guild count, size |
+| Guild analysis | ✅ | Guild count and viral coefficient (`totalGuilds` / `avgViralCoefficient`) — no size metric |
 | Viral coefficient | ✅ | Invite conversion rate |
 | Social retention impact | ✅ | `/api/analytics/social/{gameId}/retention-impact` |
 
