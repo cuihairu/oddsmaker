@@ -362,8 +362,8 @@ We apologize for any inconvenience.
 
 ### Communication
 - Slack: #oddsmaker-incidents
-- PagerDuty: https://oddsmaker.pagerduty.com
-- Status Page: https://status.oddsmaker.local
+- PagerDuty: https://oddsmaker.pagerduty.com [per-deployment placeholder — the repo ships no PagerDuty stack; fill in the real service URL]
+- Status Page: https://status.oddsmaker.local [per-deployment placeholder — no status-page service in this repo]
 
 ### Documentation
 - Architecture: /reference/architecture

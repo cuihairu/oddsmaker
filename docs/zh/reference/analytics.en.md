@@ -1,6 +1,6 @@
 # Analytics API
 
-The analytics API covers five categories — revenue, ads, sessions, performance and social — all keyed by gameId.
+The analytics API covers five categories — revenue, ads, sessions, performance, and social — all reported by gameId.
 
 ## Base URL
 
@@ -38,7 +38,7 @@ Authorization: Bearer {token}
 | `iapRevenue` | number | In-app purchase revenue |
 | `adRevenue` | number | Ad revenue |
 | `subscriptionRevenue` | number | Subscription revenue |
-| `days` | number | Days counted |
+| `days` | number | Number of days counted |
 
 **Example:**
 ```http
@@ -73,29 +73,43 @@ GET /api/analytics/revenue/game_123/overview?startDate=2024-01-01&endDate=2024-0
 | Field | Type | Description |
 |------|------|------|
 | `date` | date | Date |
-| `arpu` | number | Average revenue per user |
-| `arppu` | number | Average revenue per paying user |
-| `payingUsers` | number | Paying users |
-| `totalUsers` | number | Total users |
+| `arpu` | number | Average Revenue Per User |
+| `arppu` | number | Average Revenue Per Paying User |
+| `payingUsers` | number | Number of paying users |
+| `totalUsers` | number | Total number of users |
 
-**Metric meanings:**
-- **ARPU** = total revenue / total users
-  
-- **ARPPU** = total revenue / paying users
+**Metric meaning:**
+- **ARPU** = Total revenue / Total users
+  - Healthy value: varies by game genre
+
+- **ARPPU** = Total revenue / Number of paying users
+  - Usually ARPPU > ARPU * 10
 
 ---
 
-### 1.3 Revenue by Platform
+### 1.3 Revenue Distribution by Platform
 
-**Endpoint:** `GET /revenue/{gameId}/by-platform?date=2024-01-15`
+**Endpoint:** `GET /revenue/{gameId}/by-platform`
 
-Returns the revenue rows per platform for a single day (fields such as `platform` and revenue amount).
+**Parameters:**
+| Parameter | Type | Required | Description |
+|------|------|------|------|
+| `gameId` | string | Yes | Game ID |
+| `date` | date | Yes | Target date (YYYY-MM-DD) |
+
+**Response fields:**
+| Field | Type | Description |
+|------|------|------|
+| `platform` | string | Platform dimension key (the SDK-emitted value, e.g. `web` / `android` / `ios`) |
+| `revenue` | number | Revenue for that platform |
+| `arpu` | number | ARPU for that platform |
+| `arppu` | number | ARPPU for that platform |
 
 ---
 
 ## 2. Ads Analytics
 
-### 2.1 Ads Performance Overview
+### 2.1 Ad Performance Overview
 
 **Endpoint:** `GET /ads/{gameId}/overview`
 
@@ -111,20 +125,38 @@ Returns the revenue rows per platform for a single day (fields such as `platform
 |------|------|------|
 | `totalRevenue` | number | Total ad revenue |
 | `totalImpressions` | number | Total impressions |
-| `avgEcpm` | number | Average eCPM |
+| `avgEcpm` | number | Average eCPM (revenue per thousand impressions) |
 | `avgFillRate` | number | Average fill rate |
 | `networkCount` | number | Number of ad networks |
 
-**Metric meanings:**
-- **eCPM** = (ad revenue / impressions) * 1000
-  
-- **Fill rate** = filled requests / requests
+**Metric meaning:**
+- **eCPM** = (Ad revenue / Impressions) * 1000
+  - Healthy value: $10-$50 (varies by region and ad type)
+
+- **Fill rate** = Filled count / Request count
+  - Healthy value: > 90%
+
+---
 
 ### 2.2 Performance by Ad Network
 
-**Endpoint:** `GET /ads/{gameId}/by-network?startDate=2024-01-01&endDate=2024-01-31`
+**Endpoint:** `GET /ads/{gameId}/by-network`
 
-Returns the performance rows per ad network for the date range (impressions, revenue, eCPM and other fields).
+**Parameters:**
+| Parameter | Type | Required | Description |
+|------|------|------|------|
+| `gameId` | string | Yes | Game ID |
+| `startDate` | date | Yes | Start date (YYYY-MM-DD) |
+| `endDate` | date | Yes | End date (YYYY-MM-DD) |
+
+**Response fields:**
+| Field | Type | Description |
+|------|------|------|
+| `network` | string | Ad network (ADMOB/UNITY_ADS/...) |
+| `revenue` | number | Revenue for that network |
+| `impressions` | number | Impressions for that network |
+| `ecpm` | number | eCPM for that network |
+| `fillRate` | number | Fill rate for that network |
 
 ---
 
@@ -145,20 +177,40 @@ Returns the performance rows per ad network for the date range (impressions, rev
 | Field | Type | Description |
 |------|------|------|
 | `avgSessionDuration` | number | Average session duration (milliseconds) |
-| `avgEventsPerSession` | number | Average events per session |
+| `avgEventsPerSession` | number | Average number of events per session |
 | `avgBounceRate` | number | Average bounce rate |
-| `days` | number | Days counted |
+| `days` | number | Number of days counted |
 
-**Metric meanings:**
-- **Session duration** - how long a user plays in a single session
-- **Session depth** - events per session, reflecting user engagement
-- **Bounce rate** - share of sessions with only 1 event
+**Metric meaning:**
+- **Session duration** - How long a user plays in a single session
+  - Healthy value: > 5 minutes (casual games), > 30 minutes (hardcore games)
+
+- **Session depth** - Number of events per session
+  - Healthy value: > 10 events
+
+- **Bounce rate** - Share of sessions with only 1 event
+  - Healthy value: < 30%
+
+---
 
 ### 3.2 Session Trends
 
-**Endpoint:** `GET /sessions/{gameId}/trends?startDate=2024-01-01&endDate=2024-01-31`
+**Endpoint:** `GET /sessions/{gameId}/trends`
 
-Returns daily session trend rows for the date range (session count, duration and other fields).
+**Parameters:**
+| Parameter | Type | Required | Description |
+|------|------|------|------|
+| `gameId` | string | Yes | Game ID |
+| `startDate` | date | Yes | Start date (YYYY-MM-DD) |
+| `endDate` | date | Yes | End date (YYYY-MM-DD) |
+
+**Response fields:**
+| Field | Type | Description |
+|------|------|------|
+| `date` | date | Date |
+| `avgDuration` | number | Average session duration for the day |
+| `avgEvents` | number | Average number of events for the day |
+| `bounceRate` | number | Bounce rate for the day |
 
 ---
 
@@ -172,8 +224,8 @@ Returns daily session trend rows for the date range (session count, duration and
 | Parameter | Type | Required | Description |
 |------|------|------|------|
 | `gameId` | string | Yes | Game ID |
-| `startDate` | datetime | Yes | Start time (ISO 8601 datetime, at datetime granularity; e.g. 2024-01-01T00:00:00) |
-| `endDate` | datetime | Yes | End time (ISO 8601 datetime, at datetime granularity; e.g. 2024-01-31T23:59:59) |
+| `startDate` | datetime | Yes | Start time (ISO 8601) |
+| `endDate` | datetime | Yes | End time (ISO 8601) |
 
 **Response fields:**
 | Field | Type | Description |
@@ -182,27 +234,49 @@ Returns daily session trend rows for the date range (session count, duration and
 | `LAG` | object | Lag statistics |
 | `CRASH` | object | Crash statistics |
 | `MEMORY` | object | Memory statistics |
+| `LOAD_TIME` | object | Load time statistics |
+| `NETWORK` | object | Network statistics |
+| `BATTERY` | object | Battery statistics |
 
-**Metric meanings:**
-- **FPS** - game smoothness (frames per second)
-- **Lag** - frame freeze duration (milliseconds)
-- **Crash** - number of application crashes
-- **Memory** - memory usage (MB)
+**Each metric contains:**
+- `avgValue` - Average value
+`count` - Number of events
 
-### 4.2 Crash Groups
+**Metric meaning:**
+- **FPS (frame rate)** - Game smoothness
+  - Healthy value: > 30 FPS (mobile), > 60 FPS (PC)
+  - Warning value: < 20 FPS
+
+- **LAG (stutter)** - Duration of screen freezes (milliseconds)
+  - Healthy value: < 100ms
+  - Warning value: > 500ms
+
+- **CRASH (crash)** - Number of app crashes
+  - Healthy value: < 0.1% of sessions
+  - Warning value: > 1% of sessions
+
+- **MEMORY (memory)** - Memory usage (MB)
+  - Healthy value: < 500MB (mobile)
+  - Warning value: > 1GB
+
+---
+
+### 4.2 Crash Grouping
 
 **Endpoint:** `GET /performance/{gameId}/crashes`
 
-Returns the list of crash fingerprint groups (grouped by `crash_hash`, same source as top-groups under `/api/crash-metrics`).
+**Parameters:**
+| Parameter | Type | Required | Description |
+|------|------|------|------|
+| `gameId` | string | Yes | Game ID (no date range; crash groups are cumulative) |
 
-The full crash-specific metrics live under `/api/crash-metrics`:
-
-```http
-GET /api/crash-metrics/{gameId}/top-groups
-GET /api/crash-metrics/{gameId}/trend
-GET /api/crash-metrics/{gameId}/rate-by-version
-POST /api/crash-metrics/{gameId}/symbolicate
-```
+**Response fields:**
+| Field | Type | Description |
+|------|------|------|
+| `crashHash` | string | Crash hash (used for grouping) |
+| `count` | number | Number of crashes |
+| `firstSeen` | datetime | First seen time |
+| `lastSeen` | datetime | Last seen time |
 
 ---
 
@@ -222,13 +296,17 @@ POST /api/crash-metrics/{gameId}/symbolicate
 **Response fields:**
 | Field | Type | Description |
 |------|------|------|
-| `totalFriendships` | number | Total friendships |
-| `totalGuilds` | number | Total guilds |
+| `totalFriendships` | number | Total number of friendships |
+| `totalGuilds` | number | Total number of guilds |
 | `avgViralCoefficient` | number | Average viral coefficient |
-| `days` | number | Days counted |
+| `days` | number | Number of days counted |
 
-**Metric meanings:**
-- **Viral coefficient** - the average number of new users invited per user
+**Metric meaning:**
+- **Viral coefficient** - Average number of new users invited per user
+  - > 1 indicates organic user growth
+  - Healthy value: > 0.5
+
+---
 
 ### 5.2 Social Impact on Retention
 
@@ -238,12 +316,35 @@ POST /api/crash-metrics/{gameId}/symbolicate
 | Parameter | Type | Required | Description |
 |------|------|------|------|
 | `gameId` | string | Yes | Game ID |
-| `date` | date | Yes | Statistics date (YYYY-MM-DD) |
+| `date` | date | Yes | Target date (YYYY-MM-DD) |
 
 **Response fields:**
 | Field | Type | Description |
 |------|------|------|
-| `socialUsersD7Retention` | number | D7 retention of social users |
-| `nonSocialUsersD7Retention` | number | D7 retention of non-social users |
+| `socialUsersD7Retention` | number | D7 retention rate of social users |
+| `nonSocialUsersD7Retention` | number | D7 retention rate of non-social users |
 | `retentionLift` | number | Retention lift brought by social features |
 
+---
+
+## Best Practices
+
+### 1. Data Collection
+- Ensure events are reported correctly
+- Use standard event types
+- Include the necessary dimension information
+
+### 2. Analysis Cycle
+- Review key metrics daily
+- Analyze trends weekly
+- Perform in-depth analysis monthly
+
+### 3. Alert Settings
+- Set thresholds for key metrics
+- Monitor abnormal fluctuations
+- Respond to issues promptly
+
+### 4. Action Recommendations
+- Make decisions based on data
+- Validate hypotheses with A/B tests
+- Continuously optimize and iterate

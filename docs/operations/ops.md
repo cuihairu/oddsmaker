@@ -41,7 +41,7 @@ Observability and alerts
   - Gateway `429` > 5% (5m) (cross-check Key/IP; may be rate limiting/traffic spike) [example, not configured in the repo]
   - Kafka `Consumer Lag` continuously rising (> 10k messages/partition) [example; the repo uses `KafkaHighConsumerLag` (lag > 10000, lasting 5m)]
   - Flink `Checkpoint Failed` 3 consecutive times; or `Duration` > 2 x Interval [example, not configured in the repo]
-  - ClickHouse `Insert Error` > 0; `Merge backlog` over threshold; `Disk Used` > 80% [example, not configured in the repo]
+  - ClickHouse `Insert Error` > 0 (the repo's `ClickHouseWriteFailures`, lasting 5m); `Merge backlog` over threshold [example, not configured in the repo]; disk > 80% (the repo uses the inverse measure `ClickHouseDiskSpaceLow`: free space on the default disk below 15%); plus `ClickHouseDown` / `ClickHouseHighQueryTime`
 
 Replay and recomputation
 - Replay: locate the time window → replay from specified offsets in `events_raw` to a dedicated consumer group → start the job from Checkpoint/Savepoint

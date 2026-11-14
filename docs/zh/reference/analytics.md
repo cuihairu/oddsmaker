@@ -87,9 +87,21 @@ GET /api/analytics/revenue/game_123/overview?startDate=2024-01-01&endDate=2024-0
 
 ### 1.3 按平台收入分布
 
-**端点:** `GET /revenue/{gameId}/by-platform?date=2024-01-15`
+**端点:** `GET /revenue/{gameId}/by-platform`
 
-按单日返回各平台的收入行（`platform`、收入额等字段）。
+**参数:**
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `gameId` | string | 是 | 游戏 ID |
+| `date` | date | 是 | 目标日期（YYYY-MM-DD） |
+
+**响应字段:**
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `platform` | string | 平台维度键（SDK 上报值，如 `web` / `android` / `ios`） |
+| `revenue` | number | 该平台收入 |
+| `arpu` | number | 该平台 ARPU |
+| `arppu` | number | 该平台 ARPPU |
 
 ---
 
@@ -122,9 +134,23 @@ GET /api/analytics/revenue/game_123/overview?startDate=2024-01-01&endDate=2024-0
 
 ### 2.2 按广告网络性能
 
-**端点:** `GET /ads/{gameId}/by-network?startDate=2024-01-01&endDate=2024-01-31`
+**端点:** `GET /ads/{gameId}/by-network`
 
-按日期区间返回各广告网络的性能行（展示、收入、eCPM 等字段）。
+**参数:**
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `gameId` | string | 是 | 游戏 ID |
+| `startDate` | date | 是 | 起始日期（YYYY-MM-DD） |
+| `endDate` | date | 是 | 结束日期（YYYY-MM-DD） |
+
+**响应字段:**
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `network` | string | 广告网络 (ADMOB/UNITY_ADS/...) |
+| `revenue` | number | 该网络收入 |
+| `impressions` | number | 该网络展示次数 |
+| `ecpm` | number | 该网络 eCPM |
+| `fillRate` | number | 该网络填充率 |
 
 ---
 
@@ -156,9 +182,22 @@ GET /api/analytics/revenue/game_123/overview?startDate=2024-01-01&endDate=2024-0
 
 ### 3.2 会话趋势
 
-**端点:** `GET /sessions/{gameId}/trends?startDate=2024-01-01&endDate=2024-01-31`
+**端点:** `GET /sessions/{gameId}/trends`
 
-按日期区间返回逐日会话趋势行（会话数、时长等字段）。
+**参数:**
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `gameId` | string | 是 | 游戏 ID |
+| `startDate` | date | 是 | 起始日期（YYYY-MM-DD） |
+| `endDate` | date | 是 | 结束日期（YYYY-MM-DD） |
+
+**响应字段:**
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `date` | date | 日期 |
+| `avgDuration` | number | 当日平均会话时长 |
+| `avgEvents` | number | 当日平均事件数 |
+| `bounceRate` | number | 当日跳出率 |
 
 ---
 
@@ -195,6 +234,19 @@ GET /api/analytics/revenue/game_123/overview?startDate=2024-01-01&endDate=2024-0
 ### 4.2 崩溃分组
 
 **端点:** `GET /performance/{gameId}/crashes`
+
+**参数:**
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `gameId` | string | 是 | 游戏 ID（无日期区间；崩溃分组为累计口径） |
+
+**响应字段:**
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `crashHash` | string | 崩溃哈希 (用于分组) |
+| `count` | number | 崩溃次数 |
+| `firstSeen` | datetime | 首次出现时间 |
+| `lastSeen` | datetime | 最后出现时间 |
 
 返回崩溃指纹分组列表（`crash_hash` 分组，与 `/api/crash-metrics` 的 top-groups 同源）。
 

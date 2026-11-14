@@ -1,14 +1,14 @@
-# Game Analytics Scenario Coverage
+# Gaming Analytics Scenario Coverage Analysis
 
-This document analyzes the coverage and flexibility of the Oddsmaker platform with respect to game analytics scenarios.
+This document analyzes the coverage and flexibility of the Oddsmaker platform's gaming analytics scenarios.
 
 ## Overall Assessment
 
-The ten analytics dimensions are listed below item by item, together with their feature points and implementation status. Gaps are concentrated in custom metrics on the analytics side (see the flexibility assessment), as well as MAB auto-tuning and sequential testing for A/B testing.
+Six core scenarios and five extended scenarios are itemized below with their feature points and implementation status. The gaps are concentrated in custom metrics, the dashboard builder, and custom aggregations (see the flexibility assessment), as well as MAB auto-tuning and sequential testing for A/B experiments.
 
 ---
 
-## 1. Covered Core Scenarios
+## I. Core Scenarios Covered
 
 ### 1.1 Event Collection
 
@@ -17,138 +17,214 @@ The ten analytics dimensions are listed below item by item, together with their 
 | Feature | Status | Description |
 |------|------|------|
 | Multi-platform SDK | ✅ | Web, Android, iOS, Unity, Server (HMAC signature) |
-| Batch/real-time mode | ✅ | Flexible event reporting modes |
+| Batch mode | ✅ | All ingestion goes through `POST /v1/batch` (there is no realtime/single-event endpoint) |
 | Event Schema | ✅ | Standard events + custom properties |
 | Data validation | ✅ | Tracking Plan validation |
-| PII handling | ✅ | Desensitization, masking and drop policies |
+| PII handling | ✅ | Desensitization, masking, dropping strategies |
+
+**Supported event types:**
+- `session` - session events
+- `user` - user attributes
+- `business` - business events (payments, ads)
+- `resource` - resource events (virtual currency)
+- `progression` - progression events (levels)
+- `design` - design events
+- `error` - error events
+- `ad` - ad events
+- `risk` - risk control events
 
 ### 1.2 Retention Analysis
-
-**Coverage: 4/4 items**
-
-| Feature | Status | Description |
-|------|------|------|
-| N-Day retention | ✅ | D1/D3/D7/D14/D30/D60/D90 |
-| Rolling retention | ✅ | Rolling retention calculation |
-| Custom windows | ✅ | Windows configured via the job-level system property `retention.ndays` (default 1,7,30), not per game |
-| Dimension drill-down | ✅ | Drill down by cohort (platform/channel/version dimensions pending) |
-
-### 1.3 Funnel Analysis
-
-**Coverage: 4/4 items**
-
-| Feature | Status | Description |
-|------|------|------|
-| N-step funnel | ✅ | Any number of steps |
-| Time window | ✅ | Time limit between steps |
-| Ordered/unordered | ✅ | Strict order or loose matching |
-| Conversion rate calculation | ✅ | Overall conversion + step conversion |
-
-**Typical funnel scenarios:**
-- Onboarding funnel (registration → character creation → tutorial completion)
-- Payment funnel (browse items → click purchase → complete payment)
-- Level funnel (start level → complete level → earn rewards)
-
-### 1.4 A/B Testing Analysis
-
-**Coverage: 5/5 items** (MAB auto-tuning and sequential testing not implemented)
-
-| Feature | Status | Description |
-|------|------|------|
-| Experiment configuration | ✅ | Variants, weights, target events |
-| User assignment | ✅ | Consistent hashing assignment |
-| Conversion comparison | ✅ | Conversion rate per variant |
-| Statistical significance | ✅ | p-value calculation |
-| SRM detection | ✅ | Sample ratio mismatch detection |
-
-### 1.5 Risk Control
 
 **Coverage: 5/5 items**
 
 | Feature | Status | Description |
 |------|------|------|
-| Rule engine | ✅ | Threshold, blocklist/allowlist, velocity, sequence rules |
+| N-Day retention | ✅ | Defaults D1/D7/D30 (N-Day) and D1/D3/D7/D14/D30 (Rolling), configurable via `retention.ndays` / `retention.rolling.ndays` |
+| Rolling retention | ✅ | Rolling retention computation |
+| Custom windows | ✅ | Flexible retention window configuration |
+| Dimension drill-down | ✅ | By the segment attribute whitelist: platform / country / app_version / sdk_version / server_id / game_mode |
+| Cohort grouping | ✅ | Grouped by registration date |
+
+### 1.3 Funnel Analysis
+
+**Coverage: 5/5 items**
+
+| Feature | Status | Description |
+|------|------|------|
+| N-step funnels | ✅ | Any number of steps |
+| Time windows | ✅ | Time limits between steps |
+| Ordered/unordered | ✅ | Strict sequence or loose matching |
+| Dimension drill-down | ⚠️ | Not implemented — results endpoints accept only `gameId` / `environment` / `days` |
+| Conversion rate calculation | ✅ | Overall conversion rate + per-step conversion rate |
+
+**Typical funnel scenarios:**
+- Onboarding funnel (register → create character → complete tutorial)
+- Payment funnel (browse items → click buy → complete payment)
+- Level funnel (start level → complete level → get reward)
+
+### 1.4 A/B Testing Analysis
+
+**Coverage: 8/8 items** (MAB auto-tuning and sequential testing not yet implemented)
+
+| Feature | Status | Description |
+|------|------|------|
+| Experiment configuration | ✅ | Variants, weights, target events |
+| User bucketing | ✅ | Consistent hashing bucketing |
+| Exposure tracking | ✅ | Experiment exposure events |
+| Conversion rate comparison | ✅ | Conversion rate per variant |
+| Statistical significance | ✅ | p-value calculation |
+| SRM detection | ✅ | Sample ratio mismatch detection |
+| Uplift analysis | ✅ | B vs A uplift |
+| Confidence intervals | ✅ | 95% confidence interval |
+
+**To be enhanced:**
+- Multi-armed bandit (MAB) auto-tuning
+- Sequential testing
+
+### 1.5 Risk Control
+
+**Coverage: 7/7 items**
+
+| Feature | Status | Description |
+|------|------|------|
+| Rule engine | ✅ | THRESHOLD/FREQUENCY/PATTERN/VELOCITY/RATIO/ANOMALY/MACHINE_LEARNING/FEATURE rules; blacklists go through BlockList, replays go through the gateway ReplayGuard |
 | Real-time evaluation | ✅ | Flink stream processing |
-| Risk scoring | ✅ | 0-100 score |
-| Automatic ban | ✅ | Configurable ban duration |
+| Risk scoring | ✅ | Per-rule scores are 0-100; the cumulative subject score is an unclamped sum of rule contributions |
+| Automatic bans | ✅ | Configurable ban duration |
 | Review queue | ✅ | Manual review process |
+| Webhook notifications | ✅ | Real-time alerts |
+| Risk dashboard | ✅ | Risk trends, hit rates |
 
-### 1.6 Revenue Analysis
+**Typical risk control rules:**
+- High-frequency payment detection
+- Duplicate receipt validation
+- Anomalous login detection
+- Anomalous virtual currency growth
+- Abnormal ad reward
+
+### 1.6 User Segmentation
 
 **Coverage: 4/4 items**
 
 | Feature | Status | Description |
 |------|------|------|
-| ARPU/ARPPU | ✅ | Average revenue per user / per paying user |
-| Revenue trends | ✅ | Daily statistics |
-| Distribution by platform | ✅ | Android/iOS/Web revenue comparison |
-| Revenue composition | ✅ | IAP/ad/subscription revenue breakdown |
+| Cohort analysis | ✅ | Grouped by registration date |
+| LTV calculation | ✅ | Cumulative/predicted LTV |
+| Payer segmentation | ✅ | No prebuilt groups — build custom segment conditions over the attribute whitelist (payment events can drive the condition) |
+| Activity segmentation | ✅ | No prebuilt groups — build custom segment conditions over the attribute whitelist (activity windows can drive the condition) |
 
-### 1.7 Ads Analytics
+---
 
-**Coverage: 3/4 items** (the ctr column exists in the data layer but is not exposed by the API)
+## II. Scenarios to Be Enhanced
 
-| Feature | Status | Description |
-|------|------|------|
-| eCPM | ✅ | Revenue per thousand impressions |
-| Fill rate | ✅ | Ad availability |
-| CTR | ⚠️ | ctr column exists in the data layer, not exposed by the API |
-| Network comparison | ✅ | Performance of different ad networks |
+### 2.1 Revenue Analysis
 
-### 1.8 Session Analytics
+**Current status: ✅ Implemented**
 
-**Coverage: 3/4 items** (the session quality column exists in the data layer, the pipeline is not connected)
+| Feature | Status | API Endpoint |
+|------|------|----------|
+| ARPU/ARPPU | ✅ | `/api/analytics/revenue/{gameId}/arpu` |
+| Revenue trends | ✅ | `/api/analytics/revenue/{gameId}/overview` |
+| Distribution by platform | ✅ | `/api/analytics/revenue/{gameId}/by-platform` |
+| IAP/ad/subscription revenue | ✅ | Categorized revenue statistics |
 
-| Feature | Status | Description |
-|------|------|------|
-| Session duration | ✅ | Average session duration |
+### 2.2 Ad Analysis
+
+**Current status: ✅ Implemented**
+
+| Feature | Status | API Endpoint |
+|------|------|----------|
+| eCPM | ✅ | `/api/analytics/ads/{gameId}/overview` |
+| Fill rate | ✅ | Statistics by ad network |
+| Click-through rate (CTR) | ⚠️ | Data-layer column only — no endpoint exposes it (the ads API is by-network only) |
+| Ad network comparison | ✅ | `/api/analytics/ads/{gameId}/by-network` |
+
+### 2.3 Session Analysis
+
+**Current status: ✅ Implemented**
+
+| Feature | Status | API Endpoint |
+|------|------|----------|
+| Session duration distribution | ⚠️ | Averages only — the `p95SessionDuration` column exists but nothing writes or reads it |
 | Session depth | ✅ | Events per session |
-| Bounce rate | ✅ | First-experience quality |
-| Session quality | ⚠️ | Column exists in the data layer, pipeline not connected |
+| Bounce rate | ✅ | `/api/analytics/sessions/{gameId}/overview` |
+| Session quality scoring | ⚠️ | Columns only, pipeline not wired — no writer and no endpoint exposes a quality distribution |
 
-### 1.9 Performance Monitoring
+### 2.4 Performance Monitoring
 
-**Coverage: 4/4 items**
+**Current status: ✅ Implemented**
 
-| Feature | Status | Description |
-|------|------|------|
-| Frame rate monitoring | ✅ | FPS statistics |
-| Lag detection | ✅ | Frame freeze identification |
-| Crash analysis | ✅ | Crash grouping and statistics |
-| Memory monitoring | ✅ | Memory usage tracking |
+| Feature | Status | API Endpoint |
+|------|------|----------|
+| Frame rate monitoring | ✅ | `/api/analytics/performance/{gameId}/overview` |
+| Jank detection | ✅ | LAG metric |
+| Crash analysis | ✅ | `/api/analytics/performance/{gameId}/crashes` |
+| Memory monitoring | ✅ | MEMORY metric |
 
-### 1.10 Social Analytics
+### 2.5 Social Analysis
 
-**Coverage: 4/4 items**
+**Current status: ✅ Implemented**
 
-| Feature | Status | Description |
-|------|------|------|
-| Friends system | ✅ | Friendship statistics |
-| Guild analytics | ✅ | Guild count and size |
-| Viral coefficient | ✅ | Organic user growth |
-| Social retention impact | ✅ | Retention lift from social features |
-
----
-
-## 2. Flexibility Assessment
-
-### High flexibility
-- Event Schema is customizable
-- Risk rules are configurable
-- Reports are customizable
-- Sampling rate is adjustable
-
-### Medium flexibility
-- Analytics dimensions are fixed (extendable via props)
-- Funnels have no hard cap on the step count
-
-### To be improved
-- Custom metric definitions are missing on the analytics side (the ML model side already has a customMetrics field)
-
-Custom dashboards are live (CRUD endpoints and the console page `/analytics/dashboards`) and are no longer listed as a gap.
+| Feature | Status | API Endpoint |
+|------|------|----------|
+| Friends system | ✅ | `/api/analytics/social/{gameId}/overview` |
+| Guild analysis | ✅ | Guild count and viral coefficient (`totalGuilds` / `avgViralCoefficient`) — no size metric |
+| Viral coefficient | ✅ | Invite conversion rate |
+| Social retention impact | ✅ | `/api/analytics/social/{gameId}/retention-impact` |
 
 ---
 
-## 3. Summary
+## III. Flexibility Assessment
 
-All feature points of the 10 dimensions listed above have corresponding implementations; the endpoint list is in [API Reference](./api-reference.md). Not implemented: custom metric definitions on the analytics side, MAB auto-tuning, sequential testing; custom dashboards are live.
+### 3.1 High Flexibility
+
+| Feature | Description |
+|------|------|
+| Event Schema | Supports custom properties, flexible extension |
+| Risk control rules | Configurable rule engine, supports complex conditions |
+| Report building | Visual report builder |
+| Sampling rate | Adjustable event sampling ratio |
+| Data retention | Configurable data retention period |
+
+### 3.2 Medium Flexibility
+
+| Feature | Description |
+|------|------|
+| Analysis dimensions | Fixed dimensions, extensible via props |
+| Funnel steps | Limited, but sufficient for most scenarios |
+| Retention windows | Predefined windows + custom windows |
+
+### 3.3 Needs Improvement
+
+| Feature | Description |
+|------|------|
+| Custom metrics | Lacks custom metric definitions |
+| Custom dashboards | Delivered: console `/analytics/dashboards` (full CRUD via `/api/games/{gameId}/dashboards`) |
+| Custom aggregations | Lacks custom aggregation functions |
+
+---
+
+## IV. Scenario Coverage Matrix
+
+| Scenario | Priority | Status |
+|------|--------|------|
+| Event collection | P0 | ✅ Complete |
+| Retention analysis | P0 | ✅ Complete |
+| Funnel analysis | P0 | ✅ Complete |
+| A/B testing | P0 | ✅ Complete |
+| Risk control | P0 | ✅ Complete |
+| User segmentation | P1 | ✅ Complete |
+| Revenue analysis | P1 | ✅ Complete |
+| Ad analysis | P2 | ✅ Complete |
+| Session analysis | P2 | ✅ Complete |
+| Performance monitoring | P2 | ✅ Complete |
+| Social analysis | P3 | ✅ Complete |
+| Custom reports | P1 | ✅ Complete (report APIs + `/analytics/dashboards` visual dashboards) |
+
+---
+
+## V. Summary
+
+Completed: core scenarios such as event collection, retention, funnels, A/B testing, risk control, and segmentation; revenue, ad, session, performance, and social analytics APIs; multi-game architecture and developer tools.
+
+Not implemented: custom metric definitions, custom aggregation functions, MAB auto-tuning, sequential testing.

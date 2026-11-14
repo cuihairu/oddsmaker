@@ -362,8 +362,8 @@ We apologize for any inconvenience.
 
 ### 沟通
 - Slack: #oddsmaker-incidents
-- PagerDuty: https://oddsmaker.pagerduty.com
-- Status Page: https://status.oddsmaker.local
+- PagerDuty: https://oddsmaker.pagerduty.com 【按部署填写的占位——仓库不含 PagerDuty 技术栈，请填真实服务地址】
+- Status Page: https://status.oddsmaker.local 【按部署填写的占位——本仓库无状态页服务】
 
 ### 文档
 - 架构：/zh/reference/architecture
