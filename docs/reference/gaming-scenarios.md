@@ -42,7 +42,7 @@ Six core scenarios and five extended scenarios are itemized below with their fea
 | N-Day retention | ✅ | Defaults D1/D7/D30 (N-Day) and D1/D3/D7/D14/D30 (Rolling), configurable via `retention.ndays` / `retention.rolling.ndays` |
 | Rolling retention | ✅ | Rolling retention computation |
 | Custom windows | ✅ | Flexible retention window configuration |
-| Dimension drill-down | ✅ | By platform, channel, version, and other dimensions |
+| Dimension drill-down | ✅ | By the segment attribute whitelist: platform / country / app_version / sdk_version / server_id / game_mode |
 | Cohort grouping | ✅ | Grouped by registration date |
 
 ### 1.3 Funnel Analysis
@@ -89,7 +89,7 @@ Six core scenarios and five extended scenarios are itemized below with their fea
 |------|------|------|
 | Rule engine | ✅ | THRESHOLD/FREQUENCY/PATTERN/VELOCITY/RATIO/ANOMALY/MACHINE_LEARNING/FEATURE rules; blacklists go through BlockList, replays go through the gateway ReplayGuard |
 | Real-time evaluation | ✅ | Flink stream processing |
-| Risk scoring | ✅ | 0-100 point scoring |
+| Risk scoring | ✅ | Per-rule scores are 0-100; the cumulative subject score is an unclamped sum of rule contributions |
 | Automatic bans | ✅ | Configurable ban duration |
 | Review queue | ✅ | Manual review process |
 | Webhook notifications | ✅ | Real-time alerts |

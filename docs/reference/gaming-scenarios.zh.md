@@ -42,7 +42,7 @@
 | N-Day 留存 | ✅ | 默认 D1/D7/D30（N-Day）与 D1/D3/D7/D14/D30（Rolling），可用 `retention.ndays` / `retention.rolling.ndays` 配置 |
 | Rolling 留存 | ✅ | 滚动留存计算 |
 | 自定义窗口 | ✅ | 灵活的留存窗口配置 |
-| 维度下钻 | ✅ | 按平台、渠道、版本等维度 |
+| 维度下钻 | ✅ | 按分群属性白名单：platform / country / app_version / sdk_version / server_id / game_mode |
 | Cohort 分组 | ✅ | 按注册日期分组 |
 
 ### 1.3 漏斗分析
@@ -89,7 +89,7 @@
 |------|------|------|
 | 规则引擎 | ✅ | THRESHOLD/FREQUENCY/PATTERN/VELOCITY/RATIO/ANOMALY/MACHINE_LEARNING/FEATURE 规则；黑名单走 BlockList、重放走网关 ReplayGuard |
 | 实时评估 | ✅ | Flink 流处理 |
-| 风险评分 | ✅ | 0-100 分评分 |
+| 风险评分 | ✅ | 单规则得分 0-100；主体累计分为规则贡献的未钳制求和 |
 | 自动封禁 | ✅ | 可配置封禁时长 |
 | 审核队列 | ✅ | 人工审核流程 |
 | Webhook 通知 | ✅ | 实时告警 |
