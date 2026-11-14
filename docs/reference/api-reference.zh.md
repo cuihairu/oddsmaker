@@ -395,8 +395,8 @@ risk-job 按定时器（默认 60 秒）从 `GET /api/risk-dashboard/rules/{game
 | GET | `/api/health/checks` | 列出所有健康检查 |
 | GET | `/api/health/checks/{checkName}` | 获取健康检查详情 |
 | POST | `/api/health/checks/{checkName}/run` | 执行健康检查 |
-| GET | `/api/health/live` | 存活探针（公开） |
-| GET | `/api/health/ready` | 就绪探针（公开） |
+| GET | `/api/health/live` | 存活探针（需认证） |
+| GET | `/api/health/ready` | 就绪探针（需认证） |
 | GET | `/api/health/metrics/{type}` | 获取近期指标 |
 | GET | `/api/health/alerts/active` | 获取活跃告警 |
 | GET | `/api/health/alerts/stats` | 获取告警统计 |
@@ -427,7 +427,7 @@ risk-job 按定时器（默认 60 秒）从 `GET /api/risk-dashboard/rules/{game
 | POST | `/api/system/maintenances/{windowId}/cancel` | 取消维护窗口 |
 | GET | `/api/system/maintenances/check/{gameId}` | 检查游戏是否处于维护中 |
 | GET | `/api/system/configs` | 获取全部系统配置 |
-| GET | `/api/system/configs/public` | 获取公开配置（无需认证） |
+| GET | `/api/system/configs/public` | 获取公开配置（需认证——名字带 public，但路由仍在 `/api/**` 认证之后） |
 | GET | `/api/system/configs/{configKey}` | 获取配置值 |
 | PUT | `/api/system/configs/{configKey}` | 设置配置值 |
 | GET | `/api/system/features` | 获取全部 Feature Flag |

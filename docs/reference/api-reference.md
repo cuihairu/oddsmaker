@@ -395,8 +395,8 @@ The risk-job picks up enabled rules from `GET /api/risk-dashboard/rules/{gameId}
 | GET | `/api/health/checks` | List all health checks |
 | GET | `/api/health/checks/{checkName}` | Get health check details |
 | POST | `/api/health/checks/{checkName}/run` | Run a health check |
-| GET | `/api/health/live` | Liveness probe (public) |
-| GET | `/api/health/ready` | Readiness probe (public) |
+| GET | `/api/health/live` | Liveness probe (authenticated) |
+| GET | `/api/health/ready` | Readiness probe (authenticated) |
 | GET | `/api/health/metrics/{type}` | Get recent metrics |
 | GET | `/api/health/alerts/active` | Get active alerts |
 | GET | `/api/health/alerts/stats` | Get alert statistics |
@@ -427,7 +427,7 @@ The risk-job picks up enabled rules from `GET /api/risk-dashboard/rules/{gameId}
 | POST | `/api/system/maintenances/{windowId}/cancel` | Cancel a maintenance window |
 | GET | `/api/system/maintenances/check/{gameId}` | Check if game is in maintenance |
 | GET | `/api/system/configs` | Get all system configs |
-| GET | `/api/system/configs/public` | Get public configs (no auth) |
+| GET | `/api/system/configs/public` | Get public configs (authenticated — the name says public, the route sits behind `/api/**` auth) |
 | GET | `/api/system/configs/{configKey}` | Get config value |
 | PUT | `/api/system/configs/{configKey}` | Set config value |
 | GET | `/api/system/features` | Get all feature flags |
