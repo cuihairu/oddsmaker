@@ -91,7 +91,10 @@ Key 类型：
 | POST | `/api/games/{gameId}/tracking-plans/{trackingPlanId}/activate` | 激活方案 |
 | POST | `/api/games/{gameId}/tracking-plans/{trackingPlanId}/deactivate` | 停用方案 |
 | POST/GET | `/api/games/{gameId}/tracking-plans/{trackingPlanId}/events` | 在方案中注册 / 列出事件 |
-| POST | `/api/games/{gameId}/tracking-plans/{trackingPlanId}/properties` | 注册属性定义 |
+| POST | `/api/games/{gameId}/tracking-plans/{trackingPlanId}/events/{eventDefinitionId}/properties` | 注册属性定义 |
+| GET | `/api/games/{gameId}/tracking-plans/{trackingPlanId}/events/{eventDefinitionId}/properties` | 列出该事件定义的属性 |
+| PUT | `/api/games/{gameId}/tracking-plans/{trackingPlanId}/events/{eventDefinitionId}/properties/{propertyDefinitionId}` | 更新属性定义（仅草稿态计划） |
+| DELETE | `/api/games/{gameId}/tracking-plans/{trackingPlanId}/events/{eventDefinitionId}/properties/{propertyDefinitionId}` | 删除属性定义（仅草稿态计划） |
 
 ### 实验
 

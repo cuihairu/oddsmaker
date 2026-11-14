@@ -91,7 +91,10 @@ Plans are scoped to a game (not per environment). A plan is activated or deactiv
 | POST | `/api/games/{gameId}/tracking-plans/{trackingPlanId}/activate` | Activate a plan |
 | POST | `/api/games/{gameId}/tracking-plans/{trackingPlanId}/deactivate` | Deactivate a plan |
 | POST/GET | `/api/games/{gameId}/tracking-plans/{trackingPlanId}/events` | Register / list events in the plan |
-| POST | `/api/games/{gameId}/tracking-plans/{trackingPlanId}/properties` | Register a property definition |
+| POST | `/api/games/{gameId}/tracking-plans/{trackingPlanId}/events/{eventDefinitionId}/properties` | Register a property definition |
+| GET | `/api/games/{gameId}/tracking-plans/{trackingPlanId}/events/{eventDefinitionId}/properties` | List a plan event's property definitions |
+| PUT | `/api/games/{gameId}/tracking-plans/{trackingPlanId}/events/{eventDefinitionId}/properties/{propertyDefinitionId}` | Update a property definition (draft plans only) |
+| DELETE | `/api/games/{gameId}/tracking-plans/{trackingPlanId}/events/{eventDefinitionId}/properties/{propertyDefinitionId}` | Delete a property definition (draft plans only) |
 
 ### Experiments
 
