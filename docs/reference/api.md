@@ -160,4 +160,8 @@ The gateway validates a 5-minute time window by default. Client SDKs must not us
 - `pii_blocked`: hit the PII block.
 - `blocked`: hit the risk-control blacklist hard block.
 - `environment_unavailable`: the event's environment is not enabled (HTTP 503).
+- `missing_api_key`: the request carried no `x-api-key` header.
+- `missing_signature`: the request needs a signature (it did not carry one).
+- `request_too_large`: the decompressed body exceeds the request size limit (HTTP 413).
+- `kafka_error`: the gateway could not hand the accepted event to Kafka (it is reported as a rejection).
 - `internal_error`: internal server error.

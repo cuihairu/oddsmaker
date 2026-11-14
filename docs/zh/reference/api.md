@@ -160,4 +160,8 @@ Gateway 默认校验 5 分钟时间窗。客户端 SDK 不应使用 HMAC。
 - `pii_blocked`: 命中 PII 阻断。
 - `blocked`: 命中风控黑名单硬拦截。
 - `environment_unavailable`: 事件所属环境未启用（HTTP 503）。
+- `missing_api_key`: 请求未携带 `x-api-key` 头。
+- `missing_signature`: 请求需要签名但未携带。
+- `request_too_large`: 解压后的请求体超过请求大小上限（HTTP 413）。
+- `kafka_error`: 网关无法把已接受的事件交给 Kafka（以拒绝形式上报）。
 - `internal_error`: 服务端内部错误。
