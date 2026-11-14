@@ -115,9 +115,11 @@ POST /v1/batch
 X-Api-Key: pk_game_xxx
 Content-Type: application/x-ndjson
 
-{"event_id":"01JE2E0003","event_type":"dimension","event_name":"dimension_define","game_id":"game_x","environment":"prod","dim_type":"item","resource_id":"sword_001","name":"铁剑","rarity":"common","op":"upsert","version_ts":1760000000000,"ts_client":1760000000000}
-{"event_id":"01JE2E0004","event_type":"dimension","event_name":"dimension_define","game_id":"game_x","environment":"prod","dim_type":"item","resource_id":"sword_002","name":"钢剑","rarity":"rare","op":"upsert","version_ts":1760000000001,"ts_client":1760000000001}
+{"event_id":"01JE2E0003","event_name":"dimension_define","event_type":"dimension","game_id":"game_x","environment":"prod","device_id":"oddsmaker-agent","ts_client":1760000000000,"props":{"dim_type":"item","resource_id":"sword_001","op":"upsert","version_ts":1760000000000,"attributes":{"name":"铁剑","rarity":"common"}}}
+{"event_id":"01JE2E0004","event_name":"dimension_define","event_type":"dimension","game_id":"game_x","environment":"prod","device_id":"oddsmaker-agent","ts_client":1760000000001,"props":{"dim_type":"item","resource_id":"sword_002","op":"upsert","version_ts":1760000000001,"attributes":{"name":"钢剑","rarity":"rare"}}}
 ```
+
+> `device_id` is required by the event schema — the Sync Agent sets it to `oddsmaker-agent`, because dimension data is not device-scoped. The dimension payload goes inside `props`: `dim_type`, `resource_id`, `op`, `version_ts`, and `attributes` (free-form key/value pairs), which is the shape the Agent emits and the sync job normalizes.
 
 > Each NDJSON event must be a single complete JSON object on one line. The gateway parses the body line by line: a syntactically invalid line (malformed JSON) is silently skipped, while a line that parses but fails schema validation is rejected in the response (`invalid_schema`), not silently dropped. Each `event_id` must be unique — the gateway deduplicates by `event_id` (idempotency), so two events sharing an ID silently drop the second.
 
@@ -231,7 +233,7 @@ Authorization: Bearer ***
 Game-side API contract:
 
 - Supports the `updated_after` incremental parameter (not sent on the first pull; subsequently pass the `next_cursor` last delivered by the server, or the millisecond value of the largest `updated_at` on the page).
-- The response is a JSON object; the entry array key is probed in the order `items` / `resources` / `levels` / `data`, with an optional `next_cursor` string (an empty string is treated as the end of the window).
+- The response is a JSON object; the entry array key is probed across `items` / `resources` / `levels` / `data` (unordered set, no guaranteed order), with an optional `next_cursor` string (an empty string is treated as the end of the window).
 - In-row control columns align with the Agent semantics: one of `resource_id`/`item_code`/`level_id`/`id`/`code` is the resource identifier, `op` (defaults to upsert), one of `updated_at`/`version_ts`/`updated_ts` is the version time (an epoch millis number or ISO-8601 text), and the remaining columns go into `attributes`.
 
 Control-side behavior (all implemented):

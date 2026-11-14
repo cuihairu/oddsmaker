@@ -333,12 +333,12 @@ than "duplicates eliminated".
 
 ### Observation semantics
 
-Events judged duplicate inside the job are emitted to the `DedupFunction`'s `duplicate` side output, but that
-side output is not wired to the DLQ sink in the current job graph — only the `ValidateFunction`'s DLQ side
-output is connected (see T-REV04), so duplicate events do not currently reach the DLQ and the DLQ
-`duplicates_enrich` counter is not a reading of upstream dedup interception volume. This is a known gap
-(todo T-REV04), not an intended observation semantics; the counter remains an upper-bound signal only once
-the dedup side output is wired.
+Events judged duplicate inside the job are emitted to the `DedupFunction`'s `duplicate` side output, and that
+side output **is** wired to the DLQ sink — both the `ValidateFunction`'s and the `DedupFunction`'s side
+outputs go to the same sink (`EventsEnrichJob.java:159-160`, named `dlq-sink` and `dlq-sink-dedup`).
+Duplicate events therefore reach the DLQ, and the `duplicates_enrich` counter (fed by `reason=duplicate`
+records, aggregated by `DeadLetterConsumer`) is a direct reading of upstream dedup interception volume.
+T-REV04 is closed.
 
 ### Verification surface
 

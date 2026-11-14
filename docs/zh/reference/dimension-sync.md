@@ -115,9 +115,11 @@ POST /v1/batch
 X-Api-Key: pk_game_xxx
 Content-Type: application/x-ndjson
 
-{"event_id":"01JE2E0003","event_type":"dimension","event_name":"dimension_define","game_id":"game_x","environment":"prod","dim_type":"item","resource_id":"sword_001","name":"铁剑","rarity":"common","op":"upsert","version_ts":1760000000000,"ts_client":1760000000000}
-{"event_id":"01JE2E0004","event_type":"dimension","event_name":"dimension_define","game_id":"game_x","environment":"prod","dim_type":"item","resource_id":"sword_002","name":"钢剑","rarity":"rare","op":"upsert","version_ts":1760000000001,"ts_client":1760000000001}
+{"event_id":"01JE2E0003","event_name":"dimension_define","event_type":"dimension","game_id":"game_x","environment":"prod","device_id":"oddsmaker-agent","ts_client":1760000000000,"props":{"dim_type":"item","resource_id":"sword_001","op":"upsert","version_ts":1760000000000,"attributes":{"name":"铁剑","rarity":"common"}}}
+{"event_id":"01JE2E0004","event_name":"dimension_define","event_type":"dimension","game_id":"game_x","environment":"prod","device_id":"oddsmaker-agent","ts_client":1760000000001,"props":{"dim_type":"item","resource_id":"sword_002","op":"upsert","version_ts":1760000000001,"attributes":{"name":"钢剑","rarity":"rare"}}}
 ```
+
+> `device_id` 是事件 schema 必填字段——Sync Agent 固定填 `oddsmaker-agent`（维度数据不按设备作用域）。维度载荷放在 `props` 里：`dim_type`、`resource_id`、`op`、`version_ts`，以及 `attributes`（自由键值对）；这就是 Agent 的出事件形态，也是同步作业归一化时的读法。
 
 > 每个 NDJSON 事件必须是单行完整 JSON 对象。网关逐行解析请求体：语法无效行（JSON 畸变）被静默跳过，解析成功但未通过 schema 校验的行在响应中上报 `invalid_schema`（非静默丢弃）。每个 `event_id` 必须唯一——网关按 `event_id` 幂等去重，两个事件共用同一 ID 时第二个被静默去重。
 
@@ -231,7 +233,7 @@ Authorization: Bearer ***
 游戏方接口契约：
 
 - 支持 `updated_after` 增量参数（首次拉取不携带；后续传服务端上次下发的 `next_cursor`，或本页最大 `updated_at` 的毫秒值）。
-- 响应为 JSON 对象，条目数组键按 `items` / `resources` / `levels` / `data` 顺序探测，可选 `next_cursor` 字符串（空串视为窗口结束）。
+- 响应为 JSON 对象，条目数组键在 `items` / `resources` / `levels` / `data` 中探测（无序集合，不保证顺序），可选 `next_cursor` 字符串（空串视为窗口结束）。
 - 行内控制列对齐 Agent 语义：`resource_id`/`item_code`/`level_id`/`id`/`code` 之一为资源标识，`op`（缺省 upsert），`updated_at`/`version_ts`/`updated_ts` 之一为版本时间（epoch millis 数字或 ISO-8601 文本），其余列进 `attributes`。
 
 Control 侧行为（均已实现）：

@@ -326,10 +326,10 @@ AggregatingMergeTree 类聚合表随之重复计数。
 
 ### 观测口径
 
-作业内被判重复的事件会输出到 `DedupFunction` 的 `duplicate` 侧输出，但当前作业图未把该侧输出
-接到 DLQ sink——只接了 `ValidateFunction` 的 DLQ 侧输出（见 T-REV04），因此重复事件当前不会
-到达 DLQ，DLQ 的 `duplicates_enrich` 计数也不是上游去重拦截量的直接读数。这是已知缺口
-（todo T-REV04），不是设计好的观测口径；只有把去重侧输出接线后，该计数才是上界信号。
+作业内被判重复的事件会输出到 `DedupFunction` 的 `duplicate` 侧输出，而该侧输出**已经**接到 DLQ sink——
+`ValidateFunction` 与 `DedupFunction` 的侧输出都汇入同一个 sink（`EventsEnrichJob.java:159-160`，
+节点名 `dlq-sink` 与 `dlq-sink-dedup`）。因此重复事件确实会到达 DLQ，DLQ 的 `duplicates_enrich` 计数
+（由 `reason=duplicate` 记录喂入，`DeadLetterConsumer` 聚合）就是上游去重拦截量的直接读数。T-REV04 已关闭。
 
 ### 验证面
 
