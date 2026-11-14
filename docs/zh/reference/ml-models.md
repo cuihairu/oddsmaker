@@ -78,7 +78,7 @@ Authorization: Bearer {token}
 
 ## 打分与预测
 
-实时单条 `predict` 端点没有。打分是批量的：`PredictionMetricsService` 按 feature_names 从 ClickHouse 取特征，点积 + sigmoid（pltv 为 D7 收入 × 乘数），结果回写 ClickHouse `predictions` 表（TTL 30 天）。`/api/prediction-metrics` 下按 churn / risk-score / pltv / propensity 四类提供触发与 refresh 端点，`GET /api/ml-models/{id}/predictions` 查历史。
+实时单条 `predict` 端点没有。打分是批量的：`PredictionMetricsService` 按 feature_names 从 ClickHouse 取特征，点积 + sigmoid（pltv 为 D7 收入 × 乘数），结果回写 ClickHouse `predictions` 表（无 ClickHouse TTL 子句；行携带 `expires_at = now + 30d`，由 `PredictionMetricsService` 作为读过滤器执行）。`/api/prediction-metrics` 下按 churn / risk-score / pltv / propensity 四类提供触发与 refresh 端点，`GET /api/ml-models/{id}/predictions` 查历史。
 
 ## 模型监控
 

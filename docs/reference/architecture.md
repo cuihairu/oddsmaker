@@ -183,7 +183,7 @@ Risk-control outputs:
 
 ## Source-Layer Analysis
 
-The 2026-11-07 source-layer analysis defines 20 abstract layers by responsibility, not by directory name. Each layer's evidence is at the current HEAD `0c0141b`. See the [source-layer glossary](/reference/source-layer-glossary) for the term table.
+The 2026-11-07 source-layer analysis defines 20 abstract layers by responsibility, not by directory name. Each layer's evidence uses `file:line` citations captured at audit time; line numbers may drift as the code moves. See the [source-layer glossary](/reference/source-layer-glossary) for the term table.
 
 | Layer | Responsibility | Representative code |
 |---|---|---|
@@ -192,7 +192,7 @@ The 2026-11-07 source-layer analysis defines 20 abstract layers by responsibilit
 | Message Transport | Kafka topics + Apicurio Avro serialization | `docker-compose.quickstart.yml:93`, `services/gateway-service/.../AvroPublisher.java:72` |
 | Stream Processing | Seven Flink 1.19 jobs consume `events_raw` → ClickHouse/PG/Kafka | `jobs/flink/events-enrich-job/.../EventsEnrichJob.java:97`, `jobs/flink/risk-job/.../RiskJob.java:148` |
 | Analytics Storage | ClickHouse events/sessions/retention/funnels/identities/dimensions/risk aggregates | `schema/sql/clickhouse/schema.sql:4`, `schema/sql/clickhouse/analytics.sql:10` |
-| Metadata and Control | 80 JPA entities in PostgreSQL, API surface, Flyway, ClickHouse queries | `services/control-service/.../Application.java:8`, `services/control-service/.../ClickHouseClient.java:37` |
+| Metadata and Control | 82 JPA entities in PostgreSQL, API surface, Flyway, ClickHouse queries | `services/control-service/.../Application.java:8`, `services/control-service/.../ClickHouseClient.java:37` |
 | Control Consumer | Kafka listeners: risk cases/blocks/webhooks, identity links, DQ counters | `services/control-service/.../RiskEventConsumer.java:85`, `services/control-service/.../IdentityConsumer.java:56` |
 | Scheduling and Background | Scheduled reconcile: retention, alerts, exports/erasure, webhook retry, Flink status, ML trainer | `services/control-service/.../RetentionEnforcementService.java:160`, `services/control-service/.../MLModelService.java:927` |
 | ML Training | Python feature engineering → churn/PLTV/risk/propensity models → versioned JSON artifacts | `ml/oddsmaker_ml/cli.py:33`, `ml/oddsmaker_ml/artifact.py:25` |

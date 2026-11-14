@@ -78,7 +78,7 @@ Two paths: manual (create a job via `POST /api/ml-models/{id}/training`, start i
 
 ## Scoring and Prediction
 
-There is no real-time single-record `predict` endpoint. Scoring is batch-based: `PredictionMetricsService` fetches features from ClickHouse by feature_names, computes a dot product + sigmoid (for pltv, D7 revenue × multiplier), and writes the results back to the ClickHouse `predictions` table (TTL 30 days). Under `/api/prediction-metrics`, trigger and refresh endpoints are provided for the four types churn / risk-score / pltv / propensity; `GET /api/ml-models/{id}/predictions` queries history.
+There is no real-time single-record `predict` endpoint. Scoring is batch-based: `PredictionMetricsService` fetches features from ClickHouse by feature_names, computes a dot product + sigmoid (for pltv, D7 revenue × multiplier), and writes the results back to the ClickHouse `predictions` table (no ClickHouse TTL clause; rows carry `expires_at = now + 30d`, enforced as a read filter in `PredictionMetricsService`). Under `/api/prediction-metrics`, trigger and refresh endpoints are provided for the four types churn / risk-score / pltv / propensity; `GET /api/ml-models/{id}/predictions` queries history.
 
 ## Model Monitoring
 

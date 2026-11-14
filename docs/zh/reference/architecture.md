@@ -183,7 +183,7 @@ ORDER BY (game_id, environment, event_type, event_date, player_id, user_id, devi
 
 ## 源码分层分析
 
-2026-11-07 源码分层分析按职责（非目录名）归纳出 20 个抽象层，证据取自当前 HEAD `0c0141b`。术语表见[源码分层术语表](/zh/reference/source-layer-glossary)。
+2026-11-07 源码分层分析按职责（非目录名）归纳出 20 个抽象层，证据为审计时点采集的 `file:line` 引用；随代码演进行号可能漂移。术语表见[源码分层术语表](/zh/reference/source-layer-glossary)。
 
 | 层 | 职责 | 代表代码 |
 |---|---|---|
@@ -192,7 +192,7 @@ ORDER BY (game_id, environment, event_type, event_date, player_id, user_id, devi
 | 消息传输层 | Kafka topic + Apicurio Avro 序列化 | `docker-compose.quickstart.yml:93` `services/gateway-service/.../AvroPublisher.java:72` |
 | 流处理层 | 七个 Flink 1.19 作业消费 `events_raw` → ClickHouse/PG/Kafka | `jobs/flink/events-enrich-job/.../EventsEnrichJob.java:97` `jobs/flink/risk-job/.../RiskJob.java:148` |
 | 分析存储层 | ClickHouse 事件/会话/留存/漏斗/身份/维度/风控聚合 | `schema/sql/clickhouse/schema.sql:4` `schema/sql/clickhouse/analytics.sql:10` |
-| 元数据与控制层 | PostgreSQL 80 个 JPA 实体、API 面、Flyway、ClickHouse 查询 | `services/control-service/.../Application.java:8` `services/control-service/.../ClickHouseClient.java:37` |
+| 元数据与控制层 | PostgreSQL 82 个 JPA 实体、API 面、Flyway、ClickHouse 查询 | `services/control-service/.../Application.java:8` `services/control-service/.../ClickHouseClient.java:37` |
 | 控制面消费层 | Kafka 监听：风控案例/封禁/webhook、身份关联、DQ 计数 | `services/control-service/.../RiskEventConsumer.java:85` `services/control-service/.../IdentityConsumer.java:56` |
 | 调度与后台执行层 | 定时对账：保留、告警、导出/擦除、webhook 重试、Flink 状态、ML 训练 | `services/control-service/.../RetentionEnforcementService.java:160` `services/control-service/.../MLModelService.java:927` |
 | ML 训练层 | Python 特征工程 → 流失/PLTV/风控/倾向模型 → 版本化 JSON 产物 | `ml/oddsmaker_ml/cli.py:33` `ml/oddsmaker_ml/artifact.py:25` |
