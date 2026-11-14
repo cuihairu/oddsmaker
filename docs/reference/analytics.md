@@ -62,6 +62,13 @@ GET /api/analytics/revenue/game_123/overview?startDate=2024-01-01&endDate=2024-0
 
 **Endpoint:** `GET /revenue/{gameId}/arpu`
 
+**Parameters:**
+| Parameter | Type | Required | Description |
+|------|------|------|------|
+| `gameId` | string | Yes | Game ID |
+| `startDate` | date | Yes | Start date (YYYY-MM-DD) |
+| `endDate` | date | Yes | End date (YYYY-MM-DD) |
+
 **Response fields:**
 | Field | Type | Description |
 |------|------|------|
@@ -84,10 +91,16 @@ GET /api/analytics/revenue/game_123/overview?startDate=2024-01-01&endDate=2024-0
 
 **Endpoint:** `GET /revenue/{gameId}/by-platform`
 
+**Parameters:**
+| Parameter | Type | Required | Description |
+|------|------|------|------|
+| `gameId` | string | Yes | Game ID |
+| `date` | date | Yes | Target date (YYYY-MM-DD) |
+
 **Response fields:**
 | Field | Type | Description |
 |------|------|------|
-| `platform` | string | Platform (ANDROID/IOS/WEB) |
+| `platform` | string | Platform dimension key (the SDK-emitted value, e.g. `web` / `android` / `ios`) |
 | `revenue` | number | Revenue for that platform |
 | `arpu` | number | ARPU for that platform |
 | `arppu` | number | ARPPU for that platform |
@@ -99,6 +112,13 @@ GET /api/analytics/revenue/game_123/overview?startDate=2024-01-01&endDate=2024-0
 ### 2.1 Ad Performance Overview
 
 **Endpoint:** `GET /ads/{gameId}/overview`
+
+**Parameters:**
+| Parameter | Type | Required | Description |
+|------|------|------|------|
+| `gameId` | string | Yes | Game ID |
+| `startDate` | date | Yes | Start date (YYYY-MM-DD) |
+| `endDate` | date | Yes | End date (YYYY-MM-DD) |
 
 **Response fields:**
 | Field | Type | Description |
@@ -122,6 +142,13 @@ GET /api/analytics/revenue/game_123/overview?startDate=2024-01-01&endDate=2024-0
 
 **Endpoint:** `GET /ads/{gameId}/by-network`
 
+**Parameters:**
+| Parameter | Type | Required | Description |
+|------|------|------|------|
+| `gameId` | string | Yes | Game ID |
+| `startDate` | date | Yes | Start date (YYYY-MM-DD) |
+| `endDate` | date | Yes | End date (YYYY-MM-DD) |
+
 **Response fields:**
 | Field | Type | Description |
 |------|------|------|
@@ -138,6 +165,13 @@ GET /api/analytics/revenue/game_123/overview?startDate=2024-01-01&endDate=2024-0
 ### 3.1 Session Overview
 
 **Endpoint:** `GET /sessions/{gameId}/overview`
+
+**Parameters:**
+| Parameter | Type | Required | Description |
+|------|------|------|------|
+| `gameId` | string | Yes | Game ID |
+| `startDate` | date | Yes | Start date (YYYY-MM-DD) |
+| `endDate` | date | Yes | End date (YYYY-MM-DD) |
 
 **Response fields:**
 | Field | Type | Description |
@@ -162,6 +196,13 @@ GET /api/analytics/revenue/game_123/overview?startDate=2024-01-01&endDate=2024-0
 ### 3.2 Session Trends
 
 **Endpoint:** `GET /sessions/{gameId}/trends`
+
+**Parameters:**
+| Parameter | Type | Required | Description |
+|------|------|------|------|
+| `gameId` | string | Yes | Game ID |
+| `startDate` | date | Yes | Start date (YYYY-MM-DD) |
+| `endDate` | date | Yes | End date (YYYY-MM-DD) |
 
 **Response fields:**
 | Field | Type | Description |
@@ -194,6 +235,8 @@ GET /api/analytics/revenue/game_123/overview?startDate=2024-01-01&endDate=2024-0
 | `CRASH` | object | Crash statistics |
 | `MEMORY` | object | Memory statistics |
 | `LOAD_TIME` | object | Load time statistics |
+| `NETWORK` | object | Network statistics |
+| `BATTERY` | object | Battery statistics |
 
 **Each metric contains:**
 - `avgValue` - Average value
@@ -222,6 +265,11 @@ GET /api/analytics/revenue/game_123/overview?startDate=2024-01-01&endDate=2024-0
 
 **Endpoint:** `GET /performance/{gameId}/crashes`
 
+**Parameters:**
+| Parameter | Type | Required | Description |
+|------|------|------|------|
+| `gameId` | string | Yes | Game ID (no date range; crash groups are cumulative) |
+
 **Response fields:**
 | Field | Type | Description |
 |------|------|------|
@@ -237,6 +285,13 @@ GET /api/analytics/revenue/game_123/overview?startDate=2024-01-01&endDate=2024-0
 ### 5.1 Social Overview
 
 **Endpoint:** `GET /social/{gameId}/overview`
+
+**Parameters:**
+| Parameter | Type | Required | Description |
+|------|------|------|------|
+| `gameId` | string | Yes | Game ID |
+| `startDate` | date | Yes | Start date (YYYY-MM-DD) |
+| `endDate` | date | Yes | End date (YYYY-MM-DD) |
 
 **Response fields:**
 | Field | Type | Description |
@@ -256,6 +311,12 @@ GET /api/analytics/revenue/game_123/overview?startDate=2024-01-01&endDate=2024-0
 ### 5.2 Social Impact on Retention
 
 **Endpoint:** `GET /social/{gameId}/retention-impact`
+
+**Parameters:**
+| Parameter | Type | Required | Description |
+|------|------|------|------|
+| `gameId` | string | Yes | Game ID |
+| `date` | date | Yes | Target date (YYYY-MM-DD) |
 
 **Response fields:**
 | Field | Type | Description |

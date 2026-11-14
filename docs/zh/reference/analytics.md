@@ -182,6 +182,9 @@ GET /api/analytics/revenue/game_123/overview?startDate=2024-01-01&endDate=2024-0
 | `LAG` | object | 卡顿统计 |
 | `CRASH` | object | 崩溃统计 |
 | `MEMORY` | object | 内存统计 |
+| `LOAD_TIME` | object | 加载时间统计 |
+| `NETWORK` | object | 网络统计 |
+| `BATTERY` | object | 电池统计 |
 
 **指标含义:**
 - **FPS** - 游戏流畅度（帧/秒）

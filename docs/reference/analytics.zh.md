@@ -62,6 +62,13 @@ GET /api/analytics/revenue/game_123/overview?startDate=2024-01-01&endDate=2024-0
 
 **端点:** `GET /revenue/{gameId}/arpu`
 
+**参数:**
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `gameId` | string | 是 | 游戏 ID |
+| `startDate` | date | 是 | 起始日期（YYYY-MM-DD） |
+| `endDate` | date | 是 | 结束日期（YYYY-MM-DD） |
+
 **响应字段:**
 | 字段 | 类型 | 说明 |
 |------|------|------|
@@ -84,10 +91,16 @@ GET /api/analytics/revenue/game_123/overview?startDate=2024-01-01&endDate=2024-0
 
 **端点:** `GET /revenue/{gameId}/by-platform`
 
+**参数:**
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `gameId` | string | 是 | 游戏 ID |
+| `date` | date | 是 | 目标日期（YYYY-MM-DD） |
+
 **响应字段:**
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| `platform` | string | 平台 (ANDROID/IOS/WEB) |
+| `platform` | string | 平台维度键（SDK 上报值，如 `web` / `android` / `ios`） |
 | `revenue` | number | 该平台收入 |
 | `arpu` | number | 该平台 ARPU |
 | `arppu` | number | 该平台 ARPPU |
@@ -99,6 +112,13 @@ GET /api/analytics/revenue/game_123/overview?startDate=2024-01-01&endDate=2024-0
 ### 2.1 广告性能概览
 
 **端点:** `GET /ads/{gameId}/overview`
+
+**参数:**
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `gameId` | string | 是 | 游戏 ID |
+| `startDate` | date | 是 | 起始日期（YYYY-MM-DD） |
+| `endDate` | date | 是 | 结束日期（YYYY-MM-DD） |
 
 **响应字段:**
 | 字段 | 类型 | 说明 |
@@ -122,6 +142,13 @@ GET /api/analytics/revenue/game_123/overview?startDate=2024-01-01&endDate=2024-0
 
 **端点:** `GET /ads/{gameId}/by-network`
 
+**参数:**
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `gameId` | string | 是 | 游戏 ID |
+| `startDate` | date | 是 | 起始日期（YYYY-MM-DD） |
+| `endDate` | date | 是 | 结束日期（YYYY-MM-DD） |
+
 **响应字段:**
 | 字段 | 类型 | 说明 |
 |------|------|------|
@@ -138,6 +165,13 @@ GET /api/analytics/revenue/game_123/overview?startDate=2024-01-01&endDate=2024-0
 ### 3.1 会话概览
 
 **端点:** `GET /sessions/{gameId}/overview`
+
+**参数:**
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `gameId` | string | 是 | 游戏 ID |
+| `startDate` | date | 是 | 起始日期（YYYY-MM-DD） |
+| `endDate` | date | 是 | 结束日期（YYYY-MM-DD） |
 
 **响应字段:**
 | 字段 | 类型 | 说明 |
@@ -162,6 +196,13 @@ GET /api/analytics/revenue/game_123/overview?startDate=2024-01-01&endDate=2024-0
 ### 3.2 会话趋势
 
 **端点:** `GET /sessions/{gameId}/trends`
+
+**参数:**
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `gameId` | string | 是 | 游戏 ID |
+| `startDate` | date | 是 | 起始日期（YYYY-MM-DD） |
+| `endDate` | date | 是 | 结束日期（YYYY-MM-DD） |
 
 **响应字段:**
 | 字段 | 类型 | 说明 |
@@ -194,6 +235,8 @@ GET /api/analytics/revenue/game_123/overview?startDate=2024-01-01&endDate=2024-0
 | `CRASH` | object | 崩溃统计 |
 | `MEMORY` | object | 内存统计 |
 | `LOAD_TIME` | object | 加载时间统计 |
+| `NETWORK` | object | 网络统计 |
+| `BATTERY` | object | 电池统计 |
 
 **每个指标包含:**
 - `avgValue` - 平均值
@@ -222,6 +265,11 @@ GET /api/analytics/revenue/game_123/overview?startDate=2024-01-01&endDate=2024-0
 
 **端点:** `GET /performance/{gameId}/crashes`
 
+**参数:**
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `gameId` | string | 是 | 游戏 ID（无日期区间；崩溃分组为累计口径） |
+
 **响应字段:**
 | 字段 | 类型 | 说明 |
 |------|------|------|
@@ -237,6 +285,13 @@ GET /api/analytics/revenue/game_123/overview?startDate=2024-01-01&endDate=2024-0
 ### 5.1 社交概览
 
 **端点:** `GET /social/{gameId}/overview`
+
+**参数:**
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `gameId` | string | 是 | 游戏 ID |
+| `startDate` | date | 是 | 起始日期（YYYY-MM-DD） |
+| `endDate` | date | 是 | 结束日期（YYYY-MM-DD） |
 
 **响应字段:**
 | 字段 | 类型 | 说明 |
@@ -256,6 +311,12 @@ GET /api/analytics/revenue/game_123/overview?startDate=2024-01-01&endDate=2024-0
 ### 5.2 社交对留存的影响
 
 **端点:** `GET /social/{gameId}/retention-impact`
+
+**参数:**
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `gameId` | string | 是 | 游戏 ID |
+| `date` | date | 是 | 目标日期（YYYY-MM-DD） |
 
 **响应字段:**
 | 字段 | 类型 | 说明 |
