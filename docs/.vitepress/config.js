@@ -89,7 +89,7 @@ export default withMermaid(defineConfig({
         nav: [
           { text: '首页', link: '/zh/' },
           { text: 'API 文档', link: '/zh/reference/' },
-          { text: '调研报告', link: '/research/mature-products-survey' },
+          { text: '调研报告', link: '/zh/research/mature-products-survey' },
           // 语言切换只用 VitePress 原生 locale 切换器（locales 自动渲染），不在此手写第二套
         ],
         sidebar: {
