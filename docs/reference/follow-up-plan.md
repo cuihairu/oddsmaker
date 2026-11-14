@@ -15,7 +15,7 @@ Completed features are documented per-stage:
 |---|---|---|---|---|---|
 | 1 | identity-merge Flink job | P2.2 | Backend job | SDK identify actually takes effect | ✅ Done |
 | 2 | risk-job rule dynamism | P3.2 | Job enhancement | Add rules without restart | ✅ Done (RuleFetcher periodic pull + `-D` fallback) |
-| 3 | risk-job rule type expansion | P3.2 | Job enhancement | Cover more risk-control scenarios | ✅ Done: all seven types THRESHOLD/FREQUENCY/VELOCITY/RATIO/DUPLICATE_RECEIPT/AD_REWARD/PATTERN live (PATTERN implemented as a keyed state machine, avoiding the flink-cep dependency) |
+| 3 | risk-job rule type expansion | P3.2 | Job enhancement | Cover more risk-control scenarios | ✅ Done: all eight types THRESHOLD/FREQUENCY/VELOCITY/RATIO/DUPLICATE_RECEIPT/AD_REWARD/PATTERN/FEATURE live (PATTERN implemented as a keyed state machine, avoiding the flink-cep dependency) |
 | 4 | Dimension sync Agent | Cross-cutting | New module | Dimension sync landed | ✅ Delivered: `agents/dimension-sync-agent/` (five source types mysql/postgres/csv/excel/kafka) + sync-status API (V0.9.14) + dimension-sync-job + console dimension sync management page (web `/dimensions`, heartbeat/two-measure latency observability) |
 | 5 | Symbolication service | P4.3 | New service | Readable crashes | ✅ Done via an alternative: in-repo symbolication engine (`symbol_mappings.mapping_rules` regex rules, V0.8.5) + CrashFingerprinter; the standalone microservice approach is no longer pursued |
 | 6 | Prediction model training pipeline | P4.4 | Pipeline | ML models actually usable | ✅ Delivered: trainable pipeline in `ml/` (churn/pltv/risk/propensity, artifacts are JSON with a built-in heuristic baseline comparison) + Control-side registration/write-back pipeline + training schedule (auto-retrain then re-register); GBDT / real-time scoring are on-demand extensions |
@@ -40,15 +40,15 @@ Consume the `$identify` events reported by the SDK (event_type=identity), mainta
 
 ```
 events_raw (Kafka)
-    │ 过滤 event_type='identity'
+    │ filter event_type='identity'
     ▼
 IdentityMergeJob (Flink)
     │ keyBy(user_id)
-    │ 状态：identity_id 映射 + device_id/player_id 集合
-    │ 归并逻辑：
-    │   - user_id 已存在 → 复用 identity_id，追加 device_id/player_id
-    │   - user_id 新增 → 生成新 identity_id
-    │   - previous_user_id 出现 → 合并两个 identity 到新 user_id
+    │ state: identity_id mapping + device_id/player_id sets
+    │ merge logic:
+    │   - existing user_id → reuse the identity_id, append device_id/player_id
+    │   - new user_id → generate a new identity_id
+    │   - previous_user_id present → merge the two identities into a new user_id
     ▼
 ClickHouse identities (ReplacingMergeTree by last_seen)
 ```
@@ -87,13 +87,13 @@ risk-job currently configures rules with `-D` system properties (`risk.threshold
 
 ```
 Control Service (RiskRuleRepo)
-    │ GET /api/risk/rules?gameId=X&env=prod&status=ACTIVE
-    │ （定时拉取，默认 60s）
+    │ GET /api/risk-dashboard/rules/{gameId}
+    │ (periodic pull, default 60s)
     ▼
-RuleSupplier (Flink 算子状态 / 广播流)
-    │ 广播到所有 risk 检测算子
+RuleSupplier (Flink operator state / broadcast stream)
+    │ broadcast to all risk detection operators
     ▼
-risk-job 检测逻辑（按规则配置执行）
+risk-job detection logic (driven by rule config)
 ```
 
 ### Implementation Notes
@@ -122,7 +122,7 @@ risk-job 检测逻辑（按规则配置执行）
 
 ## 3. risk-job rule type expansion
 
-> **Status (2026-09): ✅ Fully done**—all seven rule types THRESHOLD / FREQUENCY / VELOCITY / RATIO / DUPLICATE_RECEIPT / AD_REWARD / PATTERN are live in `RiskJob` (with unit tests). The PATTERN sequence rule ultimately uses a **KeyedProcessFunction + ValueState state machine** (with `PatternFunction.advance` as a pure-function core): ordered sequences of ≥2 steps, the window counted from the first step, lazy invalidation when the window is exceeded, automatic restart when the first step repeats, and reset after a hit so it can match again; rules are delivered via the control side's `ruleConditions.sequence` + `timeWindowMinutes`, and both create/update perform 2-8 step sequence validation. The flink-cep dependency was not introduced (no new dependency, no extra state-backend burden, and the logic can be unit-tested as pure functions).
+> **Status (2026-09): ✅ Fully done**—all eight rule types THRESHOLD / FREQUENCY / VELOCITY / RATIO / DUPLICATE_RECEIPT / AD_REWARD / PATTERN / FEATURE are live in `RiskJob` (with unit tests). The PATTERN sequence rule ultimately uses a **KeyedProcessFunction + ValueState state machine** (with `PatternFunction.advance` as a pure-function core): ordered sequences of ≥2 steps, the window counted from the first step, lazy invalidation when the window is exceeded, automatic restart when the first step repeats, and reset after a hit so it can match again; rules are delivered via the control side's `ruleConditions.sequence` + `timeWindowMinutes`, and both create/update perform 2-8 step sequence validation. The flink-cep dependency was not introduced (no new dependency, no extra state-backend burden, and the logic can be unit-tested as pure functions).
 
 ### Goal
 
@@ -211,17 +211,17 @@ The stack_trace in crash reports is raw addresses (offsets) and needs to be symb
 ### Design
 
 ```
-SDK 上报 crash (props.stack_trace = 原始地址)
+SDK reports a crash (props.stack_trace = raw addresses)
     │
     ▼
-Symbolicator Service (独立微服务)
-    │ 查询 mapping 文件（按 app_version + platform）
-    │ 调用对应符号化器：
+Symbolicator Service (standalone microservice)
+    │ look up mapping files (by app_version + platform)
+    │ invoke the matching symbolicator:
     │   - iOS: dSYM (dwarfdump / atos)
     │   - Android: proguard mapping (retrace)
     │   - Web: source map (source-map)
     ▼
-回填 symbolicated_stack 到 events.props 或单独表
+write symbolicated_stack back into events.props or a dedicated table
 ```
 
 ### Implementation Notes
@@ -258,18 +258,18 @@ Symbolicator Service (独立微服务)
 
 ```
 Control Service: MLModelService
-    │ 配置模型（类型、特征、目标）
+    │ configure the model (type, features, target)
     ▼
-Training Job（定时调度，每日/每周）
-    │ 1. 从 ClickHouse 抽特征（用户行为 + 资源 + 会话）
-    │ 2. 训练（XGBoost / LightGBM / 简单 LR）
-    │ 3. 评估（AUC / LogLoss / 校准度）
-    │ 4. 注册到 MLModelService（版本化）
+Training Job (scheduled, daily/weekly)
+    │ 1. extract features from ClickHouse (user behavior + economy + sessions)
+    │ 2. train (XGBoost / LightGBM / plain LR)
+    │ 3. evaluate (AUC / LogLoss / calibration)
+    │ 4. register with MLModelService (versioned)
     ▼
-Serving（Control Service 或独立服务）
-    │ 按需打分：批量（每日跑一次，写回 ClickHouse predictions 表）
+Serving (Control Service or standalone service)
+    │ score on demand: batch (runs daily, writes back to the ClickHouse predictions table)
     ▼
-predictions 表（user_id, model_id, score, predicted_at）
+predictions table (user_id, model_id, score, predicted_at)
 ```
 
 ### Implementation Notes

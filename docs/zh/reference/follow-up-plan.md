@@ -15,7 +15,7 @@
 |---|---|---|---|---|---|
 | 1 | identity-merge Flink job | P2.2 | 后端作业 | SDK identify 真正生效 | ✅ 已完成 |
 | 2 | risk-job 规则动态化 | P3.2 | 作业增强 | 加规则不重启 | ✅ 已完成（RuleFetcher 定时拉取 + `-D` fallback） |
-| 3 | risk-job 规则类型扩展 | P3.2 | 作业增强 | 覆盖更多风控场景 | ✅ 已完成：THRESHOLD/FREQUENCY/VELOCITY/RATIO/DUPLICATE_RECEIPT/AD_REWARD/PATTERN 七类全上线（PATTERN 为 keyed 状态机实现，免 flink-cep 依赖） |
+| 3 | risk-job 规则类型扩展 | P3.2 | 作业增强 | 覆盖更多风控场景 | ✅ 已完成：THRESHOLD/FREQUENCY/VELOCITY/RATIO/DUPLICATE_RECEIPT/AD_REWARD/PATTERN/FEATURE 八类全上线（PATTERN 为 keyed 状态机实现，免 flink-cep 依赖） |
 | 4 | 维度同步 Agent | 横向 | 新模块 | 维度同步落地 | ✅ 已交付：`agents/dimension-sync-agent/`（mysql/postgres/csv/excel/kafka 五类 source）+ sync-status API（V0.9.14）+ dimension-sync-job + 控制台维度同步管理页（web `/dimensions`，心跳/两口径延迟观测） |
 | 5 | 符号化服务 | P4.3 | 新服务 | Crash 可读 | ✅ 以替代方案完成：仓库内符号化引擎（symbol_mappings.mapping_rules 正则规则，V0.8.5）+ CrashFingerprinter；独立微服务方案不再跟进 |
 | 6 | 预测模型训练管线 | P4.4 | 管线 | ML 模型实际可用 | ✅ 已交付：`ml/` 可训练管线（churn/pltv/risk/propensity，产物 JSON 自带启发式基线对照）+ Control 侧注册回写链路 + 训练调度（自动重训再注册）；GBDT / 实时打分按需扩展 |
@@ -87,7 +87,7 @@ risk-job 当前用 `-D` 系统属性配规则（`risk.threshold.amount` 等）�
 
 ```
 Control Service (RiskRuleRepo)
-    │ GET /api/risk/rules?gameId=X&env=prod&status=ACTIVE
+    │ GET /api/risk-dashboard/rules/{gameId}
     │ （定时拉取，默认 60s）
     ▼
 RuleSupplier (Flink 算子状态 / 广播流)
@@ -122,7 +122,7 @@ risk-job 检测逻辑（按规则配置执行）
 
 ## 3. risk-job 规则类型扩展
 
-> **状态（2026-09）：✅ 全部完成**——THRESHOLD / FREQUENCY / VELOCITY / RATIO / DUPLICATE_RECEIPT / AD_REWARD / PATTERN 七类规则均已在 `RiskJob` 上线（含单测）。PATTERN 序列规则最终采用 **KeyedProcessFunction + ValueState 状态机**（`PatternFunction.advance` 纯函数核心）：有序序列 ≥2 步、窗口自第一步起算、超窗惰性作废、第一步重复自动重启、命中后重置可再匹配；规则经 control 侧 `ruleConditions.sequence` + `timeWindowMinutes` 下发，create/update 均做 2-8 步序列校验。未引入 flink-cep 依赖（免新增依赖、免额外状态后端负担，逻辑可纯函数单测）。
+> **状态（2026-09）：✅ 全部完成**——THRESHOLD / FREQUENCY / VELOCITY / RATIO / DUPLICATE_RECEIPT / AD_REWARD / PATTERN / FEATURE 八类规则均已在 `RiskJob` 上线（含单测）。PATTERN 序列规则最终采用 **KeyedProcessFunction + ValueState 状态机**（`PatternFunction.advance` 纯函数核心）：有序序列 ≥2 步、窗口自第一步起算、超窗惰性作废、第一步重复自动重启、命中后重置可再匹配；规则经 control 侧 `ruleConditions.sequence` + `timeWindowMinutes` 下发，create/update 均做 2-8 步序列校验。未引入 flink-cep 依赖（免新增依赖、免额外状态后端负担，逻辑可纯函数单测）。
 
 ### 目标
 

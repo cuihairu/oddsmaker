@@ -13,6 +13,7 @@ A/B 测试分析 API，用于分析实验数据和转化率。
 | DELETE | `/api/experiments/{id}` | 删除实验 |
 | POST | `/api/experiments/{id}/publish` | 发布实验 |
 | POST | `/api/experiments/{id}/pause` | 暂停实验 |
+| POST | `/api/experiments/{id}/end` | 结束实验 |
 | GET | `/api/experiments/{id}/assign?subjectId=` | 服务端确定性分流 |
 | POST | `/api/experiments/{id}/metrics` | 接收指标快照 |
 | POST | `/api/experiments/{id}/metrics/aggregate` | 按窗口聚合指标 |
