@@ -1,4 +1,4 @@
-rootProject.name = "oddsmaker-android-jvm-coverage"
+rootProject.name = "oddsmaker-android-jvm-tests"
 
 pluginManagement {
   repositories {

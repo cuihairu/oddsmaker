@@ -32,8 +32,8 @@ sdk.flush()
 - 依赖：Kotlin 1.9.24、Android Gradle Plugin 8.5.1、OkHttp 4.12.0
 
 测试
-- `jvm-coverage` 为源码直测工程：以 srcDir 链接 `oddsmaker-android/src/main/java` 的同一份源码（不复制），`android.*` API 用 stub 替身，OkHttp + org.json 为真实依赖，网络走 JDK HttpServer 脚本化响应——无需 Android SDK 即可跑（70 例）。
-- 运行：`./gradlew -p sdks/android/jvm-coverage test`（走仓库根 wrapper）；该工程自带 `settings.gradle.kts`，不在根 settings 的 include 列表里，故 Java 全模块 `test` 不会覆盖它。
+- `jvm-tests` 为源码直测工程：以 srcDir 链接 `oddsmaker-android/src/main/java` 的同一份源码（不复制），`android.*` API 用 stub 替身，OkHttp + org.json 为真实依赖，网络走 JDK HttpServer 脚本化响应——无需 Android SDK 即可跑（70 例）。
+- 运行：`./gradlew -p sdks/android/jvm-tests test`（走仓库根 wrapper）；该工程自带 `settings.gradle.kts`，不在根 settings 的 include 列表里，故 Java 全模块 `test` 不会覆盖它。
 - 该套件自 2026-10-15 起是 CI 门禁（ci.yaml `android-sdk-tests` job、nightly job 1 第五腿）。原生 `oddsmaker-android` 的 `ConsistencyTest.kt` 需 Android SDK（compileSdk 34）方可运行，不入 CI 门禁。
 
 注意
