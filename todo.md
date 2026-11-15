@@ -261,13 +261,13 @@
 
 ### 目录/分类问题
 
-- 根目录的评审 MD 应迁入 `docs/review/`（如 `review-*.md`）
-- `bi/superset/playtics_dashboard_bundle.zip` 是构建产物（旁边有 `build_bundle.sh`），不应入库
-- 三个 compose 文件横跨两个根（`docker-compose.yml`、`docker-compose.quickstart.yml`、`infra/docker-compose.yml`）；`deploy/MODES.md` 已索引部署模式
-- 双 Dockerfile（根 `Dockerfile` 与 `services/control-service/Dockerfile`）职责边界不清
-- `tests/` 只有 e2e 文档，实际 e2e 在 `scripts/e2e.sh`
-- `sdks/android/jvm-coverage` 命名未反映其仅测试用途
-- `docs/reference/` 与 `docs/zh/reference/` 的 locale 后缀混杂（`.zh.md`、`.en.md`、无后缀等）
+- [x] 根目录的评审 MD 应迁入 `docs/review/`（如 `review-*.md`）——已解决：根目录已无 review-*.md（仅 README 双语/CHANGELOG/todo/4 件自评产物）；自评产物经审核发现 171/172 裁定列为历史材料（docs/redesign/index.md:51-54 引用），保留不动
+- [x] `bi/superset/playtics_dashboard_bundle.zip` 是构建产物（旁边有 `build_bundle.sh`），不应入库——已修复（2026-11-15 复核坐实为 release 缺陷不止整洁）：仓内 zip 是 2025-10-25 的陈旧产物（26 yaml/源目录 56、users 仍 UInt64 而源已 Int64）；release.yaml 虽有打包步骤但产出名 oddsmaker_* 与上传钉的 playtics_* 断链，被 `if-no-files-found: ignore` 静默吞——发版附件永远是陈旧 zip。改现打现发：打包步骤去 `|| true`、上传/附件改 `oddsmaker_dashboard_bundle.zip`、`if-no-files-found: error`，旧 zip 出库，`.gitignore` 加 `bi/superset/*.zip`（commit 9e9e4e8；本地实跑 build_bundle.sh 60 文件/users Int64 验真，ReleaseDeployContractTest 13 例 0 失败）
+- [x] 三个 compose 文件横跨两个根（`docker-compose.yml`、`docker-compose.quickstart.yml`、`infra/docker-compose.yml`）；`deploy/MODES.md` 已索引部署模式——维持不动（已代决）：索引即收口，迁移破坏 docs/脚本/既有引用路径，纯布局收益为零
+- [x] 双 Dockerfile（根 `Dockerfile` 与 `services/control-service/Dockerfile`）职责边界不清——已由文档收口：deploy.k8s.md:5（en+zh）明示根 Dockerfile=CI 单镜像双服务（SERVICE=control|gateway，release.yaml:136/nightly-build.yml:520），service 级 Dockerfile=自建/compose 面（docker-compose.yml:188 + gateway 同款），边界不再含混
+- [x] `tests/` 只有 e2e 文档，实际 e2e 在 `scripts/e2e.sh`——现状已变无需迁移：tests/ 仅剩 tests/load（Gatling 载荷测试 README+OddsmakerLoadTest.scala），e2e 文档已不在 tests/，scripts/e2e.sh 在
+- [x] `sdks/android/jvm-coverage` 命名未反映其仅测试用途——已改名 `sdks/android/jvm-tests`（rootProject.name=oddsmaker-android-jvm-tests；ci.yaml 4 处/nightly-build.yml 2 处/README.zh.md 2 处引用同步；冷树门禁 70 例 0 失败 0 跳过与基线一致、ci+nightly YAML 解析过；commit 80a6926；todo/CHANGELOG 历史证据行按惯例保留旧名）
+- [ ] `docs/reference/` 与 `docs/zh/reference/` 的 locale 后缀混杂（`.zh.md`、`.en.md`、无后缀等）——【待用户拍板】双镜像惯例并存（docs/reference/*.zh.md ×4 与 docs/zh/reference/*.en.md ×4，8 条路由仅 2 入链、只能手输 URL 到达），何者为权威（删一套或同步）是用户决定；G2C 轮已记录（docs/审计-文档一致性.md G2C 节「Recorded, not fixed」），事实性错误已修，结构性归属待定
 - [x] 审核发现：迁移注释错误声明多表 RENAME 为原子交换，ClickHouse 文档明确多表 RENAME 非原子且可能部分执行，此处应使用 EXCHANGE TABLES 才能保证换名原子性（schema/sql/clickhouse/migrations/2026-11-retention-users-int64.sql:61-63）——已修复：官方文档核实属实（RENAME 文档「may only be partially executed，其他会话可能收到 Table ... does not exist」；EXCHANGE 文档「单对原子，多对顺序非原子」）；迁移 3) 改用每对各一条 EXCHANGE TABLES 原子交换 + 单表 RENAME 到 *_old（2026-11-retention-users-int64.sql:61-68），24.8 Atomic 引擎实机验证交换+数据保留（scratch drill：rd/rd_new 交换后 rd=Int64、rd_old=UInt64，sum 均 5）；retention-job 31 例 0 失败。
 - [x] 审核发现：analytics.sql 注释仍宣称字段与 BI 数据集 yaml 保持一致，但 active bundle 的 retention_daily dataset 中 users 类型仍是 UInt64，未随表列改为 Int64 同步，导入后元数据与实际表类型漂移（schema/sql/clickhouse/analytics.sql:5、bi/superset/bundle/datasets/retention_daily.yaml:20-22）——已修复：属实（yaml:22 仍 UInt64）；retention_daily.yaml users type 改 Int64（bi/superset/bundle/datasets/retention_daily.yaml:22），与 analytics.sql:14 表列一致，注释 5 行「保持一致」恢复为真；无 retention_rolling.yaml（其余 UInt64 属 funnels/视图，其表列本为 UInt64，不属本发现）；retention-job 31 例 0 失败。
 - [x] 审核发现：本轮 diff 未见问题（6d359955..HEAD）
