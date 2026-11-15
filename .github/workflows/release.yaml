@@ -79,7 +79,7 @@ jobs:
       - name: Build Superset bundle asset
         run: |
           cd bi/superset
-          ./build_bundle.sh || true
+          ./build_bundle.sh
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v7.0.2
@@ -91,8 +91,8 @@ jobs:
         uses: actions/upload-artifact@v7.0.2
         with:
           name: superset-bundle
-          path: bi/superset/playtics_dashboard_bundle.zip
-          if-no-files-found: ignore
+          path: bi/superset/oddsmaker_dashboard_bundle.zip
+          if-no-files-found: error
 
   # Job 3: Build and Push Docker Image
   # 版本 tag（<version>/<major.minor>/<major>/latest）与 nightly 的 :nightly 双轨：
@@ -312,7 +312,7 @@ jobs:
         with:
           files: |
             release/*.jar
-            release/playtics_dashboard_bundle.zip
+            release/oddsmaker_dashboard_bundle.zip
           body_path: ${{ steps.pick.outputs.body }}
           name: ${{ github.ref_name }}
           tag_name: ${{ github.ref_name }}

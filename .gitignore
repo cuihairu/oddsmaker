@@ -61,6 +61,9 @@ bin/
 # 部署 jar 是本机 gradle 构建产物，rsync 传远端，不进 git（GitHub 100MB 硬限）
 deploy-rt/jars/
 
+# Superset 仪表盘 zip 是 bi/superset/build_bundle.sh 产物，release 工作流现打现发，不进 git
+bi/superset/*.zip
+
 # Python（ml/ 训练管线）
 __pycache__/
 *.py[cod]
