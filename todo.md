@@ -51,9 +51,9 @@
 ## 已完成需求
 
 - [x] T-AUDIT 外部生产审计整改收口（P0）：审计 11 条全部核验、仓内可动整改全部落地（ML/SITE 两面由 T-ML/T-DEMO502 同源挂账不双记），§10 终验清单 9 勾 + 2 条纯外部卡点（首次真实发版健康检查/事件冒烟、生产流量告警实测）；整改链 aae925e/27df30b/0569935/0ba912f/a51fa90（0ba912f：control-service 184 suite/2106 例 0 失败、promtool 49 例 SUCCESS），明细见 docs/review/review-2026-10-18-production-audit.md
-- [x] docs 内部链接指向一致性（P2）：兄弟页内部链接改指同语言对应页——4 处真 404 + 12 处中文兄弟页静默解析修正；全仓 46 条路由链接 + 140 条相对 `.md` 链接 0 失效，`pnpm docs:build` 绿（决策见 docs/决策记录.md）
-- [x] docs 英文 locale 正文语言缺口（P2）：英文 locale 下 18 页中文正文与既有 `.en.md` 译版互换（英文为正本、中文归 `.zh.md`，已代决），EN 页正文无中文残留，36 文件互换后切换器双向对称、`pnpm docs:build` 绿
-- [x] docs 子目录双语配对（P2）：52 个 .md 全配对（同目录兄弟文件，已代决）+ 51 个源文件插切换器；59 对结构计数一致 + 代码块逐字节相同，`pnpm docs:build` 绿；顺带修 06 §4.1 笔误（中英同批）
+- [x] docs 内部链接指向一致性（P2，02adfa6）：兄弟页内部链接改指同语言对应页——4 处真 404 + 12 处中文兄弟页静默解析修正；全仓 46 条路由链接 + 140 条相对 `.md` 链接 0 失效，`pnpm docs:build` 绿（决策见 docs/决策记录.md）
+- [x] docs 英文 locale 正文语言缺口（P2，ad0dbeb）：英文 locale 下 18 页中文正文与既有 `.en.md` 译版互换（英文为正本、中文归 `.zh.md`，已代决），EN 页正文无中文残留，36 文件互换后切换器双向对称、`pnpm docs:build` 绿
+- [x] docs 子目录双语配对（P2，bea9cf1）：52 个 .md 全配对（同目录兄弟文件，已代决）+ 51 个源文件插切换器；59 对结构计数一致 + 代码块逐字节相同，`pnpm docs:build` 绿；顺带修 06 §4.1 笔误（中英同批）
 - [x] ruleConditions 引 EventSchema 字段（P2，已代决）：FEATURE 条件 feature 名取值域=risk-job 特征登记表（`RiskFeatures` 6 特征），写路径未知名显式拒绝，不做 EventSchema 交叉校验（5c501aa：control-service 174 suite/2039 例、risk-job 99 例 0 失败）
 - [x] Signal 显式信号清单（P2）：两侧 `RiskSignals` 9 信号清单 + 各 3 例测试同钉 `DOCUMENTED` 名单，不改既有暴露面（7602a72：risk-job 全模块 96 例 0 失败）
 - [x] ruleConditions 结构化 JSON schema（P2）：`RiskRuleEntity.ruleConditions` 收敛为类型化结构（严格/容忍双档），FEATURE 写路径收紧、存量行不改写、读路径保持容忍（7602a72：受影响 5 测试类 25/25 绿、control-service 173 suite/2034 例 0 失败）
@@ -128,15 +128,15 @@
 - [x] 审核发现：T-CDC 行「parseDebezium 信封解析已单测」不成立（仅注释残留、无实现无测试）——表述已修正、注释已清（96953c3，dimension-sync-job 16 例 0 失败）
 - [x] 审核发现：审核范围上界误记为移动 `..HEAD`——已钉死固定上界 41f2049（`git rev-list --count cce16e6..41f2049`=1）
 - [x] 审核发现：审核范围误记 `772b1ff..HEAD` 与实际范围不一致——已更正固定上界
-- [x] 审核发现：记录提交自身落入移动 HEAD 范围致 count 失真——已钉死上界并删移动 count 断言
-- [x] 审核发现：T-DEMO502 引无源「10-27 GTS 读数」——已删，信任态记未核验
-- [x] 审核发现：issuer/SAN/Verify return code 细节非仓内取证腿可产出——已删
-- [x] 审核发现：T-ML 服务键「control」实为 `control-service`——已更正（deploy/demo/docker-compose.yml:64）
-- [x] 审核发现：「取到 GTS 证书」不可由仓内工作流复现——已删
-- [x] 审核发现：核实摘要 `--all` 计数随提交漂移（多起同类）——断言已钉死声明提交树，不再用移动口径
-- [x] 审核发现：决策文档「2026-10-14 用户授权」无出处——已改「已代决」台账口径（docs/zh/决策记录.md:3）
-- [x] 审核发现：纯中文决策文档置于英文 locale 根目录、无镜像——已迁 docs/zh/review/ + 英文 stub（与既有 review 系列同构）
-- [x] 审核发现：「现仓」断言随提交漂移——已钉死声明提交树
+- [x] 审核发现：记录提交自身落入移动 HEAD 范围致 count 失真（32271fe）——已钉死上界并删移动 count 断言
+- [x] 审核发现：T-DEMO502 引无源「10-27 GTS 读数」（32271fe）——已删，信任态记未核验
+- [x] 审核发现：issuer/SAN/Verify return code 细节非仓内取证腿可产出（32271fe）——已删
+- [x] 审核发现：T-ML 服务键「control」实为 `control-service`（32271fe）——已更正（deploy/demo/docker-compose.yml:64）
+- [x] 审核发现：「取到 GTS 证书」不可由仓内工作流复现（32271fe）——已删
+- [x] 审核发现：核实摘要 `--all` 计数随提交漂移（多起同类）（0033f76）——断言已钉死声明提交树，不再用移动口径
+- [x] 审核发现：决策文档「2026-10-14 用户授权」无出处（6310e5e）——已改「已代决」台账口径（docs/zh/决策记录.md:3）
+- [x] 审核发现：纯中文决策文档置于英文 locale 根目录、无镜像（ae2440f）——已迁 docs/zh/review/ + 英文 stub（与既有 review 系列同构）
+- [x] 审核发现：「现仓」断言随提交漂移（0033f76）——已钉死声明提交树
 - [x] 审核发现：`2026-10-30-decisions` 引用检索口径偏窄——已补全 docs/** 与全仓双口径
 > 审核发现（不属实，已排除）：zh 决策文档第 18/31/44 行引用 stub 路径——不成立，该文档仅提 commit 号
 - [x] 审核发现：架构图四 SDK 节点 id 与边 path id 重复——边 path 加 `-edge` 后缀（5bd4f1f，XML 解析过、id 30/30 唯一）
@@ -183,7 +183,7 @@
 
 - [x] 审核发现：docs/review/2026-11-01-code-review.md:60 与 docs/zh/review/2026-11-01-code-review.md:60（P1-3「已修」节）仍称异步失败回调「路由至 dlq.publish(eventId, "kafka_send_failed", json)」且「回调同时释放幂等位（ReplayGuard.releaseEventId），SDK 重试可重新占用并重发」，但本提交已改回调写「kafka_error」（AvroPublisher.java:106）且不再释放幂等位（:99-100）——review 文档描述与当前代码矛盾，读者会被误导（文档-代码漂移，EN/zh 双页同病）。——已修复：EN/zh :60/:62/:64 更正为异步回调不释放幂等位（同步路径仍释放）、成功回调不释放不写 DLQ、kafka_send_failed 计入 dlq_other（aa01366，docs/review/2026-11-01-code-review.md:60、:62、:64；docs/zh/review/2026-11-01-code-review.md:60、:62、:64；纯文档更正，aa01366）
 
-- [x] 审核发现：Dockerfile.kafka-exporter:13 的 KAFKA_EXPORTER_VERSION ARG 在改 commit-SHA 拉取后已不被构建使用（build ldflags 改读源码树 VERSION 文件，:30 `cat VERSION`），但 infra/docker-compose.yml:152 仍传 KAFKA_EXPORTER_VERSION:v1.7.0（对 kafka 无效果）——与 redis 侧不对称（Dockerfile.redis-exporter:29 仍用 REDIS_EXPORTER_VERSION 注入 main.BuildVersion），改 kafka 版本 ARG 静默无效、且易被误当有效；头部注释 :3「版本冻结在上游 tag v1.7.0（与 compose 引用同一注记）」已失实（实际冻结在不可变 commit 7e840e8，:14），「改版本只动 ARG」指引也随失效。（infra/exporters/Dockerfile.kafka-exporter:13、:3；infra/docker-compose.yml:152）；证据：Dockerfile.kafka-exporter:30 注入 KAFKA_EXPORTER_VERSION，docker build + run --version 实测 v9.9.9 生效（revision 7e840e8）
+- [x] 审核发现：Dockerfile.kafka-exporter:13 的 KAFKA_EXPORTER_VERSION ARG 在改 commit-SHA 拉取后已不被构建使用（build ldflags 改读源码树 VERSION 文件，:30 `cat VERSION`），但 infra/docker-compose.yml:152 仍传 KAFKA_EXPORTER_VERSION:v1.7.0（对 kafka 无效果）——与 redis 侧不对称（Dockerfile.redis-exporter:29 仍用 REDIS_EXPORTER_VERSION 注入 main.BuildVersion），改 kafka 版本 ARG 静默无效、且易被误当有效；头部注释 :3「版本冻结在上游 tag v1.7.0（与 compose 引用同一注记）」已失实（实际冻结在不可变 commit 7e840e8，:14），「改版本只动 ARG」指引也随失效。（infra/exporters/Dockerfile.kafka-exporter:13、:3；infra/docker-compose.yml:152）；证据：1ab00cf：Dockerfile.kafka-exporter:30 注入 KAFKA_EXPORTER_VERSION，docker build + run --version 实测 v9.9.9 生效（revision 7e840e8）
 
 - [x] 审核发现：PublishersTest 以裸 `new ObjectMapper()`（默认 camelCase）构造 AvroPublisher（services/gateway-service/src/test/java/io/oddsmaker/gateway/kafka/PublishersTest.java:64），与生产 `JacksonConfig` 注入的 SNAKE_CASE 策略不一致（services/gateway-service/src/main/java/io/oddsmaker/gateway/config/JacksonConfig.java:17）；本轮将异步 DLQ reason 改为 `kafka_send_failed`（services/gateway-service/src/main/java/io/oddsmaker/gateway/kafka/AvroPublisher.java:107），使 DeadLetterConsumer 必须解析 `raw.game_id`/`raw.environment`/`raw.ts_server` 才能按作用域/窗口正确分桶（services/control-service/src/main/java/io/oddsmaker/control/service/DeadLetterConsumer.java:70-74），但 `publishRoutesAsyncFailureToDlq` 仅断言 payload 含 `"reason":"kafka_send_failed"`（services/gateway-service/src/test/java/io/oddsmaker/gateway/kafka/PublishersTest.java:299-303）、未校验真实 SNAKE_CASE 序列化下 raw 字段名——测试 camelCase 序列化与生产 SNAKE_CASE 不一致，若生产 ObjectMapper 误配则 consumer 会落 `unknown` 桶而测试不报（生产当前配置正确，属测试保真度/契约缺口，本轮改动使其成为实际风险点）。；证据：PublishersTest.java:64-66 SNAKE_CASE ObjectMapper，:300-305 断言 raw 字段 snake_case 名，gateway 248 tests 0 fail
 - [x] 审核发现：SSRF 防护未接线——DimensionPullService 构造函数新注入 `allowPrivateNetworks`（:84/:94/:103）但从不使用（死字段）；`fetchPage` 对用户配置的 `config.endpoint` 经 RestTemplate.exchange 抓取（:305）仅过 `requireEndpoint` 的 scheme 前缀检查（:616-621），未走 `UrlSecurityValidator.validateHttpUrl` 的私网/环回/链路本地拦截——与同批改的 IntegrationService（:191）/WebhookService（:348）形成不一致，维度拉取端点可指向云元数据等内网地址（SSRF 缺口，修复不完整）（services/control-service/src/main/java/io/oddsmaker/control/service/DimensionPullService.java:84,94,103,305,616-621）。——已修复：`requireEndpoint` 改经 `UrlSecurityValidator.validateHttpUrl`（私网/环回/链路本地拦截，`allowPrivateNetworks` 显式豁免），`fetchPage` 拉取前再校验一次（配置可来自旧库/导入路径，深度防御）（DimensionPullService.java:619-625/:303-305；control-service 2124 tests 0 fail；ef81721）
@@ -273,7 +273,7 @@
 - [x] `sdks/android/jvm-coverage` 命名未反映其仅测试用途——已改名 `sdks/android/jvm-tests`（rootProject.name=oddsmaker-android-jvm-tests；ci.yaml 4 处/nightly-build.yml 2 处/README.zh.md 2 处引用同步；冷树门禁 70 例 0 失败 0 跳过与基线一致、ci+nightly YAML 解析过；commit 80a6926；todo/CHANGELOG 历史证据行按惯例保留旧名）
 - [x] `docs/reference/` 与 `docs/zh/reference/` 的 locale 后缀混杂（`.zh.md`、`.en.md`、无后缀等）——已裁决（2026-11-21 LOCALEADJ，commit f244014）：按纯 locale-mirror 结构（根=EN、zh/=ZH，与其余 reference 页一致）收口，先把更全内容晋升进 ZH 树（analytics 补回 `## 最佳实践` 节+健康值注释，350 行/8 h2；api-reference 由 408B 占位页换 737 行完整中文译本，内部链接已指向 `/zh/`），再删全部 8 个兄弟页；决定记录 docs/决策记录.md LOCALEADJ（en+zh）；239 条内部链接扫描 0 失效；侧边栏未动（全为基名路由）；`pnpm docs:build` 绿（203.89s）
 - [x] 审核发现：迁移注释错误声明多表 RENAME 为原子交换，ClickHouse 文档明确多表 RENAME 非原子且可能部分执行，此处应使用 EXCHANGE TABLES 才能保证换名原子性（schema/sql/clickhouse/migrations/2026-11-retention-users-int64.sql:61-63）——已修复（f29685e）：官方文档核实属实（RENAME 文档「may only be partially executed，其他会话可能收到 Table ... does not exist」；EXCHANGE 文档「单对原子，多对顺序非原子」）；迁移 3) 改用每对各一条 EXCHANGE TABLES 原子交换 + 单表 RENAME 到 *_old（2026-11-retention-users-int64.sql:61-68），24.8 Atomic 引擎实机验证交换+数据保留（scratch drill：rd/rd_new 交换后 rd=Int64、rd_old=UInt64，sum 均 5）；retention-job 31 例 0 失败。
-- [x] 审核发现：analytics.sql 注释仍宣称字段与 BI 数据集 yaml 保持一致，但 active bundle 的 retention_daily dataset 中 users 类型仍是 UInt64，未随表列改为 Int64 同步，导入后元数据与实际表类型漂移（schema/sql/clickhouse/analytics.sql:5、bi/superset/bundle/datasets/retention_daily.yaml:20-22）——已修复：属实（yaml:22 仍 UInt64）；retention_daily.yaml users type 改 Int64（bi/superset/bundle/datasets/retention_daily.yaml:22），与 analytics.sql:14 表列一致，注释 5 行「保持一致」恢复为真；无 retention_rolling.yaml（其余 UInt64 属 funnels/视图，其表列本为 UInt64，不属本发现）；retention-job 31 例 0 失败。
+- [x] 审核发现：analytics.sql 注释仍宣称字段与 BI 数据集 yaml 保持一致，但 active bundle 的 retention_daily dataset 中 users 类型仍是 UInt64，未随表列改为 Int64 同步，导入后元数据与实际表类型漂移（schema/sql/clickhouse/analytics.sql:5、bi/superset/bundle/datasets/retention_daily.yaml:20-22）——已修复（f29685e）：属实（yaml:22 仍 UInt64）；retention_daily.yaml users type 改 Int64（bi/superset/bundle/datasets/retention_daily.yaml:22），与 analytics.sql:14 表列一致，注释 5 行「保持一致」恢复为真；无 retention_rolling.yaml（其余 UInt64 属 funnels/视图，其表列本为 UInt64，不属本发现）；retention-job 31 例 0 失败。
 - [x] 审核发现：本轮 diff 未见问题（6d359955..a31935d）
 - [x] 审核修复批（2026-10-20 巡检单）P0：封禁环境维度断裂——网关 batch-check 走两参 isBlocked（environmentId=null）只认全局封禁，RiskEventConsumer 自动 BLOCK 一律带 event.environment 落库（environmentId 恒非 null），风控自动封禁在接入层从不生效，且请求体不传 environment 字段使环境维度封禁对网关结构性不可见（核心风控闭环断裂）——已修复（a31935d）：网关事件把 event.environment 随每个封禁检查目标下发（BatchController 目标构造 new BatchTarget(event.environment,...)，BatchController.java:137 前置校验恒非 null；BlockListClient.BatchTarget 增 environment 字段+3 参构造，缓存/结果键改 gameId:environment:targetType:targetValue，BlockListClient.java:155-167 防跨环境同 target 互串），控制面 InternalBlockListController 把 target.environment 传给 4 参 isBlocked（InternalBlockListController.java:40，匹配 environmentId.equals(block.environmentId) || block.environmentId==null——全局封禁仍命中；3 参全局版保留给运营 GET /check 端点）；测试：gateway-service 251 例 0 失败 3 跳过（新增跨环境隔离 blockListCacheIsScopedByEnvironment + blockScopedToProdDoesNotBlockDev 2 例，缓存/响应键断言随改）、control-service 2126 例 0 失败 5 跳过（内部 batch-check 转发 target.environment 断言+env2 负例，RiskControllersTest.java:186-200）；无文档引内部 batch-check schema，无需对账。
 - [x] 审核修复批（2026-10-20 巡检单）P1：gzip 炸弹 OOM——batch 入口 maybeGunzip 先 readAllBytes() 全量解压再查 exceedsRequestLimit，≤256KB 的 gzip 炸弹可膨胀数百 MB 进堆内存，反复请求即 OOM DoS——已修复（2fdd2b9）：maybeGunzip 增限界参数（propsPolicy.maxRequestBytes()），readBounded 解压输出一超上限即提前停止并返回超限哨兵数组（BatchController.java:803-831），调用方 exceedsRequestLimit 照常判 413 request_too_large；未超限解压与原行为一致（identity/null 编码直通原字节、限界内还原断言）。测试：gateway-service 252 例 0 失败 3 跳过（新增 gzip 炸弹 413 回归 1 例 + maybeGunzip 限界内还原，BatchControllerCoverageTest.java:691-714）。
