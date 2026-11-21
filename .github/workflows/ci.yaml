@@ -73,7 +73,9 @@ jobs:
       - uses: actions/setup-node@v7.1.0
         with:
           node-version: '24'
-      - run: npm ci || npm i
+      # 硬门：npm ci 失败即红。`|| npm i` 会把 sdks/web 锁文件漂移静默吞掉变绿
+      # （同族 6ccf1b6 假绿修复），与 ci.yaml web 腿 pnpm --frozen-lockfile、docs.yaml 根腿同口径。
+      - run: npm ci
       - run: npm run build
       # 全量三套（test:hash + test:game + test:src 的 node --test）：此前只跑 test:hash，
       # test:game 与 test:src（含 1009ecb 补的桶文件导出断言）在 CI 上从未执行。
