@@ -77,7 +77,7 @@ Oddsmaker 当前真实定位是**单一游戏公司的游戏实时分析与风�
    **严重度：高。**
 
 8. **依赖安装存在非锁定回退，第三方风险治理证据不足**  
-   **证据：** Web SDK CI/nightly 用 npm ci || npm i（.github/workflows/ci.yaml:72-81；.github/workflows/nightly-build.yml:128-137），锁文件安装失败时回退到可能更新依赖的安装。仓库未检索到 .github/dependabot.yml、Renovate、SBOM/依赖漏洞扫描工作流或发布签名/来源证明；可见工作流主要为 ci、nightly、release、deploy、docs。Java/JS/Python 依赖清单与部分锁文件存在，但无统一漏洞处置 SLA 证据。  
+   **证据：** 本报告初版记录 Web SDK CI/nightly 用 `npm ci || npm i`（.github/workflows/ci.yaml:72-81；.github/workflows/nightly-build.yml:128-137），锁文件安装失败时回退到可能更新依赖的安装——**该半条已修复（commit 16fd7df，2026-11-21）**：两条腿均改硬门 `npm ci`（现 ci.yaml:78、nightly-build.yml:130），锁文件与 package.json 不一致会直接打红；web 控制台腿（ci.yaml `pnpm -C web install --frozen-lockfile`）与 docs 根腿（docs.yaml `pnpm install --frozen-lockfile`）本已收紧。仓库仍未检索到 .github/dependabot.yml、Renovate、SBOM/依赖漏洞扫描工作流或发布签名/来源证明；可见工作流主要为 ci、nightly、release、deploy、docs。Java/JS/Python 依赖清单与部分锁文件存在，但无统一漏洞处置 SLA 证据。  
    **影响：** 同一提交重跑可能解析不同依赖；企业安全审查无法快速取得软件组成、传递依赖许可证和漏洞状态。这是治理缺口，**不等于已证实存在可利用漏洞**。  
    **严重度：高。**
 
@@ -129,7 +129,7 @@ Oddsmaker 当前真实定位是**单一游戏公司的游戏实时分析与风�
 | 给 Quickstart 加官方 web 静态服务/反代，或提供明确的 Compose/Nginx 发布包；让资产内 web/ 有可执行 serve 指南，打包缺失时失败。 | 登录控制台成为真正的一键路径；解除“包里有但无法访问”。 | 3–5 人日 |
 | 加 quickstart → 登录 → 建游戏/环境 → SDK 发事件 → Live Inspector/指标可见的短路径，附可复位 demo seed 和健康/链路状态说明。 | 采购 PoC 可在可控时间形成完整体验，避免只看 actuator health。 | 3–5 人日 |
 | 建立版本事实表：tag、镜像 digest、BUILD_INFO、JAR version、Flyway schema 范围；生产说明不推荐 nightly，提供固定版本与回滚步骤。 | 增强可追踪和审计，减少升级时运行版本争议。 | 2–4 人日 |
-| 移除 npm ci || npm i 回退；Release/nightly 增加压缩包内容校验，并发布依赖 SBOM 与许可证清单初版。 | 构建可复现、交付缺文件更早失败，安全审查有基础证据。 | 3–5 人日 |
+| ~~移除 npm ci || npm i 回退~~（**已完成，commit 16fd7df**）；Release/nightly 增加压缩包内容校验，并发布依赖 SBOM 与许可证清单初版。 | 构建可复现、交付缺文件更早失败，安全审查有基础证据。 | 余 2–4 人日 |
 | 修正首页产品副标题及“部署后可用能力”表格，标记已验证、需外部服务、未集成、降级状态。 | 降低品类误解和售前超范围承诺。 | 1–2 人日 |
 
 **一期收益：**让客户按文档安全启动、进入 UI、验证一条事件链，并知道获得了什么、还缺什么。整体约 2 周并行可交付，建议排成 1–2 周小迭代。
