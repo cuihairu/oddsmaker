@@ -66,22 +66,24 @@ GET /api/analytics/revenue/game_123/overview?startDate=2024-01-01&endDate=2024-0
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | `gameId` | string | 是 | 游戏 ID |
-| `startDate` | date | 是 | 开始日期 (YYYY-MM-DD) |
-| `endDate` | date | 是 | 结束日期 (YYYY-MM-DD) |
+| `startDate` | date | 是 | 起始日期（YYYY-MM-DD） |
+| `endDate` | date | 是 | 结束日期（YYYY-MM-DD） |
 
 **响应字段:**
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | `date` | date | 日期 |
-| `arpu` | number | 每用户平均收入 |
-| `arppu` | number | 每付费用户平均收入 |
+| `arpu` | number | 每用户平均收入 (Average Revenue Per User) |
+| `arppu` | number | 每付费用户平均收入 (Average Revenue Per Paying User) |
 | `payingUsers` | number | 付费用户数 |
 | `totalUsers` | number | 总用户数 |
 
 **指标含义:**
 - **ARPU** = 总收入 / 总用户数
+  - 健康值：因游戏类型而异
   
 - **ARPPU** = 总收入 / 付费用户数
+  - 通常 ARPPU > ARPU * 10
 
 ---
 
@@ -115,22 +117,26 @@ GET /api/analytics/revenue/game_123/overview?startDate=2024-01-01&endDate=2024-0
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | `gameId` | string | 是 | 游戏 ID |
-| `startDate` | date | 是 | 开始日期 (YYYY-MM-DD) |
-| `endDate` | date | 是 | 结束日期 (YYYY-MM-DD) |
+| `startDate` | date | 是 | 起始日期（YYYY-MM-DD） |
+| `endDate` | date | 是 | 结束日期（YYYY-MM-DD） |
 
 **响应字段:**
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | `totalRevenue` | number | 广告总收入 |
 | `totalImpressions` | number | 总展示次数 |
-| `avgEcpm` | number | 平均 eCPM |
+| `avgEcpm` | number | 平均 eCPM (每千次展示收入) |
 | `avgFillRate` | number | 平均填充率 |
 | `networkCount` | number | 广告网络数量 |
 
 **指标含义:**
 - **eCPM** = (广告收入 / 展示次数) * 1000
-  
+  - 健康值：$10-$50 (因地区和广告类型而异)
+
 - **填充率** = 填充次数 / 请求次数
+  - 健康值：> 90%
+
+---
 
 ### 2.2 按广告网络性能
 
@@ -164,8 +170,8 @@ GET /api/analytics/revenue/game_123/overview?startDate=2024-01-01&endDate=2024-0
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | `gameId` | string | 是 | 游戏 ID |
-| `startDate` | date | 是 | 开始日期 (YYYY-MM-DD) |
-| `endDate` | date | 是 | 结束日期 (YYYY-MM-DD) |
+| `startDate` | date | 是 | 起始日期（YYYY-MM-DD） |
+| `endDate` | date | 是 | 结束日期（YYYY-MM-DD） |
 
 **响应字段:**
 | 字段 | 类型 | 说明 |
@@ -177,8 +183,15 @@ GET /api/analytics/revenue/game_123/overview?startDate=2024-01-01&endDate=2024-0
 
 **指标含义:**
 - **会话时长** - 用户单次游戏时长
-- **会话深度** - 每会话事件数，反映用户参与度
+  - 健康值：> 5 分钟 (休闲游戏), > 30 分钟 (重度游戏)
+
+- **会话深度** - 每会话事件数
+  - 健康值：> 10 个事件
+
 - **跳出率** - 只有 1 个事件的会话占比
+  - 健康值：< 30%
+
+---
 
 ### 3.2 会话趋势
 
@@ -211,8 +224,8 @@ GET /api/analytics/revenue/game_123/overview?startDate=2024-01-01&endDate=2024-0
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | `gameId` | string | 是 | 游戏 ID |
-| `startDate` | datetime | 是 | 开始时间 (ISO 8601 日期时间，按 datetime 粒度；如 2024-01-01T00:00:00) |
-| `endDate` | datetime | 是 | 结束时间 (ISO 8601 日期时间，按 datetime 粒度；如 2024-01-31T23:59:59) |
+| `startDate` | datetime | 是 | 开始时间 (ISO 8601) |
+| `endDate` | datetime | 是 | 结束时间 (ISO 8601) |
 
 **响应字段:**
 | 字段 | 类型 | 说明 |
@@ -225,11 +238,28 @@ GET /api/analytics/revenue/game_123/overview?startDate=2024-01-01&endDate=2024-0
 | `NETWORK` | object | 网络统计 |
 | `BATTERY` | object | 电池统计 |
 
+**每个指标包含:**
+- `avgValue` - 平均值
+`count` - 事件数量
+
 **指标含义:**
-- **FPS** - 游戏流畅度（帧/秒）
-- **卡顿** - 画面停顿时长（毫秒）
-- **崩溃** - 应用崩溃次数
-- **内存** - 内存使用量（MB）
+- **FPS (帧率)** - 游戏流畅度
+  - 健康值：> 30 FPS (移动端), > 60 FPS (PC)
+  - 警告值：< 20 FPS
+
+- **LAG (卡顿)** - 画面停顿时长 (毫秒)
+  - 健康值：< 100ms
+  - 警告值：> 500ms
+
+- **CRASH (崩溃)** - 应用崩溃次数
+  - 健康值：< 0.1% 会话
+  - 警告值：> 1% 会话
+
+- **MEMORY (内存)** - 内存使用量 (MB)
+  - 健康值：< 500MB (移动端)
+  - 警告值：> 1GB
+
+---
 
 ### 4.2 崩溃分组
 
@@ -248,17 +278,6 @@ GET /api/analytics/revenue/game_123/overview?startDate=2024-01-01&endDate=2024-0
 | `firstSeen` | datetime | 首次出现时间 |
 | `lastSeen` | datetime | 最后出现时间 |
 
-返回崩溃指纹分组列表（`crash_hash` 分组，与 `/api/crash-metrics` 的 top-groups 同源）。
-
-更完整的崩溃专项指标在 `/api/crash-metrics` 下：
-
-```http
-GET /api/crash-metrics/{gameId}/top-groups
-GET /api/crash-metrics/{gameId}/trend
-GET /api/crash-metrics/{gameId}/rate-by-version
-POST /api/crash-metrics/{gameId}/symbolicate
-```
-
 ---
 
 ## 五、社交分析
@@ -271,8 +290,8 @@ POST /api/crash-metrics/{gameId}/symbolicate
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | `gameId` | string | 是 | 游戏 ID |
-| `startDate` | date | 是 | 开始日期 (YYYY-MM-DD) |
-| `endDate` | date | 是 | 结束日期 (YYYY-MM-DD) |
+| `startDate` | date | 是 | 起始日期（YYYY-MM-DD） |
+| `endDate` | date | 是 | 结束日期（YYYY-MM-DD） |
 
 **响应字段:**
 | 字段 | 类型 | 说明 |
@@ -284,6 +303,10 @@ POST /api/crash-metrics/{gameId}/symbolicate
 
 **指标含义:**
 - **病毒系数** - 每个用户平均邀请的新用户数
+  - > 1 表示用户自发增长
+  - 健康值：> 0.5
+
+---
 
 ### 5.2 社交对留存的影响
 
@@ -293,7 +316,7 @@ POST /api/crash-metrics/{gameId}/symbolicate
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | `gameId` | string | 是 | 游戏 ID |
-| `date` | date | 是 | 统计日期 (YYYY-MM-DD) |
+| `date` | date | 是 | 目标日期（YYYY-MM-DD） |
 
 **响应字段:**
 | 字段 | 类型 | 说明 |
@@ -302,3 +325,26 @@ POST /api/crash-metrics/{gameId}/symbolicate
 | `nonSocialUsersD7Retention` | number | 非社交用户 7 日留存率 |
 | `retentionLift` | number | 社交带来的留存提升 |
 
+---
+
+## 最佳实践
+
+### 1. 数据采集
+- 确保事件正确上报
+- 使用标准事件类型
+- 包含必要的维度信息
+
+### 2. 分析周期
+- 每日查看关键指标
+- 每周分析趋势
+- 每月深度分析
+
+### 3. 告警设置
+- 设置关键指标阈值
+- 监控异常波动
+- 及时响应问题
+
+### 4. 行动建议
+- 基于数据做决策
+- A/B 测试验证假设
+- 持续优化迭代
